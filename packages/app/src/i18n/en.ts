@@ -531,6 +531,7 @@ export const dict = {
   "home.loading.title": "Loading projects",
   "home.title": "Home",
   "home.projects": "Projects",
+  "home.projects.quickSwitch": "Projects quick switch",
   "home.project.add": "Add project",
   "home.sessions.search.placeholder": "Search sessions",
   "home.sessions.empty": "No sessions found",
@@ -600,6 +601,8 @@ export const dict = {
 
   "session.header.search.placeholder": "Search {{project}}",
   "session.header.searchFiles": "Search files",
+  "session.header.agent.label": "Agent",
+  "session.header.agent.active": "Active agent: @{{agent}}",
   "session.header.openIn": "Open in",
   "session.header.open.action": "Open {{app}}",
   "session.header.open.ariaLabel": "Open in {{app}}",

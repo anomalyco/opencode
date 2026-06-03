@@ -4,6 +4,7 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Keybind } from "@opencode-ai/ui/keybind"
+import { Select } from "@opencode-ai/ui/select"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -14,6 +15,7 @@ import { Portal } from "solid-js/web"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useLocal } from "@/context/local"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
@@ -21,7 +23,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { messageAgentColor } from "@/utils/agent"
+import { agentColor, messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
@@ -135,6 +137,7 @@ export function SessionHeader() {
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
+  const local = useLocal()
   const platform = usePlatform()
   const language = useLanguage()
   const settings = useSettings()
@@ -233,7 +236,25 @@ export function SessionHeader() {
   const tint = createMemo(() =>
     messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
   )
+  const activeAgent = createMemo(() => {
+    const agent = local.agent.current()
+    if (!agent) return
+    return {
+      name: agent.name,
+      color: agentColor(agent.name, agent.color),
+    }
+  })
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
+    agentName: activeAgent()?.name,
+    agentColor: activeAgent()?.color,
+    agentOptions: local.agent.list().map((agent) => agent.name),
+    agentLabel: language.t("session.header.agent.label"),
+    agentActiveLabel: activeAgent()?.name
+      ? language.t("session.header.agent.active", { agent: activeAgent()!.name })
+      : undefined,
+    agentCycleLabel: language.t("command.agent.cycle"),
+    agentCycleKeybind: command.keybind("agent.cycle"),
+    onAgentSelect: (value) => local.agent.set(value),
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
     reviewLabel: language.t("command.review.toggle"),
@@ -520,6 +541,14 @@ export function SessionHeader() {
 }
 
 type SessionHeaderV2ActionsState = {
+  agentName?: string
+  agentColor?: string
+  agentOptions: string[]
+  agentLabel: string
+  agentActiveLabel?: string
+  agentCycleLabel: string
+  agentCycleKeybind: string
+  onAgentSelect: (value: string | undefined) => void
   statusVisible: boolean
   statusLabel: string
   reviewLabel: string
@@ -530,7 +559,35 @@ type SessionHeaderV2ActionsState = {
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
-    <div class="flex items-center gap-0">
+    <div class="flex items-center gap-1">
+      <Show when={props.state.agentName}>
+        {(agentName) => (
+          <div data-component="session-agent-control" class="relative">
+            <span
+              class="pointer-events-none absolute left-2 top-1/2 z-10 size-2 -translate-y-1/2 rounded-full"
+              style={{ "background-color": props.state.agentColor ?? "var(--icon-muted)" }}
+              aria-hidden="true"
+            />
+            <TooltipKeybind
+              placement="bottom"
+              title={props.state.agentCycleLabel}
+              keybind={props.state.agentCycleKeybind}
+            >
+              <Select
+                size="normal"
+                options={props.state.agentOptions}
+                current={agentName()}
+                onSelect={props.state.onAgentSelect}
+                class="capitalize max-w-[160px] text-text-base"
+                valueClass="truncate text-13-regular text-text-base"
+                triggerStyle={{ height: "28px", "padding-left": "22px" }}
+                triggerProps={{ "aria-label": props.state.agentActiveLabel ?? props.state.agentLabel }}
+                variant="ghost"
+              />
+            </TooltipKeybind>
+          </div>
+        )}
+      </Show>
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />

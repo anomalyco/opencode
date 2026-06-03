@@ -1,5 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
@@ -13,6 +13,7 @@ import { MenuV2 } from "@opencode-ai/ui/v2/components/menu-v2.jsx"
 import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
@@ -253,6 +254,13 @@ function HomeDesign() {
   function HomeSessionsColumn() {
     return (
       <>
+        <HomeProjectTabs
+          projects={projects()}
+          selectedProject={state.project}
+          selectProject={selectProject}
+          chooseProject={() => void chooseProject()}
+          language={language}
+        />
         <HomeSessionSearch
           value={state.search}
           placeholder={language.t("home.sessions.search.placeholder")}
@@ -347,19 +355,21 @@ function HomeProjectColumn(props: {
       <Show
         when={servers.list().length > 1}
         fallback={
-          <ProjectList
-            projects={projects()}
-            selectedProject={props.selectedProject}
-            showEmptyFallback={false}
-            onSelectedProjectChange={props.selectProject}
-            onChooseProject={props.chooseProject}
-            openNewSession={props.openNewSession}
-            editProject={props.editProject}
-            closeProject={props.closeProject}
-            clearNotifications={props.clearNotifications}
-            unseenCount={props.unseenCount}
-            language={props.language}
-          />
+          <HomeProjectListViewport>
+            <ProjectList
+              projects={projects()}
+              selectedProject={props.selectedProject}
+              showEmptyFallback={false}
+              onSelectedProjectChange={props.selectProject}
+              onChooseProject={props.chooseProject}
+              openNewSession={props.openNewSession}
+              editProject={props.editProject}
+              closeProject={props.closeProject}
+              clearNotifications={props.clearNotifications}
+              unseenCount={props.unseenCount}
+              language={props.language}
+            />
+          </HomeProjectListViewport>
         }
       >
         <For each={servers.list()}>
@@ -400,19 +410,21 @@ function HomeProjectColumn(props: {
                 </div>
                 <Show when={healthy() && open()}>
                   <div class="h-px bg-v2-border-border-base mx-3 my-1" />
-                  <ProjectList
-                    projects={projects()}
-                    selectedProject={props.selectedProject}
-                    showEmptyFallback={true}
-                    onSelectedProjectChange={props.selectProject}
-                    onChooseProject={props.chooseProject}
-                    openNewSession={props.openNewSession}
-                    editProject={props.editProject}
-                    closeProject={props.closeProject}
-                    clearNotifications={props.clearNotifications}
-                    unseenCount={props.unseenCount}
-                    language={props.language}
-                  />
+                  <HomeProjectListViewport>
+                    <ProjectList
+                      projects={projects()}
+                      selectedProject={props.selectedProject}
+                      showEmptyFallback={true}
+                      onSelectedProjectChange={props.selectProject}
+                      onChooseProject={props.chooseProject}
+                      openNewSession={props.openNewSession}
+                      editProject={props.editProject}
+                      closeProject={props.closeProject}
+                      clearNotifications={props.clearNotifications}
+                      unseenCount={props.unseenCount}
+                      language={props.language}
+                    />
+                  </HomeProjectListViewport>
                 </Show>
               </div>
             )
@@ -441,6 +453,62 @@ function HomeProjectColumn(props: {
   )
 }
 
+function HomeProjectListViewport(props: { children: JSX.Element }) {
+  return (
+    <div class="max-h-[min(288px,36vh)] min-w-0 overflow-y-auto pr-1 [scrollbar-width:none] lg:max-h-none lg:overflow-visible lg:pr-0 [&::-webkit-scrollbar]:hidden">
+      {props.children}
+    </div>
+  )
+}
+
+function HomeProjectTabs(props: {
+  projects: LocalProject[]
+  selectedProject?: string
+  selectProject: (directory: string) => void
+  chooseProject: () => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  return (
+    <Show when={props.projects.length > 0}>
+      <nav
+        class="mb-3 flex min-w-0 items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden"
+        aria-label={props.language.t("home.projects.quickSwitch")}
+      >
+        <For each={props.projects}>
+          {(project) => {
+            const name = createMemo(() => displayName(project))
+            const selected = createMemo(() => props.selectedProject === project.worktree)
+
+            return (
+              <button
+                type="button"
+                class="flex h-9 max-w-[180px] shrink-0 items-center gap-2 rounded-full border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 pr-3 text-v2-text-text-muted shadow-[var(--v2-elevation-raised)] transition-[background-color,border-color,box-shadow,color] duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_var(--v2-border-border-focus),var(--v2-elevation-raised)]"
+                classList={{
+                  "border-v2-border-border-focus bg-v2-overlay-simple-overlay-hover text-v2-text-text-base": selected(),
+                }}
+                aria-current={selected() ? "page" : undefined}
+                onClick={() => props.selectProject(project.worktree)}
+              >
+                <HomeProjectAvatar project={project} class="size-5 rounded-md" />
+                <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap [font-weight:560]">{name()}</span>
+              </button>
+            )
+          }}
+        </For>
+        <IconButtonV2
+          data-action="home-project-tabs-add"
+          variant="ghost-muted"
+          size="large"
+          class="h-9 w-9 shrink-0 rounded-full border border-v2-border-border-base bg-v2-background-bg-deep shadow-[var(--v2-elevation-raised)] [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+          icon={<IconV2 name="plus" />}
+          onClick={props.chooseProject}
+          aria-label={props.language.t("home.project.add")}
+        />
+      </nav>
+    </Show>
+  )
+}
+
 function HomeProjectRow(props: {
   project: LocalProject
   selected: boolean
@@ -453,24 +521,42 @@ function HomeProjectRow(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   const name = createMemo(() => displayName(props.project))
+  const directoryName = createMemo(() => projectDirectoryName(props.project.worktree))
   const [menuOpen, setMenuOpen] = createSignal(false)
 
   return (
-    <div class="group/project relative flex h-8 min-w-0 items-center rounded-[6px]">
+    <div class="group/project relative flex min-h-16 min-w-0 items-center rounded-[12px] lg:h-8 lg:min-h-0 lg:rounded-[6px]">
       <button
         type="button"
         data-component="home-project-row"
-        class={`${HOME_PROJECT_NAV_ROW} pr-16 peer`}
-        classList={{ "bg-v2-overlay-simple-overlay-hover": props.selected }}
+        class="peer flex min-h-16 w-full min-w-0 shrink-0 cursor-default items-center gap-3 rounded-[12px] bg-v2-background-bg-deep px-2.5 py-2.5 pr-24 text-left text-v2-text-text-muted shadow-[var(--v2-elevation-raised)] transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none lg:h-7 lg:min-h-0 lg:gap-2 lg:rounded-[6px] lg:bg-transparent lg:px-1.5 lg:py-0 lg:pr-16 lg:shadow-none"
+        classList={{
+          "bg-v2-overlay-simple-overlay-hover shadow-[0_0_0_0.5px_var(--v2-border-border-focus),var(--v2-elevation-raised)] lg:shadow-none":
+            props.selected,
+        }}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
         onClick={() => props.selectProject(props.project.worktree)}
       >
         <HomeProjectAvatar project={props.project} />
-        <span>{name()}</span>
+        <span class="flex min-w-0 flex-1 flex-col gap-0.5 lg:block">
+          <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:560] lg:[font-weight:inherit]">
+            {name()}
+          </span>
+          <Show when={directoryName() !== name()}>
+            <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440] lg:hidden">
+              {directoryName()}
+            </span>
+          </Show>
+        </span>
+        <Show when={props.unseenCount > 0}>
+          <span class="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-text-interactive-base px-1.5 text-[11px] leading-none text-text-on-interactive-base [font-weight:650] lg:hidden">
+            {Math.min(props.unseenCount, 99)}
+          </span>
+        </Show>
       </button>
       <div
-        class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/project:opacity-100 peer-focus-visible:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+        class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-100 transition-opacity lg:right-1 lg:gap-0.5 lg:opacity-0 lg:group-hover/project:opacity-100 lg:peer-focus-visible:opacity-100 lg:focus-within:opacity-100 lg:data-[menu=true]:opacity-100"
         data-menu={menuOpen()}
       >
         <MenuV2 gutter={4} modal={false} placement="bottom-end" open={menuOpen()} onOpenChange={setMenuOpen}>
@@ -516,7 +602,7 @@ function HomeProjectRow(props: {
   )
 }
 
-function HomeProjectAvatar(props: { project: LocalProject }) {
+function HomeProjectAvatar(props: { project: LocalProject; class?: string }) {
   const name = createMemo(() => displayName(props.project))
   return (
     <AvatarV2
@@ -525,9 +611,13 @@ function HomeProjectAvatar(props: { project: LocalProject }) {
       kind="org"
       size="small"
       {...getAvatarColors(props.project.icon?.color)}
-      class="size-4 rounded"
+      class={props.class ?? "size-10 rounded-[10px] lg:size-4 lg:rounded"}
     />
   )
+}
+
+function projectDirectoryName(directory: string) {
+  return getFilename(directory)
 }
 
 function HomeSessionSearch(props: {
