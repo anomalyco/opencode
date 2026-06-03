@@ -108,6 +108,32 @@ function listedAdapter(directory: string, type: string): WorkspaceAdapter {
   }
 }
 
+function removeFailingAdapter(directory: string): WorkspaceAdapter {
+  return {
+    name: "Remove Failing Test",
+    description: "Fail when removing a local test workspace",
+    configure(info) {
+      return {
+        ...info,
+        name: "remove-failing-test",
+        directory,
+      }
+    },
+    async create() {
+      await mkdir(directory, { recursive: true })
+    },
+    async remove() {
+      throw new Error("simulated remove failure")
+    },
+    target() {
+      return {
+        type: "local" as const,
+        directory,
+      }
+    },
+  }
+}
+
 function missingAdapterContext(): never {
   throw new Error("missing workspace adapter context")
 }
@@ -240,6 +266,30 @@ describe("workspace HttpApi", () => {
       const listed = yield* request(WorkspacePaths.list, dir)
       expect(listed.status).toBe(200)
       expect(yield* listed.json).toEqual([])
+    }),
+  )
+
+  it.live("keeps workspace record when adapter remove fails", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      registerAdapter(project.project.id, "remove-failing-test", removeFailingAdapter(path.join(dir, ".workspace")))
+
+      const created = yield* request(WorkspacePaths.list, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "remove-failing-test", branch: null }),
+      })
+      expect(created.status).toBe(200)
+      const workspace = (yield* created.json) as Workspace.Info
+
+      const removed = yield* request(WorkspacePaths.remove.replace(":id", workspace.id), dir, { method: "DELETE" })
+      expect(removed.status).toBe(400)
+
+      const listed = yield* request(WorkspacePaths.list, dir)
+      expect(listed.status).toBe(200)
+      expect((yield* listed.json) as Workspace.Info[]).toEqual([expect.objectContaining({ id: workspace.id })])
     }),
   )
 

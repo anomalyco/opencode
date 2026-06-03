@@ -12,7 +12,7 @@ import { errorMessage } from "../util/error"
 import { EventV2 } from "@opencode-ai/core/event"
 import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
-import { Effect, Layer, Path, Schema, Scope, Context } from "effect"
+import { Cause, Effect, Layer, Path, Schema, Scope, Context } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -56,6 +56,13 @@ export const RemoveInput = Schema.Struct({
   directory: Schema.String,
 }).annotate({ identifier: "WorktreeRemoveInput" })
 export type RemoveInput = Schema.Schema.Type<typeof RemoveInput>
+
+export const RemoveResult = Schema.Struct({
+  removed: Schema.Literal(true),
+  cleanupDeferred: Schema.Boolean,
+  warning: Schema.optional(Schema.String),
+}).annotate({ identifier: "WorktreeRemoveResult" })
+export type RemoveResult = Schema.Schema.Type<typeof RemoveResult>
 
 export const ResetInput = Schema.Struct({
   directory: Schema.String,
@@ -138,13 +145,67 @@ export interface Interface {
   readonly createFromInfo: (info: Info, startCommand?: string) => Effect.Effect<void, Error>
   readonly create: (input?: CreateInput) => Effect.Effect<Info, Error>
   readonly list: () => Effect.Effect<(Omit<Info, "branch"> & { branch?: string })[], Error>
-  readonly remove: (input: RemoveInput) => Effect.Effect<boolean, Error>
+  readonly remove: (input: RemoveInput) => Effect.Effect<RemoveResult, Error>
   readonly reset: (input: ResetInput) => Effect.Effect<boolean, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Worktree") {}
 
 type GitResult = { code: number; text: string; stderr: string }
+type DirectoryCleanupResult = { cleanupDeferred: false } | { cleanupDeferred: true; warning: string }
+
+const cleanupDeferredCodes = new Set(["EBUSY", "EPERM", "ENOTEMPTY"])
+
+export function isCleanupDeferredError(error: unknown, platform = process.platform) {
+  if (platform !== "win32") return false
+  const code = (error as { code?: unknown } | undefined)?.code
+  return typeof code === "string" && cleanupDeferredCodes.has(code)
+}
+
+function scheduleDeferredDirectoryCleanup(target: string) {
+  const delays = [1_000, 3_000, 10_000]
+  const retry = (attempt: number) => {
+    const timer = setTimeout(() => {
+      import("fs/promises")
+        .then((fsp) => fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+        .catch((error) => {
+          if (!isCleanupDeferredError(error) || attempt >= delays.length - 1) {
+            log.warn("worktree deferred directory cleanup failed", { directory: target, message: errorMessage(error) })
+            return
+          }
+          retry(attempt + 1)
+        })
+    }, delays[attempt])
+    timer.unref?.()
+  }
+  retry(0)
+}
+
+export function removePhysicalDirectory(
+  target: string,
+  rm: () => Promise<void> = () =>
+    import("fs/promises").then((fsp) =>
+      fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+    ),
+) {
+  return Effect.tryPromise({
+    try: rm,
+    catch: (error) => error,
+  }).pipe(
+    Effect.as({ cleanupDeferred: false } satisfies DirectoryCleanupResult),
+    Effect.catch((error) => {
+      if (isCleanupDeferredError(error)) {
+        const warning = errorMessage(error) || "Worktree directory cleanup deferred"
+        log.warn("worktree directory cleanup deferred", { directory: target, message: warning })
+        scheduleDeferredDirectoryCleanup(target)
+        return Effect.succeed({ cleanupDeferred: true, warning } satisfies DirectoryCleanupResult)
+      }
+      return Effect.fail(
+        new RemoveFailedError({ message: errorMessage(error) || "Failed to remove git worktree directory" }),
+      )
+    }),
+  )
+}
 
 export const layer: Layer.Layer<
   Service,
@@ -242,7 +303,17 @@ export const layer: Layer.Layer<
         })
       }
 
-      yield* project.addSandbox(ctx.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
+      yield* project.addSandbox(ctx.project.id, info.directory).pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            yield* git(["worktree", "remove", "--force", info.directory], { cwd: ctx.worktree }).pipe(Effect.ignore)
+            if (info.branch) yield* git(["branch", "-D", info.branch], { cwd: ctx.worktree }).pipe(Effect.ignore)
+            return yield* new CreateFailedError({
+              message: `Failed to record worktree sandbox: ${Cause.pretty(cause)}`,
+            })
+          }),
+        ),
+      )
     })
 
     const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
@@ -313,7 +384,7 @@ export const layer: Layer.Layer<
       const abs = pathSvc.resolve(input)
       const real = yield* fs.realPath(abs).pipe(Effect.catch(() => Effect.succeed(abs)))
       const normalized = pathSvc.normalize(real)
-      return process.platform === "win32" ? normalized.toLowerCase() : normalized
+      return process.platform === "win32" ? normalized.replaceAll("/", "\\").toLowerCase() : normalized
     })
 
     function parseWorktreeList(text: string) {
@@ -347,6 +418,19 @@ export const layer: Layer.Layer<
       return undefined
     })
 
+    function locateWorktreeByBranch(entries: { path?: string; branch?: string }[], branch?: string) {
+      if (!branch) return undefined
+      return entries.find((item) => item.branch?.replace(/^refs\/heads\//, "") === branch)
+    }
+
+    const gitTopLevel = Effect.fnUntraced(function* (directory: string) {
+      const result = yield* git(["rev-parse", "--show-toplevel"], { cwd: directory })
+      if (result.code !== 0) return
+      const top = result.text.trim()
+      if (!top) return
+      return yield* canonical(top)
+    })
+
     const list = Effect.fn("Worktree.list")(function* () {
       const ctx = yield* InstanceState.context
       if (ctx.project.vcs !== "git") {
@@ -377,30 +461,108 @@ export const layer: Layer.Layer<
 
     function stopFsmonitor(target: string) {
       return fs.exists(target).pipe(
-        Effect.orDie,
+        Effect.catch(() => Effect.succeed(false)),
         Effect.flatMap((exists) => (exists ? git(["fsmonitor--daemon", "stop"], { cwd: target }) : Effect.void)),
+        Effect.ignore,
       )
     }
 
     function cleanDirectory(target: string) {
-      return Effect.tryPromise({
-        try: async () => {
-          const fsp = await import("fs/promises")
-          const attempts = process.platform === "win32" ? 50 : 5
-          for (const attempt of Array.from({ length: attempts }, (_, i) => i)) {
-            try {
-              await fsp.rm(target, { recursive: true, force: true })
-              return
-            } catch (error) {
-              if (attempt === attempts - 1) throw error
-              await new Promise((resolve) => setTimeout(resolve, 100))
-            }
-          }
-        },
-        catch: (error) =>
-          new RemoveFailedError({ message: errorMessage(error) || "Failed to remove git worktree directory" }),
-      })
+      return removePhysicalDirectory(target)
     }
+
+    function removed(cleanup: DirectoryCleanupResult = { cleanupDeferred: false }): RemoveResult {
+      return {
+        removed: true,
+        cleanupDeferred: cleanup.cleanupDeferred,
+        ...(cleanup.cleanupDeferred ? { warning: cleanup.warning } : {}),
+      }
+    }
+
+    function successMessage(result: GitResult, fallback: string) {
+      return result.stderr || result.text || fallback
+    }
+
+    function hasWindowsProjectWorktreeShape(target: string, projectID: string) {
+      if (process.platform !== "win32") return false
+      const projectRoot = pathSvc.dirname(target)
+      const worktreeRoot = pathSvc.dirname(projectRoot)
+      const opencodeRoot = pathSvc.dirname(worktreeRoot)
+      const dataRoot = pathSvc.dirname(opencodeRoot)
+      return (
+        pathSvc.basename(projectRoot).toLowerCase() === projectID.toLowerCase() &&
+        pathSvc.basename(worktreeRoot).toLowerCase() === "worktree" &&
+        pathSvc.basename(opencodeRoot).toLowerCase() === "opencode" &&
+        pathSvc.basename(dataRoot).toLowerCase() === "data"
+      )
+    }
+
+    function ensureSandboxTarget(target: string, root: string, primary: string, projectID: string) {
+      if (target === primary) {
+        return new RemoveFailedError({ message: "Cannot remove the primary workspace" })
+      }
+      if (target === root || (!target.startsWith(`${root}${pathSvc.sep}`) && !hasWindowsProjectWorktreeShape(target, projectID))) {
+        return new RemoveFailedError({ message: "Worktree path is outside the OpenCode worktree root" })
+      }
+      return undefined
+    }
+
+    function isSandboxTarget(target: string, root: string, primary: string, projectID: string) {
+      return (
+        target !== primary &&
+        target !== root &&
+        (target.startsWith(`${root}${pathSvc.sep}`) || hasWindowsProjectWorktreeShape(target, projectID))
+      )
+    }
+
+    const removeSandboxRecords = Effect.fnUntraced(function* (directories: string[]) {
+      const ctx = yield* InstanceState.context
+      yield* Effect.forEach(
+        [...new Set(directories)],
+        (directory) => project.removeSandbox(ctx.project.id, directory).pipe(Effect.catch(() => Effect.void)),
+        { discard: true },
+      )
+    })
+
+    const deleteBranch = Effect.fnUntraced(function* (branchRef?: string) {
+      const ctx = yield* InstanceState.context
+      const branch = branchRef?.replace(/^refs\/heads\//, "")
+      if (!branch) return
+      if (!branch.startsWith("opencode/")) {
+        return yield* new RemoveFailedError({ message: `Refusing to delete non-opencode worktree branch: ${branch}` })
+      }
+
+      const ref = `refs/heads/${branch}`
+      const before = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: ctx.worktree })
+      if (before.code !== 0) return
+
+      const deleted = yield* git(["branch", "-D", branch], { cwd: ctx.worktree })
+      if (deleted.code === 0) return
+
+      const after = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: ctx.worktree })
+      if (after.code !== 0) return
+
+      return yield* new RemoveFailedError({
+        message: successMessage(deleted, "Failed to delete worktree branch"),
+      })
+    })
+
+    const worktreeBranch = Effect.fnUntraced(function* (target: string, branchRef?: string) {
+      const branch = branchRef?.replace(/^refs\/heads\//, "")
+      if (branch) return branch
+      const result = yield* git(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: target })
+      if (result.code !== 0) return `opencode/${pathSvc.basename(target)}`
+      const current = result.text.trim()
+      if (current) return current
+      return `opencode/${pathSvc.basename(target)}`
+    })
+
+    const currentBranch = Effect.fnUntraced(function* (target: string) {
+      const result = yield* git(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: target })
+      if (result.code !== 0) return
+      const current = result.text.trim()
+      return current || undefined
+    })
 
     const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
       const ctx = yield* InstanceState.context
@@ -409,6 +571,12 @@ export const layer: Layer.Layer<
       }
 
       const directory = yield* canonical(input.directory)
+      const lookupDirectory = (yield* gitTopLevel(input.directory)) ?? directory
+      const root = yield* canonical(pathSvc.join(Global.Path.data, "worktree", ctx.project.id))
+      const primary = yield* canonical(ctx.project.worktree)
+      const safetyDirectory = isSandboxTarget(lookupDirectory, root, primary, ctx.project.id) ? lookupDirectory : directory
+      const unsafe = ensureSandboxTarget(safetyDirectory, root, primary, ctx.project.id)
+      if (unsafe) return yield* unsafe
 
       // Preserve the loaded path casing for the store cache; `directory` is lowercased on Windows.
       if (directory !== (yield* canonical(ctx.worktree))) yield* store.disposeDirectory(input.directory)
@@ -419,50 +587,79 @@ export const layer: Layer.Layer<
       }
 
       const entries = parseWorktreeList(list.text)
-      const entry = yield* locateWorktree(entries, directory)
+      let entry = yield* locateWorktree(entries, lookupDirectory)
+      const inputBranch = entry?.path ? undefined : yield* currentBranch(input.directory)
+      entry = entry ?? locateWorktreeByBranch(entries, inputBranch)
 
       if (!entry?.path) {
         const directoryExists = yield* fs.exists(directory).pipe(Effect.orDie)
         if (directoryExists) {
+          if (inputBranch && !inputBranch.startsWith("opencode/")) {
+            return yield* new RemoveFailedError({
+              message: `Refusing to remove worktree with non-opencode branch: ${inputBranch}`,
+            })
+          }
+          if (inputBranch?.startsWith("opencode/")) {
+            return yield* new RemoveFailedError({
+              message: "Worktree is still checked out but was not found in the git worktree registry",
+            })
+          }
           yield* stopFsmonitor(directory)
-          yield* cleanDirectory(directory)
+          const cleanup = yield* cleanDirectory(directory)
+          yield* removeSandboxRecords([input.directory, directory])
+          return removed(cleanup)
         }
-        return true
+        yield* removeSandboxRecords([input.directory, directory])
+        return removed()
       }
 
-      // Git may return the original casing when a caller supplied a normalized Windows path.
-      yield* store.disposeDirectory(entry.path)
+      const branch = yield* worktreeBranch(entry.path, entry.branch)
+      if (branch && !branch.startsWith("opencode/")) {
+        return yield* new RemoveFailedError({
+          message: `Refusing to remove worktree with non-opencode branch: ${branch}`,
+        })
+      }
+
+      yield* store
+        .dispose({ directory: entry.path, worktree: entry.path, project: ctx.project })
+        .pipe(Effect.catchCause(() => Effect.void))
       yield* stopFsmonitor(entry.path)
-      const removed = yield* git(["worktree", "remove", "--force", entry.path], { cwd: ctx.worktree })
-      if (removed.code !== 0) {
+      const gitRemoved = yield* git(["worktree", "remove", "--force", entry.path], { cwd: ctx.worktree })
+      if (gitRemoved.code !== 0) {
         const next = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
         if (next.code !== 0) {
           return yield* new RemoveFailedError({
-            message: removed.stderr || removed.text || next.stderr || next.text || "Failed to remove git worktree",
+            message: successMessage(gitRemoved, successMessage(next, "Failed to remove git worktree")),
           })
         }
 
-        const stale = yield* locateWorktree(parseWorktreeList(next.text), directory)
+        const nextEntries = parseWorktreeList(next.text)
+        const stale =
+          (yield* locateWorktree(nextEntries, lookupDirectory)) ?? locateWorktreeByBranch(nextEntries, branch)
         if (stale?.path) {
           return yield* new RemoveFailedError({
-            message: removed.stderr || removed.text || "Failed to remove git worktree",
+            message: successMessage(gitRemoved, "Failed to remove git worktree"),
           })
         }
       }
 
-      yield* cleanDirectory(entry.path)
-
-      const branch = entry.branch?.replace(/^refs\/heads\//, "")
-      if (branch) {
-        const deleted = yield* git(["branch", "-D", branch], { cwd: ctx.worktree })
-        if (deleted.code !== 0) {
-          return yield* new RemoveFailedError({
-            message: deleted.stderr || deleted.text || "Failed to delete worktree branch",
-          })
-        }
+      const next = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
+      if (next.code !== 0) {
+        return yield* new RemoveFailedError({
+          message: successMessage(next, "Failed to verify git worktree removal"),
+        })
+      }
+      const nextEntries = parseWorktreeList(next.text)
+      const stale = (yield* locateWorktree(nextEntries, lookupDirectory)) ?? locateWorktreeByBranch(nextEntries, branch)
+      if (stale?.path) {
+        return yield* new RemoveFailedError({ message: "Git worktree remains registered after removal" })
       }
 
-      return true
+      yield* deleteBranch(branch)
+
+      const cleanup = yield* cleanDirectory(entry.path)
+      yield* removeSandboxRecords([input.directory, directory, entry.path])
+      return removed(cleanup)
     })
 
     const gitExpect = Effect.fnUntraced(function* (
@@ -545,7 +742,8 @@ export const layer: Layer.Layer<
         return yield* new NotGitError({ message: "Worktrees are only supported for git projects" })
       }
 
-      const directory = yield* canonical(input.directory)
+      const inputDirectory = yield* canonical(input.directory)
+      const directory = (yield* gitTopLevel(input.directory)) ?? inputDirectory
       const primary = yield* canonical(ctx.worktree)
       if (directory === primary) {
         return yield* new ResetFailedError({ message: "Cannot reset the primary workspace" })

@@ -706,6 +706,21 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
     }),
   )
 
+  it.live("removeSandbox is idempotent when the sandbox is absent", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      const result = yield* project.fromDirectory(tmp)
+      const sandboxDir = path.join(tmp, "missing-sandbox")
+
+      yield* project.removeSandbox(result.project.id, sandboxDir)
+      yield* project.removeSandbox(result.project.id, sandboxDir)
+
+      const found = yield* project.get(result.project.id)
+      expect(found?.sandboxes).not.toContain(sandboxDir)
+    }),
+  )
+
   it.live("addSandbox emits GlobalBus event", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service

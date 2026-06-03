@@ -15,10 +15,16 @@ const trimTrailingSlashes = (value: string) => {
 
 const isWindowsPath = (value: string) => value[1] === ":" || value.startsWith("\\\\")
 
+const normalizeWindowsDrive = (value: string) => {
+  if (!isDrive(value.slice(0, 2))) return value
+  return value[0]!.toUpperCase() + value.slice(1)
+}
+
 export const pathKey = (path: string) => {
   const value = isWindowsPath(path) ? path.replaceAll("\\", "/") : path
   const trimmed = trimTrailingSlashes(value)
   if (!trimmed && value.startsWith("/")) return "/" as PathKey
-  if (isDrive(trimmed)) return `${trimmed}/` as PathKey
-  return trimmed as PathKey
+  const normalized = normalizeWindowsDrive(trimmed)
+  if (isDrive(normalized)) return `${normalized}/` as PathKey
+  return normalized as PathKey
 }

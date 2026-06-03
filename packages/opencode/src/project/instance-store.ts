@@ -143,13 +143,14 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
     }
 
     const dispose = Effect.fn("InstanceStore.dispose")(function* (ctx: InstanceContext) {
-      const entry = cache.get(ctx.directory)
-      if (!entry) return yield* disposeContext(ctx)
+      const directory = FSUtil.resolve(ctx.directory)
+      const entry = cache.get(directory)
+      if (!entry) return yield* disposeContext({ ...ctx, directory })
 
       const exit = yield* Deferred.await(entry.deferred).pipe(Effect.exit)
-      if (Exit.isFailure(exit)) return yield* removeEntry(ctx.directory, entry).pipe(Effect.asVoid)
-      if (exit.value !== ctx) return
-      yield* disposeEntry(ctx.directory, entry, ctx).pipe(Effect.asVoid)
+      if (Exit.isFailure(exit)) return yield* removeEntry(directory, entry).pipe(Effect.asVoid)
+      if (exit.value !== ctx && exit.value.directory !== directory) return
+      yield* disposeEntry(directory, entry, exit.value).pipe(Effect.asVoid)
     })
 
     const disposeDirectory = Effect.fn("InstanceStore.disposeDirectory")(function* (input: string) {

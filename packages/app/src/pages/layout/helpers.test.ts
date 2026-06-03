@@ -114,6 +114,7 @@ describe("layout workspace helpers", () => {
     expect(String(pathKey("C:\\"))).toBe("C:/")
     expect(String(pathKey("C://"))).toBe("C:/")
     expect(String(pathKey("C:///"))).toBe("C:/")
+    expect(String(pathKey("d:/"))).toBe("D:/")
   })
 
   test("keeps local first while preserving known order", () => {

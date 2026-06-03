@@ -1,4 +1,4 @@
-import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { Database } from "@opencode-ai/core/database/database"
@@ -76,6 +76,10 @@ function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
 
 const log = Log.create({ service: "workspace-sync" })
 
+function isUnknownWorkspaceAdapterError(error: unknown) {
+  return error instanceof globalThis.Error && error.message.startsWith("Unknown workspace adapter:")
+}
+
 export const CreateInput = Schema.Struct({
   id: Schema.optional(WorkspaceV2.ID),
   type: Info.fields.type,
@@ -144,6 +148,7 @@ type SessionWarpError =
   | HttpClientError.HttpClientError
 type WaitForSyncError = SyncTimeoutError | SyncAbortedError
 type SyncLoopError = SyncHttpError | HttpClientError.HttpClientError
+type RemoveError = globalThis.Error
 
 export interface Interface {
   readonly create: (input: CreateInput) => Effect.Effect<Info, CreateError>
@@ -151,7 +156,7 @@ export interface Interface {
   readonly list: (project: Project.Info) => Effect.Effect<Info[]>
   readonly syncList: (project: Project.Info) => Effect.Effect<void>
   readonly get: (id: WorkspaceV2.ID) => Effect.Effect<Info | undefined>
-  readonly remove: (id: WorkspaceV2.ID) => Effect.Effect<Info | undefined>
+  readonly remove: (id: WorkspaceV2.ID) => Effect.Effect<Info | undefined, RemoveError>
   readonly status: () => Effect.Effect<ConnectionStatus[]>
   readonly isSyncing: (workspaceID: WorkspaceV2.ID) => Effect.Effect<boolean>
   readonly waitForSync: (
@@ -478,8 +483,6 @@ export const layer = Layer.effect(
     })
 
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
-      if (!flags.experimentalWorkspaces) return
-
       const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
         Effect.catch((error) =>
           Effect.sync(() => {
@@ -498,6 +501,8 @@ export const layer = Layer.effect(
         setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
         return
       }
+
+      if (!flags.experimentalWorkspaces) return
 
       const exists = yield* FiberMap.has(syncFibers, space.id)
       if (exists && connections.get(space.id)?.status !== "error") return
@@ -575,22 +580,24 @@ export const layer = Layer.effect(
       }
 
       yield* WorkspaceAdapterRuntime.create(adapter, config, env)
-      yield* Effect.all(
-        [
-          waitEvent({
-            timeout: TIMEOUT,
-            fn(event) {
-              if (event.workspace === info.id && event.payload.type === Event.Status.type) {
-                const { status } = event.payload.properties
-                return status === "error" || status === "connected"
-              }
-              return false
-            },
-          }),
-          startSync(info),
-        ],
-        { concurrency: 2, discard: true },
-      )
+
+      const statusReady = () => {
+        const status = connections.get(info.id)?.status
+        return status === "error" || status === "connected"
+      }
+      yield* startSync(info)
+      if (!statusReady()) {
+        yield* waitEvent({
+          timeout: TIMEOUT,
+          fn(event) {
+            if (event.workspace === info.id && event.payload.type === Event.Status.type) {
+              const { status } = event.payload.properties
+              return status === "error" || status === "connected"
+            }
+            return false
+          },
+        })
+      }
 
       return info
     })
@@ -910,14 +917,16 @@ export const layer = Layer.effect(
       yield* stopSync(id)
 
       const info = fromRow(row)
-      yield* Effect.catchCause(
-        Effect.gen(function* () {
-          yield* WorkspaceAdapterRuntime.remove(info)
+      yield* WorkspaceAdapterRuntime.remove(info).pipe(
+        Effect.catchCause((cause) => {
+          const error = Cause.squash(cause)
+          if (isUnknownWorkspaceAdapterError(error)) {
+            return Effect.sync(() => {
+              log.error("adapter not available when removing workspace", { type: row.type })
+            })
+          }
+          return Effect.fail(error instanceof globalThis.Error ? error : new globalThis.Error(String(error)))
         }),
-        () =>
-          Effect.sync(() => {
-            log.error("adapter not available when removing workspace", { type: row.type })
-          }),
       )
 
       yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run().pipe(Effect.orDie)

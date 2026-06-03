@@ -605,6 +605,15 @@ export default function Layout(props: ParentProps) {
     return layout.sidebar.workspaces(project.worktree)()
   })
 
+  const currentSandboxWorkspace = createMemo(() => {
+    const project = currentProject()
+    const directory = currentDir()
+    if (!project) return
+    if (!directory) return
+    if (pathKey(directory) === pathKey(project.worktree)) return
+    return { root: project.worktree, directory }
+  })
+
   const visibleSessionDirs = createMemo(() => {
     const project = currentProject()
     if (!project) return [] as string[]
@@ -1109,6 +1118,28 @@ export default function Layout(props: ParentProps) {
           const project = currentProject()
           if (!project) return
           return createWorkspace(project)
+        },
+      },
+      {
+        id: "workspace.reset",
+        title: language.t("workspace.reset.title"),
+        category: language.t("command.category.workspace"),
+        disabled: !currentSandboxWorkspace() || isBusy(currentSandboxWorkspace()?.directory ?? ""),
+        onSelect: () => {
+          const target = currentSandboxWorkspace()
+          if (!target) return
+          dialog.show(() => <DialogResetWorkspace root={target.root} directory={target.directory} />)
+        },
+      },
+      {
+        id: "workspace.delete",
+        title: language.t("workspace.delete.title"),
+        category: language.t("command.category.workspace"),
+        disabled: !currentSandboxWorkspace() || isBusy(currentSandboxWorkspace()?.directory ?? ""),
+        onSelect: () => {
+          const target = currentSandboxWorkspace()
+          if (!target) return
+          dialog.show(() => <DialogDeleteWorkspace root={target.root} directory={target.directory} />)
         },
       },
       {

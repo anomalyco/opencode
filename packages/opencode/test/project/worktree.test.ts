@@ -5,12 +5,22 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Git } from "../../src/git"
+import { InstanceRef } from "../../src/effect/instance-ref"
+import { Database } from "@opencode-ai/core/database/database"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Worktree } from "../../src/worktree"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { eq } from "drizzle-orm"
 
 const it = testEffect(
-  Layer.mergeAll(Worktree.defaultLayer, FSUtil.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
+  Layer.mergeAll(
+    Worktree.defaultLayer,
+    FSUtil.defaultLayer,
+    CrossSpawnSpawner.defaultLayer,
+    Git.defaultLayer,
+    Database.defaultLayer,
+  ),
 )
 const wintest = process.platform !== "win32" ? it.instance : it.instance.skip
 
@@ -40,7 +50,7 @@ const removeCreatedWorktree = (directory: string) =>
   Effect.gen(function* () {
     const svc = yield* Worktree.Service
     const ok = yield* svc.remove({ directory })
-    if (!ok) return yield* Effect.fail(new Error(`failed to remove worktree ${directory}`))
+    if (!ok.removed) return yield* Effect.fail(new Error(`failed to remove worktree ${directory}`))
   })
 
 const withCreatedWorktree = <A, E, R>(
@@ -167,7 +177,8 @@ describe("Worktree", () => {
           expect(props.name).toBe(info.name)
           expect(props.branch).toBeUndefined()
 
-          yield* svc.remove({ directory: info.directory })
+          const removed = yield* svc.remove({ directory: info.directory })
+          expect(removed.removed).toBe(true)
         }),
       { git: true },
     )
@@ -234,6 +245,33 @@ describe("Worktree", () => {
         ),
       { git: true },
     )
+
+    it.instance(
+      "fails and rolls back the git worktree when sandbox persistence fails",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const ctx = yield* InstanceRef
+          const svc = yield* Worktree.Service
+          const info = yield* svc.makeWorktreeInfo({ name: `sandbox-fail-${Date.now().toString(36)}` })
+
+          if (!ctx) return yield* Effect.die(new Error("missing test instance"))
+          const { db } = yield* Database.Service
+          yield* db.delete(ProjectTable).where(eq(ProjectTable.id, ctx.project.id)).run().pipe(Effect.orDie)
+
+          const exit = yield* Effect.exit(svc.createFromInfo(info))
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.CreateFailedError)
+
+          const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+          expect(normalize(list)).not.toContain(normalize(info.directory))
+
+          const branch = yield* gitResult(test.directory, ["show-ref", "--verify", "--quiet", `refs/heads/${info.branch}`])
+          expect(branch.exitCode).not.toBe(0)
+        }),
+      { git: true },
+    )
   })
 
   describe("createFromInfo", () => {
@@ -283,7 +321,8 @@ describe("Worktree", () => {
             directory: normalize(directory),
           })
 
-          yield* svc.remove({ directory: target })
+          yield* git(test.directory, ["worktree", "remove", "--force", target])
+          yield* git(test.directory, ["branch", "-D", branch])
         }),
       { git: true },
     )
@@ -296,8 +335,43 @@ describe("Worktree", () => {
         Effect.gen(function* () {
           const test = yield* TestInstance
           const svc = yield* Worktree.Service
-          const ok = yield* svc.remove({ directory: path.join(test.directory, "does-not-exist") })
-          expect(ok).toBe(true)
+          const info = yield* svc.makeWorktreeInfo({ name: "does-not-exist" })
+          const ok = yield* svc.remove({ directory: info.directory })
+          expect(ok).toEqual({ removed: true, cleanupDeferred: false })
+        }),
+      { git: true },
+    )
+
+    it.instance(
+      "rejects a path outside the OpenCode worktree root",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const svc = yield* Worktree.Service
+          const exit = yield* Effect.exit(svc.remove({ directory: path.join(test.directory, "unsafe") }))
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause)
+            expect(error).toBeInstanceOf(Worktree.RemoveFailedError)
+          }
+        }),
+      { git: true },
+    )
+
+    it.instance(
+      "rejects removing the primary workspace",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const svc = yield* Worktree.Service
+          const exit = yield* Effect.exit(svc.remove({ directory: test.directory }))
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause)
+            expect(error).toBeInstanceOf(Worktree.RemoveFailedError)
+          }
         }),
       { git: true },
     )
