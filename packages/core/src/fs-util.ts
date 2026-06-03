@@ -21,7 +21,7 @@ export namespace FSUtil {
     readonly type: "file" | "directory" | "symlink" | "other"
   }
 
-  export interface Interface extends FileSystem.FileSystem {
+  export interface Interface extends Omit<FileSystem.FileSystem, "rename"> {
     readonly isDir: (path: string) => Effect.Effect<boolean>
     readonly isFile: (path: string) => Effect.Effect<boolean>
     readonly existsSafe: (path: string) => Effect.Effect<boolean>
@@ -30,6 +30,7 @@ export namespace FSUtil {
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
     readonly ensureDir: (path: string) => Effect.Effect<void, Error>
     readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
+    readonly rename: (oldPath: string, newPath: string) => Effect.Effect<void, Error>
     readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly up: (options: { targets: string[]; start: string; stop?: string }) => Effect.Effect<string[], Error>
@@ -117,6 +118,13 @@ export namespace FSUtil {
         if (mode) yield* fs.chmod(path, mode)
       })
 
+      const rename = Effect.fn("FileSystem.rename")(function* (oldPath: string, newPath: string) {
+        yield* Effect.tryPromise({
+          try: async () => NFS.rename(oldPath, newPath),
+          catch: (cause) => new FileSystemError({ method: "rename", cause }),
+        })
+      })
+
       const glob = Effect.fn("FileSystem.glob")(function* (pattern: string, options?: Glob.Options) {
         return yield* Effect.tryPromise({
           try: () => Glob.scan(pattern, options),
@@ -181,6 +189,7 @@ export namespace FSUtil {
         writeJson,
         ensureDir,
         writeWithDirs,
+        rename,
         findUp,
         up,
         globUp,

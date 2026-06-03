@@ -5,6 +5,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Git } from "@/git"
+import { randomUUID } from "crypto"
 
 const log = Log.create({ service: "storage" })
 
@@ -251,7 +252,9 @@ export const layer = Layer.effect(
       body.pipe(Effect.catchIf(missing, () => fail(target)))
 
     const writeJson = Effect.fnUntraced(function* (target: string, content: unknown) {
-      yield* fs.writeWithDirs(target, JSON.stringify(content, null, 2))
+      const tmp = target + ".tmp." + randomUUID()
+      yield* fs.writeWithDirs(tmp, JSON.stringify(content, null, 2))
+      yield* fs.rename(tmp, target)
     })
 
     const withResolved = <A, E>(
