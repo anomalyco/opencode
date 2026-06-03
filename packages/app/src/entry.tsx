@@ -121,7 +121,7 @@ const clearAuthToken = () => {
 
 const platform: Platform = {
   platform: "web",
-  version: pkg.version,
+  version: import.meta.env.VITE_OPENCODE_VERSION || pkg.version,
   openLink,
   back,
   forward,

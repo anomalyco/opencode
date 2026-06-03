@@ -12,6 +12,8 @@ const channel = (() => {
   return "dev"
 })()
 
+const version = process.env.OPENCODE_VERSION ?? ""
+
 /**
  * @type {import("vite").PluginOption}
  */
@@ -27,6 +29,7 @@ export default [
         },
         define: {
           "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+          "import.meta.env.VITE_OPENCODE_VERSION": JSON.stringify(version),
         },
         worker: {
           format: "es",
