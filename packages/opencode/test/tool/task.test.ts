@@ -480,6 +480,55 @@ describe("tool.task", () => {
     }),
   )
 
+  // Regression: subagent sessions must persist their `agent` field so that
+  // when this subagent later spawns a nested subagent via `task.ts`, the
+  // grandchild can resolve `parentAgent` and inherit the parent agent's
+  // restrictions (e.g. Plan mode edit denies) via
+  // `deriveSubagentSessionPermission`. Before this was set, `parent.agent`
+  // was undefined for any spawned subagent and the inheritance silently
+  // bypassed.
+  it.instance(
+    "execute persists the subagent's agent name on the created session",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const promptOps = stubOps()
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "reviewer",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const child = yield* sessions.get(result.metadata.sessionId)
+        expect(child.agent).toBe("reviewer")
+      }),
+    {
+      config: {
+        agent: {
+          reviewer: {
+            mode: "subagent",
+          },
+        },
+      },
+    },
+  )
+
   background.instance("execute launches background tasks without waiting for completion", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service

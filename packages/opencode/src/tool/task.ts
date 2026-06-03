@@ -146,6 +146,12 @@ export const TaskTool = Tool.define(
         session ??
         (yield* sessions.create({
           parentID: ctx.sessionID,
+          // Invariant: every subagent session row carries its agent name.
+          // `deriveSubagentSessionPermission` resolves the parent's agent
+          // from this column when a subagent spawns its own subagent, and
+          // a missing value silently drops the parent agent's edit denies
+          // (e.g. Plan mode) on the grandchild.
+          agent: next.name,
           title: params.description + ` (@${next.name} subagent)`,
           permission: [
             ...deriveSubagentSessionPermission({
