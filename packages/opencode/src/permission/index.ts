@@ -111,7 +111,8 @@ export const layer = Layer.effect(
       log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const output: { status: "ask" | "allow" | "deny" } = { status: "ask" }
-      yield* plugin.trigger("permission.ask", info, output).pipe(
+      const hookInfo = { ...info, patterns: [...info.patterns], metadata: { ...info.metadata }, always: [...info.always] }
+      yield* plugin.trigger("permission.ask", hookInfo, output).pipe(
         Effect.catchCause((cause) => {
           log.error("Plugin failed during permission.ask hook, falling back to ask", { cause })
           return Effect.sync(() => {
