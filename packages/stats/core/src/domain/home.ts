@@ -11,6 +11,7 @@ export type UsagePoint = { date: string; segments: { model: string; value: numbe
 export type MarketDay = { date: string; total: number; authors: { author: string; share: number; tokens: number }[] }
 export type LeaderboardEntry = { model: string; author: string; tokens: number; change: number; rank: number }
 export type TokenCostEntry = { model: string; total: number; input: number; output: number; cached: number }
+export type CacheRatioEntry = { model: string; ratio: number; cached: number; uncached: number; total: number }
 export type SessionCostEntry = { model: string; cost: number; tokens: number }
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
 export type StatsHomeData = {
@@ -19,6 +20,7 @@ export type StatsHomeData = {
   leaderboard: Record<UsageProduct, Record<UsageRange, LeaderboardEntry[]>>
   market: Record<UsageRange, MarketDay[]>
   tokenCost: Record<TokenProduct, TokenCostEntry[]>
+  cacheRatio: Record<TokenProduct, CacheRatioEntry[]>
   sessionCost: Record<TokenProduct, SessionCostEntry[]>
   country: Record<UsageRange, CountryEntry[]>
 }
@@ -99,6 +101,9 @@ function buildStatsHomeData(
     tokenCost: createTokenProductRecord((product) =>
       buildTokenCost(normalized, product, getWindow("1W", earliest, latest)),
     ),
+    cacheRatio: createTokenProductRecord((product) =>
+      buildCacheRatio(normalized, product, getWindow("1W", earliest, latest)),
+    ),
     sessionCost: createTokenProductRecord((product) =>
       buildSessionCost(normalized, product, getWindow("1W", earliest, latest)),
     ),
@@ -113,6 +118,7 @@ function emptyStatsHomeData(): StatsHomeData {
     leaderboard: createUsageProductRecord(() => createRangeRecord(() => [])),
     market: createRangeRecord(() => []),
     tokenCost: createTokenProductRecord(() => []),
+    cacheRatio: createTokenProductRecord(() => []),
     sessionCost: createTokenProductRecord(() => []),
     country: createRangeRecord(() => []),
   }
@@ -191,12 +197,12 @@ function buildMarketShare(rows: ProviderMetricRow[], range: UsageRange, window: 
 
 function buildCountryStats(rows: GeoMetricRow[], window: DateWindow) {
   const countries = aggregateByCountry(rowsForProduct(rows, "All Users", window.start, window.end))
-    .filter((item) => item.tokens > 0)
+    .filter((item) => item.tokens > 0 && item.country !== "AQ")
     .toSorted((a, b) => b.tokens - a.tokens)
   const totalTokens = countries.reduce((sum, item) => sum + item.tokens, 0)
   if (totalTokens === 0) return []
 
-  return countries.slice(0, 16).map((item, index) => ({
+  return countries.map((item, index) => ({
     country: item.country,
     continent: item.continent,
     tokens: round(item.tokens / 1_000_000_000_000, 4),
@@ -221,6 +227,25 @@ function buildTokenCost(rows: StatMetricRow[], product: TokenProduct, window: Da
       ]
     })
     .toSorted((a, b) => a.total - b.total)
+    .slice(0, 17)
+}
+
+function buildCacheRatio(rows: StatMetricRow[], product: TokenProduct, window: DateWindow) {
+  return aggregateByModel(rowsForProduct(rows, product, window.start, window.end))
+    .flatMap((item) => {
+      const total = item.inputTokens + item.cacheReadTokens
+      if (total === 0) return []
+      return [
+        {
+          model: item.model,
+          ratio: round((item.cacheReadTokens / total) * 100, 1),
+          cached: round(item.cacheReadTokens / 1_000_000_000, 1),
+          uncached: round(item.inputTokens / 1_000_000_000, 1),
+          total: round(total / 1_000_000_000, 1),
+        },
+      ]
+    })
+    .toSorted((a, b) => b.ratio - a.ratio || b.cached - a.cached)
     .slice(0, 17)
 }
 
