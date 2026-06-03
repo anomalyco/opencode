@@ -1914,7 +1914,10 @@ describe("session.llm.stream", () => {
           | undefined
 
         expect(capture.url.pathname).toBe(pathSuffix)
-        expect(body.contents).toEqual([{ role: "user", parts: [{ text: "Hello" }] }])
+        expect(body.contents).toEqual([
+          { role: "user", parts: [{ text: "Hello" }] },
+          { role: "model", parts: [] },
+        ])
         expect(config?.temperature).toBe(0.3)
         expect(config?.topP).toBe(0.8)
         expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))
