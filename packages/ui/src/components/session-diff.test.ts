@@ -37,7 +37,8 @@ describe("session diff", () => {
   test("renders whole-file VCS patches as complete diffs", () => {
     const fileDiff = resolveFileDiff({
       file: "a.ts",
-      patch: "diff --git a/a.ts b/a.ts\nindex 1a2b3c4..5d6e7f8 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -1,2 +1,2 @@\n one\n-old\n+new\n",
+      patch:
+        "diff --git a/a.ts b/a.ts\nindex 1a2b3c4..5d6e7f8 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -1,2 +1,2 @@\n one\n-old\n+new\n",
     })
 
     expect(fileDiff.isPartial).toBe(false)
@@ -47,7 +48,8 @@ describe("session diff", () => {
   test("keeps ordinary leading tool patches partial", () => {
     const fileDiff = resolveFileDiff({
       file: "a.ts",
-      patch: "Index: a.ts\n===================================================================\n--- a.ts\n+++ a.ts\n@@ -1,5 +1,5 @@\n-old\n+new\n two\n three\n four\n five\n",
+      patch:
+        "Index: a.ts\n===================================================================\n--- a.ts\n+++ a.ts\n@@ -1,5 +1,5 @@\n-old\n+new\n two\n three\n four\n five\n",
     })
 
     expect(fileDiff.isPartial).toBe(true)
