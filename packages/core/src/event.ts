@@ -136,7 +136,7 @@ export interface Interface {
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
-  readonly events: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<CursorEvent>
+  readonly aggregateEvents: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<CursorEvent>
   readonly sync: (handler: Sync) => Effect.Effect<Unsubscribe>
   readonly listen: (listener: Listener) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
@@ -448,7 +448,7 @@ export const layer = Layer.effect(
           const live = Stream.fromSubscription(subscription).pipe(
             Stream.filter((aggregateID) => aggregateID === input.aggregateID),
             Stream.mapEffect(() => read),
-            Stream.flatMap(Stream.fromIterable),
+            Stream.flattenIterable,
           )
           return Stream.concat(Stream.fromIterable(historical), live)
         }),
@@ -479,7 +479,7 @@ export const layer = Layer.effect(
         projectors.set(definition.type, list)
       })
 
-    return Service.of({ publish, subscribe, all: streamAll, events: streamEvents, sync, listen, project, replay, replayAll, remove, claim })
+    return Service.of({ publish, subscribe, all: streamAll, aggregateEvents: streamEvents, sync, listen, project, replay, replayAll, remove, claim })
   }),
 )
 

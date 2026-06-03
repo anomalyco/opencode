@@ -44,6 +44,7 @@ describe("SessionV2.create", () => {
       expect(SessionV2.ID.fromExternal(input)).toBe(SessionV2.ID.fromExternal(input))
       expect(SessionV2.ID.fromExternal(input)).toMatch(/^ses_[a-f0-9]{64}$/)
       expect(SessionV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(SessionV2.ID.fromExternal(input))
+      expect(SessionV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(SessionV2.ID.fromExternal({ namespace: "a", key: "b:c" }))
     }),
   )
 

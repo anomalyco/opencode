@@ -89,6 +89,7 @@ describe("EventV2", () => {
       expect(EventV2.ID.fromExternal(input)).toBe(EventV2.ID.fromExternal(input))
       expect(EventV2.ID.fromExternal(input)).toMatch(/^evt_[a-f0-9]{64}$/)
       expect(EventV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(EventV2.ID.fromExternal(input))
+      expect(EventV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(EventV2.ID.fromExternal({ namespace: "a", key: "b:c" }))
     }),
   )
 
@@ -291,7 +292,7 @@ describe("EventV2", () => {
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
-      const fiber = yield* events.events({ aggregateID, after: 0 }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events.aggregateEvents({ aggregateID, after: 0 }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "two" })
@@ -308,7 +309,7 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
-      const fiber = yield* events.events({ aggregateID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events.aggregateEvents({ aggregateID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
 
@@ -323,7 +324,7 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
-      const fiber = yield* events.events({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events.aggregateEvents({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(Message, { text: "live only" })

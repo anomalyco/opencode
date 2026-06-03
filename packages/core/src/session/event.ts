@@ -30,6 +30,12 @@ const options = {
     version: 1,
   },
 } as const
+const stepSettlementOptions = {
+  sync: {
+    aggregate: "sessionID",
+    version: 2,
+  },
+} as const
 
 export const UnknownError = Schema.Struct({
   type: Schema.Literal("unknown"),
@@ -118,7 +124,7 @@ export namespace Step {
 
   export const Ended = EventV2.define({
     type: "session.next.step.ended",
-    ...options,
+    ...stepSettlementOptions,
     schema: {
       ...Base,
       assistantMessageID: EventV2.ID,
@@ -140,7 +146,7 @@ export namespace Step {
 
   export const Failed = EventV2.define({
     type: "session.next.step.failed",
-    ...options,
+    ...stepSettlementOptions,
     schema: {
       ...Base,
       assistantMessageID: EventV2.ID,
@@ -369,42 +375,6 @@ export namespace Compaction {
   export type Ended = typeof Ended.Type
 }
 
-export const All = Schema.Union(
-  [
-    AgentSwitched,
-    ModelSwitched,
-    Prompted,
-    Synthetic,
-    Shell.Started,
-    Shell.Ended,
-    Step.Started,
-    Step.Ended,
-    Step.Failed,
-    Text.Started,
-    Text.Delta,
-    Text.Ended,
-    Tool.Input.Started,
-    Tool.Input.Delta,
-    Tool.Input.Ended,
-    Tool.Called,
-    Tool.Progress,
-    Tool.Success,
-    Tool.Failed,
-    Reasoning.Started,
-    Reasoning.Delta,
-    Reasoning.Ended,
-    Retried,
-    Compaction.Started,
-    Compaction.Delta,
-    Compaction.Ended,
-  ],
-  {
-    mode: "oneOf",
-  },
-).pipe(Schema.toTaggedUnion("type"))
-export type Event = typeof All.Type
-export type Type = Event["type"]
-
 const DurableDefinitions = [
   AgentSwitched,
   ModelSwitched,
@@ -430,8 +400,13 @@ const DurableDefinitions = [
   Compaction.Delta,
   Compaction.Ended,
 ] as const
+const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta] as const
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
 export type DurableEvent = typeof Durable.Type
+
+export const All = Schema.Union([...DurableDefinitions, ...EphemeralDefinitions], { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
+export type Event = typeof All.Type
+export type Type = Event["type"]
 
 export * as SessionEvent from "./event"

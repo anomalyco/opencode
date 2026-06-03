@@ -124,7 +124,7 @@ export interface Interface {
       direction: "previous" | "next"
     }
   }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly message: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Message | undefined>
+  readonly message: (input: { sessionID: SessionSchema.ID; messageID: SessionMessage.ID }) => Effect.Effect<SessionMessage.Message | undefined>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
@@ -356,8 +356,9 @@ export const layer = Layer.effect(
         )
         return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
       }),
-      message: Effect.fn("V2Session.message")(function* (messageID) {
-        return (yield* store.message(messageID))?.message
+      message: Effect.fn("V2Session.message")(function* (input) {
+        const stored = yield* store.message(input.messageID)
+        return stored?.sessionID === input.sessionID ? stored.message : undefined
       }),
       context: Effect.fn("V2Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
@@ -366,7 +367,7 @@ export const layer = Layer.effect(
       events: (input) =>
         Stream.unwrap(
           result.get(input.sessionID).pipe(
-            Effect.as(events.events({ aggregateID: input.sessionID, after: input.after })),
+            Effect.as(events.aggregateEvents({ aggregateID: input.sessionID, after: input.after })),
           ),
         ).pipe(
           Stream.filter((event): event is EventV2.CursorEvent<SessionEvent.DurableEvent> => isDurableSessionEvent(event.event)),
