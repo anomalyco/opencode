@@ -1512,9 +1512,15 @@ export function Prompt(props: PromptProps) {
                 setCursorVersion((value) => value + 1)
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
-              onKeyDown={(e: { preventDefault(): void }) => {
+              onKeyDown={(e: KeyEvent) => {
                 if (props.disabled) {
                   e.preventDefault()
+                  return
+                }
+                if (e.name === "return" && e.shift) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  input.insertText("\n")
                   return
                 }
               }}
