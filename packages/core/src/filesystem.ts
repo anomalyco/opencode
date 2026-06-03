@@ -48,11 +48,32 @@ export const ListInput = Schema.Struct({
 })
 export type ListInput = typeof ListInput.Type
 
+export const ListPageInput = Schema.Struct({
+  ...ListInput.fields,
+  offset: PositiveInt.pipe(Schema.optional),
+  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(2_000)).pipe(Schema.optional),
+})
+export type ListPageInput = typeof ListPageInput.Type
+
+export class ListTarget extends Schema.Class<ListTarget>("LocationFileSystem.ListTarget")({
+  absolute: Schema.String,
+  real: Schema.String,
+  directory: Schema.String,
+  root: Schema.String,
+  resource: Schema.String,
+}) {}
+
 export class Entry extends Schema.Class<Entry>("LocationFileSystem.Entry")({
   path: RelativePath,
   uri: Schema.String,
   type: Schema.Literals(["file", "directory"]),
   mime: Schema.String,
+}) {}
+
+export class ListPage extends Schema.Class<ListPage>("LocationFileSystem.ListPage")({
+  entries: Schema.Array(Entry),
+  truncated: Schema.Boolean,
+  next: PositiveInt.pipe(Schema.optional),
 }) {}
 
 export const FindInput = Schema.Struct({
@@ -97,6 +118,10 @@ export interface Interface {
   readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
   readonly readResolved: (target: ReadTarget) => Effect.Effect<Content>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
+  readonly resolveList: (input?: ListInput) => Effect.Effect<ListTarget>
+  readonly listResolved: (target: ListTarget) => Effect.Effect<Entry[]>
+  readonly listPage: (input?: ListPageInput) => Effect.Effect<ListPage>
+  readonly listPageResolved: (target: ListTarget, page?: Pick<ListPageInput, "offset" | "limit">) => Effect.Effect<ListPage>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   readonly grep: (input: GrepInput) => Effect.Effect<GrepMatch[]>
   readonly isIgnored: (path: RelativePath, type: "file" | "directory") => boolean
@@ -218,6 +243,42 @@ export const layer = Layer.effect(
         mime,
       })
     })
+    const resolveList = Effect.fn("FileSystem.resolveList")(function* (input: ListInput = {}) {
+      const directory = yield* resolve(input.path, input.reference)
+      const info = yield* fs.stat(directory.real).pipe(Effect.orDie)
+      if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
+      const relative = path.relative(directory.root, directory.real).replaceAll("\\", "/") || "."
+      return new ListTarget({
+        ...directory,
+        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
+      })
+    })
+    const listResolved = Effect.fn("FileSystem.listResolved")(function* (directory: ListTarget) {
+      return yield* fs.readDirectoryEntries(directory.real).pipe(
+        Effect.orDie,
+        Effect.flatMap((items) =>
+          Effect.forEach(items, (item) => entry(path.join(directory.absolute, item.name), directory), {
+            concurrency: "unbounded",
+          }),
+        ),
+        Effect.map((items) =>
+          items
+            .filter((item): item is Entry => item !== undefined)
+            .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
+        ),
+      )
+    })
+    const listPageResolved = Effect.fn("FileSystem.listPageResolved")(function* (
+      target: ListTarget,
+      page: Pick<ListPageInput, "offset" | "limit"> = {},
+    ) {
+      const entries = yield* listResolved(target)
+      const offset = page.offset ?? 1
+      const limit = page.limit ?? 2_000
+      const selected = entries.slice(offset - 1, offset - 1 + limit)
+      const truncated = offset - 1 + selected.length < entries.length
+      return new ListPage({ entries: selected, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
+    })
 
     return Service.of({
       read: Effect.fn("FileSystem.read")(function* (input) {
@@ -225,24 +286,15 @@ export const layer = Layer.effect(
       }),
       resolveRead,
       readResolved,
-      list: Effect.fn("FileSystem.list")(function* (input = {}) {
-        const directory = yield* resolve(input.path, input.reference)
-        const info = yield* fs.stat(directory.real).pipe(Effect.orDie)
-        if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
-        return yield* fs.readDirectoryEntries(directory.real).pipe(
-          Effect.orDie,
-          Effect.flatMap((items) =>
-            Effect.forEach(items, (item) => entry(path.join(directory.absolute, item.name), directory), {
-              concurrency: "unbounded",
-            }),
-          ),
-          Effect.map((items) =>
-            items
-              .filter((item): item is Entry => item !== undefined)
-              .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
-          ),
-        )
+      list: Effect.fn("FileSystem.list")(function* (input) {
+        return yield* listResolved(yield* resolveList(input))
       }),
+      resolveList,
+      listResolved,
+      listPage: Effect.fn("FileSystem.listPage")(function* (input) {
+        return yield* listPageResolved(yield* resolveList(input), input)
+      }),
+      listPageResolved,
       find: Effect.fn("FileSystem.find")(function* (input) {
         const items = (yield* scan()).filter((item) => input.type !== "file" || !item.endsWith("/"))
         const filtered = items.filter((item) => input.type !== "directory" || item.endsWith("/"))

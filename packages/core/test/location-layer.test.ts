@@ -17,6 +17,7 @@ import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
 import { ProjectReference } from "../src/project-reference"
+import { ToolRegistry } from "../src/tool-registry"
 
 const it = testEffect(
   LocationServiceMap.layer.pipe(
@@ -58,15 +59,17 @@ describe("LocationServiceMap", () => {
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
-              return yield* catalog.provider.all()
+              return { providers: yield* catalog.provider.all(), tools: yield* (yield* ToolRegistry.Service).definitions() }
             }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
 
-          expect((yield* update(blocked.path)).some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(
+          expect((yield* update(blocked.path)).providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(
             false,
           )
-          expect((yield* update(allowed.path)).some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(
+          const allowedState = yield* update(allowed.path)
+          expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(
             true,
           )
+          expect(allowedState.tools.map((tool) => tool.name)).toEqual(["read", "list"])
         }),
       ),
     ),

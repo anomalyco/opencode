@@ -35,6 +35,10 @@ const filesystem = Layer.succeed(FileSystem.Service, FileSystem.Service.of({
       return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
     }),
   list: () => Effect.die("unused"),
+  resolveList: () => Effect.die("unused"),
+  listResolved: () => Effect.die("unused"),
+  listPage: () => Effect.die("unused"),
+  listPageResolved: () => Effect.die("unused"),
   find: () => Effect.die("unused"),
   grep: () => Effect.die("unused"),
   isIgnored: () => false,

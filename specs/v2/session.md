@@ -57,6 +57,16 @@ resolve one path relative to the Location or a named project reference
 -> return UTF-8 text or base64 binary content
 ```
 
+The second built-in contribution is bounded `list`:
+
+```text
+resolve one directory relative to the Location or a named project reference
+-> reject absolute paths, path escapes, and symlink escapes
+-> authorize list against the canonical directory identity
+-> return direct children in directory-first alphabetical order
+-> page the structured result with one-based offset and next cursor
+```
+
 ### Current Runner Follow-Ups
 
 - Keep eager structured local-tool settlement: durably record each complete call, start its child execution immediately, await all started settlements after provider-turn consumption, persist every result, and reload history once before continuation.

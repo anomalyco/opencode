@@ -98,6 +98,41 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("lists stable bounded pages", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(directory, "src"))
+          await fs.writeFile(path.join(directory, "README.md"), "# Test")
+        })
+        const service = yield* FileSystem.Service
+
+        expect(yield* service.listPage({ limit: 1 })).toMatchObject({ entries: [{ path: "src", type: "directory" }], truncated: true, next: 2 })
+        expect(yield* service.listPage({ offset: 2, limit: 1 })).toMatchObject({ entries: [{ path: "README.md", type: "file" }], truncated: false })
+        expect((yield* service.resolveList()).resource).toBe(".")
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("rejects escaping list paths and omits escaping symlink children", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const outside = `${directory}-outside`
+        yield* Effect.promise(async () => {
+          await fs.mkdir(outside)
+          await fs.writeFile(path.join(outside, "secret.txt"), "secret")
+          await fs.symlink(outside, path.join(directory, "escape"))
+        })
+        const service = yield* FileSystem.Service
+
+        expect(Exit.isFailure(yield* service.listPage({ path: RelativePath.make("../outside") }).pipe(Effect.exit))).toBe(true)
+        expect((yield* service.listPage()).entries).toEqual([])
+        yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("rejects paths outside the location", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
