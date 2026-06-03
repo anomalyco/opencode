@@ -11433,6 +11433,18 @@
             "$ref": "#/components/schemas/EventFileWatcherUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventPtyCreated"
+          },
+          {
+            "$ref": "#/components/schemas/EventPtyUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventPtyExited"
+          },
+          {
+            "$ref": "#/components/schemas/EventPtyDeleted"
+          },
+          {
             "$ref": "#/components/schemas/EventLspUpdated"
           },
           {
@@ -11467,18 +11479,6 @@
           },
           {
             "$ref": "#/components/schemas/EventProjectUpdated"
-          },
-          {
-            "$ref": "#/components/schemas/EventPtyCreated"
-          },
-          {
-            "$ref": "#/components/schemas/EventPtyUpdated"
-          },
-          {
-            "$ref": "#/components/schemas/EventPtyExited"
-          },
-          {
-            "$ref": "#/components/schemas/EventPtyDeleted"
           },
           {
             "$ref": "#/components/schemas/EventQuestionAsked"
@@ -15008,6 +15008,108 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["pty.created"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "info": {
+                        "$ref": "#/components/schemas/Pty"
+                      }
+                    },
+                    "required": ["info"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["pty.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "info": {
+                        "$ref": "#/components/schemas/Pty"
+                      }
+                    },
+                    "required": ["info"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["pty.exited"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^pty"
+                      },
+                      "exitCode": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": ["id", "exitCode"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["pty.deleted"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^pty"
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["lsp.updated"]
                   },
                   "properties": {
@@ -15433,108 +15535,6 @@
                       }
                     },
                     "required": ["id", "worktree", "time", "sandboxes"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["pty.created"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "info": {
-                        "$ref": "#/components/schemas/Pty"
-                      }
-                    },
-                    "required": ["info"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["pty.updated"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "info": {
-                        "$ref": "#/components/schemas/Pty"
-                      }
-                    },
-                    "required": ["info"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["pty.exited"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "pattern": "^pty"
-                      },
-                      "exitCode": {
-                        "type": "integer",
-                        "minimum": 0
-                      }
-                    },
-                    "required": ["id", "exitCode"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["pty.deleted"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "pattern": "^pty"
-                      }
-                    },
-                    "required": ["id"],
                     "additionalProperties": false
                   }
                 },
@@ -19300,9 +19300,6 @@
           "id": {
             "type": "string"
           },
-          "apiID": {
-            "type": "string"
-          },
           "providerID": {
             "type": "string"
           },
@@ -19312,93 +19309,14 @@
           "name": {
             "type": "string"
           },
-          "endpoint": {
+          "api": {
             "anyOf": [
               {
                 "type": "object",
                 "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["unknown"]
-                  }
-                },
-                "required": ["type"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/responses"]
-                  },
-                  "url": {
+                  "id": {
                     "type": "string"
                   },
-                  "websocket": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/completions"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "reasoning": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_content"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_details"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      }
-                    ]
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["anthropic/messages"]
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
                   "type": {
                     "type": "string",
                     "enum": ["aisdk"]
@@ -19408,9 +19326,32 @@
                   },
                   "url": {
                     "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
                   }
                 },
-                "required": ["type", "package"],
+                "required": ["id", "type", "package"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["native"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
+                  }
+                },
+                "required": ["id", "type", "settings"],
                 "additionalProperties": false
               }
             ]
@@ -19437,7 +19378,7 @@
             "required": ["tools", "input", "output"],
             "additionalProperties": false
           },
-          "options": {
+          "request": {
             "type": "object",
             "properties": {
               "headers": {
@@ -19449,24 +19390,11 @@
               "body": {
                 "type": "object"
               },
-              "aisdk": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "object"
-                  },
-                  "request": {
-                    "type": "object"
-                  }
-                },
-                "required": ["provider", "request"],
-                "additionalProperties": false
-              },
               "variant": {
                 "type": "string"
               }
             },
-            "required": ["headers", "body", "aisdk"],
+            "required": ["headers", "body"],
             "additionalProperties": false
           },
           "variants": {
@@ -19485,22 +19413,9 @@
                 },
                 "body": {
                   "type": "object"
-                },
-                "aisdk": {
-                  "type": "object",
-                  "properties": {
-                    "provider": {
-                      "type": "object"
-                    },
-                    "request": {
-                      "type": "object"
-                    }
-                  },
-                  "required": ["provider", "request"],
-                  "additionalProperties": false
                 }
               },
-              "required": ["id", "headers", "body", "aisdk"],
+              "required": ["id", "headers", "body"],
               "additionalProperties": false
             }
           },
@@ -19603,12 +19518,11 @@
         },
         "required": [
           "id",
-          "apiID",
           "providerID",
           "name",
-          "endpoint",
+          "api",
           "capabilities",
-          "options",
+          "request",
           "variants",
           "time",
           "cost",
@@ -22237,90 +22151,8 @@
               "type": "string"
             }
           },
-          "endpoint": {
+          "api": {
             "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["unknown"]
-                  }
-                },
-                "required": ["type"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/responses"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "websocket": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/completions"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "reasoning": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_content"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_details"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      }
-                    ]
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["anthropic/messages"]
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
               {
                 "type": "object",
                 "properties": {
@@ -22333,14 +22165,34 @@
                   },
                   "url": {
                     "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
                   }
                 },
                 "required": ["type", "package"],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["native"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
+                  }
+                },
+                "required": ["type", "settings"],
+                "additionalProperties": false
               }
             ]
           },
-          "options": {
+          "request": {
             "type": "object",
             "properties": {
               "headers": {
@@ -22351,26 +22203,13 @@
               },
               "body": {
                 "type": "object"
-              },
-              "aisdk": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "object"
-                  },
-                  "request": {
-                    "type": "object"
-                  }
-                },
-                "required": ["provider", "request"],
-                "additionalProperties": false
               }
             },
-            "required": ["headers", "body", "aisdk"],
+            "required": ["headers", "body"],
             "additionalProperties": false
           }
         },
-        "required": ["id", "name", "enabled", "env", "endpoint", "options"],
+        "required": ["id", "name", "enabled", "env", "api", "request"],
         "additionalProperties": false
       },
       "PermissionV2Request": {
@@ -22534,9 +22373,6 @@
           "id": {
             "type": "string"
           },
-          "apiID": {
-            "type": "string"
-          },
           "providerID": {
             "type": "string"
           },
@@ -22546,93 +22382,14 @@
           "name": {
             "type": "string"
           },
-          "endpoint": {
+          "api": {
             "anyOf": [
               {
                 "type": "object",
                 "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["unknown"]
-                  }
-                },
-                "required": ["type"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/responses"]
-                  },
-                  "url": {
+                  "id": {
                     "type": "string"
                   },
-                  "websocket": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/completions"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "reasoning": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_content"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_details"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      }
-                    ]
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["anthropic/messages"]
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
                   "type": {
                     "type": "string",
                     "enum": ["aisdk"]
@@ -22642,9 +22399,32 @@
                   },
                   "url": {
                     "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
                   }
                 },
-                "required": ["type", "package"],
+                "required": ["id", "type", "package"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["native"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
+                  }
+                },
+                "required": ["id", "type", "settings"],
                 "additionalProperties": false
               }
             ]
@@ -22671,7 +22451,7 @@
             "required": ["tools", "input", "output"],
             "additionalProperties": false
           },
-          "options": {
+          "request": {
             "type": "object",
             "properties": {
               "headers": {
@@ -22683,24 +22463,11 @@
               "body": {
                 "type": "object"
               },
-              "aisdk": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "object"
-                  },
-                  "request": {
-                    "type": "object"
-                  }
-                },
-                "required": ["provider", "request"],
-                "additionalProperties": false
-              },
               "variant": {
                 "type": "string"
               }
             },
-            "required": ["headers", "body", "aisdk"],
+            "required": ["headers", "body"],
             "additionalProperties": false
           },
           "variants": {
@@ -22719,22 +22486,9 @@
                 },
                 "body": {
                   "type": "object"
-                },
-                "aisdk": {
-                  "type": "object",
-                  "properties": {
-                    "provider": {
-                      "type": "object"
-                    },
-                    "request": {
-                      "type": "object"
-                    }
-                  },
-                  "required": ["provider", "request"],
-                  "additionalProperties": false
                 }
               },
-              "required": ["id", "headers", "body", "aisdk"],
+              "required": ["id", "headers", "body"],
               "additionalProperties": false
             }
           },
@@ -22833,12 +22587,11 @@
         },
         "required": [
           "id",
-          "apiID",
           "providerID",
           "name",
-          "endpoint",
+          "api",
           "capabilities",
-          "options",
+          "request",
           "variants",
           "time",
           "cost",
@@ -24434,6 +24187,108 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventPtyCreated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pty.created"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/Pty"
+              }
+            },
+            "required": ["info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventPtyUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pty.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/Pty"
+              }
+            },
+            "required": ["info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventPtyExited": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pty.exited"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^pty"
+              },
+              "exitCode": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["id", "exitCode"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventPtyDeleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pty.deleted"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^pty"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventLspUpdated": {
         "type": "object",
         "properties": {
@@ -24733,108 +24588,6 @@
               }
             },
             "required": ["id", "worktree", "time", "sandboxes"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventPtyCreated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["pty.created"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "info": {
-                "$ref": "#/components/schemas/Pty"
-              }
-            },
-            "required": ["info"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventPtyUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["pty.updated"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "info": {
-                "$ref": "#/components/schemas/Pty"
-              }
-            },
-            "required": ["info"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventPtyExited": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["pty.exited"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^pty"
-              },
-              "exitCode": {
-                "type": "integer",
-                "minimum": 0
-              }
-            },
-            "required": ["id", "exitCode"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventPtyDeleted": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["pty.deleted"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^pty"
-              }
-            },
-            "required": ["id"],
             "additionalProperties": false
           }
         },
