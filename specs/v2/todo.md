@@ -109,6 +109,14 @@ failure appears during canary work:
 - serialize database migration claiming across processes; current migration
   application is protected only by an in-process semaphore, so two processes
   starting against one SQLite database can still race
+- simplify process-local durable-tail wake lifecycle with Effect `RcMap` and one
+  shared `PubSub.sliding<void>(1)` per active aggregate; keep SQLite cursor replay
+  and subscribe-before-history semantics unchanged
+- page large durable aggregate replay reads instead of loading every row after a
+  stale cursor into one array
+- decide whether connected tails need a periodic polling fallback for
+  cross-process SQLite writers; current advisory wakes are intentionally
+  process-local
 - stream-cap websearch body collection before parsing
 - add ripgrep execution timeout and bounded line framing
 - validate managed tool-output payload size during reads and cleanup

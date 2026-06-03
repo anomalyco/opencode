@@ -70,6 +70,7 @@ describe("LocationServiceMap", () => {
           const blockedState = yield* update(blocked.path)
           expect(blockedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(false)
           expect(blockedState.tools.map((tool) => tool.name).sort()).toEqual([
+            "apply_patch",
             "bash",
             "edit",
             "glob",
@@ -84,6 +85,7 @@ describe("LocationServiceMap", () => {
           const allowedState = yield* update(allowed.path)
           expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(true)
           expect(allowedState.tools.map((tool) => tool.name).sort()).toEqual([
+            "apply_patch",
             "bash",
             "edit",
             "glob",

@@ -556,3 +556,29 @@ Compatibility:
 
 - No migration, synchronized event version, OpenAPI, or SDK regeneration is required.
 - `sessions.events({ sessionID, after? })` remains a replay-and-tail stream of every durable event in aggregate sequence order.
+
+## 2026-06-03: Sequential V2 Apply Patch Tool
+
+Affected schema:
+
+- New Core-owned `apply_patch` model-facing tool parameters and success payload.
+- New Core-owned pure patch hunk representation for add, update, and delete operations.
+
+Change:
+
+- Accept `{ patchText: string }` using the `*** Begin Patch` envelope.
+- Return ordered applied-operation receipts carrying `type`, canonical `target`, and permission-facing `resource`.
+- Resolve and approve every target before reading approved update/delete contents.
+- Preflight update/delete correctness before committing operations sequentially.
+- Report already-applied resources explicitly when a later commit fails.
+
+Reason:
+
+- Embedded V2 agents need reviewable multi-file edits without importing legacy application orchestration into Core.
+- Sequential semantics are small and honest: they avoid claiming rollback or transactionality that path-based filesystem commits do not provide.
+
+Compatibility:
+
+- This is an additive model-facing V2 tool contract.
+- Moves and atomic rollback are deliberately unsupported in the first slice and remain visible follow-ups.
+- No database migration, durable-event version, public HTTP, OpenAPI, or generated SDK change is required.

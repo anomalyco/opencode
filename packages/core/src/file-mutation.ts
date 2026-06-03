@@ -160,5 +160,5 @@ export const locationLayer = layer
 // TODO: Publish watcher/file-edit events after V2 watcher integration exists.
 // TODO: Add snapshots / undo after V2 snapshot design exists.
 // TODO: Notify LSP and collect diagnostics after V2 LSP runtime exists.
-// TODO: Add multi-file transaction / rollback design before apply_patch relies on batches.
+// TODO: Add multi-file transaction / rollback design if apply_patch needs an atomic mode. The first V2 leaf is intentionally sequential and reports partial application explicitly.
 // TODO: Revisit crash recovery and idempotency for side effects after Tool.Called but before durable settlement.

@@ -2,6 +2,7 @@ export * as BuiltInTools from "./builtins"
 
 import { Layer } from "effect"
 import { BashTool } from "./bash"
+import { ApplyPatchTool } from "./apply-patch"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -21,11 +22,12 @@ import { WriteTool } from "./write"
  * services once to this merged set.
  *
  * TODO: Port the remaining launch-follow-up leaves deliberately: edit fuzzy
- * parity, apply_patch, skill, task, LSP,
+ * parity, skill, task, LSP,
  * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep MCP and plugin
  * contributions separate from this static built-in list.
  */
 export const locationLayer = Layer.mergeAll(
+  ApplyPatchTool.layer,
   BashTool.layer,
   EditTool.layer,
   GlobTool.layer,
