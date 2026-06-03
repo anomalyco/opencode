@@ -6,9 +6,9 @@
   padding: 2px;
   min-width: 160px;
 
-  background: var(--background-bg-layer-01);
+  background: var(--v2-background-bg-layer-01);
   border-radius: 6px;
-  box-shadow: var(--elevation-floating);
+  box-shadow: var(--v2-elevation-floating);
 
   outline: none;
 
@@ -25,14 +25,14 @@
 }
 
 [data-component="menu-v2-item"] {
-  --menu-v2-fg: var(--text-text-base);
-  --menu-v2-fg-muted: var(--text-text-faint);
-  --menu-v2-fg-subtle: var(--text-text-muted);
-  --menu-v2-icon: var(--icon-icon-base);
-  --menu-v2-accent: var(--text-text-accent);
-  --menu-v2-badge-bg: var(--background-bg-layer-02);
-  --menu-v2-badge-border: var(--border-border-base);
-  --menu-v2-hover: var(--overlay-simple-overlay-hover);
+  --menu-v2-fg: var(--v2-text-text-base);
+  --menu-v2-fg-muted: var(--v2-text-text-faint);
+  --menu-v2-fg-subtle: var(--v2-text-text-muted);
+  --menu-v2-icon: var(--v2-icon-icon-base);
+  --menu-v2-accent: var(--v2-text-text-accent);
+  --menu-v2-badge-bg: var(--v2-background-bg-layer-02);
+  --menu-v2-badge-border: var(--v2-border-border-base);
+  --menu-v2-hover: var(--v2-overlay-simple-overlay-hover);
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -151,7 +151,7 @@
   height: 1px;
   width: calc(100% + 4px);
   margin: 2px -2px;
-  background: var(--border-border-muted);
+  background: var(--v2-border-border-muted);
   border: none;
 }
 
@@ -166,7 +166,7 @@
   font-weight: 530;
   line-height: 100%;
   letter-spacing: 0.05px;
-  color: var(--text-text-faint);
+  color: var(--v2-text-text-faint);
   user-select: none;
   font-variant-numeric: tabular-nums;
 }

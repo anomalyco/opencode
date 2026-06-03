@@ -447,21 +447,23 @@ function HomeProjectList(props: {
         </button>
       }
     >
-      <For each={props.projects}>
-        {(project) => (
-          <HomeProjectRow
-            project={project}
-            selected={props.selected === project.worktree}
-            unseenCount={props.unseenCount(project)}
-            selectProject={props.selectProject}
-            openNewSession={props.openNewSession}
-            editProject={props.editProject}
-            closeProject={props.closeProject}
-            clearNotifications={props.clearNotifications}
-            language={props.language}
-          />
-        )}
-      </For>
+      <div class="flex min-w-0 flex-col gap-1">
+        <For each={props.projects}>
+          {(project) => (
+            <HomeProjectRow
+              project={project}
+              selected={props.selected === project.worktree}
+              unseenCount={props.unseenCount(project)}
+              selectProject={props.selectProject}
+              openNewSession={props.openNewSession}
+              editProject={props.editProject}
+              closeProject={props.closeProject}
+              clearNotifications={props.clearNotifications}
+              language={props.language}
+            />
+          )}
+        </For>
+      </div>
     </Show>
   )
 }
@@ -495,6 +497,14 @@ function HomeProjectRow(props: {
         class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
         data-menu={state.menuOpen}
       >
+        <IconButtonV2
+          data-action="home-project-new-session"
+          variant="ghost-muted"
+          size="small"
+          icon={<IconV2 name="edit" />}
+          aria-label={props.language.t("command.session.new")}
+          onClick={() => props.openNewSession(props.project.worktree)}
+        />
         <MenuV2
           gutter={4}
           modal={false}
@@ -528,14 +538,6 @@ function HomeProjectRow(props: {
             </MenuV2.Content>
           </MenuV2.Portal>
         </MenuV2>
-        <IconButtonV2
-          data-action="home-project-new-session"
-          variant="ghost-muted"
-          size="small"
-          icon={<IconV2 name="edit" />}
-          aria-label={props.language.t("command.session.new")}
-          onClick={() => props.openNewSession(props.project.worktree)}
-        />
       </div>
     </div>
   )
