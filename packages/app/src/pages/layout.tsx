@@ -201,6 +201,7 @@ export default function Layout(props: ParentProps) {
   // route is mounted. The URL still carries the project slug so existing
   // resolvers keep working, but the icon should not look "selected".
   const onConfigRoute = createMemo(() => /\/config(?:\/|$)/.test(location.pathname))
+  const onSessionRoute = createMemo(() => /\/session(?:\/|$)/.test(location.pathname))
   const tasksPanelActive = createMemo(() => store.sidebarPanel === "tasks")
   const canConfigureExtraAgents = createMemo(
     () =>
@@ -2285,8 +2286,12 @@ export default function Layout(props: ParentProps) {
 
   createEffect(
     on(
-      () => [pageReady(), routeDir(), params.id, currentProject()?.root, switching()] as const,
-      ([ready, dir, id, root, pending]) => {
+      () => [pageReady(), routeDir(), params.id, currentProject()?.root, switching(), onSessionRoute()] as const,
+      ([ready, dir, id, root, pending, sessionRoute]) => {
+        if (!sessionRoute) {
+          if (pending) setSwitching(undefined)
+          return
+        }
         if (!ready || !dir || !root || !pending) return
         if (workspaceKey(root) !== workspaceKey(pending)) return
         if (id) {
@@ -2338,10 +2343,10 @@ export default function Layout(props: ParentProps) {
   createEffect(
     on(
       () => {
-        return [pageReady(), routeSlug(), params.id, currentProject()?.root, routeDir()] as const
+        return [pageReady(), routeSlug(), params.id, currentProject()?.root, routeDir(), onSessionRoute()] as const
       },
-      ([ready, slug, id, root, dir]) => {
-        if (!ready || !slug || !dir) {
+      ([ready, slug, id, root, dir, sessionRoute]) => {
+        if (!ready || !slug || !dir || !sessionRoute) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
           activeRoute.directory = ""

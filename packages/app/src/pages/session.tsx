@@ -2038,6 +2038,7 @@ export default function Page() {
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
     if (initialScrollFrame !== undefined) cancelAnimationFrame(initialScrollFrame)
+    if (scroller?.style.visibility === "hidden") scroller.style.visibility = ""
   })
 
   return (
