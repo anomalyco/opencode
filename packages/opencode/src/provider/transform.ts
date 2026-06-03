@@ -35,6 +35,8 @@ function sdkKey(npm: string): string | undefined {
       return "azure"
     case "@ai-sdk/openai":
       return "openai"
+    case "@ai-sdk/amazon-bedrock/mantle":
+      return "openai"
     case "@ai-sdk/amazon-bedrock":
       return "bedrock"
     case "@ai-sdk/anthropic":
@@ -1069,7 +1071,8 @@ export function options(input: {
   if (
     input.model.providerID === "openai" ||
     input.model.api.npm === "@ai-sdk/openai" ||
-    input.model.api.npm === "@ai-sdk/github-copilot"
+    input.model.api.npm === "@ai-sdk/github-copilot" ||
+    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
   ) {
     result["store"] = false
   }
@@ -1155,7 +1158,7 @@ export function options(input: {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
       result["reasoningSummary"] = "auto"
-      if (input.model.api.npm === "@ai-sdk/openai") {
+      if (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle") {
         result["include"] = INCLUDE_ENCRYPTED_REASONING
       }
     }
