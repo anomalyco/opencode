@@ -43,9 +43,9 @@ function authFetch(fetchWithRuntimeOptions?: unknown) {
   // do not, so inject a Google access token into their fetch path.
   return async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const { GoogleAuth } = await import("google-auth-library")
-    const auth = new GoogleAuth()
-    const client = await auth.getApplicationDefault()
-    const token = await client.credential.getAccessToken()
+    const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] })
+    const client = await auth.getClient()
+    const token = await client.getAccessToken()
     const headers = new Headers(init?.headers)
     headers.set("Authorization", `Bearer ${token.token}`)
     return typeof fetchWithRuntimeOptions === "function"
@@ -59,7 +59,7 @@ export const GoogleVertexPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           if (item.provider.endpoint.type !== "aisdk") continue
           if (
             item.provider.endpoint.package !== "@ai-sdk/google-vertex" &&
@@ -110,7 +110,7 @@ export const GoogleVertexAnthropicPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           if (item.provider.endpoint.type !== "aisdk") continue
           if (item.provider.endpoint.package !== "@ai-sdk/google-vertex/anthropic") continue
           const project =

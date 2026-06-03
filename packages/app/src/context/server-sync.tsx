@@ -1,5 +1,5 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import {
   batch,
@@ -43,6 +43,7 @@ import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-a
 import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
+import { retry } from "@opencode-ai/core/util/retry"
 
 type GlobalStore = {
   ready: boolean
@@ -218,6 +219,19 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     onBootstrap: (directory) => {
       void bootstrapInstance(directory)
     },
+    onMcp: (directory, setStore) => {
+      void retry(() =>
+        sdkFor(directory)
+          .command.list()
+          .then((x) => setStore("command", x.data ?? [])),
+      ).catch((err) => {
+        showToast({
+          variant: "error",
+          title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+          description: formatServerError(err, language.t),
+        })
+      })
+    },
     onDispose: (directory) => {
       const key = directoryKey(directory)
       queue.clear(key)
@@ -324,6 +338,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
+        mcp: children.mcp(key),
         global: {
           config: globalStore.config,
           path: globalStore.path,
@@ -450,6 +465,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     },
     child: children.child,
     peek: children.peek,
+    disableMcp: children.disableMcp,
     queryOptions: queryOptionsApi,
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
@@ -472,7 +488,11 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
     const ctx = global.createServerCtx(conn)
 
     return Object.assign(ctx.sync, {
-      createDirSyncContext: createRefCountMap((dir) => createDirSyncContext(dir, ctx.sync)),
+      createDirSyncContext: createRefCountMap(
+        (dir) => createDirSyncContext(dir, ctx.sync),
+        (dir) => ctx.sync.disableMcp(dir),
+        directoryKey,
+      ),
     })
   },
 })

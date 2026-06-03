@@ -198,6 +198,11 @@ export const lakeCatalog = $interpolate`${glueCatalogName}/${tableBucket.name}`
 export const lakeAthenaWorkgroup = athenaWorkgroup
 
 const ingestSecret = new random.RandomPassword("LakeIngestSecret", { length: 32 })
+export const ingestSecretSsm = new aws.ssm.Parameter("LakeIngestSecretSsm", {
+  name: $interpolate`/${$app.name}/${$app.stage}/lake/ingest/secret`,
+  type: "SecureString",
+  value: ingestSecret.result,
+})
 
 const ingestConfig = new sst.Linkable("LakeIngestConfig", {
   properties: {

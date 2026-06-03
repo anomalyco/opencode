@@ -37,7 +37,7 @@ export function createModelTpsLimiter(providers: { id: string; model: string; tp
       )
 
       // convert to map of model to summed count across current and previous intervals
-      const result = data.reduce(
+      return data.reduce(
         (acc, curr) => {
           const existing = acc[curr.id] ?? { qualify: 0, unqualify: 0 }
           acc[curr.id] = {
@@ -47,13 +47,6 @@ export function createModelTpsLimiter(providers: { id: string; model: string; tp
           return acc
         },
         {} as Record<string, { qualify: number; unqualify: number }>,
-      )
-
-      return Object.fromEntries(
-        Object.entries(result).map(([id, { qualify, unqualify }]) => {
-          const isLowTps = qualify + unqualify > 10 && qualify < unqualify
-          return [id, isLowTps]
-        }),
       )
     },
     track: async (
