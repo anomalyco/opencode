@@ -63,17 +63,47 @@ describe("DatabaseMigration", () => {
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY, seq integer NOT NULL)`)
-        yield* db.run(sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, time_created integer NOT NULL, data text NOT NULL)`)
-        yield* db.run(sql`CREATE INDEX session_message_session_time_created_id_idx ON session_message (session_id, time_created, id)`)
-        yield* db.run(sql`CREATE INDEX session_message_session_type_time_created_id_idx ON session_message (session_id, type, time_created, id)`)
+        yield* db.run(
+          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, time_created integer NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE INDEX session_message_session_time_created_id_idx ON session_message (session_id, time_created, id)`,
+        )
+        yield* db.run(
+          sql`CREATE INDEX session_message_session_type_time_created_id_idx ON session_message (session_id, type, time_created, id)`,
+        )
         yield* db.run(sql`INSERT INTO event (id, seq) VALUES ('evt_z', 0), ('evt_a', 1)`)
-        yield* db.run(sql`INSERT INTO session_message (id, session_id, type, time_created, data) VALUES ('evt_z', 'session', 'user', 0, '{}'), ('evt_a', 'session', 'user', 0, '{}')`)
+        yield* db.run(
+          sql`INSERT INTO session_message (id, session_id, type, time_created, data) VALUES ('evt_z', 'session', 'user', 0, '{}'), ('evt_a', 'session', 'user', 0, '{}')`,
+        )
 
         yield* DatabaseMigration.applyOnly(db, [sessionMessageProjectionOrderMigration])
 
-        expect(yield* db.all(sql`SELECT id, seq FROM session_message ORDER BY seq`)).toEqual([{ id: "evt_z", seq: 0 }, { id: "evt_a", seq: 1 }])
+        expect(yield* db.all(sql`SELECT id, seq FROM session_message ORDER BY seq`)).toEqual([
+          { id: "evt_z", seq: 0 },
+          { id: "evt_a", seq: 1 },
+        ])
       }),
     )
+  })
+
+  test("fails projected Session message order backfill without a durable event", async () => {
+    await expect(
+      run(
+        Effect.gen(function* () {
+          const db = yield* makeDb
+          yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY, seq integer NOT NULL)`)
+          yield* db.run(
+            sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, time_created integer NOT NULL, data text NOT NULL)`,
+          )
+          yield* db.run(
+            sql`INSERT INTO session_message (id, session_id, type, time_created, data) VALUES ('evt_missing', 'session', 'user', 0, '{}')`,
+          )
+
+          yield* DatabaseMigration.applyOnly(db, [sessionMessageProjectionOrderMigration])
+        }),
+      ),
+    ).rejects.toThrow("Cannot migrate session_message projections without matching durable events")
   })
 
   test("runs session usage backfill in order with schema changes", async () => {
