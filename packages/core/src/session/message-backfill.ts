@@ -89,7 +89,7 @@ function mapUser(
     .forEach((part) => addStat(stats.degraded, part.type, part.synthetic ? "synthetic_embedded_unsupported" : "ignored_text_omitted"))
   parts
     .filter((part) => part.type !== "text" && part.type !== "file" && part.type !== "agent")
-    .forEach((part) => addUnsupportedPartStat(part, stats))
+    .forEach((part) => addUnsupportedPartStat(part, stats, "user"))
 
   addStat(stats.mapped, entry.info.role, "user_message")
   return new SessionMessage.User({
@@ -142,10 +142,26 @@ function mapAssistant(
   })
   const stepFinish = parts.filter((part): part is SessionLegacy.StepFinishPart => part.type === "step-finish").at(-1)
   const stepStart = parts.find((part): part is SessionLegacy.StepStartPart => part.type === "step-start" && part.snapshot !== undefined)
+  const retries = parts
+    .filter((part): part is SessionLegacy.RetryPart => part.type === "retry")
+    .flatMap((part): SessionMessage.AssistantRetry[] => {
+      if (part.messageID !== entry.info.id) {
+        addStat(stats.skipped, part.type, "retry_no_active_assistant")
+        return []
+      }
+      addStat(stats.mapped, part.type, "assistant_retry")
+      return [
+        new SessionMessage.AssistantRetry({
+          attempt: part.attempt,
+          error: mapRetryError(part, stats),
+          time: { created: DateTime.makeUnsafe(part.time.created) },
+        }),
+      ]
+    })
 
   parts
-    .filter((part) => part.type !== "text" && part.type !== "reasoning" && part.type !== "tool" && part.type !== "step-start" && part.type !== "step-finish")
-    .forEach((part) => addUnsupportedPartStat(part, stats))
+    .filter((part) => part.type !== "text" && part.type !== "reasoning" && part.type !== "tool" && part.type !== "retry" && part.type !== "step-start" && part.type !== "step-finish")
+    .forEach((part) => addUnsupportedPartStat(part, stats, "assistant"))
   if (entry.info.structured !== undefined) addStat(stats.degraded, "assistant", "assistant_structured_schema_missing")
   addStat(stats.degraded, "assistant", "assistant_mode_schema_missing")
   addStat(stats.degraded, "assistant", "assistant_path_schema_missing")
@@ -183,6 +199,7 @@ function mapAssistant(
     snapshot: stepStart?.snapshot || snapshotEnd ? { start: stepStart?.snapshot, end: snapshotEnd } : undefined,
     finish,
     cost,
+    retries: retries.length > 0 ? retries : undefined,
     tokens,
     error: entry.info.error ? mapAssistantError(entry.info.error, stats) : undefined,
     time: {
@@ -359,11 +376,46 @@ function mapAssistantError(error: NonNullable<SessionLegacy.Assistant["error"]>,
   return { type: "unknown", message: "Unknown assistant error" }
 }
 
-function addUnsupportedPartStat(part: SessionLegacy.Part, stats: Stats) {
+function mapRetryError(part: SessionLegacy.RetryPart, stats: Stats): SessionEvent.RetryError {
+  if (isRecord(part.error) && part.error.name === "APIError" && isRecord(part.error.data)) {
+    if (typeof part.error.data.message === "string" && typeof part.error.data.isRetryable === "boolean") {
+      return {
+        message: part.error.data.message,
+        statusCode: typeof part.error.data.statusCode === "number" ? part.error.data.statusCode : undefined,
+        isRetryable: part.error.data.isRetryable,
+        responseHeaders: stringRecord(part.error.data.responseHeaders),
+        responseBody: typeof part.error.data.responseBody === "string" ? part.error.data.responseBody : undefined,
+        metadata: stringRecord(part.error.data.metadata),
+      }
+    }
+    addStat(stats.degraded, part.type, "retry_error_malformed")
+    return {
+      message: typeof part.error.data.message === "string" ? part.error.data.message : "Malformed retry error",
+      statusCode: typeof part.error.data.statusCode === "number" ? part.error.data.statusCode : undefined,
+      isRetryable: false,
+      responseHeaders: stringRecord(part.error.data.responseHeaders),
+      responseBody: typeof part.error.data.responseBody === "string" ? part.error.data.responseBody : undefined,
+      metadata: stringRecord(part.error.data.metadata),
+    }
+  }
+  addStat(stats.degraded, part.type, "retry_error_category_unsupported")
+  return {
+    message: isRecord(part.error) && isRecord(part.error.data) && typeof part.error.data.message === "string" ? part.error.data.message : "Unsupported retry error",
+    isRetryable: false,
+  }
+}
+
+function stringRecord(value: unknown) {
+  if (!isRecord(value)) return undefined
+  const entries = Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function addUnsupportedPartStat(part: SessionLegacy.Part, stats: Stats, location: "assistant" | "user") {
   if (part.type === "subtask") return addStat(stats.skipped, part.type, "subtask_schema_missing")
   if (part.type === "patch") return addStat(stats.skipped, part.type, "patch_schema_missing")
   if (part.type === "tool") return addStat(stats.skipped, part.type, "tool_mapping_excluded")
-  if (part.type === "retry") return addStat(stats.skipped, part.type, "retry_mapping_excluded")
+  if (part.type === "retry") return addStat(stats.skipped, part.type, location === "user" ? "retry_user_unsupported" : "retry_no_active_assistant")
   if (part.type === "compaction") return addStat(stats.skipped, part.type, "compaction_mapping_excluded")
   if (part.type === "snapshot") return addStat(stats.skipped, part.type, "standalone_snapshot_unsupported")
   if (part.type === "file") return addStat(stats.skipped, part.type, "assistant_file_location_schema_missing")

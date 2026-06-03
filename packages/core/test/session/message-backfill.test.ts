@@ -182,18 +182,18 @@ function patch(messageID: string, id: string): SessionLegacy.PatchPart {
   }
 }
 
-function retry(messageID: string, id: string): SessionLegacy.RetryPart {
+function retry(messageID: string, id: string, attempt = 1, created = 1): SessionLegacy.RetryPart {
   return {
     id: SessionLegacy.PartID.make(id),
     sessionID,
     messageID: SessionLegacy.MessageID.make(messageID),
     type: "retry",
-    attempt: 1,
+    attempt,
     error: {
       name: "APIError",
-      data: { message: "retry", statusCode: 429, isRetryable: true },
+      data: { message: `retry ${attempt}`, statusCode: 429, isRetryable: true, responseHeaders: { "retry-after": "1" }, responseBody: "rate limited", metadata: { provider: "test" } },
     } as SessionLegacy.RetryPart["error"],
-    time: { created: 1 },
+    time: { created },
   }
 }
 
@@ -336,11 +336,90 @@ describe("SessionMessageBackfill", () => {
     expect(statCount(result.stats.mapped, "tool", "assistant_tool_pending")).toBe(1)
     expect(statCount(result.stats.skipped, "tool", "tool_mapping_excluded")).toBe(0)
     expect(statCount(result.stats.skipped, "patch", "patch_schema_missing")).toBe(1)
-    expect(statCount(result.stats.skipped, "retry", "retry_mapping_excluded")).toBe(1)
+    expect(statCount(result.stats.mapped, "retry", "assistant_retry")).toBe(1)
+    expect(statCount(result.stats.skipped, "retry", "retry_mapping_excluded")).toBe(0)
     expect(statCount(result.stats.skipped, "compaction", "compaction_mapping_excluded")).toBe(1)
     expect(statCount(result.stats.skipped, "subtask", "subtask_schema_missing")).toBe(1)
     expect(statCount(result.stats.degraded, "step-finish", "assistant_finish_conflict")).toBe(1)
     expect(statCount(result.stats.degraded, "assistant", "assistant_mode_schema_missing")).toBe(1)
+  })
+
+  test("maps assistant retry parts to assistant retries with API error details and created time", () => {
+    const result = SessionMessageBackfill.mapLegacyMessages([assistant("msg_retry", 1, [retry("msg_retry", "prt_retry", 2, 123)])], { sessionID })
+    const message = result.messages[0]
+
+    expect(message?.type).toBe("assistant")
+    if (message?.type !== "assistant") return
+    expect(message.retries).toEqual([
+      {
+        attempt: 2,
+        error: {
+          message: "retry 2",
+          statusCode: 429,
+          isRetryable: true,
+          responseHeaders: { "retry-after": "1" },
+          responseBody: "rate limited",
+          metadata: { provider: "test" },
+        },
+        time: { created: DateTime.makeUnsafe(123) },
+      },
+    ])
+    expect(message.retries).toBeDefined()
+    if (!message.retries?.[0]) return
+    expect(DateTime.toEpochMillis(message.retries[0].time.created)).toBe(123)
+    expect(statCount(result.stats.mapped, "retry", "assistant_retry")).toBe(1)
+    assertNoLegacyIDs(encodeMessage(message))
+  })
+
+  test("sorts multiple assistant retries by legacy part ID without changing content IDs", () => {
+    const withoutRetry = SessionMessageBackfill.mapLegacyMessages(
+      [assistant("msg_retry_order", 1, [text("msg_retry_order", "prt_b", "answer"), tool("msg_retry_order", "prt_d")])],
+      { sessionID },
+    )
+    const withRetry = SessionMessageBackfill.mapLegacyMessages(
+      [
+        assistant("msg_retry_order", 1, [
+          retry("msg_retry_order", "prt_c", 2, 20),
+          tool("msg_retry_order", "prt_d"),
+          retry("msg_retry_order", "prt_a", 1, 10),
+          text("msg_retry_order", "prt_b", "answer"),
+        ]),
+      ],
+      { sessionID },
+    )
+    const withoutMessage = withoutRetry.messages[0]
+    const withMessage = withRetry.messages[0]
+
+    expect(withoutMessage?.type).toBe("assistant")
+    expect(withMessage?.type).toBe("assistant")
+    if (withoutMessage?.type !== "assistant" || withMessage?.type !== "assistant") return
+    expect(withMessage.retries?.map((item) => item.attempt)).toEqual([1, 2])
+    expect(withMessage.content.map((content) => content.id)).toEqual(withoutMessage.content.map((content) => content.id))
+    assertNoLegacyIDs(encodeMessage(withMessage))
+  })
+
+  test("records user retry parts as skipped without mapping them into user messages", () => {
+    const result = SessionMessageBackfill.mapLegacyMessages([user("msg_user_retry", 1, [text("msg_user_retry", "prt_a", "hello"), retry("msg_user_retry", "prt_b")])], { sessionID })
+    const message = result.messages[0]
+
+    expect(message).toMatchObject({ type: "user", text: "hello" })
+    if (!message) return
+    expect(JSON.stringify(encodeMessage(message))).not.toContain("retries")
+    expect(statCount(result.stats.skipped, "retry", "retry_user_unsupported")).toBe(1)
+  })
+
+  test("degrades unsupported retry error categories and skips cross-message retry parts", () => {
+    const unsupported = retry("msg_retry_degraded", "prt_a")
+    unsupported.error = { name: "MessageAbortedError", data: { message: "aborted" } } as unknown as SessionLegacy.RetryPart["error"]
+    const orphan = retry("msg_other", "prt_b")
+    const result = SessionMessageBackfill.mapLegacyMessages([assistant("msg_retry_degraded", 1, [orphan, unsupported])], { sessionID })
+    const message = result.messages[0]
+
+    expect(message?.type).toBe("assistant")
+    if (message?.type !== "assistant") return
+    expect(message.retries).toMatchObject([{ attempt: 1, error: { message: "aborted", isRetryable: false } }])
+    expect(statCount(result.stats.degraded, "retry", "retry_error_category_unsupported")).toBe(1)
+    expect(statCount(result.stats.skipped, "retry", "retry_no_active_assistant")).toBe(1)
   })
 
   test("maps pending assistant tools with deterministic content IDs and raw input", () => {
