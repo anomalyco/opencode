@@ -121,6 +121,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onConnectionInvalid: (error) => {
           log.warn("websocket invalidated", { key, error: error.message })
           entry.busy = false
+          entry.lastUsedAt = Date.now()
           if (!entry.fallback) recordStreamFailure(entry)
           invalidate(entry)
           resolveFirstEvent(false)
@@ -186,6 +187,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     const now = Date.now()
     for (const [key, entry] of pool) {
       if (entry.busy) continue
+      if (entry.fallback) continue
       if (now - entry.lastUsedAt < idleTimeout) continue
       log.debug("websocket idle prune", { key })
       invalidate(entry)
@@ -200,7 +202,16 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     pool.clear()
   }
 
-  return Object.assign(websocketFetch, { close })
+  function remove(sessionID: string) {
+    const key = `${sessionID}:conversation`
+    const entry = pool.get(key)
+    if (!entry) return
+    log.debug("websocket pool remove", { key })
+    invalidate(entry)
+    pool.delete(key)
+  }
+
+  return Object.assign(websocketFetch, { close, remove })
 }
 
 function connectionLimitError(event: Record<string, unknown>) {
