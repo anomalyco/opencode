@@ -90,7 +90,7 @@ describe("Git worktrees", () => {
         Effect.promise(() => fs.rm(worktree, { recursive: true, force: true })).pipe(Effect.ignore),
       )
       const git = yield* Git.Service
-      const repo = { directory, store: AbsolutePath.make(`${directory}/.git`) }
+      const repo = { directory, store: AbsolutePath.make(path.join(directory, ".git")) }
 
       yield* git.worktreeCreate({ repo, directory: worktree })
 
