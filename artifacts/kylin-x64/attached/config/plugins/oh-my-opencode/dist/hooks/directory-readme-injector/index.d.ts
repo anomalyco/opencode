@@ -1,0 +1,1 @@
+export { createDirectoryReadmeInjectorHook } from "./hook";

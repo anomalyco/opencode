@@ -1,0 +1,54 @@
+import { z } from "zod";
+export declare const BuiltinAgentNameSchema: z.ZodEnum<{
+    sisyphus: "sisyphus";
+    hephaestus: "hephaestus";
+    oracle: "oracle";
+    librarian: "librarian";
+    explore: "explore";
+    "multimodal-looker": "multimodal-looker";
+    metis: "metis";
+    momus: "momus";
+    atlas: "atlas";
+    "sisyphus-junior": "sisyphus-junior";
+    prometheus: "prometheus";
+}>;
+export declare const BuiltinSkillNameSchema: z.ZodEnum<{
+    playwright: "playwright";
+    "agent-browser": "agent-browser";
+    "dev-browser": "dev-browser";
+    "frontend-ui-ux": "frontend-ui-ux";
+    "git-master": "git-master";
+    "review-work": "review-work";
+    "ai-slop-remover": "ai-slop-remover";
+}>;
+export declare const OverridableAgentNameSchema: z.ZodEnum<{
+    sisyphus: "sisyphus";
+    hephaestus: "hephaestus";
+    oracle: "oracle";
+    librarian: "librarian";
+    explore: "explore";
+    "multimodal-looker": "multimodal-looker";
+    metis: "metis";
+    momus: "momus";
+    atlas: "atlas";
+    "sisyphus-junior": "sisyphus-junior";
+    build: "build";
+    plan: "plan";
+    prometheus: "prometheus";
+    "OpenCode-Builder": "OpenCode-Builder";
+}>;
+export declare const AgentNameSchema: z.ZodEnum<{
+    sisyphus: "sisyphus";
+    hephaestus: "hephaestus";
+    oracle: "oracle";
+    librarian: "librarian";
+    explore: "explore";
+    "multimodal-looker": "multimodal-looker";
+    metis: "metis";
+    momus: "momus";
+    atlas: "atlas";
+    "sisyphus-junior": "sisyphus-junior";
+    prometheus: "prometheus";
+}>;
+export type AgentName = z.infer<typeof AgentNameSchema>;
+export type BuiltinSkillName = z.infer<typeof BuiltinSkillNameSchema>;

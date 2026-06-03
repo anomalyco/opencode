@@ -1,0 +1,1 @@
+export { createQuestionLabelTruncatorHook } from "./hook";

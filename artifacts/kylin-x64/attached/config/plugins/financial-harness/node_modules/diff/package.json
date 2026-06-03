@@ -1,0 +1,131 @@
+{
+  "name": "diff",
+  "version": "8.0.2",
+  "description": "A JavaScript text diff implementation.",
+  "keywords": [
+    "diff",
+    "jsdiff",
+    "compare",
+    "patch",
+    "text",
+    "json",
+    "css",
+    "javascript"
+  ],
+  "maintainers": [
+    "Kevin Decker <kpdecker@gmail.com> (http://incaseofstairs.com)",
+    "Mark Amery <markrobertamery+jsdiff@gmail.com>"
+  ],
+  "bugs": {
+    "email": "kpdecker@gmail.com",
+    "url": "http://github.com/kpdecker/jsdiff/issues"
+  },
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kpdecker/jsdiff.git"
+  },
+  "engines": {
+    "node": ">=0.3.1"
+  },
+  "main": "./libcjs/index.js",
+  "module": "./libesm/index.js",
+  "browser": "./dist/diff.js",
+  "unpkg": "./dist/diff.js",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./libesm/index.d.ts",
+        "default": "./libesm/index.js"
+      },
+      "require": {
+        "types": "./libcjs/index.d.ts",
+        "default": "./libcjs/index.js"
+      }
+    },
+    "./package.json": "./package.json",
+    "./lib/*.js": {
+      "import": {
+        "types": "./libesm/*.d.ts",
+        "default": "./libesm/*.js"
+      },
+      "require": {
+        "types": "./libcjs/*.d.ts",
+        "default": "./libcjs/*.js"
+      }
+    },
+    "./lib/": {
+      "import": {
+        "types": "./libesm/",
+        "default": "./libesm/"
+      },
+      "require": {
+        "types": "./libcjs/",
+        "default": "./libcjs/"
+      }
+    }
+  },
+  "type": "module",
+  "types": "libcjs/index.d.ts",
+  "scripts": {
+    "clean": "rm -rf libcjs/ libesm/ dist/ coverage/ .nyc_output/",
+    "lint": "yarn eslint",
+    "build": "yarn lint && yarn generate-esm && yarn generate-cjs && yarn check-types && yarn run-rollup && yarn run-uglify",
+    "generate-cjs": "yarn tsc --module commonjs --outDir libcjs && node --eval \"fs.writeFileSync('libcjs/package.json', JSON.stringify({type:'commonjs',sideEffects:false}))\"",
+    "generate-esm": "yarn tsc --module nodenext --outDir libesm --target es6 && node --eval \"fs.writeFileSync('libesm/package.json', JSON.stringify({type:'module',sideEffects:false}))\"",
+    "check-types": "yarn run-tsd && yarn run-attw",
+    "test": "nyc yarn _test",
+    "_test": "yarn build && cross-env NODE_ENV=test yarn run-mocha",
+    "run-attw": "yarn attw --pack --entrypoints . && yarn attw --pack --entrypoints lib/diff/word.js --profile node16",
+    "run-tsd": "yarn tsd --typings libesm/ && yarn tsd --files test-d/",
+    "run-rollup": "rollup -c rollup.config.mjs",
+    "run-uglify": "uglifyjs dist/diff.js -c -o dist/diff.min.js",
+    "run-mocha": "mocha --require ./runtime 'test/**/*.js'"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.17.4",
+    "@babel/core": "^7.26.9",
+    "@babel/preset-env": "^7.26.9",
+    "@babel/register": "^7.25.9",
+    "@colors/colors": "^1.6.0",
+    "@eslint/js": "^9.25.1",
+    "babel-loader": "^10.0.0",
+    "babel-plugin-istanbul": "^7.0.0",
+    "chai": "^5.2.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^9.25.1",
+    "globals": "^16.0.0",
+    "karma": "^6.4.4",
+    "karma-mocha": "^2.0.1",
+    "karma-mocha-reporter": "^2.2.5",
+    "karma-sourcemap-loader": "^0.4.0",
+    "karma-webpack": "^5.0.1",
+    "mocha": "^11.1.0",
+    "nyc": "^17.1.0",
+    "rollup": "^4.40.1",
+    "tsd": "^0.32.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.31.0",
+    "uglify-js": "^3.19.3",
+    "webpack": "^5.99.7",
+    "webpack-dev-server": "^5.2.1"
+  },
+  "optionalDependencies": {},
+  "dependencies": {},
+  "nyc": {
+    "require": [
+      "@babel/register"
+    ],
+    "reporter": [
+      "lcov",
+      "text"
+    ],
+    "sourceMap": false,
+    "instrument": false,
+    "check-coverage": true,
+    "branches": 100,
+    "lines": 100,
+    "functions": 100,
+    "statements": 100
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "name": "seroval-plugins",
+  "type": "module",
+  "version": "1.5.2",
+  "files": [
+    "dist",
+    "web"
+  ],
+  "engines": {
+    "node": ">=10"
+  },
+  "license": "MIT",
+  "keywords": [
+    "pridepack"
+  ],
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@vitest/ui": "^4.0.6",
+    "pridepack": "2.6.4",
+    "seroval": "1.5.2",
+    "tslib": "^2.8.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.6"
+  },
+  "peerDependencies": {
+    "seroval": "^1.0"
+  },
+  "private": false,
+  "description": "Stringify JS values",
+  "repository": {
+    "url": "https://github.com/lxsmnsyc/seroval.git",
+    "type": "git"
+  },
+  "homepage": "https://github.com/lxsmnsyc/seroval/tree/main/packages/plugins",
+  "bugs": {
+    "url": "https://github.com/lxsmnsyc/seroval/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Alexis Munsayac",
+  "exports": {
+    "./web": {
+      "types": "./dist/types/web/index.d.ts",
+      "development": {
+        "require": "./dist/cjs/development/web.cjs",
+        "import": "./dist/esm/development/web.mjs"
+      },
+      "require": "./dist/cjs/production/web.cjs",
+      "import": "./dist/esm/production/web.mjs"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "web": [
+        "./dist/types/web/index.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "pridepack build",
+    "type-check": "pridepack check",
+    "clean": "pridepack clean",
+    "watch": "pridepack watch",
+    "start": "pridepack start",
+    "dev": "pridepack dev",
+    "test": "vitest",
+    "test:ui": "vitest --ui"
+  }
+}

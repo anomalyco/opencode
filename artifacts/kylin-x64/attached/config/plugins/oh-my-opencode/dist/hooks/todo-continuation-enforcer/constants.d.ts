@@ -1,0 +1,12 @@
+export declare const HOOK_NAME = "todo-continuation-enforcer";
+export declare const DEFAULT_SKIP_AGENTS: string[];
+export declare const CONTINUATION_PROMPT: string;
+export declare const COUNTDOWN_SECONDS = 2;
+export declare const TOAST_DURATION_MS = 900;
+export declare const COUNTDOWN_GRACE_PERIOD_MS = 500;
+export declare const ABORT_WINDOW_MS = 3000;
+export declare const COMPACTION_GUARD_MS = 60000;
+export declare const CONTINUATION_COOLDOWN_MS = 5000;
+export declare const MAX_STAGNATION_COUNT = 3;
+export declare const MAX_CONSECUTIVE_FAILURES = 5;
+export declare const FAILURE_RESET_WINDOW_MS: number;

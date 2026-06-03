@@ -5,11 +5,11 @@
     将构建好的 ARM64 二进制、离线解析器、配置文件、启动脚本打包为
     可直接在内网麒麟 OS 上部署的 tar.gz 包。
 .PARAMETER Target
-    构建目标类型，需与 build-kylin-arm64.ps1 一致。默认 linux-arm64。
+    构建目标类型，需与 build-kylin-arm64.sh 一致。默认 linux-arm64。
 .PARAMETER OutputDir
     输出目录。默认 <project-root>/dist-offline-kylin-arm64
 .EXAMPLE
-    .\build-kylin-offline-package.ps1
+    .\build-kylin-arm64-release-package.ps1
     使用默认配置打包
 #>
 
@@ -62,7 +62,7 @@ if (Test-Path $OutputDir) {
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
 # ── 复制二进制 ────────────────────────────────────────
-Write-Host "`n[1/7] Copying binary..." -ForegroundColor Yellow
+Write-Host "`n[1/3] Copying binary..." -ForegroundColor Yellow
 $OutputDirBin = Join-Path $OutputDir "bin"
 New-Item -ItemType Directory -Path $OutputDirBin -Force | Out-Null
 Copy-Item $binary (Join-Path $OutputDirBin "opencode") -Force
@@ -75,7 +75,7 @@ if (Test-Path $ArtifactDirAttached) {
 }
 
 # ── 复制解析器 ────────────────────────────────────────
-Write-Host "`n[2/7] Copying offline parsers..." -ForegroundColor Yellow
+Write-Host "`n[2/3] Copying offline parsers..." -ForegroundColor Yellow
 if (Test-Path $ParsersCacheDir) {
     Copy-Item -Path $ParsersCacheDir -Destination (Join-Path $OutputDir "parsers") -Recurse -Force
     $parserCount = (Get-ChildItem (Join-Path $OutputDir "parsers") -Directory).Count
@@ -85,30 +85,8 @@ if (Test-Path $ParsersCacheDir) {
     Write-Host "  Run 'bun run script/offline-cache-parsers.ts' first." -ForegroundColor DarkYellow
 }
 
-# ── 生成启动脚本 ──────────────────────────────────────
-# Write-Host "`n[3/7] Generating run.sh..." -ForegroundColor Yellow
-# $runSh = @'
-# #!/bin/bash
-# # LINGXI CODE Offline Launcher
-# SCRIPT_DIR=$(cd $(dirname "$0") && pwd)
-
-# export OPENCODE_DISABLE_AUTOUPDATE=true
-# export OPENCODE_DISABLE_MODELS_FETCH=true
-# export OPENCODE_DISABLE_LSP_DOWNLOAD=true
-# export OPENCODE_CONFIG_DIR=$SCRIPT_DIR/config
-
-# exec "$SCRIPT_DIR/opencode" "$@"
-# '@
-# $runShUnix = $runSh -replace "`r`n", "`n"
-# [System.IO.File]::WriteAllText(
-#     (Join-Path $OutputDir "run.sh"),
-#     $runShUnix,
-#     [System.Text.UTF8Encoding]::new($false)
-# )
-# Write-Host "  Done." -ForegroundColor Green
-
 # ── 打包 ──────────────────────────────────────────────
-Write-Host "`n[3/7] Creating tar.gz archive..." -ForegroundColor Yellow
+Write-Host "`n[3/3] Creating tar.gz archive..." -ForegroundColor Yellow
 $PackageJson = Get-Content (Join-Path $BuildDir "package.json") -Encoding UTF8 | ConvertFrom-Json
 $Version = $PackageJson.version
 $tarName = "lingxicode-offline-v${Version}-kylin-arm64.tar.gz"

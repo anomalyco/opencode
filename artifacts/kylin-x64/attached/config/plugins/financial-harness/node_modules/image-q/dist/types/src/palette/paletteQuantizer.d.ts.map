@@ -1,0 +1,1 @@
+{"version":3,"file":"paletteQuantizer.d.ts","sourceRoot":"","sources":["../../../../src/palette/paletteQuantizer.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,EAAE,cAAc,EAAE,MAAM,yBAAyB,CAAC;AACzD,OAAO,EAAE,0BAA0B,EAAE,MAAM,8BAA8B,CAAC;AAE1E,8BAAsB,wBAAwB;IAC5C,QAAQ,CAAC,MAAM,CAAC,cAAc,EAAE,cAAc,GAAG,IAAI;IACrD,QAAQ,CAAC,QAAQ,IAAI,gBAAgB,CAAC,0BAA0B,CAAC;IAEjE,YAAY;CASb"}

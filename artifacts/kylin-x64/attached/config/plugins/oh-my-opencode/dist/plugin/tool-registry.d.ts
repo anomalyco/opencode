@@ -1,0 +1,41 @@
+import type { AvailableCategory } from "../agents/dynamic-agent-prompt-builder";
+import type { OhMyOpenCodeConfig } from "../config";
+import type { PluginContext, ToolsRecord } from "./types";
+import { builtinTools, createBackgroundTools, createCallOmoAgent, createLookAt, createSkillMcpTool, createSkillTool, createGrepTools, createGlobTools, createAstGrepTools, createSessionManagerTools, createDelegateTask, discoverCommandsSync, interactive_bash, createTaskCreateTool, createTaskGetTool, createTaskList, createTaskUpdateTool, createHashlineEditTool } from "../tools";
+import type { Managers } from "../create-managers";
+import type { SkillContext } from "./skill-context";
+type ToolRegistryFactories = {
+    builtinTools: typeof builtinTools;
+    createBackgroundTools: typeof createBackgroundTools;
+    createCallOmoAgent: typeof createCallOmoAgent;
+    createLookAt: typeof createLookAt;
+    createSkillMcpTool: typeof createSkillMcpTool;
+    createSkillTool: typeof createSkillTool;
+    createGrepTools: typeof createGrepTools;
+    createGlobTools: typeof createGlobTools;
+    createAstGrepTools: typeof createAstGrepTools;
+    createSessionManagerTools: typeof createSessionManagerTools;
+    createDelegateTask: typeof createDelegateTask;
+    discoverCommandsSync: typeof discoverCommandsSync;
+    interactive_bash: typeof interactive_bash;
+    createTaskCreateTool: typeof createTaskCreateTool;
+    createTaskGetTool: typeof createTaskGetTool;
+    createTaskList: typeof createTaskList;
+    createTaskUpdateTool: typeof createTaskUpdateTool;
+    createHashlineEditTool: typeof createHashlineEditTool;
+};
+export type ToolRegistryResult = {
+    filteredTools: ToolsRecord;
+    taskSystemEnabled: boolean;
+};
+export declare function trimToolsToCap(filteredTools: ToolsRecord, maxTools: number): void;
+export declare function createToolRegistry(args: {
+    ctx: PluginContext;
+    pluginConfig: OhMyOpenCodeConfig;
+    managers: Pick<Managers, "backgroundManager" | "tmuxSessionManager" | "skillMcpManager">;
+    skillContext: SkillContext;
+    availableCategories: AvailableCategory[];
+    interactiveBashEnabled?: boolean;
+    toolFactories?: Partial<ToolRegistryFactories>;
+}): ToolRegistryResult;
+export {};

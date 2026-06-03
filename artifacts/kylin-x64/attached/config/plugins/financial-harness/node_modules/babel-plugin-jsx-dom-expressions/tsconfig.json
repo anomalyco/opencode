@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "outDir": "types",
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "target": "esnext",
+    "moduleResolution": "node",
+    "allowJs": true,
+    "strict": true,
+    "paths": {
+      "dom-expressions/*": ["../dom-expressions/*"]
+    }
+  },
+  "include": ["src"]
+}

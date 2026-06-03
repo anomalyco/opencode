@@ -1,0 +1,38 @@
+{
+  "name": "s-js",
+  "version": "0.4.9",
+  "description": "S.js - simple, clean, fast reactive programming in Javascript",
+  "main": "dist/S.js",
+  "module": "dist/es/S.js",
+  "types": "dist/es/S.d.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "jasmine": "^3.1.0",
+    "karma": "^2.0.5",
+    "karma-chrome-launcher": "^2.2.0",
+    "karma-jasmine": "^1.1.2",
+    "rollup": "^0.63.4",
+    "typescript": "^2.9.2"
+  },
+  "scripts": {
+    "build": "tsc && rollup dist/es/S.js -f \"umd\" -n \"S\" -o dist/S.js && rollup dist/es/withsubclocks.js -f \"umd\" -n \"S\" -o dist/withsubclocks.js",
+    "test": "jasmine",
+    "bench": "node --allow-natives-syntax bench/bench.js"
+  },
+  "keywords": [
+    "reactive",
+    "javascript",
+    "synchronous",
+    "signal",
+    "dependency"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adamhaile/S.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adamhaile/S/issues"
+  },
+  "author": "Adam Haile",
+  "license": "MIT"
+}

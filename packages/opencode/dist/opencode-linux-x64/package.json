@@ -1,0 +1,10 @@
+{
+  "name": "opencode-linux-x64",
+  "version": "1.4.6",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ]
+}

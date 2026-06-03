@@ -1,0 +1,12 @@
+import type { RenderableOptions, Renderable } from "../Renderable.js";
+import type { PositionTypeString, OverflowString } from "./yoga.options.js";
+export declare function validateOptions(id: string, options: RenderableOptions<Renderable>): void;
+export declare function isValidPercentage(value: any): value is `${number}%`;
+export declare function isMarginType(value: any): value is number | "auto" | `${number}%`;
+export declare function isPaddingType(value: any): value is number | `${number}%`;
+export declare function isPositionType(value: any): value is number | "auto" | `${number}%`;
+export declare function isPositionTypeType(value: any): value is PositionTypeString;
+export declare function isOverflowType(value: any): value is OverflowString;
+export declare function isDimensionType(value: any): value is number | "auto" | `${number}%`;
+export declare function isFlexBasisType(value: any): value is number | "auto" | undefined;
+export declare function isSizeType(value: any): value is number | `${number}%` | undefined;

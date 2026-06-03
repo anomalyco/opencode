@@ -1,0 +1,21 @@
+import type { PluginInput } from "@opencode-ai/plugin";
+import { type ToolDefinition } from "@opencode-ai/plugin/tool";
+import { getAllSessions, getMainSessions, getSessionInfo, readSessionMessages, readSessionTodos, sessionExists, setStorageClient } from "./storage";
+import { filterSessionsByDate, formatSessionInfo, formatSessionList, formatSessionMessages, formatSearchResults, searchInSession } from "./session-formatter";
+type SessionManagerToolDeps = {
+    getAllSessions: typeof getAllSessions;
+    getMainSessions: typeof getMainSessions;
+    getSessionInfo: typeof getSessionInfo;
+    readSessionMessages: typeof readSessionMessages;
+    readSessionTodos: typeof readSessionTodos;
+    sessionExists: typeof sessionExists;
+    setStorageClient: typeof setStorageClient;
+    filterSessionsByDate: typeof filterSessionsByDate;
+    formatSessionInfo: typeof formatSessionInfo;
+    formatSessionList: typeof formatSessionList;
+    formatSessionMessages: typeof formatSessionMessages;
+    formatSearchResults: typeof formatSearchResults;
+    searchInSession: typeof searchInSession;
+};
+export declare function createSessionManagerTools(ctx: PluginInput, deps?: Partial<SessionManagerToolDeps>): Record<string, ToolDefinition>;
+export {};

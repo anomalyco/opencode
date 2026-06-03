@@ -1,0 +1,33 @@
+{
+  "enabled_providers": [
+    "enterprise-llm"
+  ],
+  "provider": {
+    "enterprise-llm": {
+      "name": "Enterprise Intranet LLM Service",
+      "npm": "@ai-sdk/openai-compatible",
+      "models": {
+        "your-model-name": {
+          "name": "Primary coding model",
+          "temperature": true,
+          "tool_call": true,
+          "limit": {
+            "output": 128000,
+            "context": 200000
+          },
+          "reasoning": true,
+          "attachment": true
+        }
+      },
+      "options": {
+        "baseURL": "http://YOUR_LLM_SERVER:8080/v1",
+        "timeout": 300000,
+        "apiKey": "{env:ENTERPRISE_API_KEY}"
+      }
+    }
+  },
+  "share": "disabled",
+  "model": "enterprise-llm/your-model-name",
+  "autoupdate": false,
+  "$schema": "https://opencode.ai/config.json"
+}
