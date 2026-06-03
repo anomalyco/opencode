@@ -5,7 +5,7 @@ import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/even
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { ServerAuth } from "../../src/server/auth"
-import { PtyID } from "../../src/pty/schema"
+import { PtyID } from "@opencode-ai/core/pty/schema"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import * as Log from "@opencode-ai/core/util/log"

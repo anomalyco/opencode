@@ -1,7 +1,6 @@
 import { Schema } from "effect"
-
-import { Identifier } from "@/id/id"
-import { withStatics } from "@opencode-ai/core/schema"
+import { Identifier } from "../id/id"
+import { withStatics } from "../schema"
 
 const ptyIdSchema = Schema.String.check(Schema.isStartsWith("pty")).pipe(Schema.brand("PtyID"))
 

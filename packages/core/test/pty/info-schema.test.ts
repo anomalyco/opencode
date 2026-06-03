@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Pty } from "../../src/pty"
+import { Pty } from "@opencode-ai/core/pty"
 
-// Windows ConPTY (via @lydell/node-pty >= 1.2.0-beta.12) assigns the child pid
-// asynchronously: `proc.pid` reads back as 0 at the synchronous spawn point and
-// only resolves to the real pid a tick later. `Pty.create` snapshots `proc.pid`
-// while building `Info`, so `Info.pid` legitimately carries 0 right after spawn.
-// `Pty.Info` must be able to represent that, otherwise every `pty.create` on
-// Windows fails to encode/decode and the terminal feature is unusable.
 const sample = (pid: number) => ({
   id: "pty_01J5Y5H0AH4Q4NXJ6P4C3P5V2K",
   title: "demo",

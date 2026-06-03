@@ -1,9 +1,8 @@
 export * as PtyTicket from "./ticket"
 
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
-import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
-import { PtyID } from "@/pty/schema"
-import { PositiveInt } from "@opencode-ai/core/schema"
+import { WorkspaceV2 } from "../workspace"
+import { PositiveInt } from "../schema"
+import { PtyID } from "./schema"
 import { Cache, Context, Duration, Effect, Layer, Schema } from "effect"
 
 const DEFAULT_TTL = Duration.seconds(60)
@@ -57,12 +56,3 @@ export const make = (ttl: Duration.Input = DEFAULT_TTL) =>
 export const layer = Layer.effect(Service, make())
 
 export const defaultLayer = layer
-
-export const scope = Effect.gen(function* () {
-  const instance = yield* InstanceRef
-  const workspaceID = yield* WorkspaceRef
-  return {
-    directory: instance?.directory,
-    workspaceID,
-  }
-})

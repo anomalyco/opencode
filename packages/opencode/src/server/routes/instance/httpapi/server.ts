@@ -31,8 +31,7 @@ import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { ProviderAuth } from "@/provider/auth"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
-import { Pty } from "@/pty"
-import { PtyTicket } from "@/pty/ticket"
+import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Question } from "@/question"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
@@ -212,7 +211,6 @@ export function createRoutes(
       ProjectCopy.defaultLayer,
       ProviderAuth.defaultLayer,
       Provider.defaultLayer,
-      Pty.defaultLayer,
       PtyTicket.defaultLayer,
       Question.defaultLayer,
       Ripgrep.defaultLayer,
