@@ -9,14 +9,14 @@ import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
-import { File } from "../file"
-import { FileWatcher } from "../file/watcher"
+import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "@/util/bom"
 
 function normalizeLineEndings(text: string): string {
@@ -35,7 +35,7 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
 const locks = new Map<string, Semaphore.Semaphore>()
 
 function lock(filePath: string) {
-  const resolvedFilePath = AppFileSystem.resolve(filePath)
+  const resolvedFilePath = FSUtil.resolve(filePath)
   const hit = locks.get(resolvedFilePath)
   if (hit) return hit
 
@@ -59,7 +59,7 @@ export const EditTool = Tool.define(
   "edit",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
-    const afs = yield* AppFileSystem.Service
+    const afs = yield* FSUtil.Service
     const format = yield* Format.Service
     const events = yield* EventV2Bridge.Service
 
@@ -108,8 +108,8 @@ export const EditTool = Tool.define(
                 if (yield* format.file(filePath)) {
                   contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
                 }
-                yield* events.publish(File.Event.Edited, { file: filePath })
-                yield* events.publish(FileWatcher.Event.Updated, {
+                yield* events.publish(FileSystem.Event.Edited, { file: filePath })
+                yield* events.publish(Watcher.Event.Updated, {
                   file: filePath,
                   event: existed ? "change" : "add",
                 })
@@ -152,8 +152,8 @@ export const EditTool = Tool.define(
               if (yield* format.file(filePath)) {
                 contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
               }
-              yield* events.publish(File.Event.Edited, { file: filePath })
-              yield* events.publish(FileWatcher.Event.Updated, {
+              yield* events.publish(FileSystem.Event.Edited, { file: filePath })
+              yield* events.publish(Watcher.Event.Updated, {
                 file: filePath,
                 event: "change",
               })
@@ -192,7 +192,7 @@ export const EditTool = Tool.define(
           let output = "Edit applied successfully."
           yield* lsp.touchFile(filePath, "document")
           const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = AppFileSystem.normalizePath(filePath)
+          const normalizedFilePath = FSUtil.normalizePath(filePath)
           const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
 

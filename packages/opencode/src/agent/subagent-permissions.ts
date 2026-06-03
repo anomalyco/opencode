@@ -1,4 +1,4 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import type { Permission } from "../permission"
 import type { Agent } from "./agent"
 import { HashSet, Result, pipe, Iterable, Array } from "effect"
@@ -23,7 +23,7 @@ import { HashSet, Result, pipe, Iterable, Array } from "effect"
  * nature of permission rule evaluation (last match applies).
  */
 export function deriveSubagentSessionPermission(input: {
-  parentSessionPermission: PermissionLegacy.Ruleset
+  parentSessionPermission: PermissionV1.Ruleset
   parentAgent: Agent.Info | undefined
   subagent: Agent.Info
 }): Permission.Ruleset {

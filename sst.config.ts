@@ -44,7 +44,7 @@ export default $config({
       ...(lake
         ? {
             LakeUrl: lake.lakeIngest.properties.url,
-            LakeSecretName: lake.lakeIngestSecret.name,
+            LakeSecretSsm: lake.ingestSecretSsm.name,
           }
         : {}),
       AwsStage: stage.awsStage,
