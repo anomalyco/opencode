@@ -620,16 +620,17 @@ function wrapInSapModelParams(
 }
 
 function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
-  if (model.api.id.includes("2.5")) {
+  const id = model.api.id.toLowerCase()
+  if (id.includes("2.5")) {
     return {
       high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
       max: {
-        thinkingConfig: { includeThoughts: true, thinkingBudget: googleThinkingBudgetMax(model.api.id) },
+        thinkingConfig: { includeThoughts: true, thinkingBudget: googleThinkingBudgetMax(id) },
       },
     }
   }
   return Object.fromEntries(
-    googleThinkingLevelEfforts(model.api.id).map((effort) => [
+    googleThinkingLevelEfforts(id).map((effort) => [
       effort,
       { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } },
     ]),
