@@ -764,6 +764,34 @@ it.instance("failed subtask preserves metadata on error tool state", () =>
   }),
 )
 
+// Integration regression: subtask child must inherit parent external_directory allow.
+it.instance("subtask child inherits parent session external_directory allow", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Parent",
+      permission: [{ permission: "external_directory", pattern: "/tmp/allowed/*", action: "allow" }],
+    })
+    yield* llm.text("done")
+    const msg = yield* user(chat.id, "hello")
+    yield* addSubtask(chat.id, msg.id)
+
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const kids = yield* sessions.children(chat.id)
+    expect(kids).toHaveLength(1)
+    const child = kids[0]!
+    const rules = child.permission ?? []
+    expect(rules).toEqual(
+      expect.arrayContaining([{ permission: "external_directory", pattern: "/tmp/allowed/*", action: "allow" }]),
+    )
+    expect(Permission.evaluate("external_directory", "/tmp/allowed/file", rules).action).toBe("allow")
+    expect(Permission.evaluate("task", "anything", rules).action).toBe("deny")
+  }),
+)
+
 it.instance(
   "running subtask preserves metadata after tool-call transition",
   () =>
@@ -2347,6 +2375,73 @@ noLLMServer.instance(
           expect(err.data.message).toContain("init")
         }
       }
+    }),
+  30_000,
+)
+
+// Regression: prompt with tools must merge into session.permission, not replace it.
+noLLMServer.instance(
+  "[subagent perm inheritance] prompt with tools merges into existing session permission",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Subagent perm merge",
+        permission: [
+          { permission: "external_directory", pattern: "/tmp/allowed/*", action: "allow" },
+          { permission: "edit", pattern: "*", action: "deny" },
+        ],
+      })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        tools: { task: false, todowrite: false },
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const reloaded = yield* sessions.get(session.id)
+      expect(reloaded.permission).toEqual([
+        { permission: "external_directory", pattern: "/tmp/allowed/*", action: "allow" },
+        { permission: "edit", pattern: "*", action: "deny" },
+        { permission: "task", pattern: "*", action: "deny" },
+        { permission: "todowrite", pattern: "*", action: "deny" },
+      ])
+
+      expect(Permission.evaluate("external_directory", "/tmp/allowed/file", reloaded.permission ?? []).action).toBe(
+        "allow",
+      )
+      expect(Permission.evaluate("task", "anything", reloaded.permission ?? []).action).toBe("deny")
+      expect(Permission.evaluate("todowrite", "*", reloaded.permission ?? []).action).toBe("deny")
+    }),
+  30_000,
+)
+
+noLLMServer.instance(
+  "[subagent perm inheritance] prompt without tools preserves existing session permission",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const original = [
+        { permission: "external_directory", pattern: "/tmp/foo/*", action: "allow" as const },
+      ]
+      const session = yield* sessions.create({
+        title: "No tools preserve",
+        permission: original,
+      })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const reloaded = yield* sessions.get(session.id)
+      expect(reloaded.permission).toEqual(original)
     }),
   30_000,
 )
