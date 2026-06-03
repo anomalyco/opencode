@@ -89,11 +89,15 @@ function DiffViewer(props: { api: TuiPluginApi }) {
         }
       | undefined
   const mode = () => params()?.mode ?? "git"
-  const diffInput = createMemo(() => ({
-    mode: mode(),
-    sessionID: params()?.sessionID,
-    messageID: params()?.messageID,
-  }))
+  const diffInput = createMemo(() => {
+    const sessionID = params()?.sessionID
+    return {
+      mode: mode(),
+      sessionID,
+      messageID: params()?.messageID,
+      directory: sessionID ? props.api.state.session.get(sessionID)?.directory : undefined,
+    }
+  })
   const [diff] = createResource(diffInput, async (input) => {
     if (input.mode === "last-turn") {
       const sessionID = input.sessionID
@@ -106,7 +110,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     }
 
     const result = await props.api.client.vcs.diff(
-      { mode: "git", context: WORKING_TREE_DIFF_CONTEXT_LINES },
+      { directory: input.directory, mode: "git", context: WORKING_TREE_DIFF_CONTEXT_LINES },
       { throwOnError: true },
     )
     return normalizeDiffs(result.data ?? [])

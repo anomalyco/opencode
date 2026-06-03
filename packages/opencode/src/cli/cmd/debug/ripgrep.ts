@@ -1,6 +1,6 @@
 import { EOL } from "os"
 import { Effect, Stream } from "effect"
-import { Ripgrep } from "../../../file/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 import { InstanceRef } from "@/effect/instance-ref"

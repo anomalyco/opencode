@@ -52,8 +52,6 @@ export function toToolKind(toolName: string): ToolKind {
 
     case "grep":
     case "glob":
-    case "repo_clone":
-    case "repo_overview":
     case "context":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
@@ -78,8 +76,6 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
 
     case "grep":
     case "glob":
-    case "repo_clone":
-    case "repo_overview":
     case "context":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
