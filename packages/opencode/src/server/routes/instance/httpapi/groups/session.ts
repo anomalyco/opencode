@@ -1,6 +1,6 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "@/permission"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
@@ -48,7 +48,7 @@ export const StatusMap = Schema.Record(Schema.String, SessionStatus.Info)
 export const UpdatePayload = Schema.Struct({
   title: Schema.optional(Schema.String),
   metadata: Schema.optional(Session.Metadata),
-  permission: Schema.optional(PermissionLegacy.Ruleset),
+  permission: Schema.optional(PermissionV1.Ruleset),
   time: Schema.optional(
     Schema.Struct({
       archived: Schema.optional(Session.ArchivedTimestamp),
@@ -71,7 +71,7 @@ export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInp
 export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
 export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
 export const PermissionResponsePayload = Schema.Struct({
-  response: PermissionLegacy.Reply,
+  response: PermissionV1.Reply,
 })
 
 export const SessionPaths = {
@@ -178,7 +178,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("messages", SessionPaths.messages, {
           params: { sessionID: SessionID },
           query: MessagesQuery,
-          success: described(Schema.Array(SessionLegacy.WithParts), "List of messages"),
+          success: described(Schema.Array(SessionV1.WithParts), "List of messages"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -190,7 +190,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("message", SessionPaths.message, {
           params: { sessionID: SessionID, messageID: MessageID },
           query: WorkspaceRoutingQuery,
-          success: described(SessionLegacy.WithParts, "Message"),
+          success: described(SessionV1.WithParts, "Message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -316,7 +316,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           payload: PromptPayload,
-          success: described(SessionLegacy.WithParts, "Created message"),
+          success: described(SessionV1.WithParts, "Created message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -343,7 +343,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           payload: CommandPayload,
-          success: described(SessionLegacy.WithParts, "Created message"),
+          success: described(SessionV1.WithParts, "Created message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -356,7 +356,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           payload: ShellPayload,
-          success: described(SessionLegacy.WithParts, "Created message"),
+          success: described(SessionV1.WithParts, "Created message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -392,7 +392,7 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.post("permissionRespond", SessionPaths.permissions, {
-          params: { sessionID: SessionID, permissionID: PermissionLegacy.ID },
+          params: { sessionID: SessionID, permissionID: PermissionV1.ID },
           query: WorkspaceRoutingQuery,
           payload: PermissionResponsePayload,
           success: described(Schema.Boolean, "Permission processed successfully"),
@@ -432,8 +432,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.patch("updatePart", SessionPaths.updatePart, {
           params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
           query: WorkspaceRoutingQuery,
-          payload: SessionLegacy.Part,
-          success: described(SessionLegacy.Part, "Successfully updated part"),
+          payload: SessionV1.Part,
+          success: described(SessionV1.Part, "Successfully updated part"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({

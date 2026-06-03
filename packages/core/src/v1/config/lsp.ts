@@ -1,7 +1,6 @@
-export * as ConfigLSP from "./lsp"
+export * as ConfigLSPV1 from "./lsp"
 
 import { Schema } from "effect"
-import * as LSPServer from "../lsp/server"
 
 export const Disabled = Schema.Struct({
   disabled: Schema.Literal(true),
@@ -18,19 +17,57 @@ export const Entry = Schema.Union([
   }),
 ]).pipe((schema) => schema)
 
-/**
- * For custom (non-builtin) LSP server entries, `extensions` is required so the
- * client knows which files the server should attach to. Builtin server IDs and
- * explicitly disabled entries are exempt.
- */
+// Keep this list aligned with the builtin servers in opencode's LSP runtime.
+// Custom servers must declare extensions because the runtime cannot infer them.
+export const builtinServerIds = [
+  "deno",
+  "typescript",
+  "vue",
+  "eslint",
+  "oxlint",
+  "biome",
+  "gopls",
+  "ruby-lsp",
+  "ty",
+  "pyright",
+  "elixir-ls",
+  "zls",
+  "csharp",
+  "razor",
+  "fsharp",
+  "sourcekit-lsp",
+  "rust",
+  "clangd",
+  "svelte",
+  "astro",
+  "jdtls",
+  "kotlin-ls",
+  "yaml-ls",
+  "lua-ls",
+  "php intelephense",
+  "prisma",
+  "dart",
+  "ocaml-lsp",
+  "bash",
+  "terraform",
+  "texlab",
+  "dockerfile",
+  "gleam",
+  "clojure-lsp",
+  "nixd",
+  "tinymist",
+  "haskell-language-server",
+  "julials",
+]
+
 export const requiresExtensionsForCustomServers = Schema.makeFilter<
   boolean | Record<string, Schema.Schema.Type<typeof Entry>>
 >((data) => {
   if (typeof data === "boolean") return undefined
-  const serverIds = new Set(Object.values(LSPServer).map((server) => server.id))
+  const ids = new Set(builtinServerIds)
   const ok = Object.entries(data).every(([id, config]) => {
     if ("disabled" in config && config.disabled) return true
-    if (serverIds.has(id)) return true
+    if (ids.has(id)) return true
     return "extensions" in config && Boolean(config.extensions)
   })
   return ok ? undefined : "For custom LSP servers, 'extensions' array is required."

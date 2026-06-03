@@ -1,4 +1,4 @@
-import type { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 // CLI entry point for `opencode run`.
 //
 // Handles three modes:
@@ -362,7 +362,7 @@ export const RunCommand = effectCmd({
         process.exit(1)
       }
 
-      const rules: PermissionLegacy.Ruleset = args.interactive
+      const rules: PermissionV1.Ruleset = args.interactive
         ? []
         : [
             {

@@ -1,5 +1,7 @@
+export * as ConfigMCPV1 from "./mcp"
+
 import { Schema } from "effect"
-import { PositiveInt } from "@opencode-ai/core/schema"
+import { PositiveInt } from "../../schema"
 
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
@@ -56,5 +58,3 @@ export type Remote = Schema.Schema.Type<typeof Remote>
 
 export const Info = Schema.Union([Local, Remote]).annotate({ discriminator: "type" })
 export type Info = Schema.Schema.Type<typeof Info>
-
-export * as ConfigMCP from "./mcp"

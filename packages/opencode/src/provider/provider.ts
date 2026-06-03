@@ -1,4 +1,5 @@
 import os from "os"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -142,7 +143,7 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
 
 type CustomDep = {
   auth: (id: string) => Effect.Effect<Auth.Info | undefined>
-  config: () => Effect.Effect<Config.Info>
+  config: () => Effect.Effect<ConfigV1.Info>
   env: () => Effect.Effect<Record<string, string | undefined>>
   get: (key: string) => Effect.Effect<string | undefined>
 }
