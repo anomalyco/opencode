@@ -182,17 +182,75 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("prepares user message with media as image_url content block", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({
           id: "req_media",
           model,
           messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("OpenAI Chat user messages only support text content for now")
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: "data:image/png;base64,AAECAw==",
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("prepares user message with mixed text and media", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          id: "req_mixed",
+          model,
+          messages: [
+            LLM.user([
+              { type: "text", text: "What is in this image?" },
+              { type: "media", mediaType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHAFQIAxflheFOeAAAAABJRU5ErkJggg==" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "What is in this image?" },
+            {
+              type: "image_url",
+              image_url: {
+                url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHAFQIAxflheFOeAAAAABJRU5ErkJggg==",
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("prepares user message with only text (no content blocks)", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          id: "req_text",
+          model,
+          messages: [LLM.user("Hello world")],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([{ role: "user", content: "Hello world" }])
     }),
   )
 
