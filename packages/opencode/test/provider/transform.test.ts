@@ -1193,6 +1193,175 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   })
 })
 
+describe("ProviderTransform.message - Cloudflare Workers AI content normalization", () => {
+  test("normalizes mixed string/array content into string-only messages when parts are text-only", () => {
+    const model = {
+      id: "cloudflare-workers-ai/@cf/meta/llama-4-scout-17b-16e-instruct",
+      providerID: "cloudflare-workers-ai",
+      api: {
+        id: "@cf/meta/llama-4-scout-17b-16e-instruct",
+        url: "https://api.cloudflare.com/client/v4/accounts/test/ai/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Llama 4 Scout",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "",
+    } as any
+
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant.",
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "First line" },
+          { type: "text", text: "Second line" },
+        ],
+      },
+      {
+        role: "user",
+        content: "Please help me debug this issue.",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(typeof result[0].content).toBe("string")
+    expect(typeof result[1].content).toBe("string")
+    expect(typeof result[2].content).toBe("string")
+    expect(result[1].content).toBe("First line\nSecond line")
+  })
+
+  test("keeps non-text array content unchanged", () => {
+    const model = {
+      id: "cloudflare-workers-ai/@cf/meta/llama-4-scout-17b-16e-instruct",
+      providerID: "cloudflare-workers-ai",
+      api: {
+        id: "@cf/meta/llama-4-scout-17b-16e-instruct",
+        url: "https://api.cloudflare.com/client/v4/accounts/test/ai/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Llama 4 Scout",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "",
+    } as any
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "echo hi" } }],
+      },
+      {
+        role: "user",
+        content: "continue",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(Array.isArray(result[0].content)).toBe(true)
+    expect(typeof result[1].content).toBe("string")
+  })
+
+  test("does not normalize when an array message is empty", () => {
+    const model = {
+      id: "cloudflare-workers-ai/@cf/meta/llama-4-scout-17b-16e-instruct",
+      providerID: "cloudflare-workers-ai",
+      api: {
+        id: "@cf/meta/llama-4-scout-17b-16e-instruct",
+        url: "https://api.cloudflare.com/client/v4/accounts/test/ai/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Llama 4 Scout",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "",
+    } as any
+
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant.",
+      },
+      {
+        role: "assistant",
+        content: [],
+      },
+      {
+        role: "user",
+        content: "Please help me debug this issue.",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(typeof result[0].content).toBe("string")
+    expect(Array.isArray(result[1].content)).toBe(true)
+    expect(typeof result[2].content).toBe("string")
+  })
+})
+
 describe("ProviderTransform.message - surrogate sanitization", () => {
   const model = {
     id: "test/test-model",
