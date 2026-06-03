@@ -158,6 +158,52 @@ function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
+    gab: Effect.fnUntraced(function* (input: Info) {
+      const env = yield* dep.env()
+      const apiKey = input.env.map((item) => env[item]).find(Boolean)
+      return {
+        autoload: false,
+        discoverModels: async () => {
+          if (!apiKey) return {}
+          const res = await fetch("https://api.gab.ai/v1/models", {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          })
+          if (!res.ok) return {}
+          const json = (await res.json()) as { data?: Array<{ id: string; owned_by?: string }> }
+          const models: Record<string, Model> = {}
+          for (const m of json.data ?? []) {
+            models[m.id] = {
+              id: ProviderV2.ModelID.make(m.id),
+              providerID: ProviderV2.ID.make("gab"),
+              name: m.id,
+              family: m.owned_by ?? "",
+              api: {
+                id: m.id,
+                url: "https://api.gab.ai/v1",
+                npm: "@ai-sdk/openai-compatible",
+              },
+              status: "active",
+              capabilities: {
+                temperature: true,
+                reasoning: false,
+                attachment: false,
+                toolcall: true,
+                input: { text: true, audio: false, image: false, video: false, pdf: false },
+                output: { text: true, audio: false, image: false, video: false, pdf: false },
+                interleaved: false,
+              },
+              cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+              limit: { context: 0, output: 0 },
+              headers: {},
+              options: {},
+              release_date: "",
+              variants: {},
+            }
+          }
+          return models
+        },
+      }
+    }),
     anthropic: () =>
       Effect.succeed({
         autoload: false,
@@ -1201,6 +1247,17 @@ export const layer = Layer.effect(
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
         const database = mapValues(catalog, toPublicInfo)
 
+        // Inject hardcoded builtin providers not present in models.dev
+        const GAB_PROVIDER_ID = ProviderV2.ID.make("gab")
+        database[GAB_PROVIDER_ID] = {
+          id: GAB_PROVIDER_ID,
+          source: "custom",
+          name: "Gab AI",
+          env: ["GAB_API_KEY"],
+          options: {},
+          models: {},
+        }
+
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()
         const modelLoaders: {
@@ -1446,18 +1503,19 @@ export const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [id, loader] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderV2.ID.make(id)
+          if (!providers[providerID] || !isProviderAllowed(providerID)) continue
           yield* Effect.promise(async () => {
             try {
-              const discovered = await discoveryLoaders[gitlab]()
+              const discovered = await loader()
               for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+                if (!providers[providerID].models[modelID]) {
+                  providers[providerID].models[modelID] = model
                 }
               }
             } catch (e) {
-              log.warn("state discovery error", { id: "gitlab", error: e })
+              log.warn("state discovery error", { id, error: e })
             }
           })
         }
