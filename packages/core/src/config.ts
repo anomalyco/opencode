@@ -98,30 +98,22 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
 }) {}
 
-export const FileSource = Schema.Struct({
-  type: Schema.Literal("file"),
-  path: Schema.String,
-}).annotate({ identifier: "Config.FileSource" })
-export type FileSource = typeof FileSource.Type
-
-export const MemorySource = Schema.Struct({
-  type: Schema.Literal("memory"),
-}).annotate({ identifier: "Config.MemorySource" })
-export type MemorySource = typeof MemorySource.Type
-
-export const Source = Schema.Union([FileSource, MemorySource]).pipe(Schema.toTaggedUnion("type"))
-export type Source = typeof Source.Type
-
-export class Loaded extends Schema.Class<Loaded>("Config.Loaded")({
-  source: Source,
+export class Document extends Schema.Class<Document>("Config.Document")({
+  type: Schema.Literal("document"),
+  path: Schema.String.pipe(Schema.optional),
   info: Info,
 }) {}
 
+export class Directory extends Schema.Class<Directory>("Config.Directory")({
+  type: Schema.Literal("directory"),
+  path: AbsolutePath,
+}) {}
+
+export type Entry = Document | Directory
+
 export interface Interface {
-  /** Returns supplemental config directories from lowest to highest priority. */
-  readonly directories: () => Effect.Effect<AbsolutePath[]>
-  /** Loads location config files from lowest to highest priority. */
-  readonly get: () => Effect.Effect<Loaded[]>
+  /** Returns location config documents and supplemental directories from lowest to highest priority. */
+  readonly entries: () => Effect.Effect<Entry[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Config") {}
@@ -160,39 +152,40 @@ export const layer = Layer.effect(
         ),
       )
       if (!info) return
-      return new Loaded({ source: { type: "file", path: filepath }, info })
+      return new Document({ type: "document", path: filepath, info })
     })
 
     const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
-      return yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
-        Effect.map((configs) => configs.filter((config): config is Loaded => config !== undefined)),
-      )
+      return [
+        ...(yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
+          Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
+        )),
+        new Directory({ type: "directory", path: directory }),
+      ]
     })
 
     const globalDirectory = AbsolutePath.make(global.config)
     const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
     // Read configuration once when this location opens. Later calls reuse these
     // values until the location is reopened.
-    const directories = locationIsGlobal
-      ? [globalDirectory]
-      : [
-          globalDirectory,
-          ...(yield* fs
-            .up({ targets: [".opencode"], start: location.directory, stop: location.project.directory })
-            .pipe(Effect.orDie))
-            .toReversed()
-            .map((directory) => AbsolutePath.make(directory)),
-        ]
+    const discovered = locationIsGlobal
+      ? []
+      : yield* fs
+          .up({ targets: [".opencode", ...names.toReversed()], start: location.directory, stop: location.project.directory })
+          .pipe(Effect.orDie)
+    const directories = [
+      globalDirectory,
+      ...discovered
+        .filter((item) => path.basename(item) === ".opencode")
+        .toReversed()
+        .map((directory) => AbsolutePath.make(directory)),
+    ]
     // A config closer to the opened directory should win over one higher up.
     // Search starts nearby, so reverse the results before applying them.
-    const directPaths = locationIsGlobal
-      ? []
-      : (yield* fs
-          .up({ targets: names.toReversed(), start: location.directory, stop: location.project.directory })
-          .pipe(Effect.orDie)).toReversed()
+    const directPaths = discovered.filter((item) => path.basename(item) !== ".opencode").toReversed()
     const direct = yield* Effect.forEach(directPaths, loadFile).pipe(
       Effect.orDie,
-      Effect.map((configs) => configs.filter((config): config is Loaded => config !== undefined)),
+      Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
     )
     const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
@@ -200,13 +193,15 @@ export const layer = Layer.effect(
     const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
-    yield* policy.load(configs.toReversed().flatMap((config) => config.info.experimental?.policies ?? []))
+    yield* policy.load(
+      configs
+        .filter((config): config is Document => config.type === "document")
+        .toReversed()
+        .flatMap((config) => config.info.experimental?.policies ?? []),
+    )
 
     return Service.of({
-      directories: Effect.fn("Config.directories")(function* () {
-        return directories
-      }),
-      get: Effect.fn("Config.get")(function* () {
+      entries: Effect.fn("Config.entries")(function* () {
         return configs
       }),
     })

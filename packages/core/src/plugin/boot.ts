@@ -7,6 +7,7 @@ import { Catalog } from "../catalog"
 import { Config } from "../config"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { EventV2 } from "../event"
+import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
@@ -26,6 +27,7 @@ type Plugin = {
     | AgentV2.Service
     | Npm.Service
     | EventV2.Service
+    | FSUtil.Service
     | Location.Service
     | PluginV2.Service
     | Config.Service
@@ -51,6 +53,7 @@ export const layer = Layer.effect(
     const modelsDev = yield* ModelsDev.Service
     const npm = yield* Npm.Service
     const events = yield* EventV2.Service
+    const fs = yield* FSUtil.Service
     const done = yield* Deferred.make<void>()
 
     const add = Effect.fn("PluginBoot.add")(function* (input: Plugin) {
@@ -65,6 +68,7 @@ export const layer = Layer.effect(
           Effect.provideService(ModelsDev.Service, modelsDev),
           Effect.provideService(Npm.Service, npm),
           Effect.provideService(EventV2.Service, events),
+          Effect.provideService(FSUtil.Service, fs),
           Effect.provideService(PluginV2.Service, plugin),
         ),
       })
