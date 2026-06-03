@@ -91,7 +91,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     }
     if (entry.busy) {
       log.debug("http fallback", { key, reason: "busy" })
-      return httpFetch(input, httpInit)
+      return fallbackFetch(input, httpInit, entry)
     }
 
     entry.busy = true
@@ -228,8 +228,15 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           return response
         }
 
-        const reader = response.body.getReader()
-        return new Response(
+        const reader = (() => {
+          try {
+            return response.body.getReader()
+          } catch (error) {
+            release()
+            throw error
+          }
+        })()
+        const wrapped = new Response(
           new ReadableStream({
             pull(controller) {
               return reader.read().then(
@@ -254,6 +261,12 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           }),
           response,
         )
+        Object.defineProperties(wrapped, {
+          redirected: { value: response.redirected },
+          type: { value: response.type },
+          url: { value: response.url },
+        })
+        return wrapped
       },
       (error) => {
         release()

@@ -300,6 +300,66 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("keeps HTTP fallback active while a busy-lane response body streams", async () => {
+    let connections = 0
+    let httpRequests = 0
+    let failWebSocket = () => {}
+    const http = await createHttpServer((_request, response) => {
+      httpRequests += 1
+      if (httpRequests > 1) {
+        response.writeHead(200, { "content-type": "text/plain" })
+        response.end("http")
+        return
+      }
+      response.writeHead(200, { "content-type": "text/plain" })
+      response.write("started")
+    })
+    const sockets = new WebSocketServer({ server: http.server })
+    sockets.on("connection", (socket) => {
+      connections += 1
+      socket.once("message", () => {
+        socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
+        failWebSocket = () => socket.terminate()
+      })
+    })
+    await using server = websocketServerHandle(sockets, http)
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      idleTimeout: 20,
+      streamRetries: 0,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    const firstText = first.text()
+    const second = await fetch(server.url, streamRequest())
+    failWebSocket()
+    expect((await readTextError(firstText)).message).toContain("WebSocket closed before response.completed")
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const third = await fetch(server.url, streamRequest())
+
+    expect(await third.text()).toBe("http")
+    expect(connections).toBe(1)
+    await second.body!.cancel()
+    fetch.close()
+  })
+
+  test("preserves HTTP fallback response metadata", async () => {
+    await using server = await createRejectingWebSocketServer(() => {})
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      streamRetries: 0,
+    })
+
+    const response = await fetch(server.url, streamRequest())
+
+    expect(response.url).toBe(server.url)
+    expect(response.redirected).toBe(false)
+    expect(response.type).toBe("default")
+    expect(await response.text()).toBe("http")
+    fetch.close()
+  })
+
   test("prunes idle websocket connections after completed responses", async () => {
     let connections = 0
     let closed = 0
