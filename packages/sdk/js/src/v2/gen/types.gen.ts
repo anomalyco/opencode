@@ -617,6 +617,45 @@ export type Part =
   | RetryPart
   | CompactionPart
 
+export type PermissionMetadata = {
+  filepath?: string
+  diff?: string
+  files?: Array<{
+    filePath: string
+    relativePath: string
+    type: string
+    patch: string
+    additions: number
+    deletions: number
+    movePath?: string
+  }>
+  parentDir?: string
+  url?: string
+  format?: string
+  timeout?: number
+  query?: string
+  numResults?: number
+  livecrawl?: boolean
+  type?: string
+  contextMaxCharacters?: number
+  provider?: string
+  repository?: string
+  remote?: string
+  path?: string
+  refresh?: boolean
+  branch?: string
+  depth?: number
+  pattern?: string
+  include?: string
+  description?: string
+  subagent_type?: string
+  operation?: string
+  filePath?: string
+  line?: number
+  character?: number
+  input?: unknown
+}
+
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -1234,9 +1273,7 @@ export type GlobalEvent = {
           sessionID: string
           permission: string
           patterns: Array<string>
-          metadata: {
-            [key: string]: unknown
-          }
+          metadata: PermissionMetadata
           always: Array<string>
           tool?: {
             messageID: string
@@ -2477,9 +2514,7 @@ export type PermissionRequest = {
   sessionID: string
   permission: string
   patterns: Array<string>
-  metadata: {
-    [key: string]: unknown
-  }
+  metadata: PermissionMetadata
   always: Array<string>
   tool?: {
     messageID: string
@@ -4676,9 +4711,7 @@ export type EventPermissionAsked = {
     sessionID: string
     permission: string
     patterns: Array<string>
-    metadata: {
-      [key: string]: unknown
-    }
+    metadata: PermissionMetadata
     always: Array<string>
     tool?: {
       messageID: string

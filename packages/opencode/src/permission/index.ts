@@ -7,7 +7,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import * as Log from "@opencode-ai/core/util/log"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
-import { Deferred, Effect, Layer, Schema, Context } from "effect"
+import { Deferred, Effect, Layer, Option, Schema, Context } from "effect"
 import os from "os"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { PermissionID } from "./schema"
@@ -29,6 +29,48 @@ export type Rule = Schema.Schema.Type<typeof Rule>
 export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionRuleset" })
 export type Ruleset = Schema.Schema.Type<typeof Ruleset>
 
+const MetadataFile = Schema.Struct({
+  filePath: Schema.String,
+  relativePath: Schema.String,
+  type: Schema.String,
+  patch: Schema.String,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  movePath: Schema.optional(Schema.String),
+})
+
+export const Metadata = Schema.Struct({
+  filepath: Schema.optional(Schema.String),
+  diff: Schema.optional(Schema.String),
+  files: Schema.optional(Schema.Array(MetadataFile)),
+  parentDir: Schema.optional(Schema.String),
+  url: Schema.optional(Schema.String),
+  format: Schema.optional(Schema.String),
+  timeout: Schema.optional(Schema.Finite),
+  query: Schema.optional(Schema.String),
+  numResults: Schema.optional(Schema.Finite),
+  livecrawl: Schema.optional(Schema.Boolean),
+  type: Schema.optional(Schema.String),
+  contextMaxCharacters: Schema.optional(Schema.Finite),
+  provider: Schema.optional(Schema.String),
+  repository: Schema.optional(Schema.String),
+  remote: Schema.optional(Schema.String),
+  path: Schema.optional(Schema.String),
+  refresh: Schema.optional(Schema.Boolean),
+  branch: Schema.optional(Schema.String),
+  depth: Schema.optional(Schema.Finite),
+  pattern: Schema.optional(Schema.String),
+  include: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  subagent_type: Schema.optional(Schema.String),
+  operation: Schema.optional(Schema.String),
+  filePath: Schema.optional(Schema.String),
+  line: Schema.optional(Schema.Finite),
+  character: Schema.optional(Schema.Finite),
+  input: Schema.optional(Schema.Json),
+}).annotate({ identifier: "PermissionMetadata" })
+type Metadata = Schema.Schema.Type<typeof Metadata>
+
 // Pure data; nothing checks class identity. As `Schema.Struct` + type alias,
 // `Permission.ask` can trust its already-typed input and skip the inner
 // `decodeUnknownSync` that would otherwise throw uncaught on any structural
@@ -38,7 +80,7 @@ export const Request = Schema.Struct({
   sessionID: SessionID,
   permission: Schema.String,
   patterns: Schema.Array(Schema.String),
-  metadata: Schema.Record(Schema.String, Schema.Unknown),
+  metadata: Metadata,
   always: Schema.Array(Schema.String),
   tool: Schema.optional(
     Schema.Struct({
@@ -47,7 +89,10 @@ export const Request = Schema.Struct({
     }),
   ),
 }).annotate({ identifier: "PermissionRequest" })
-export type Request = Schema.Schema.Type<typeof Request>
+type WireRequest = Schema.Schema.Type<typeof Request>
+export type Request = Omit<WireRequest, "metadata"> & {
+  metadata: Readonly<Record<string, unknown>>
+}
 
 export const Reply = Schema.Literals(["once", "always", "reject"])
 export type Reply = Schema.Schema.Type<typeof Reply>
@@ -109,6 +154,7 @@ export type Error = DeniedError | RejectedError | CorrectedError
 export const AskInput = Schema.Struct({
   ...Request.fields,
   id: Schema.optional(PermissionID),
+  metadata: Schema.Record(Schema.String, Schema.Unknown),
   ruleset: Ruleset,
 }).annotate({ identifier: "PermissionAskInput" })
 export type AskInput = Schema.Schema.Type<typeof AskInput>
@@ -122,11 +168,11 @@ export type ReplyInput = Schema.Schema.Type<typeof ReplyInput>
 export interface Interface {
   readonly ask: (input: AskInput) => Effect.Effect<void, Error>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
-  readonly list: () => Effect.Effect<ReadonlyArray<Request>>
+  readonly list: () => Effect.Effect<ReadonlyArray<WireRequest>>
 }
 
 interface PendingEntry {
-  info: Request
+  info: WireRequest
   deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
 
@@ -192,12 +238,12 @@ export const layer = Layer.effect(
       if (!needsAsk) return
 
       const id = request.id ?? PermissionID.ascending()
-      const info: Request = {
+      const info: WireRequest = {
         id,
         sessionID: request.sessionID,
         permission: request.permission,
         patterns: request.patterns,
-        metadata: request.metadata,
+        metadata: normalizeMetadata(request.metadata),
         always: request.always,
         tool: request.tool,
       }
@@ -287,6 +333,120 @@ function expand(pattern: string): string {
   if (pattern.startsWith("$HOME/")) return os.homedir() + pattern.slice(5)
   if (pattern.startsWith("$HOME")) return os.homedir() + pattern.slice(5)
   return pattern
+}
+
+function normalizeMetadata(metadata: Readonly<Record<string, unknown>>): Metadata {
+  const filepath = decodeStringMetadata(metadata.filepath)
+  const diff = decodeStringMetadata(metadata.diff)
+  const files = decodeFilesMetadata(metadata.files)
+  const parentDir = decodeStringMetadata(metadata.parentDir)
+  const url = decodeStringMetadata(metadata.url)
+  const format = decodeStringMetadata(metadata.format)
+  const timeout = decodeFiniteMetadata(metadata.timeout)
+  const query = decodeStringMetadata(metadata.query)
+  const numResults = decodeFiniteMetadata(metadata.numResults)
+  const livecrawl = decodeBooleanMetadata(metadata.livecrawl)
+  const type = decodeStringMetadata(metadata.type)
+  const contextMaxCharacters = decodeFiniteMetadata(metadata.contextMaxCharacters)
+  const provider = decodeStringMetadata(metadata.provider)
+  const repository = decodeStringMetadata(metadata.repository)
+  const remote = decodeStringMetadata(metadata.remote)
+  const path = decodeStringMetadata(metadata.path)
+  const refresh = decodeBooleanMetadata(metadata.refresh)
+  const branch = decodeStringMetadata(metadata.branch)
+  const depth = decodeFiniteMetadata(metadata.depth)
+  const pattern = decodeStringMetadata(metadata.pattern)
+  const include = decodeStringMetadata(metadata.include)
+  const description = decodeStringMetadata(metadata.description)
+  const subagent_type = decodeStringMetadata(metadata.subagent_type)
+  const operation = decodeStringMetadata(metadata.operation)
+  const filePath = decodeStringMetadata(metadata.filePath)
+  const line = decodeFiniteMetadata(metadata.line)
+  const character = decodeFiniteMetadata(metadata.character)
+  const input = toJson(metadata.input, new WeakSet<object>())
+
+  return {
+    ...(filepath !== undefined ? { filepath } : {}),
+    ...(diff !== undefined ? { diff } : {}),
+    ...(files !== undefined ? { files } : {}),
+    ...(parentDir !== undefined ? { parentDir } : {}),
+    ...(url !== undefined ? { url } : {}),
+    ...(format !== undefined ? { format } : {}),
+    ...(timeout !== undefined ? { timeout } : {}),
+    ...(query !== undefined ? { query } : {}),
+    ...(numResults !== undefined ? { numResults } : {}),
+    ...(livecrawl !== undefined ? { livecrawl } : {}),
+    ...(type !== undefined ? { type } : {}),
+    ...(contextMaxCharacters !== undefined ? { contextMaxCharacters } : {}),
+    ...(provider !== undefined ? { provider } : {}),
+    ...(repository !== undefined ? { repository } : {}),
+    ...(remote !== undefined ? { remote } : {}),
+    ...(path !== undefined ? { path } : {}),
+    ...(refresh !== undefined ? { refresh } : {}),
+    ...(branch !== undefined ? { branch } : {}),
+    ...(depth !== undefined ? { depth } : {}),
+    ...(pattern !== undefined ? { pattern } : {}),
+    ...(include !== undefined ? { include } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(subagent_type !== undefined ? { subagent_type } : {}),
+    ...(operation !== undefined ? { operation } : {}),
+    ...(filePath !== undefined ? { filePath } : {}),
+    ...(line !== undefined ? { line } : {}),
+    ...(character !== undefined ? { character } : {}),
+    ...(input !== undefined ? { input } : {}),
+  }
+}
+
+const decodeString = Schema.decodeUnknownOption(Schema.String)
+const decodeBoolean = Schema.decodeUnknownOption(Schema.Boolean)
+const decodeFinite = Schema.decodeUnknownOption(Schema.Finite)
+const decodeFiles = Schema.decodeUnknownOption(Schema.Array(MetadataFile))
+
+function decodeStringMetadata(value: unknown) {
+  return decodeMetadataValue(decodeString, value)
+}
+
+function decodeBooleanMetadata(value: unknown) {
+  return decodeMetadataValue(decodeBoolean, value)
+}
+
+function decodeFiniteMetadata(value: unknown) {
+  return decodeMetadataValue(decodeFinite, value)
+}
+
+function decodeFilesMetadata(value: unknown) {
+  return decodeMetadataValue(decodeFiles, value)
+}
+
+function decodeMetadataValue<Value>(decode: (input: unknown) => Option.Option<Value>, value: unknown) {
+  const json = toJson(value, new WeakSet<object>())
+  if (json === undefined) return undefined
+  return Option.getOrUndefined(decode(json))
+}
+
+function toJson(value: unknown, seen: WeakSet<object>): Schema.Schema.Type<typeof Schema.Json> | undefined {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  if (typeof value === "string") return value
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (typeof value === "bigint") return undefined
+  if (typeof value === "function") return undefined
+  if (typeof value === "symbol") return undefined
+  if (seen.has(value)) return undefined
+
+  seen.add(value)
+  const json = Array.isArray(value)
+    ? value.map((item) => toJson(item, seen) ?? null)
+    : Object.fromEntries(
+        Object.entries(value).flatMap(([key, item]) => {
+          const json = toJson(item, seen)
+          if (json === undefined) return []
+          return [[key, json]]
+        }),
+      )
+  seen.delete(value)
+  return json
 }
 
 export function fromConfig(permission: ConfigPermission.Info) {
