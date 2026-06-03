@@ -24,6 +24,8 @@ export type Event =
   | EventSessionNextStepStarted
   | EventSessionNextStepEnded
   | EventSessionNextStepFailed
+  | EventSessionNextTurnStarted
+  | EventSessionNextTurnSettled
   | EventSessionNextTextStarted
   | EventSessionNextTextDelta
   | EventSessionNextTextEnded
@@ -869,6 +871,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           finish: string
           cost: number
           tokens: {
@@ -889,7 +892,27 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           error: SessionErrorUnknown
+        }
+      }
+    | {
+        id: string
+        type: "session.next.turn.started"
+        properties: {
+          timestamp: number
+          sessionID: string
+          promptCursor?: number
+        }
+      }
+    | {
+        id: string
+        type: "session.next.turn.settled"
+        properties: {
+          timestamp: number
+          sessionID: string
+          turnID: string
+          outcome: "completed" | "failed" | "interrupted"
         }
       }
     | {
@@ -1507,6 +1530,8 @@ export type GlobalEvent = {
     | SyncEventSessionNextStepStarted
     | SyncEventSessionNextStepEnded
     | SyncEventSessionNextStepFailed
+    | SyncEventSessionNextTurnStarted
+    | SyncEventSessionNextTurnSettled
     | SyncEventSessionNextTextStarted
     | SyncEventSessionNextTextDelta
     | SyncEventSessionNextTextEnded
@@ -3058,13 +3083,14 @@ export type SyncEventSessionNextStepStarted = {
 
 export type SyncEventSessionNextStepEnded = {
   type: "sync"
-  name: "session.next.step.ended.1"
+  name: "session.next.step.ended.2"
   id: string
   seq: number
   aggregateID: "sessionID"
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     finish: string
     cost: number
     tokens: {
@@ -3082,14 +3108,42 @@ export type SyncEventSessionNextStepEnded = {
 
 export type SyncEventSessionNextStepFailed = {
   type: "sync"
-  name: "session.next.step.failed.1"
+  name: "session.next.step.failed.2"
   id: string
   seq: number
   aggregateID: "sessionID"
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     error: SessionErrorUnknown
+  }
+}
+
+export type SyncEventSessionNextTurnStarted = {
+  type: "sync"
+  name: "session.next.turn.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    promptCursor?: number
+  }
+}
+
+export type SyncEventSessionNextTurnSettled = {
+  type: "sync"
+  name: "session.next.turn.settled.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    turnID: string
+    outcome: "completed" | "failed" | "interrupted"
   }
 }
 
@@ -3916,6 +3970,7 @@ export type EventSessionNextStepEnded = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     finish: string
     cost: number
     tokens: {
@@ -3937,7 +3992,29 @@ export type EventSessionNextStepFailed = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     error: SessionErrorUnknown
+  }
+}
+
+export type EventSessionNextTurnStarted = {
+  id: string
+  type: "session.next.turn.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    promptCursor?: number
+  }
+}
+
+export type EventSessionNextTurnSettled = {
+  id: string
+  type: "session.next.turn.settled"
+  properties: {
+    timestamp: number
+    sessionID: string
+    turnID: string
+    outcome: "completed" | "failed" | "interrupted"
   }
 }
 
