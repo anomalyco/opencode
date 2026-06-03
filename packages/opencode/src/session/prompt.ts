@@ -97,6 +97,65 @@ export interface Interface {
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
+//PATCH START to custom ROLE>
+//import path from "path"
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs"
+
+type RoleEvalConfig = {
+  usersystem: string
+  assistant_system: string
+}
+
+function loadRoleEvalConfig(projectRoot: string): RoleEvalConfig {
+  const root = path.resolve(projectRoot || process.cwd())
+  const file = process.env.OPENCODE_ROLE_FILE
+    ? path.resolve(process.env.OPENCODE_ROLE_FILE)
+    : path.join(root, ".opencode", "role.json")
+
+  const stock: RoleEvalConfig = {
+    usersystem: "",
+    assistant_system: "",
+  }
+
+  const debugFile = path.join(root, ".opencode", "role-debug.log")
+
+  try {
+    mkdirSync(path.dirname(file), { recursive: true })
+    appendFileSync(
+      debugFile,
+      [
+        `[${new Date().toISOString()}]`,
+        `cwd=${process.cwd()}`,
+        `projectRoot=${projectRoot}`,
+        `root=${root}`,
+        `file=${file}`,
+        `exists=${existsSync(file)}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    if (!existsSync(file)) {
+      writeFileSync(file, JSON.stringify(stock, null, 2) + "\n", "utf8")
+      appendFileSync(debugFile, `created=${file}\n\n`, "utf8")
+      return stock
+    }
+
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<RoleEvalConfig>
+
+    return {
+      usersystem: typeof parsed.usersystem === "string" ? parsed.usersystem : "",
+      assistant_system: typeof parsed.assistant_system === "string" ? parsed.assistant_system : "",
+    }
+  } catch (err) {
+    try {
+      appendFileSync(debugFile, `ERROR=${String(err)}\n\n`, "utf8")
+    } catch {}
+    return stock
+  }
+}
+//PATCH END,P1.P2 is per user&assistant function edit to use var>roleEvalConfig.assistant etc.
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
 
 export const layer = Layer.effect(
@@ -1265,13 +1324,12 @@ export const layer = Layer.effect(
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
-          // Some providers return "stop" even when the assistant message contains
-          // tool calls. Keep the loop running so tool results can be sent back to
-          // the model, but ignore cleanup-marked interrupted orphans.
+          // Some providers return "stop" even when the assistant message contains tool calls.
+          // Keep the loop running so tool results can be sent back to the model.
+          // Skip provider-executed tool parts — those were fully handled within the
+          // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
           const hasToolCalls =
-            lastAssistantMsg?.parts.some(
-              (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
-            ) ?? false
+            lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
           if (
             lastAssistant?.finish &&
@@ -1289,6 +1347,7 @@ export const layer = Layer.effect(
                 callID: orphan.callID,
               })
             }
+
             yield* slog.info("exiting loop")
             break
           }
@@ -1441,7 +1500,20 @@ export const layer = Layer.effect(
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+
+            // CUSTOM-ROLE-SYSTEM START
+            const roleRoot = ctx.worktree === "/" || ctx.worktree === "\\" ? ctx.directory : ctx.worktree
+            const roleEvalConfig = loadRoleEvalConfig(roleRoot)
+
+            const system = [
+              roleEvalConfig.assistant_system,
+              ...env,
+              ...instructions,
+              ...(skills ? [skills] : []),
+            ].filter(Boolean)
+            // CUSTOM-ROLE-SYSTEM END
+
+            //const system = [...env, ...instructions, ...(skills ? [skills] : [])]//ori
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
