@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, eq, sql } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -127,19 +127,20 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
     const adapter: SessionMessageUpdater.Adapter = {
       getCurrentAssistant() {
         return Effect.gen(function* () {
-          const rows = yield* db
+          // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
+          const row = yield* db
             .select()
             .from(SessionMessageTable)
             .where(
               and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
             )
-            .all()
+            .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
+            .limit(1)
+            .get()
             .pipe(Effect.orDie)
-          return rows
-            .map(decodeRow)
-            .find(
-              (message): message is SessionMessage.Assistant => message.type === "assistant" && !message.time.completed,
-            )
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "assistant" && !message.time.completed ? message : undefined
         })
       },
       getAssistant(messageID) {

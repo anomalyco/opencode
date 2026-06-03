@@ -43,7 +43,16 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)).toEqual({
           name: "session",
         })
-        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 24 })
+        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 25 })
+        expect(
+          yield* db.all(
+            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_time_created_id_idx', 'session_message_session_type_time_created_id_idx') ORDER BY name`,
+          ),
+        ).toEqual([
+          { name: "event_aggregate_seq_idx" },
+          { name: "session_message_session_time_created_id_idx" },
+          { name: "session_message_session_type_time_created_id_idx" },
+        ])
       }),
     )
   })

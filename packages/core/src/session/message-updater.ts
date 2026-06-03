@@ -20,8 +20,8 @@ export interface Adapter {
 
 export function memory(state: MemoryState): Adapter {
   const assistantIndex = (messageID: SessionMessage.ID) => state.messages.findLastIndex((message) => message.id === messageID)
-  const activeAssistantIndex = () =>
-    state.messages.findLastIndex((message) => message.type === "assistant" && !message.time.completed)
+  // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
+  const latestAssistantIndex = () => state.messages.findLastIndex((message) => message.type === "assistant")
   const activeCompactionIndex = () => state.messages.findLastIndex((message) => message.type === "compaction")
   const activeShellIndex = (callID: string) =>
     state.messages.findLastIndex((message) => message.type === "shell" && message.callID === callID)
@@ -29,10 +29,10 @@ export function memory(state: MemoryState): Adapter {
   return {
     getCurrentAssistant() {
       return Effect.sync(() => {
-        const index = activeAssistantIndex()
+        const index = latestAssistantIndex()
         if (index < 0) return
         const assistant = state.messages[index]
-        return assistant?.type === "assistant" ? assistant : undefined
+        return assistant?.type === "assistant" && !assistant.time.completed ? assistant : undefined
       })
     },
     getAssistant(messageID) {
