@@ -104,6 +104,46 @@ describe("acp tool conversion", () => {
     ])
   })
 
+  test("uses clean read display text for completed content", () => {
+    const output = [
+      "<path>/tmp/file.ts</path>",
+      "<type>file</type>",
+      "<content>",
+      "7: first",
+      "8: second",
+      "",
+      "(End of file - total 8 lines)",
+      "</content>",
+    ].join("\n")
+    const state = {
+      status: "completed" as const,
+      input: { filePath: "/tmp/file.ts" },
+      output,
+      metadata: {
+        display: {
+          type: "file",
+          path: "/tmp/file.ts",
+          text: "first\nsecond",
+          lineStart: 7,
+          lineEnd: 8,
+          totalLines: 8,
+          truncated: false,
+        },
+      },
+    }
+
+    expect(completedToolContent("read", state)).toEqual([
+      {
+        type: "content",
+        content: { type: "text", text: "first\nsecond" },
+      },
+    ])
+    expect(completedToolRawOutput(state)).toEqual({
+      output,
+      metadata: state.metadata,
+    })
+  })
+
   test("builds completed raw output with optional metadata and attachments", () => {
     const attachments = [
       {

@@ -251,6 +251,11 @@ function completedTool(
   callID: string,
   output = "done",
   attachments: Extract<ToolPart["state"], { status: "completed" }>["attachments"] = [],
+  options: {
+    readonly tool?: string
+    readonly input?: Record<string, unknown>
+    readonly metadata?: Record<string, unknown>
+  } = {},
 ) {
   return {
     id: `part_${callID}`,
@@ -258,13 +263,13 @@ function completedTool(
     messageID: `msg_${callID}`,
     type: "tool",
     callID,
-    tool: "bash",
+    tool: options.tool ?? "bash",
     state: {
       status: "completed",
-      input: { cmd: "printf done" },
+      input: options.input ?? { cmd: "printf done" },
       output,
       title: "bash",
-      metadata: { exit: 0 },
+      metadata: options.metadata ?? { exit: 0 },
       time: { start: Date.now() - 1, end: Date.now() },
       ...(attachments.length ? { attachments } : {}),
     },
@@ -602,6 +607,55 @@ describe("acp event routing", () => {
       status: "completed",
       content: [{ type: "content", content: { type: "text", text: "finished" } }],
       rawOutput: { output: "finished", metadata: { exit: 0 } },
+    })
+  })
+
+  it("emits clean read display content and preserves rawOutput", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_read", cwd: "/workspace" }))
+    const output = [
+      "<path>/workspace/file.ts</path>",
+      "<type>file</type>",
+      "<content>",
+      "1: import { value } from './value'",
+      "2: export { value }",
+      "",
+      "(End of file - total 2 lines)",
+      "</content>",
+    ].join("\n")
+    const metadata = {
+      display: {
+        type: "file",
+        path: "/workspace/file.ts",
+        text: "import { value } from './value'\nexport { value }",
+        lineStart: 1,
+        lineEnd: 2,
+        totalLines: 2,
+        truncated: false,
+      },
+    }
+
+    await harness.subscription.handle(
+      toolUpdated(
+        completedTool("ses_read", "call_read", output, [], {
+          tool: "read",
+          input: { filePath: "/workspace/file.ts" },
+          metadata,
+        }),
+      ),
+    )
+
+    expect(harness.updates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_read",
+      status: "completed",
+      content: [
+        {
+          type: "content",
+          content: { type: "text", text: "import { value } from './value'\nexport { value }" },
+        },
+      ],
+      rawOutput: { output, metadata },
     })
   })
 
