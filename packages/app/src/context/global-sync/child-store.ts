@@ -180,6 +180,7 @@ export function createChildStoreManager(input: {
           const initialIcon = icon[0].value
           const [mcpEnabled, setMcpEnabled] = createSignal(false)
 
+          const agentsQuery = useQuery(() => input.queryOptions.agents(key))
           const pathQuery = useQuery(() => input.queryOptions.path(key))
           const mcpQuery = useQuery(() => ({ ...input.queryOptions.mcp(key), enabled: mcpEnabled() }))
           const lspQuery = useQuery(() => input.queryOptions.lsp(key))
@@ -205,7 +206,9 @@ export function createChildStoreManager(input: {
               return pathQuery.data ?? EMPTY
             },
             status: "loading" as const,
-            agent: [],
+            get agent() {
+              return agentsQuery.data ?? []
+            },
             command: [],
             session: [],
             sessionTotal: 0,

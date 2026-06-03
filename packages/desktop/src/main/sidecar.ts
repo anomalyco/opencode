@@ -1,4 +1,7 @@
+import { execFile, spawn } from "node:child_process"
+import { existsSync, statSync } from "node:fs"
 import * as http from "node:http"
+import { resolve } from "node:path"
 import * as tls from "node:tls"
 
 type NodeHttpWithEnvProxy = typeof http & {
@@ -37,6 +40,7 @@ type Listener = {
 
 const parentPort = getParentPort()
 let listener: Listener | undefined
+const server = { proc: undefined as ReturnType<typeof spawn> | undefined }
 
 parentPort.on("message", (event) => {
   const command = parseCommand(event.data)
@@ -48,10 +52,41 @@ parentPort.on("message", (event) => {
   void start(command)
 })
 
+async function spawnServer(exe: string, args: string[]): Promise<boolean> {
+  return new Promise((done) => {
+    const proc = spawn(exe, args, { stdio: ["ignore", "pipe", "pipe"] })
+    server.proc = proc
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      const line = chunk.toString()
+      process.stdout.write(line)
+      if (line.includes("server listening")) {
+        parentPort.postMessage({ type: "ready" })
+        done(true)
+      }
+    })
+    proc.stderr?.on("data", (chunk: Buffer) => process.stderr.write(chunk))
+    proc.on("exit", (code) => {
+      done(false)
+      if (code === 0 || code === null) return
+      parentPort.postMessage({ type: "error", error: { message: `server exited with code ${code}` } })
+      setImmediate(() => process.exit(1))
+    })
+    proc.on("error", () => done(false))
+  })
+}
+
 async function start(command: StartCommand) {
   try {
     prepareSidecarEnv(command.password, command.userDataPath)
     ensureLoopbackNoProxy()
+
+    const bin = resolve(__dirname, `../../../opencode${process.platform === "win32" ? ".exe" : ""}`)
+    if (existsSync(bin) && statSync(bin).isFile() && (await spawnServer(bin, ["serve", "--port", String(command.port), "--hostname", command.hostname]))) return
+
+    const entry = resolve(__dirname, "../../../opencode/src/index.ts")
+    const bunBin = process.env.BUN_PATH || (await findBun())
+    if (bunBin && existsSync(entry) && (await spawnServer(bunBin, [entry, "serve", "--port", String(command.port), "--hostname", command.hostname]))) return
+
     useSystemCertificates()
     useEnvProxy()
     const { Log, Server } = await import("virtual:opencode-server")
@@ -73,12 +108,24 @@ async function start(command: StartCommand) {
 
 async function stop() {
   try {
+    server.proc?.kill()
+    server.proc = undefined
     await listener?.stop()
   } finally {
     listener = undefined
     parentPort.postMessage({ type: "stopped" })
     setImmediate(() => process.exit(0))
   }
+}
+
+async function findBun(): Promise<string | undefined> {
+  const found = ["/usr/bin/bun", "/usr/local/bin/bun", `${process.env.HOME}/.bun/bin/bun`].find(existsSync)
+  if (found) return found
+  return new Promise<string | undefined>((done) => {
+    execFile("which", ["bun"], { encoding: "utf8" }, (err, stdout) => {
+      done(err ? undefined : stdout.trim() || undefined)
+    })
+  })
 }
 
 function prepareSidecarEnv(password: string, userDataPath: string) {
