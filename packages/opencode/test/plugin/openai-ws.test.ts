@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
-import { createServer, type IncomingMessage, type Server as HttpServer } from "node:http"
+import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http"
 import net, { type AddressInfo, type Socket } from "node:net"
 import WebSocket, { WebSocketServer } from "ws"
 import { APICallError } from "ai"
@@ -253,6 +253,50 @@ describe("plugin.openai.ws-pool", () => {
     expect(await third.text()).toBe("http")
     expect(websocketAttempts).toBe(1)
     expect(server.httpRequests).toHaveLength(3)
+    fetch.close()
+  })
+
+  test("keeps HTTP fallback active while a response body streams", async () => {
+    let websocketAttempts = 0
+    let httpRequests = 0
+    const http = await createHttpServer((_request, response) => {
+      httpRequests += 1
+      if (httpRequests > 1) {
+        response.writeHead(200, { "content-type": "text/plain" })
+        response.end("http")
+        return
+      }
+      response.writeHead(200, { "content-type": "text/plain" })
+      response.write("started")
+    })
+    const sockets = new WebSocketServer({
+      server: http.server,
+      verifyClient(_info, callback) {
+        websocketAttempts += 1
+        callback(false, 401, "denied")
+      },
+    })
+    await using server = websocketServerHandle(sockets, http)
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      connectTimeout: 100,
+      idleTimeout: 20,
+      streamRetries: 0,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toBe("http")
+    expect(websocketAttempts).toBe(1)
+    await first.body!.cancel()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const third = await fetch(server.url, streamRequest())
+
+    expect(await third.text()).toBe("http")
+    expect(websocketAttempts).toBe(2)
     fetch.close()
   })
 
@@ -808,12 +852,16 @@ async function createRejectingWebSocketServer(onAttempt: () => void) {
   return websocketServerHandle(server, http)
 }
 
-async function createHttpServer() {
+async function createHttpServer(
+  respond: (request: IncomingMessage, response: ServerResponse) => void = (_request, response) => {
+    response.writeHead(200, { "content-type": "text/plain" })
+    response.end("http")
+  },
+) {
   const httpRequests: IncomingMessage[] = []
   const server = createServer((request, response) => {
     httpRequests.push(request)
-    response.writeHead(200, { "content-type": "text/plain" })
-    response.end("http")
+    respond(request, response)
   })
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address() as AddressInfo

@@ -23,6 +23,7 @@ interface PoolEntry {
   lastUsedAt: number
   busy: boolean
   fallback: boolean
+  activeFallbacks: number
   streamFailures: number
 }
 
@@ -74,13 +75,19 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     }
     const key = `${sessionID}:conversation`
 
-    const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false, streamFailures: 0 }
+    const entry = pool.get(key) ?? {
+      lastUsedAt: Date.now(),
+      busy: false,
+      fallback: false,
+      activeFallbacks: 0,
+      streamFailures: 0,
+    }
     pool.set(key, entry)
 
     if (entry.fallback) {
       entry.lastUsedAt = Date.now()
       log.debug("http fallback", { key, reason: "fallback_active" })
-      return httpFetch(input, httpInit)
+      return fallbackFetch(input, httpInit, entry)
     }
     if (entry.busy) {
       log.debug("http fallback", { key, reason: "busy" })
@@ -152,7 +159,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       }
       if (!entry.fallback) return response
       log.debug("http fallback", { key, reason: "websocket_retries_exhausted" })
-      return httpFetch(input, httpInit)
+      return fallbackFetch(input, httpInit, entry)
     } catch (error) {
       entry.busy = false
       entry.lastUsedAt = Date.now()
@@ -169,7 +176,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         fallback: entry.fallback ? "http" : undefined,
       })
       invalidate(entry)
-      if (entry.fallback) return httpFetch(input, httpInit)
+      if (entry.fallback) return fallbackFetch(input, httpInit, entry)
       return failedResponse(
         new ProviderError.ResponseStreamError(error instanceof Error ? error.message : String(error), {
           cause: error,
@@ -188,6 +195,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     const now = Date.now()
     for (const [key, entry] of pool) {
       if (entry.busy) continue
+      if (entry.activeFallbacks) continue
       if (now - entry.lastUsedAt < idleTimeout) continue
       log.debug("websocket idle prune", { key })
       invalidate(entry)
@@ -200,6 +208,58 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     clearInterval(pruneTimer)
     for (const entry of pool.values()) invalidate(entry)
     pool.clear()
+  }
+
+  function fallbackFetch(input: RequestInfo | URL, init: RequestInit | undefined, entry: PoolEntry) {
+    entry.activeFallbacks++
+    let active = true
+
+    function release() {
+      if (!active) return
+      active = false
+      entry.activeFallbacks--
+      entry.lastUsedAt = Date.now()
+    }
+
+    return httpFetch(input, init).then(
+      (response) => {
+        if (!response.body) {
+          release()
+          return response
+        }
+
+        const reader = response.body.getReader()
+        return new Response(
+          new ReadableStream({
+            pull(controller) {
+              return reader.read().then(
+                (result) => {
+                  if (!result.done) {
+                    controller.enqueue(result.value)
+                    return
+                  }
+                  release()
+                  controller.close()
+                },
+                (error) => {
+                  release()
+                  throw error
+                },
+              )
+            },
+            cancel(reason) {
+              release()
+              return reader.cancel(reason)
+            },
+          }),
+          response,
+        )
+      },
+      (error) => {
+        release()
+        throw error
+      },
+    )
   }
 
   return Object.assign(websocketFetch, { close })
