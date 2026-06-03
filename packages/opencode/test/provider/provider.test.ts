@@ -201,7 +201,7 @@ it.instance(
 const bifrostAuthorizationHeaders: string[] = []
 
 it.instance(
-  "bifrost discovers OpenAI-compatible models and applies wildcard whitelist",
+  "bifrost discovers OpenAI-compatible models as OpenAI Responses models and applies wildcard whitelist",
   Effect.gen(function* () {
     const providers = yield* list
     const bifrost = providers[ProviderV2.ID.bifrost]
@@ -215,7 +215,7 @@ it.instance(
       providerID: ProviderV2.ID.bifrost,
       api: {
         id: "codex/gpt-5",
-        npm: "@ai-sdk/openai-compatible",
+        npm: "@ai-sdk/openai",
       },
       name: "codex/gpt-5",
       status: "active",

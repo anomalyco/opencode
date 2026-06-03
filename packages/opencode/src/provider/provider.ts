@@ -1157,7 +1157,7 @@ function bifrostModel(modelID: string, baseURL: string): Model {
     api: {
       id: modelID,
       url: baseURL,
-      npm: "@ai-sdk/openai-compatible",
+      npm: "@ai-sdk/openai",
     },
     status: "active",
     headers: {},

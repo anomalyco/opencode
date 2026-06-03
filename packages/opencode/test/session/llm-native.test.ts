@@ -3,6 +3,7 @@ import { ToolFailure } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { jsonSchema, tool, type ModelMessage, type Tool } from "ai"
 import { Effect, Layer, Stream } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
@@ -364,6 +365,23 @@ describe("session.llm-native.request", () => {
     expect(compatible.route.id).toBe("openai-compatible-chat")
     expect(compatible.route.endpoint.baseURL).toBe("https://ai.example.test/v1")
 
+    const bifrost = LLMNative.model({
+      model: {
+        ...baseModel,
+        providerID: ProviderV2.ID.bifrost,
+        api: {
+          ...baseModel.api,
+          id: "codex/gpt-5.5",
+          url: "http://localhost:8081/v1",
+          npm: "@ai-sdk/openai",
+        },
+      },
+      apiKey: "test-key",
+      messages: [],
+    })
+    expect(bifrost.route.id).toBe("openai-responses")
+    expect(bifrost.route.endpoint.baseURL).toBe("http://localhost:8081/v1")
+
     const openrouter = LLMNative.model({
       model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@openrouter/ai-sdk-provider" } },
       apiKey: "test-key",
@@ -423,7 +441,7 @@ describe("session.llm-native.request", () => {
         model: {
           ...baseModel,
           providerID: ProviderV2.ID.bifrost,
-          api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible", url: "http://localhost:8080/openai" },
+          api: { ...baseModel.api, npm: "@ai-sdk/openai", url: "http://localhost:8080/openai" },
         },
         provider: {
           ...providerInfo,
@@ -713,6 +731,77 @@ describe("session.llm-native.request", () => {
         body: {
           model: "gpt-5-mini",
           instructions: "You are concise.",
+          input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+        },
+      })
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "text-delta", text: "Hello" }),
+          expect.objectContaining({ type: "finish" }),
+        ]),
+      )
+    }),
+  )
+
+  it.effect("streams Bifrost Responses requests with bearer auth", () =>
+    Effect.gen(function* () {
+      const captures: Array<{ url: string; authorization: string | null; body: unknown }> = []
+      const customFetch = Object.assign(
+        async (input: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1]) => {
+          const request = input instanceof Request ? input : new Request(input, init)
+          captures.push({
+            url: request.url,
+            authorization: request.headers.get("Authorization"),
+            body: await request.clone().json(),
+          })
+          return responsesStream([
+            { type: "response.created", item: null },
+            { type: "response.in_progress", item: null },
+            { type: "response.output_text.delta", item: null, item_id: "msg_1", delta: "Hello" },
+            { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+          ])
+        },
+        { preconnect: () => undefined },
+      ) satisfies typeof fetch
+
+      const llmClient = yield* LLMClient.Service
+      const native = LLMNativeRuntime.stream({
+        model: {
+          ...baseModel,
+          id: ProviderV2.ModelID.make("codex/gpt-5.5"),
+          providerID: ProviderV2.ID.bifrost,
+          api: {
+            id: "codex/gpt-5.5",
+            url: "http://bifrost.example.test/v1",
+            npm: "@ai-sdk/openai",
+          },
+        },
+        provider: {
+          ...providerInfo,
+          id: ProviderV2.ID.bifrost,
+          name: "Bifrost",
+          env: [],
+          options: { apiKey: "bifrost-key", baseURL: "http://bifrost.example.test/v1" },
+        },
+        auth: undefined,
+        llmClient,
+        messages: [{ role: "user", content: "hello" }],
+        tools: {},
+        headers: {},
+        abort: new AbortController().signal,
+      })
+      expect(native.type).toBe("supported")
+      if (native.type === "unsupported") throw new Error(native.reason)
+      const events = Array.from(
+        yield* native.stream.pipe(Stream.provideService(FetchHttpClient.Fetch, customFetch), Stream.runCollect),
+      )
+
+      expect(captures).toHaveLength(1)
+      expect(captures[0]).toMatchObject({
+        url: "http://bifrost.example.test/v1/responses",
+        authorization: "Bearer bifrost-key",
+        body: {
+          model: "codex/gpt-5.5",
           input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
         },
       })
