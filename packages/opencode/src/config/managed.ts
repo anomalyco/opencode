@@ -44,6 +44,14 @@ export function parseManagedPlist(json: string): string {
 }
 
 export async function readManagedPreferences() {
+  // Test seam (mirrors OPENCODE_TEST_MANAGED_CONFIG_DIR): read an already-decoded managed payload so the
+  // .mobileconfig path is exercisable without /Library/Managed Preferences, plutil, or a real MDM profile.
+  const testPlist = process.env.OPENCODE_TEST_MANAGED_PLIST
+  if (testPlist) {
+    if (!existsSync(testPlist)) return
+    return { source: `mobileconfig:${testPlist}`, text: parseManagedPlist(await Bun.file(testPlist).text()) }
+  }
+
   if (process.platform !== "darwin") return
 
   const user = (() => {

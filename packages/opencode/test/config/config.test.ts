@@ -1187,6 +1187,65 @@ it.instance(
   { config: { model: "user/model" } },
 )
 
+it.instance(
+  "loads plugins declared in managed preferences (.mobileconfig)",
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const plist = path.join(dir, "ai.opencode.managed.json")
+    yield* FSUtil.use.writeWithDirs(
+      plist,
+      JSON.stringify({
+        // Payload* keys ride along on a real managed plist and must be stripped before merge.
+        PayloadType: "ai.opencode.managed",
+        plugin: ["file:///opt/acme/plugin.js"],
+        enabled_providers: ["acme"],
+      }),
+    )
+
+    return yield* withProcessEnv(
+      "OPENCODE_TEST_MANAGED_PLIST",
+      plist,
+      Effect.gen(function* () {
+        const config = yield* Config.use.get()
+        // managed values still win over user/project config
+        expect(config.enabled_providers).toEqual(["acme"])
+        // and the managed plugin is now collected + loadable (previously it was silently dropped)
+        const specs = (config.plugin ?? []).map((spec) => ConfigPlugin.pluginSpecifier(spec))
+        expect(specs.some((spec) => spec.includes("acme/plugin.js"))).toBe(true)
+        const origin = config.plugin_origins?.find((item) =>
+          ConfigPlugin.pluginSpecifier(item.spec).includes("acme/plugin.js"),
+        )
+        expect(origin?.scope).toBe("global")
+      }),
+    )
+  }),
+  { config: { enabled_providers: ["user-provider"], plugin: ["user-plugin"] } },
+)
+
+it.instance("ignores relative plugin specs from managed preferences", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const plist = path.join(dir, "ai.opencode.managed.json")
+    yield* FSUtil.use.writeWithDirs(
+      plist,
+      JSON.stringify({ plugin: ["./relative-plugin.ts", "file:///opt/acme/plugin.js"] }),
+    )
+
+    return yield* withProcessEnv(
+      "OPENCODE_TEST_MANAGED_PLIST",
+      plist,
+      Effect.gen(function* () {
+        const config = yield* Config.use.get()
+        const specs = (config.plugin ?? []).map((spec) => ConfigPlugin.pluginSpecifier(spec))
+        // relative spec has no declaring directory in a plist, so it is dropped with a warning
+        expect(specs.some((spec) => spec.includes("relative-plugin"))).toBe(false)
+        // the absolute file:// spec still loads
+        expect(specs.some((spec) => spec.includes("acme/plugin.js"))).toBe(true)
+      }),
+    )
+  }),
+)
+
 it.instance("migrates legacy edit tool to edit permission", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance

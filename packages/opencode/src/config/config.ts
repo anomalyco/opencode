@@ -518,13 +518,26 @@ export const layer = Layer.effect(
         // macOS managed preferences (.mobileconfig deployed via MDM) override everything
         const managed = yield* Effect.promise(() => ConfigManaged.readManagedPreferences())
         if (managed) {
-          result = mergeConfigConcatArrays(
-            result,
-            yield* loadConfig(managed.text, {
-              dir: path.dirname(managed.source),
-              source: managed.source,
-            }),
-          )
+          const next = yield* loadConfig(managed.text, {
+            dir: path.dirname(managed.source),
+            source: managed.source,
+          })
+          // A managed value-source has no config file on disk, so relative specs ("./plugin.ts") have no
+          // directory to resolve against — drop them with a warning. file://, absolute, and npm specs are fine.
+          if (next.plugin?.length) {
+            const relative = next.plugin.filter((spec) => ConfigPlugin.pluginSpecifier(spec).startsWith("."))
+            if (relative.length)
+              log.warn("ignoring relative plugin specs from managed preferences; use file:// URLs or npm packages", {
+                source: managed.source,
+                specs: relative.map(ConfigPlugin.pluginSpecifier),
+              })
+            next.plugin = next.plugin.filter((spec) => !ConfigPlugin.pluginSpecifier(spec).startsWith("."))
+            // loadConfig only normalizes specs for the on-disk ({ path }) form, so resolve the rest here.
+            yield* Effect.promise(() => resolveLoadedPlugins(next, managed.source))
+          }
+          // Route through merge() (not a bare mergeConfigConcatArrays) so managed plugins reach plugin_origins
+          // and load — matching the managed-config-dir branch above.
+          yield* merge(managed.source, next, "global")
         }
 
         for (const [name, mode] of Object.entries(result.mode ?? {})) {
