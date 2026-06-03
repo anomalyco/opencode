@@ -1,4 +1,5 @@
-export * as ConfigPermission from "./permission"
+export * as ConfigPermissionV1 from "./permission"
+
 import { Schema, SchemaGetter } from "effect"
 
 export const Action = Schema.Literals(["ask", "allow", "deny"]).annotate({ identifier: "PermissionActionConfig" })
@@ -34,21 +35,14 @@ const InputObject = Schema.StructWithRest(
   [Schema.Record(Schema.String, Rule)],
 )
 
-// Input the user writes in config: either a single Action (shorthand for "*")
-// or an object of per-target rules.
 const InputSchema = Schema.Union([Action, InputObject])
 
-// Normalise the Action shorthand into `{ "*": action }`. Object inputs pass
-// through untouched.
 const normalizeInput = (input: Schema.Schema.Type<typeof InputSchema>): Schema.Schema.Type<typeof InputObject> =>
   typeof input === "string" ? { "*": input } : input
 
 export const Info = InputSchema.pipe(
   Schema.decodeTo(InputObject, {
     decode: SchemaGetter.transform(normalizeInput),
-    // Not perfectly invertible (we lose whether the user originally typed an
-    // Action shorthand), but the object form is always a valid representation
-    // of the same rules.
     encode: SchemaGetter.passthrough({ strict: false }),
   }),
 ).annotate({ identifier: "PermissionConfig" })

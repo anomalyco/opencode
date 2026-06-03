@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { APICallError } from "ai"
@@ -218,8 +219,8 @@ function layer(result: "continue" | "compact") {
   )
 }
 
-function cfg(compaction?: Config.Info["compaction"]) {
-  const base = Schema.decodeUnknownSync(Config.Info)({}) as Config.Info
+function cfg(compaction?: ConfigV1.Info["compaction"]) {
+  const base = Schema.decodeUnknownSync(ConfigV1.Info)({}) as ConfigV1.Info
   return TestConfig.layer({
     get: () => Effect.succeed({ ...base, compaction }),
   })
@@ -303,7 +304,7 @@ function readCompactionPart(sessionID: SessionID) {
     .messages({ sessionID })
     .pipe(
       Effect.map((messages) =>
-        messages.at(-2)?.parts.find((item): item is SessionLegacy.CompactionPart => item.type === "compaction"),
+        messages.at(-2)?.parts.find((item): item is SessionV1.CompactionPart => item.type === "compaction"),
       ),
     )
 }
@@ -649,7 +650,7 @@ describe("session.compaction.prune", () => {
             type: "text",
             text: "first",
           })
-          const b: SessionLegacy.Assistant = {
+          const b: SessionV1.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID: info.id,
@@ -745,7 +746,7 @@ describe("session.compaction.prune", () => {
           type: "text",
           text: "first",
         })
-        const b: SessionLegacy.Assistant = {
+        const b: SessionV1.Assistant = {
           id: MessageID.ascending(),
           role: "assistant",
           sessionID: info.id,

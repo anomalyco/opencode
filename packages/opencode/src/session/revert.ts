@@ -1,5 +1,5 @@
 import { Effect, Layer, Context, Schema } from "effect"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
@@ -40,7 +40,7 @@ export const layer = Layer.effect(
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      let lastUser: SessionLegacy.User | undefined
+      let lastUser: SessionV1.User | undefined
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
 
       let rev: Session.Info["revert"]
@@ -104,8 +104,8 @@ export const layer = Layer.effect(
       const sessionID = session.id
       const msgs = yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
       const messageID = session.revert.messageID
-      const remove = [] as SessionLegacy.WithParts[]
-      let target: SessionLegacy.WithParts | undefined
+      const remove = [] as SessionV1.WithParts[]
+      let target: SessionV1.WithParts | undefined
       for (const msg of msgs) {
         if (msg.info.id < messageID) continue
         if (msg.info.id > messageID) {

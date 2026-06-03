@@ -1,5 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import { HttpServer } from "effect/unstable/http"
@@ -190,7 +191,7 @@ function httpapiInstance<A, E>(
   options: {
     serverPath: ServerPath
     git?: boolean
-    config?: Partial<Config.Info>
+    config?: Partial<ConfigV1.Info>
     setup?: (dir: string) => Effect.Effect<void, E, TestServices>
   },
   run: (input: ProjectFixture) => Effect.Effect<A, E, TestScope>,
@@ -214,7 +215,7 @@ function withProject<A, E, E2 = never>(
   serverPath: ServerPath,
   options: {
     git?: boolean
-    config?: Partial<Config.Info>
+    config?: Partial<ConfigV1.Info>
     setup?: (dir: string) => Effect.Effect<void, E2, TestServices>
   },
   run: (input: ProjectFixture) => Effect.Effect<A, E, TestScope>,
@@ -300,7 +301,7 @@ function seedMessage(directory: string, sessionID: string) {
             agent: "test",
             model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
             tools: {},
-          } satisfies SessionLegacy.User)
+          } satisfies SessionV1.User)
           const part = yield* svc.updatePart({
             id: PartID.ascending(),
             sessionID: id,

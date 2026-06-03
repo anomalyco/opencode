@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { aggregateFailures } from "@/cli/cmd/tui/context/aggregate-failures"
-import { ConfigError } from "@/config/error"
+import { ConfigErrorV1 } from "@opencode-ai/core/v1/config/error"
 
 describe("aggregateFailures", () => {
   test("returns null when every result is fulfilled", () => {
@@ -43,7 +43,7 @@ describe("aggregateFailures", () => {
   })
 
   test("formats structured config errors hidden inside SDK error causes", () => {
-    const configError = new ConfigError.InvalidError({
+    const configError = new ConfigErrorV1.InvalidError({
       path: "/tmp/opencode.json",
       issues: [{ message: "Expected object", path: ["provider", "anthropic", "options"] }],
     })

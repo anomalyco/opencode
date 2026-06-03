@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
@@ -52,7 +53,7 @@ type RecordedScenario = {
   readonly recordAuth?: () => Auth.Info | undefined
   readonly replayAuth?: Auth.Info
   readonly stableID?: string
-  readonly config: (model: ModelsDev.Provider["models"][string]) => Partial<Config.Info>
+  readonly config: (model: ModelsDev.Provider["models"][string]) => Partial<ConfigV1.Info>
 }
 
 const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
@@ -60,9 +61,9 @@ const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
   const { experimental, ...rest } = cloned
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- The config schema accepts the same model shape except object-valued experimental metadata.
   if (typeof experimental === "boolean")
-    return cloned as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
+    return cloned as NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Dropping non-boolean experimental metadata makes the fixture model match config input.
-  return rest as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
+  return rest as NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
 }
 
 const envValue = (...names: string[]) => names.map((name) => process.env[name]).find(Boolean)
@@ -97,7 +98,7 @@ const providerConfig = (input: {
   readonly api: string
   readonly model: ModelsDev.Provider["models"][string]
   readonly options: Record<string, unknown>
-}): Partial<Config.Info> => ({
+}): Partial<ConfigV1.Info> => ({
   enabled_providers: [input.providerID],
   provider: {
     [input.providerID]: {
@@ -396,7 +397,7 @@ const driveToolLoop = (scenario: RecordedScenario) =>
         time: { created: 0 },
         agent: agent.name,
         model: { providerID: scenario.providerID, modelID },
-      } satisfies SessionLegacy.User,
+      } satisfies SessionV1.User,
       sessionID,
       model: resolved,
       agent,

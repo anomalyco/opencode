@@ -1,6 +1,6 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
@@ -37,25 +37,25 @@ const log = Log.create({ service: "session.processor" })
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
-  readonly message: SessionLegacy.Assistant
+  readonly message: SessionV1.Assistant
   readonly updateToolCall: (
     toolCallID: string,
-    update: (part: SessionLegacy.ToolPart) => SessionLegacy.ToolPart,
-  ) => Effect.Effect<SessionLegacy.ToolPart | undefined>
+    update: (part: SessionV1.ToolPart) => SessionV1.ToolPart,
+  ) => Effect.Effect<SessionV1.ToolPart | undefined>
   readonly completeToolCall: (
     toolCallID: string,
     output: {
       title: string
       metadata: Record<string, any>
       output: string
-      attachments?: SessionLegacy.FilePart[]
+      attachments?: SessionV1.FilePart[]
     },
   ) => Effect.Effect<void>
   readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
 }
 
 type Input = {
-  assistantMessage: SessionLegacy.Assistant
+  assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
 }
@@ -65,9 +65,9 @@ export interface Interface {
 }
 
 type ToolCall = {
-  partID: SessionLegacy.ToolPart["id"]
-  messageID: SessionLegacy.ToolPart["messageID"]
-  sessionID: SessionLegacy.ToolPart["sessionID"]
+  partID: SessionV1.ToolPart["id"]
+  messageID: SessionV1.ToolPart["messageID"]
+  sessionID: SessionV1.ToolPart["sessionID"]
   done: Deferred.Deferred<void>
   inputEnded: boolean
 }
@@ -78,8 +78,8 @@ interface ProcessorContext extends Input {
   snapshot: string | undefined
   blocked: boolean
   needsCompaction: boolean
-  currentText: SessionLegacy.TextPart | undefined
-  reasoningMap: Record<string, SessionLegacy.ReasoningPart>
+  currentText: SessionV1.TextPart | undefined
+  reasoningMap: Record<string, SessionV1.ReasoningPart>
 }
 
 type StreamEvent = LLMEvent
@@ -153,7 +153,7 @@ export const layer = Layer.effect(
 
       const updateToolCall = Effect.fn("SessionProcessor.updateToolCall")(function* (
         toolCallID: string,
-        update: (part: SessionLegacy.ToolPart) => SessionLegacy.ToolPart,
+        update: (part: SessionV1.ToolPart) => SessionV1.ToolPart,
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match) return undefined
@@ -173,7 +173,7 @@ export const layer = Layer.effect(
           title: string
           metadata: Record<string, any>
           output: string
-          attachments?: SessionLegacy.FilePart[]
+          attachments?: SessionV1.FilePart[]
         },
       ) {
         const match = yield* readToolCall(toolCallID)
@@ -205,7 +205,7 @@ export const layer = Layer.effect(
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
-        if (error instanceof PermissionLegacy.RejectedError || error instanceof Question.RejectedError) {
+        if (error instanceof PermissionV1.RejectedError || error instanceof Question.RejectedError) {
           ctx.blocked = ctx.shouldBreak
         }
         yield* settleToolCall(toolCallID)
@@ -268,7 +268,7 @@ export const layer = Layer.effect(
           callID: input.id,
           state: { status: "pending", input: {}, raw: "" },
           metadata: input.providerExecuted ? { providerExecuted: true } : undefined,
-        } satisfies SessionLegacy.ToolPart)
+        } satisfies SessionV1.ToolPart)
         ctx.toolcalls[input.id] = {
           done: yield* Deferred.make<void>(),
           partID: part.id,
@@ -279,11 +279,11 @@ export const layer = Layer.effect(
         return { call: ctx.toolcalls[input.id], part }
       })
 
-      const isFilePart = (value: unknown): value is SessionLegacy.FilePart => Schema.is(SessionLegacy.FilePart)(value)
+      const isFilePart = (value: unknown): value is SessionV1.FilePart => Schema.is(SessionV1.FilePart)(value)
 
       const toolResultOutput = (
         value: Extract<StreamEvent, { type: "tool-result" }>,
-      ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionLegacy.FilePart[] } => {
+      ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionV1.FilePart[] } => {
         if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
           return {
             title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,
@@ -463,7 +463,7 @@ export const layer = Layer.effect(
                     ),
                     Effect.exit,
                   )
-                : Effect.succeed(Exit.succeed<SessionLegacy.FilePart>(attachment)),
+                : Effect.succeed(Exit.succeed<SessionV1.FilePart>(attachment)),
             )
             const omitted = normalized.filter(Exit.isFailure).length
             const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
@@ -486,7 +486,7 @@ export const layer = Layer.effect(
                     type: "text",
                     text: output.output,
                   },
-                  ...(output.attachments?.map((item: SessionLegacy.FilePart) => ({
+                  ...(output.attachments?.map((item: SessionV1.FilePart) => ({
                     type: "file" as const,
                     uri: item.url,
                     mime: item.mime,
@@ -753,7 +753,7 @@ export const layer = Layer.effect(
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
         slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
         const error = parse(e)
-        if (SessionLegacy.ContextOverflowError.isInstance(error)) {
+        if (SessionV1.ContextOverflowError.isInstance(error)) {
           ctx.needsCompaction = true
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return

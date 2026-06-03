@@ -1,7 +1,7 @@
-export * as ConfigAttachment from "./attachment"
+export * as ConfigAttachmentV1 from "./attachment"
 
 import { Schema } from "effect"
-import { PositiveInt } from "@opencode-ai/core/schema"
+import { PositiveInt } from "../../schema"
 
 export const Image = Schema.Struct({
   auto_resize: Schema.optional(Schema.Boolean).annotate({

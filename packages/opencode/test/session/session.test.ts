@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Exit, Layer } from "effect"
@@ -122,17 +122,17 @@ describe("step-finish token propagation via event", () => {
           model: { providerID: "test", modelID: "test" },
           tools: {},
           mode: "",
-        } as unknown as SessionLegacy.Info)
+        } as unknown as SessionV1.Info)
 
-        // Event subscribers receive readonly Schema.Type payloads; `SessionLegacy.Part`
+        // Event subscribers receive readonly Schema.Type payloads; `SessionV1.Part`
         // is the mutable domain type. Cast bridges the two — safe because the
         // test only reads the value afterwards.
-        const received = yield* Deferred.make<SessionLegacy.Part>()
+        const received = yield* Deferred.make<SessionV1.Part>()
         const unsub = yield* events.listen((event) => {
           if (event.type === MessageV2.Event.PartUpdated.type)
             Deferred.doneUnsafe(
               received,
-              Effect.succeed((event.data as typeof MessageV2.Event.PartUpdated.data.Type).part as SessionLegacy.Part),
+              Effect.succeed((event.data as typeof MessageV2.Event.PartUpdated.data.Type).part as SessionV1.Part),
             )
           return Effect.void
         })
@@ -160,7 +160,7 @@ describe("step-finish token propagation via event", () => {
         const receivedPart = yield* awaitDeferred(received, "timed out waiting for message.part.updated")
 
         expect(receivedPart.type).toBe("step-finish")
-        const finish = receivedPart as SessionLegacy.StepFinishPart
+        const finish = receivedPart as SessionV1.StepFinishPart
         expect(finish.tokens.input).toBe(500)
         expect(finish.tokens.output).toBe(800)
         expect(finish.tokens.reasoning).toBe(200)

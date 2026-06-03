@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, FileSystem, Layer } from "effect"
@@ -16,14 +17,14 @@ const ROOT = path.resolve(import.meta.dir, "..", "..")
 
 const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, NodeFileSystem.layer, FSUtil.defaultLayer))
 
-const configuredLayer = (cfg: Config.Info) =>
+const configuredLayer = (cfg: ConfigV1.Info) =>
   Layer.mergeAll(
     Truncate.defaultLayer,
     NodeFileSystem.layer,
     FSUtil.defaultLayer,
     TestConfig.layer({ get: () => Effect.succeed(cfg) }),
   )
-const configuredIt = (cfg: Config.Info) => testEffect(configuredLayer(cfg))
+const configuredIt = (cfg: ConfigV1.Info) => testEffect(configuredLayer(cfg))
 
 describe("Truncate", () => {
   describe("output", () => {

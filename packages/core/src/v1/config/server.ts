@@ -1,5 +1,7 @@
+export * as ConfigServerV1 from "./server"
+
 import { Schema } from "effect"
-import { PositiveInt } from "@opencode-ai/core/schema"
+import { PositiveInt } from "../../schema"
 
 export const Server = Schema.Struct({
   port: Schema.optional(PositiveInt).annotate({
@@ -15,5 +17,3 @@ export const Server = Schema.Struct({
   }),
 }).annotate({ identifier: "ServerConfig" })
 export type Server = Schema.Schema.Type<typeof Server>
-
-export * as ConfigServer from "./server"

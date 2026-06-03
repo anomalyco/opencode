@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProvider } from "@opencode-ai/core/config/provider"
+import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
@@ -53,6 +54,14 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.effect("detects v1 configuration from any v1-only top-level key", () =>
+    Effect.sync(() => {
+      expect(ConfigMigrateV1.isV1({ snapshot: false })).toBe(true)
+      expect(ConfigMigrateV1.isV1({ snapshot: false, agents: {} })).toBe(true)
+      expect(ConfigMigrateV1.isV1({ shell: "/bin/zsh", model: "anthropic/claude" })).toBe(false)
+    }),
+  )
+
   it.live("returns an empty configuration when directory files do not exist", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -331,6 +340,100 @@ describe("Config", () => {
               "opencode-helicone-session",
               { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
             ])
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("migrates v1 configuration when a v1-only key is present", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                shell: "/bin/zsh",
+                snapshot: false,
+                autoshare: true,
+                permission: {
+                  bash: "ask",
+                  edit: { "*.md": "allow", "*": "deny" },
+                },
+                agent: {
+                  reviewer: {
+                    prompt: "Review changes.",
+                    disable: true,
+                    temperature: 0.2,
+                    permission: { read: "allow" },
+                  },
+                },
+                plugin: ["opencode-helicone-session", ["@my-org/audit-plugin", { endpoint: "https://audit.example.com" }]],
+                skills: { paths: ["./skills"], urls: ["https://example.com/.well-known/skills/"] },
+                reference: { docs: { path: "../docs" } },
+                attachment: { image: { auto_resize: false, max_width: 1200 } },
+                compaction: { auto: true, tail_turns: 3, preserve_recent_tokens: 2000, reserved: 10000 },
+                experimental: { mcp_timeout: 5000 },
+                mcp: {
+                  local: { type: "local", command: ["node", "server.js"], enabled: false },
+                  remote: {
+                    type: "remote",
+                    url: "https://mcp.example.com",
+                    oauth: { clientId: "client", callbackPort: 19876 },
+                  },
+                },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = yield* config.get()
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info).toBeInstanceOf(Config.Info)
+            expect(documents[0]?.info.shell).toBe("/bin/zsh")
+            expect(documents[0]?.info.snapshots).toBe(false)
+            expect(documents[0]?.info.share).toBe("auto")
+            expect(documents[0]?.info.permissions).toEqual([
+              { action: "bash", resource: "*", effect: "ask" },
+              { action: "edit", resource: "*.md", effect: "allow" },
+              { action: "edit", resource: "*", effect: "deny" },
+            ])
+            expect(documents[0]?.info.agents?.reviewer).toMatchObject({
+              system: "Review changes.",
+              disabled: true,
+              options: { body: { temperature: 0.2 } },
+              permissions: [{ action: "read", resource: "*", effect: "allow" }],
+            })
+            expect(documents[0]?.info.plugins).toEqual([
+              "opencode-helicone-session",
+              { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
+            ])
+            expect(documents[0]?.info.skills).toEqual(["./skills", "https://example.com/.well-known/skills/"])
+            expect(documents[0]?.info.references).toEqual({ docs: { path: "../docs" } })
+            expect(documents[0]?.info.attachments).toEqual({ image: { auto_resize: false, max_width: 1200 } })
+            expect(documents[0]?.info.compaction).toEqual({
+              auto: true,
+              prune: undefined,
+              keep: { turns: 3, tokens: 2000 },
+              buffer: 10000,
+            })
+            expect(documents[0]?.info.mcp).toMatchObject({
+              timeout: 5000,
+              servers: {
+                local: { type: "local", command: ["node", "server.js"], disabled: true },
+                remote: {
+                  type: "remote",
+                  url: "https://mcp.example.com",
+                  oauth: { client_id: "client", callback_port: 19876 },
+                },
+              },
+            })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),

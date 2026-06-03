@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MessageV2 } from "../message-v2"
 import { Reference } from "@/reference/reference"
 
@@ -34,7 +34,7 @@ export function referenceTextPart(input: {
   target?: string
   targetPath?: string
   problem?: string
-}): SessionLegacy.TextPartInput {
+}): SessionV1.TextPartInput {
   const metadata: ReferencePromptMetadata = {
     name: input.reference.name,
     kind: input.reference.kind,

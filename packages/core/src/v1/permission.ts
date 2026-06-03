@@ -1,4 +1,4 @@
-export * as PermissionLegacy from "./legacy"
+export * as PermissionV1 from "./permission"
 
 import { Schema } from "effect"
 import { ProjectV2 } from "../project"
