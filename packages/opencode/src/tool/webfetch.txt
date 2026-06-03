@@ -6,8 +6,9 @@
 
 Usage notes:
   - IMPORTANT: if another tool is present that offers better web fetching capabilities, is more targeted to the task, or has fewer restrictions, prefer using that tool instead of this one.
-  - The URL must be a fully-formed valid URL
-  - HTTP URLs will be automatically upgraded to HTTPS
-  - Format options: "markdown" (default), "text", or "html"
-  - This tool is read-only and does not modify any files
-  - Results may be summarized if the content is very large
+- The URL must be a fully-formed valid URL
+- HTTP URLs will be automatically upgraded to HTTPS
+- Maximum response size defaults to 5MB and can be configured via `OPENCODE_WEBFETCH_MAX_SIZE` (bytes)
+- Format options: "markdown" (default), "text", or "html"
+- This tool is read-only and does not modify any files
+- Results may be summarized if the content is very large

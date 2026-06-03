@@ -7,8 +7,9 @@ import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect } from "../lib/effect"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const it = testEffect(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer))
+const it = testEffect(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer, RuntimeFlags.defaultLayer))
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -108,6 +109,24 @@ describe("tool.webfetch", () => {
           expect(result.output).toBe("Hello world")
           expect(result.attachments).toBeUndefined()
         }),
+    ),
+  )
+
+  it.instance("enforces OPENCODE_WEBFETCH_MAX_SIZE override for response-size checks", () =>
+    withFetch(
+      () =>
+        new Response("123456", {
+          status: 200,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        }),
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* Effect.exit(exec({ url: new URL("/size.txt", url).toString(), format: "text" }))
+          expect(result._tag).toBe("Failure")
+          if (result._tag === "Success") return
+          expect(String(result.cause)).toContain("Response too large")
+          expect(String(result.cause)).toContain("5 bytes")
+        }).pipe(Effect.provide(RuntimeFlags.layer({ webfetchMaxResponseSizeBytes: 5 }))),
     ),
   )
 })
