@@ -1,6 +1,6 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Slug } from "@opencode-ai/core/util/slug"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
@@ -234,7 +234,7 @@ export const Info = Schema.Struct({
   version: Schema.String,
   metadata: optionalOmitUndefined(Metadata),
   time: Time,
-  permission: optionalOmitUndefined(PermissionLegacy.Ruleset),
+  permission: optionalOmitUndefined(PermissionV1.Ruleset),
   revert: optionalOmitUndefined(Revert),
 }).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
@@ -259,7 +259,7 @@ export const CreateInput = Schema.optional(
     agent: Schema.optional(Schema.String),
     model: Schema.optional(Model),
     metadata: Schema.optional(Metadata),
-    permission: Schema.optional(PermissionLegacy.Ruleset),
+    permission: Schema.optional(PermissionV1.Ruleset),
     workspaceID: Schema.optional(WorkspaceV2.ID),
   }),
 )
@@ -283,7 +283,7 @@ export const SetMetadataInput = Schema.Struct({
 })
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
-  permission: PermissionLegacy.Ruleset,
+  permission: PermissionV1.Ruleset,
 })
 export const SetRevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -349,7 +349,7 @@ const UpdatedInfo = Schema.Struct({
   version: Schema.optional(Schema.NullOr(Schema.String)),
   metadata: Schema.optional(Schema.NullOr(Metadata)),
   time: Schema.optional(UpdatedTime),
-  permission: Schema.optional(Schema.NullOr(PermissionLegacy.Ruleset)),
+  permission: Schema.optional(Schema.NullOr(PermissionV1.Ruleset)),
   revert: Schema.optional(Schema.NullOr(Revert)),
 })
 
@@ -359,9 +359,9 @@ const UpdatedEventSchema = Schema.Struct({
 })
 
 export const Event = {
-  Created: SessionLegacy.Event.Created,
-  Updated: SessionLegacy.Event.Updated,
-  Deleted: SessionLegacy.Event.Deleted,
+  Created: SessionV1.Event.Created,
+  Updated: SessionV1.Event.Updated,
+  Deleted: SessionV1.Event.Deleted,
   Diff: EventV2.define({
     type: "session.diff",
     schema: {
@@ -373,9 +373,9 @@ export const Event = {
     type: "session.error",
     schema: {
       sessionID: Schema.optional(SessionID),
-      // Reuses SessionLegacy.Assistant.fields.error (already Schema.optional) so
+      // Reuses SessionV1.Assistant.fields.error (already Schema.optional) so
       // the derived schema keeps the same discriminated-union shape on the event stream.
-      error: SessionLegacy.Assistant.fields.error,
+      error: SessionV1.Assistant.fields.error,
     },
   }),
 }
@@ -473,7 +473,7 @@ export interface Interface {
     agent?: string
     model?: Schema.Schema.Type<typeof Model>
     metadata?: typeof Metadata.Type
-    permission?: PermissionLegacy.Ruleset
+    permission?: PermissionV1.Ruleset
     workspaceID?: WorkspaceV2.ID
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
@@ -482,7 +482,7 @@ export interface Interface {
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
-  readonly setPermission: (input: { sessionID: SessionID; permission: PermissionLegacy.Ruleset }) => Effect.Effect<void>
+  readonly setPermission: (input: { sessionID: SessionID; permission: PermissionV1.Ruleset }) => Effect.Effect<void>
   readonly setRevert: (input: {
     sessionID: SessionID
     revert: Info["revert"]
@@ -493,21 +493,18 @@ export interface Interface {
   readonly setShare: (input: { sessionID: SessionID; share: Info["share"] }) => Effect.Effect<void>
   readonly setWorkspace: (input: { sessionID: SessionID; workspaceID: Info["workspaceID"] }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
-  readonly messages: (input: {
-    sessionID: SessionID
-    limit?: number
-  }) => Effect.Effect<SessionLegacy.WithParts[], NotFound>
+  readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
-  readonly updateMessage: <T extends SessionLegacy.Info>(msg: T) => Effect.Effect<T>
+  readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
   readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
   readonly getPart: (input: {
     sessionID: SessionID
     messageID: MessageID
     partID: PartID
-  }) => Effect.Effect<SessionLegacy.Part | undefined>
-  readonly updatePart: <T extends SessionLegacy.Part>(part: T) => Effect.Effect<T>
+  }) => Effect.Effect<SessionV1.Part | undefined>
+  readonly updatePart: <T extends SessionV1.Part>(part: T) => Effect.Effect<T>
   readonly updatePartDelta: (input: {
     sessionID: SessionID
     messageID: MessageID
@@ -518,8 +515,8 @@ export interface Interface {
   /** Finds the first message matching the predicate, searching newest-first. */
   readonly findMessage: (
     sessionID: SessionID,
-    predicate: (msg: SessionLegacy.WithParts) => boolean,
-  ) => Effect.Effect<Option.Option<SessionLegacy.WithParts>, NotFound>
+    predicate: (msg: SessionV1.WithParts) => boolean,
+  ) => Effect.Effect<Option.Option<SessionV1.WithParts>, NotFound>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
@@ -571,7 +568,7 @@ export const layer: Layer.Layer<
       directory: string
       path?: string
       metadata?: typeof Metadata.Type
-      permission?: PermissionLegacy.Ruleset
+      permission?: PermissionV1.Ruleset
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -598,7 +595,7 @@ export const layer: Layer.Layer<
       log.info("created", result)
 
       yield* events.publish(
-        SessionLegacy.Event.Created,
+        SessionV1.Event.Created,
         { sessionID: result.id, info: result },
         { location: eventLocation(result) },
       )
@@ -689,7 +686,7 @@ export const layer: Layer.Layer<
         }
 
         yield* events.publish(
-          SessionLegacy.Event.Deleted,
+          SessionV1.Event.Deleted,
           { sessionID, info: session },
           { location: eventLocation(session) },
         )
@@ -699,18 +696,18 @@ export const layer: Layer.Layer<
       }
     })
 
-    const updateMessage = <T extends SessionLegacy.Info>(msg: T): Effect.Effect<T> =>
+    const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         const location = yield* locationForSession(msg.sessionID)
-        yield* events.publish(SessionLegacy.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg }, { location })
+        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg }, { location })
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
-    const updatePart = <T extends SessionLegacy.Part>(part: T): Effect.Effect<T> =>
+    const updatePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         const location = yield* locationForSession(part.sessionID)
         yield* events.publish(
-          SessionLegacy.Event.PartUpdated,
+          SessionV1.Event.PartUpdated,
           {
             sessionID: part.sessionID,
             part: structuredClone(part),
@@ -740,7 +737,7 @@ export const layer: Layer.Layer<
         id: row.id,
         sessionID: row.session_id,
         messageID: row.message_id,
-      } as SessionLegacy.Part
+      } as SessionV1.Part
     })
 
     const create = Effect.fn("Session.create")(function* (input?: {
@@ -749,7 +746,7 @@ export const layer: Layer.Layer<
       agent?: string
       model?: Schema.Schema.Type<typeof Model>
       metadata?: typeof Metadata.Type
-      permission?: PermissionLegacy.Ruleset
+      permission?: PermissionV1.Ruleset
       workspaceID?: WorkspaceV2.ID
     }) {
       const ctx = yield* InstanceState.context
@@ -795,7 +792,7 @@ export const layer: Layer.Layer<
         })
 
         for (const part of msg.parts) {
-          const p: SessionLegacy.Part = {
+          const p: SessionV1.Part = {
             ...part,
             id: PartID.ascending(),
             messageID: cloned.id,
@@ -822,7 +819,7 @@ export const layer: Layer.Layer<
           revert: info.revert === null ? undefined : (info.revert ?? current.revert),
           permission: info.permission === null ? undefined : (info.permission ?? current.permission),
         } as Info
-        yield* events.publish(SessionLegacy.Event.Updated, { sessionID, info: next }, { location: eventLocation(next) })
+        yield* events.publish(SessionV1.Event.Updated, { sessionID, info: next }, { location: eventLocation(next) })
       })
 
     const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
@@ -843,7 +840,7 @@ export const layer: Layer.Layer<
 
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {
       sessionID: SessionID
-      permission: PermissionLegacy.Ruleset
+      permission: PermissionV1.Ruleset
     }) {
       yield* patch(input.sessionID, { permission: [...input.permission], time: { updated: Date.now() } }).pipe(
         Effect.orDie,
@@ -899,7 +896,7 @@ export const layer: Layer.Layer<
       }
 
       const size = 50
-      const result = [] as SessionLegacy.WithParts[]
+      const result = [] as SessionV1.WithParts[]
       let before: string | undefined
       while (true) {
         const page = yield* MessageV2.page({ sessionID: input.sessionID, limit: size, before }).pipe(
@@ -922,7 +919,7 @@ export const layer: Layer.Layer<
     }) {
       const location = yield* locationForSession(input.sessionID)
       yield* events.publish(
-        SessionLegacy.Event.MessageRemoved,
+        SessionV1.Event.MessageRemoved,
         {
           sessionID: input.sessionID,
           messageID: input.messageID,
@@ -939,7 +936,7 @@ export const layer: Layer.Layer<
     }) {
       const location = yield* locationForSession(input.sessionID)
       yield* events.publish(
-        SessionLegacy.Event.PartRemoved,
+        SessionV1.Event.PartRemoved,
         {
           sessionID: input.sessionID,
           messageID: input.messageID,
@@ -976,7 +973,7 @@ export const layer: Layer.Layer<
         if (!page.more || !page.cursor) break
         before = page.cursor
       }
-      return Option.none<SessionLegacy.WithParts>()
+      return Option.none<SessionV1.WithParts>()
     })
 
     return Service.of({
