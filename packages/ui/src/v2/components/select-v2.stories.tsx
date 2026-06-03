@@ -22,7 +22,8 @@ Single-select built on Kobalte with a **TextInput v2** trigger surface and **Men
 - \`options\`, \`current\`, \`onSelect\`: controlled selection (\`current\` is the selected option object).
 - \`value\` / \`label\`: accessors when options are not plain strings.
 - \`groupBy\`: groups options; section headers use menu group label styling.
-- \`appearance\`: \`base\` (28px) or \`large\` (32px).
+- \`appearance\`: \`base\` (28px), \`large\` (32px), or \`inline\` (compact settings-row trigger).
+- \`placement\`, \`gutter\`, \`sameWidth\`, \`flip\`, \`slide\`, \`fitViewport\`: forwarded to Kobalte popper (defaults match legacy \`Select\`: gutter 4, flip/slide on; inline uses \`bottom-end\` and \`sameWidth: false\`).
 - \`invalid\`, \`disabled\`, \`numeric\`: match text input conventions.
 `
 
@@ -58,7 +59,7 @@ export default {
     },
     appearance: {
       control: "select",
-      options: ["base", "large"],
+      options: ["base", "large", "inline"],
     },
   },
 }
