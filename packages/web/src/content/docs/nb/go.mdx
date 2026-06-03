@@ -69,6 +69,7 @@ Den nåværende listen over modeller inkluderer:
 - **MiniMax M2.7**
 - **MiniMax M3**
 - **Qwen3.6 Plus**
+- **Qwen3.7 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
@@ -101,6 +102,7 @@ Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksm
 | MiniMax M2.7      | 3,400                    | 8,500                | 17,000                 |
 | MiniMax M2.5      | 6,300                    | 15,900               | 31,800                 |
 | Qwen3.7 Max       | 950                      | 2,390                | 4,770                  |
+| Qwen3.7 Plus      | 4,300                    | 10,800               | 21,600                 |
 | Qwen3.6 Plus      | 3,300                    | 8,200                | 16,300                 |
 | DeepSeek V4 Pro   | 3,450                    | 8,550                | 17,150                 |
 | DeepSeek V4 Flash | 31,650                   | 79,050               | 158,150                |
@@ -114,6 +116,7 @@ Estimatene er basert på observerte gjennomsnittlige forespørselsmønstre:
 - MiniMax M3 — 810 input, 62 000 bufret, 225 output-tokens per forespørsel
 - MiniMax M2.7/M2.5 — 300 input, 55 000 bufret, 125 output-tokens per forespørsel
 - Qwen3.7 Max — 420 input, 66 000 bufret, 200 output-tokens per forespørsel
+- Qwen3.7 Plus — 500 input, 57 000 bufret, 190 output-tokens per forespørsel
 - Qwen3.6 Plus — 500 input, 57 000 bufret, 190 output-tokens per forespørsel
 - MiMo-V2.5 — 830 input, 71 500 bufret, 295 output-tokens per forespørsel
 - MiMo-V2.5-Pro — 790 input, 86 000 bufret, 305 output-tokens per forespørsel
@@ -132,6 +135,7 @@ Estimatene er også basert på følgende priser per 1M tokens:
 | MiniMax M2.7      | $0.30 | $1.20  | $0.06       | $0.375       |
 | MiniMax M2.5      | $0.30 | $1.20  | $0.06       | $0.375       |
 | Qwen3.7 Max       | $2.50 | $7.50  | $0.50       | $3.125       |
+| Qwen3.7 Plus      | $0.40 | $1.60  | $0.04       | $0.50        |
 | Qwen3.6 Plus      | $0.50 | $3.00  | $0.05       | $0.625       |
 | DeepSeek V4 Pro   | $1.74 | $3.48  | $0.0145     | -            |
 | DeepSeek V4 Flash | $0.14 | $0.28  | $0.0028     | -            |
@@ -172,6 +176,7 @@ Du kan også få tilgang til Go-modeller gjennom følgende API-endepunkter.
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 [Modell-ID-en](/docs/config/#models) i din OpenCode-konfigurasjon
