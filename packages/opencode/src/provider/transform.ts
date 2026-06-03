@@ -613,9 +613,7 @@ function googleThinkingBudgetMax(apiId: string) {
 
 // SAP's Zod schema drops unknown top-level keys; reasoning controls survive
 // only via `modelParams` (catchall), forwarded verbatim by the SAP SDKs.
-function wrapInSapModelParams(
-  variants: Record<string, Record<string, any>>,
-): Record<string, Record<string, any>> {
+function wrapInSapModelParams(variants: Record<string, Record<string, any>>): Record<string, Record<string, any>> {
   return Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, { modelParams: v }]))
 }
 
@@ -995,14 +993,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       }
       if (id.includes("gpt") || /\bo[1-9]/.test(id)) {
         const efforts = openaiReasoningEfforts(id, model.release_date)
-        return wrapInSapModelParams(
-          Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])),
-        )
+        return wrapInSapModelParams(Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])))
       }
       return wrapInSapModelParams(
-        Object.fromEntries(
-          ["low", "medium", "high"].map((effort) => [effort, { reasoning_effort: effort }]),
-        ),
+        Object.fromEntries(["low", "medium", "high"].map((effort) => [effort, { reasoning_effort: effort }])),
       )
     }
   }
