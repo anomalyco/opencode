@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { toModelAggregate, toProviderAggregate } from "./inference"
+import { toGeoAggregate, toModelAggregate, toProviderAggregate } from "./inference"
 import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from "./model-normalization"
 
 describe("inference stat normalization", () => {
@@ -31,9 +31,11 @@ describe("inference stat normalization", () => {
   test("uses provider.model to resolve opencode route providers", () => {
     expect(statModel("big-pickle", "claude-sonnet-4-5")).toBe("claude-sonnet-4-5")
     expect(statModel("big-pickle", "gpt-5-free")).toBe("gpt-5")
+    expect(statModel("big-pickle", "")).toBe("unknown")
     expect(statProvider("big-pickle", "claude-sonnet-4-5", "opencode")).toBe("anthropic")
     expect(statProvider("big-pickle", "gpt-5", "opencode")).toBe("openai")
     expect(statProvider("big-pickle", "", "opencode")).toBe("unknown")
+    expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
   })
 
   test("model aggregates prefer provider.model and use normalized model", () => {
@@ -63,6 +65,12 @@ describe("inference stat normalization", () => {
       { provider: "openai" },
     ])
     expect(toProviderAggregate(aggregate("big-pickle", "opencode"))).toMatchObject([{ provider: "unknown" }])
+  })
+
+  test("geo aggregates never keep opencode or big-pickle dimensions", () => {
+    expect(toGeoAggregate({ ...aggregate("big-pickle", "opencode"), country: "US" })).toMatchObject([
+      { provider: "unknown", model: "unknown", country: "US" },
+    ])
   })
 
   test("model aggregates use ISO week period keys", () => {

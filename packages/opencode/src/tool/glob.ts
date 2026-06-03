@@ -2,8 +2,8 @@ import path from "path"
 import { Effect, Option, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { InstanceState } from "@/effect/instance-state"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Ripgrep } from "../file/ripgrep"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
@@ -20,7 +20,7 @@ export const GlobTool = Tool.define(
   "glob",
   Effect.gen(function* () {
     const rg = yield* Ripgrep.Service
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const reference = yield* Reference.Service
 
     return {

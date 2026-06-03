@@ -1,10 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import { HttpServer } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
@@ -30,7 +31,7 @@ import { httpApiLayer } from "./httpapi-layer"
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
   Layer.mergeAll(
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
     Database.defaultLayer,
@@ -50,7 +51,7 @@ type Captured = { status: number; data?: unknown; error?: unknown }
 type ProjectFixture = { sdk: Sdk; directory: string }
 type LlmProjectFixture = ProjectFixture & { llm: TestLLMServer["Service"] }
 type TestServices =
-  | AppFileSystem.Service
+  | FSUtil.Service
   | ChildProcessSpawner.ChildProcessSpawner
   | InstanceStore.Service
   | HttpServer.HttpServer
@@ -190,7 +191,7 @@ function httpapiInstance<A, E>(
   options: {
     serverPath: ServerPath
     git?: boolean
-    config?: Partial<Config.Info>
+    config?: Partial<ConfigV1.Info>
     setup?: (dir: string) => Effect.Effect<void, E, TestServices>
   },
   run: (input: ProjectFixture) => Effect.Effect<A, E, TestScope>,
@@ -214,7 +215,7 @@ function withProject<A, E, E2 = never>(
   serverPath: ServerPath,
   options: {
     git?: boolean
-    config?: Partial<Config.Info>
+    config?: Partial<ConfigV1.Info>
     setup?: (dir: string) => Effect.Effect<void, E2, TestServices>
   },
   run: (input: ProjectFixture) => Effect.Effect<A, E, TestScope>,
@@ -262,7 +263,7 @@ function withFakeLlmProject<A, E>(
 }
 
 function writeStandardFiles(dir: string) {
-  return AppFileSystem.Service.use((fs) =>
+  return FSUtil.Service.use((fs) =>
     Effect.all([
       fs.writeWithDirs(path.join(dir, "hello.txt"), "hello"),
       fs.writeWithDirs(path.join(dir, "needle.ts"), "export const needle = 'sdk-parity'\n"),
@@ -271,7 +272,7 @@ function writeStandardFiles(dir: string) {
 }
 
 function writeProjectSkill(dir: string) {
-  return AppFileSystem.Service.use((fs) =>
+  return FSUtil.Service.use((fs) =>
     fs.writeWithDirs(
       path.join(dir, ".opencode", "skills", "project-rest-skill", "SKILL.md"),
       `---
@@ -300,7 +301,7 @@ function seedMessage(directory: string, sessionID: string) {
             agent: "test",
             model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
             tools: {},
-          } satisfies SessionLegacy.User)
+          } satisfies SessionV1.User)
           const part = yield* svc.updatePart({
             id: PartID.ascending(),
             sessionID: id,

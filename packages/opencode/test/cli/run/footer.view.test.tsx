@@ -487,7 +487,7 @@ test.skip("direct footer dispatches leader variant binding only when leader is r
   }
 })
 
-test.skip("direct footer keeps leader variant binding inactive when leader is disabled", async () => {
+test("direct footer keeps leader variant binding inactive when leader is disabled", async () => {
   const calls: string[] = []
   const app = await renderFooter({
     tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "none", variant_cycle: "<leader>t" } }),

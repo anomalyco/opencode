@@ -5,7 +5,7 @@ import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { SessionEvent } from "./event"
-import { SessionLegacy } from "./legacy"
+import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
@@ -27,7 +27,7 @@ type Usage = {
   }
 }
 
-function usage(part: (typeof SessionLegacy.Event.PartUpdated.Type)["data"]["part"] | unknown): Usage | undefined {
+function usage(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"] | unknown): Usage | undefined {
   if (typeof part !== "object" || part === null) return undefined
   const value = part as Record<string, unknown>
   if (value.type !== "step-finish") return undefined
@@ -35,7 +35,7 @@ function usage(part: (typeof SessionLegacy.Event.PartUpdated.Type)["data"]["part
   return { cost: value.cost as Usage["cost"], tokens: value.tokens as Usage["tokens"] }
 }
 
-function sessionRow(info: SessionLegacy.SessionInfo): typeof SessionTable.$inferInsert {
+function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInsert {
   return {
     id: info.id,
     project_id: info.projectID,
@@ -70,22 +70,20 @@ function sessionRow(info: SessionLegacy.SessionInfo): typeof SessionTable.$infer
 }
 
 function messageData(
-  info: (typeof SessionLegacy.Event.MessageUpdated.Type)["data"]["info"],
+  info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"],
 ): typeof MessageTable.$inferInsert.data {
   const { id: _, sessionID: __, ...rest } = info
   return rest as DeepMutable<typeof rest>
 }
 
-function partData(
-  part: (typeof SessionLegacy.Event.PartUpdated.Type)["data"]["part"],
-): typeof PartTable.$inferInsert.data {
+function partData(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"]): typeof PartTable.$inferInsert.data {
   const { id: _, messageID: __, sessionID: ___, ...rest } = part
   return rest as DeepMutable<typeof rest>
 }
 
 function applyUsage(
   db: DatabaseService,
-  sessionID: (typeof SessionLegacy.Event.MessageUpdated.Type)["data"]["sessionID"],
+  sessionID: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["sessionID"],
   value: Usage,
   sign = 1,
 ) {
@@ -270,7 +268,7 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const { db } = yield* Database.Service
-    yield* events.project(SessionLegacy.Event.Created, (event) =>
+    yield* events.project(SessionV1.Event.Created, (event) =>
       Effect.gen(function* () {
         yield* db.insert(SessionTable).values(sessionRow(event.data.info)).run().pipe(Effect.orDie)
         if (event.data.info.workspaceID) {
@@ -283,7 +281,7 @@ export const layer = Layer.effectDiscard(
         }
       }),
     )
-    yield* events.project(SessionLegacy.Event.Updated, (event) =>
+    yield* events.project(SessionV1.Event.Updated, (event) =>
       db
         .update(SessionTable)
         .set(sessionRow(event.data.info))
@@ -291,10 +289,10 @@ export const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie),
     )
-    yield* events.project(SessionLegacy.Event.Deleted, (event) =>
+    yield* events.project(SessionV1.Event.Deleted, (event) =>
       db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
     )
-    yield* events.project(SessionLegacy.Event.MessageUpdated, (event) =>
+    yield* events.project(SessionV1.Event.MessageUpdated, (event) =>
       Effect.gen(function* () {
         const time_created = event.data.info.time.created
         const id = event.data.info.id
@@ -308,7 +306,7 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       }),
     )
-    yield* events.project(SessionLegacy.Event.MessageRemoved, (event) =>
+    yield* events.project(SessionV1.Event.MessageRemoved, (event) =>
       Effect.gen(function* () {
         const rows = yield* db
           .select()
@@ -327,7 +325,7 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       }),
     )
-    yield* events.project(SessionLegacy.Event.PartRemoved, (event) =>
+    yield* events.project(SessionV1.Event.PartRemoved, (event) =>
       Effect.gen(function* () {
         const row = yield* db
           .select()
@@ -344,7 +342,7 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       }),
     )
-    yield* events.project(SessionLegacy.Event.PartUpdated, (event) =>
+    yield* events.project(SessionV1.Event.PartUpdated, (event) =>
       Effect.gen(function* () {
         const id = event.data.part.id
         const messageID = event.data.part.messageID

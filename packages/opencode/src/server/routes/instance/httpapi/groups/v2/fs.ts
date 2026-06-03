@@ -1,4 +1,4 @@
-import { LocationFileSystem } from "@opencode-ai/core/location-filesystem"
+import { FileSystem } from "@opencode-ai/core/filesystem"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -8,18 +8,20 @@ import { LocationQuery, locationQueryOpenApi, V2LocationMiddleware } from "./loc
 const ReadQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: RelativePath,
+  reference: Schema.String.pipe(Schema.optional),
 })
 
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: RelativePath.pipe(Schema.optional),
+  reference: Schema.String.pipe(Schema.optional),
 })
 
 export const FileSystemGroup = HttpApiGroup.make("v2.fs")
   .add(
     HttpApiEndpoint.get("read", "/api/fs/read", {
       query: ReadQuery,
-      success: LocationFileSystem.Content,
+      success: FileSystem.Content,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -33,7 +35,7 @@ export const FileSystemGroup = HttpApiGroup.make("v2.fs")
   .add(
     HttpApiEndpoint.get("list", "/api/fs/list", {
       query: ListQuery,
-      success: Schema.Array(LocationFileSystem.Entry),
+      success: Schema.Array(FileSystem.Entry),
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(

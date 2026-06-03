@@ -199,6 +199,41 @@ const scenarios: Scenario[] = [
       },
       "status",
     ),
+  http.protected
+    .get("/project/{projectID}/directories", "project.directories")
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/project/{projectID}/directories", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, array, "status"),
+  http.protected
+    .post("/experimental/project/{projectID}/copy", "experimental.projectCopy.create")
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/experimental/project/{projectID}/copy", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(400),
+  http.protected
+    .delete("/experimental/project/{projectID}/copy", "experimental.projectCopy.remove")
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/experimental/project/{projectID}/copy", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(400),
+  http.protected
+    .post("/experimental/project/{projectID}/copy/refresh", "experimental.projectCopy.refresh")
+    .mutating()
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/experimental/project/{projectID}/copy/refresh", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .status(204, undefined, "status"),
   http.protected.get("/provider", "provider.list").json(),
   http.protected.get("/provider/auth", "provider.auth").json(),
   http.protected

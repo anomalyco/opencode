@@ -1363,6 +1363,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     navigate(`/${base64Encode(worktree)}/session`)
   }
   const addProject = async () => {
+    const conn = server.current
+    if (!conn) return
     const select = (result: string | string[] | null) => {
       const directory = Array.isArray(result) ? result[0] : result
       if (!directory) return
@@ -1374,7 +1376,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     void import("@/components/dialog-select-directory").then((x) => {
       dialog.show(
-        () => <x.DialogSelectDirectory onSelect={select} />,
+        () => <x.DialogSelectDirectory onSelect={select} server={conn} />,
         () => select(null),
       )
     })
