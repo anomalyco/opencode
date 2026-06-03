@@ -21,6 +21,7 @@ import { FileSystem } from "./filesystem"
 import { Watcher } from "./filesystem/watcher"
 import { ProjectReference } from "./project-reference"
 import { RepositoryCache } from "./repository-cache"
+import { Pty } from "./pty"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -37,6 +38,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       PermissionV2.locationLayer,
       FileSystem.locationLayer,
       Watcher.locationLayer,
+      Pty.locationLayer,
     ).pipe(Layer.provideMerge(location), Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
