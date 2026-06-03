@@ -1635,7 +1635,6 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
     ])
   })
-
 })
 
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {
