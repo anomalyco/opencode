@@ -919,6 +919,8 @@ File paths can be:
 - Relative to the config file directory
 - Or absolute paths starting with `/` or `~`
 
+If the referenced file does not exist, the variable resolves to an empty string. Other file read errors still fail config loading.
+
 These are useful for:
 
 - Keeping sensitive data like API keys in separate files.

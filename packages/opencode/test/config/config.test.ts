@@ -529,13 +529,51 @@ it.instance("preserves env variables when adding $schema to config", () =>
 it.instance("handles file inclusion substitution", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "included.txt"), "test-user")
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "included.txt"), "  test-user\n")
     yield* writeConfigEffect(test.directory, {
       $schema: "https://opencode.ai/config.json",
       username: "{file:included.txt}",
     })
     const config = yield* Config.use.get()
     expect(config.username).toBe("test-user")
+  }),
+)
+
+it.instance("resolves missing file inclusion substitution to empty string", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "{file:missing.txt}",
+    })
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("")
+  }),
+)
+
+it.instance("handles mixed existing and missing file inclusion substitutions", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "included.txt"), "test-user")
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      username: "{file:included.txt}{file:missing.txt}",
+    })
+    const config = yield* Config.use.get()
+    expect(config.username).toBe("test-user")
+  }),
+)
+
+it.instance("keeps non-missing file inclusion read errors fatal", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "included-dir")))
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      username: "{file:included-dir}",
+    })
+    const exit = yield* Config.use.get().pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
   }),
 )
 
