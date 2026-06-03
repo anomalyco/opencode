@@ -3699,6 +3699,295 @@
         ]
       }
     },
+    "/project/{projectID}/directories": {
+      "get": {
+        "tags": ["project"],
+        "operationId": "project.directories",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project directories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDirectories"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List known local absolute directories for a project.",
+        "summary": "List project directories",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.project.directories({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/project/{projectID}/copy": {
+      "post": {
+        "tags": ["projectCopy"],
+        "operationId": "experimental.projectCopy.create",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project copy created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCopyCopy"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a local physical copy of a project using the selected strategy.",
+        "summary": "Create project copy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": ["git_worktree"]
+                  },
+                  "directory": {
+                    "type": "string"
+                  }
+                },
+                "required": ["strategy", "directory"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.projectCopy.create({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["projectCopy"],
+        "operationId": "experimental.projectCopy.remove",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Project copy removed"
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove a local physical copy of a project using the selected strategy.",
+        "summary": "Remove project copy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  }
+                },
+                "required": ["directory"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.projectCopy.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/project/{projectID}/copy/refresh": {
+      "post": {
+        "tags": ["projectCopy"],
+        "operationId": "experimental.projectCopy.refresh",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Project copies refreshed"
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Discover local project copies using one or all configured strategies.",
+        "summary": "Refresh project copies",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.projectCopy.refresh({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/pty/shells": {
       "get": {
         "tags": ["pty"],
@@ -11174,6 +11463,9 @@
             "$ref": "#/components/schemas/EventCommandExecuted"
           },
           {
+            "$ref": "#/components/schemas/EventProjectDirectoriesUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventProjectUpdated"
           },
           {
@@ -15033,6 +15325,30 @@
                       }
                     },
                     "required": ["name", "sessionID", "arguments", "messageID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["project.directories.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "projectID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["projectID"],
                     "additionalProperties": false
                   }
                 },
@@ -21149,6 +21465,22 @@
         "required": ["action", "effect", "resource"],
         "additionalProperties": false
       },
+      "ProjectDirectories": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "ProjectCopyCopy": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"],
+        "additionalProperties": false
+      },
       "LocationRef": {
         "type": "object",
         "properties": {
@@ -24299,6 +24631,30 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventProjectDirectoriesUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["project.directories.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "projectID": {
+                "type": "string"
+              }
+            },
+            "required": ["projectID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventProjectUpdated": {
         "type": "object",
         "properties": {
@@ -24946,6 +25302,10 @@
     {
       "name": "project",
       "description": "Experimental HttpApi project routes."
+    },
+    {
+      "name": "projectCopy",
+      "description": "Project copy management routes."
     },
     {
       "name": "pty",
