@@ -2200,9 +2200,13 @@ function Task(props: ToolProps<typeof TaskTool>) {
   )
 
   const status = createMemo(() => sync.data.session_status[props.metadata.sessionId ?? ""])
-  const isRunning = createMemo(
-    () => props.part.state.status === "running" || (props.metadata.background === true && status() !== undefined),
-  )
+  const isRunning = createMemo(() => {
+    const value = status()
+    return (
+      props.part.state.status === "running" ||
+      (props.metadata.background === true && value !== undefined && value.type !== "idle")
+    )
+  })
   const retry = createMemo(() => {
     const value = status()
     if (value?.type !== "retry") return
