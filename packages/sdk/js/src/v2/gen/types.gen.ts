@@ -1511,7 +1511,6 @@ export type GlobalEvent = {
     | SyncEventSessionNextTextDelta
     | SyncEventSessionNextTextEnded
     | SyncEventSessionNextReasoningStarted
-    | SyncEventSessionNextReasoningDelta
     | SyncEventSessionNextReasoningEnded
     | SyncEventSessionNextToolInputStarted
     | SyncEventSessionNextToolInputDelta
@@ -3143,20 +3142,6 @@ export type SyncEventSessionNextReasoningStarted = {
     timestamp: number
     sessionID: string
     reasoningID: string
-  }
-}
-
-export type SyncEventSessionNextReasoningDelta = {
-  type: "sync"
-  name: "session.next.reasoning.delta.1"
-  id: string
-  seq: number
-  aggregateID: "sessionID"
-  data: {
-    timestamp: number
-    sessionID: string
-    reasoningID: string
-    delta: string
   }
 }
 

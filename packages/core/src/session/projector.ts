@@ -340,7 +340,6 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Reasoning.Delta, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
     // yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))

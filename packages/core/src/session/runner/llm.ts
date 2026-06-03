@@ -127,7 +127,7 @@ export const layer = Layer.effect(
                      )
                  }),
                ),
-               Effect.ensuring(publication.withPermit(publisher.flushText())),
+               Effect.ensuring(publication.withPermit(publisher.flush())),
              )
              yield* FiberSet.awaitEmpty(settlements)
              return settledLocalTool

@@ -897,6 +897,133 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("broadcasts provider reasoning deltas without storing projection rewrites", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Think in chunks" }), resume: false })
+      const live: SessionEvent.Reasoning.Delta[] = []
+      const unsubscribe = yield* EventV2.Service.pipe(
+        Effect.flatMap((events) => events.listen((event) => Effect.sync(() => {
+          if (event.type === SessionEvent.Reasoning.Delta.type) live.push(event as SessionEvent.Reasoning.Delta)
+        }))),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({ id: "reasoning-many" }),
+        ...Array.from({ length: 32 }, (_, index) => LLMEvent.reasoningDelta({ id: "reasoning-many", text: `${index},` })),
+        LLMEvent.reasoningEnd({ id: "reasoning-many" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const deltas = yield* db
+        .select({ type: EventTable.type })
+        .from(EventTable)
+        .where(eq(EventTable.type, EventV2.versionedType(SessionEvent.Reasoning.Delta.type, 1)))
+        .all()
+        .pipe(Effect.orDie)
+      const expected = Array.from({ length: 32 }, (_, index) => `${index},`).join("")
+      expect(live).toHaveLength(32)
+      expect(deltas).toHaveLength(0)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Think in chunks" },
+        { type: "assistant", finish: "stop", content: [{ type: "reasoning", id: "reasoning-many", text: expected }] },
+      ])
+      const recorded = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      yield* events.remove(sessionID)
+      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, sessionID)).run().pipe(Effect.orDie)
+      yield* events.replayAll(
+        recorded.map((event) => ({
+          id: event.id,
+          aggregateID: event.aggregate_id,
+          seq: event.seq,
+          type: event.type,
+          data: event.data,
+        })),
+      )
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Think in chunks" },
+        { type: "assistant", finish: "stop", content: [{ type: "reasoning", id: "reasoning-many", text: expected }] },
+      ])
+    }),
+  )
+
+  it.effect("durably closes partial reasoning when the provider stream fails", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail after reasoning" }), resume: false })
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new TransportReason({ message: "Provider unavailable" }),
+      })
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({ id: "reasoning-partial" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-partial", text: "Partial" }),
+        ]),
+        Stream.fail(failure),
+      )
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail after reasoning" },
+        { type: "assistant", content: [{ type: "reasoning", id: "reasoning-partial", text: "Partial" }] },
+      ])
+    }),
+  )
+
+  it.effect("durably closes partial reasoning when the provider stream is interrupted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt after reasoning" }), resume: false })
+      const streamed = yield* Deferred.make<void>()
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({ id: "reasoning-interrupted" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-interrupted", text: "Partial" }),
+        ]),
+        Stream.fromEffect(Deferred.succeed(streamed, undefined)).pipe(Stream.flatMap(() => Stream.never)),
+      )
+
+      const fiber = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamed)
+      yield* Fiber.interrupt(fiber)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Interrupt after reasoning" },
+        { type: "assistant", content: [{ type: "reasoning", id: "reasoning-interrupted", text: "Partial" }] },
+      ])
+    }),
+  )
+
   it.effect("rejects malformed streamed tool input ordering", () =>
     Effect.gen(function* () {
       yield* setup

@@ -193,9 +193,9 @@ export namespace Reasoning {
   })
   export type Started = typeof Started.Type
 
+  // Stream fragments are live-only; Reasoning.Ended is the replayable full-value boundary.
   export const Delta = EventV2.define({
     type: "session.next.reasoning.delta",
-    ...options,
     schema: {
       ...Base,
       reasoningID: Schema.String,
