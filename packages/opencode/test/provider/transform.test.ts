@@ -3504,7 +3504,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@jerome-benoit/sap-ai-provider-v2", () => {
-    const sapModel = (apiId: string) =>
+    const sapModel = (apiId: string, releaseDate = "2024-01-01") =>
       createMockModel({
         id: `sap-ai-core/${apiId}`,
         providerID: "sap-ai-core",
@@ -3513,6 +3513,7 @@ describe("ProviderTransform.variants", () => {
           url: "https://api.ai.sap",
           npm: "@jerome-benoit/sap-ai-provider-v2",
         },
+        release_date: releaseDate,
       })
 
     for (const testCase of [
@@ -3520,71 +3521,102 @@ describe("ProviderTransform.variants", () => {
         name: "sonnet 4.6",
         apiIds: ["anthropic--claude-sonnet-4-6"],
         efforts: ["low", "medium", "high", "max"],
-        expectedHigh: { thinking: { type: "adaptive" }, effort: "high" },
+        thinking: { type: "adaptive" },
       },
       {
         name: "opus 4.6",
         apiIds: ["anthropic--claude-4.6-opus", "anthropic--claude-4-6-opus"],
         efforts: ["low", "medium", "high", "max"],
-        expectedHigh: { thinking: { type: "adaptive" }, effort: "high" },
+        thinking: { type: "adaptive" },
       },
       {
         name: "opus 4.7",
         apiIds: ["anthropic--claude-4.7-opus", "anthropic--claude-4-7-opus"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
-        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+        thinking: { type: "adaptive", display: "summarized" },
       },
       {
         name: "opus 4.8",
         apiIds: ["anthropic--claude-4.8-opus", "anthropic--claude-4-8-opus"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
-        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+        thinking: { type: "adaptive", display: "summarized" },
       },
     ]) {
       for (const apiId of testCase.apiIds) {
-        test(`${testCase.name} ${apiId} returns adaptive thinking variants`, () => {
+        test(`${testCase.name} ${apiId} returns adaptive thinking variants under modelParams`, () => {
           const result = ProviderTransform.variants(sapModel(apiId))
           expect(Object.keys(result)).toEqual(testCase.efforts)
-          expect(result.high).toEqual(testCase.expectedHigh)
-          if (testCase.efforts.includes("xhigh")) {
-            expect(result.xhigh).toEqual({ ...testCase.expectedHigh, effort: "xhigh" })
+          for (const effort of testCase.efforts) {
+            expect(result[effort]).toEqual({
+              modelParams: {
+                thinking: testCase.thinking,
+                output_config: { effort },
+              },
+            })
           }
         })
       }
     }
 
-    test("anthropic sonnet 4 returns budget-tokens variants", () => {
-      const result = ProviderTransform.variants(sapModel("anthropic--claude-sonnet-4"))
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({ thinking: { type: "enabled", budgetTokens: 16000 } })
-      expect(result.max).toEqual({ thinking: { type: "enabled", budgetTokens: 31999 } })
-    })
+    for (const apiId of ["anthropic--claude-sonnet-4", "anthropic--claude-4.5-opus"]) {
+      test(`${apiId} returns budget_tokens variants under modelParams`, () => {
+        const result = ProviderTransform.variants(sapModel(apiId))
+        expect(Object.keys(result)).toEqual(["high", "max"])
+        expect(result.high).toEqual({
+          modelParams: { thinking: { type: "enabled", budget_tokens: 16000 } },
+        })
+        expect(result.max).toEqual({
+          modelParams: { thinking: { type: "enabled", budget_tokens: 31999 } },
+        })
+      })
+    }
 
-    test("gemini 2.5 returns thinkingConfig variants", () => {
-      const result = ProviderTransform.variants(sapModel("gcp--gemini-2.5-pro"))
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({ thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } })
-      expect(result.max).toEqual({ thinkingConfig: { includeThoughts: true, thinkingBudget: 24576 } })
-    })
+    for (const testCase of [
+      { apiId: "gemini-2.5-pro", maxBudget: 32768 },
+      { apiId: "gemini-2.5-flash", maxBudget: 24576 },
+    ]) {
+      test(`${testCase.apiId} returns thinkingConfig variants under modelParams`, () => {
+        const result = ProviderTransform.variants(sapModel(testCase.apiId))
+        expect(Object.keys(result)).toEqual(["high", "max"])
+        expect(result.high).toEqual({
+          modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+        })
+        expect(result.max).toEqual({
+          modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: testCase.maxBudget } },
+        })
+      })
+    }
 
-    for (const apiId of ["azure-openai--gpt-4o", "azure-openai--o3-mini"]) {
-      test(`${apiId} returns reasoningEffort variants`, () => {
+    for (const testCase of [
+      { apiId: "gpt-5", releaseDate: "2025-08-07", efforts: ["minimal", "low", "medium", "high"] },
+      { apiId: "gpt-5-mini", releaseDate: "2025-08-07", efforts: ["minimal", "low", "medium", "high"] },
+      { apiId: "gpt-5-nano", releaseDate: "2025-08-07", efforts: ["minimal", "low", "medium", "high"] },
+      { apiId: "gpt-5.4", releaseDate: "2026-01-15", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { apiId: "azure-openai--o3-mini", releaseDate: "2024-01-01", efforts: ["low", "medium", "high"] },
+    ]) {
+      test(`${testCase.apiId} returns reasoning_effort variants under modelParams`, () => {
+        const result = ProviderTransform.variants(sapModel(testCase.apiId, testCase.releaseDate))
+        expect(Object.keys(result)).toEqual(testCase.efforts)
+        for (const effort of testCase.efforts) {
+          expect(result[effort]).toEqual({ modelParams: { reasoning_effort: effort } })
+        }
+      })
+    }
+
+    for (const apiId of [
+      "gemini-3.1-flash-lite",
+      "cohere--command-a-reasoning",
+      "sonar-deep-research",
+      "aws--llama-opus-4.7-fake",
+    ]) {
+      test(`${apiId} falls through to harmonized reasoning_effort fallback`, () => {
         const result = ProviderTransform.variants(sapModel(apiId))
         expect(Object.keys(result)).toEqual(["low", "medium", "high"])
-        expect(result.low).toEqual({ reasoningEffort: "low" })
-        expect(result.high).toEqual({ reasoningEffort: "high" })
+        for (const effort of ["low", "medium", "high"]) {
+          expect(result[effort]).toEqual({ modelParams: { reasoning_effort: effort } })
+        }
       })
     }
-
-    for (const apiId of ["perplexity--sonar-pro", "mistral--mistral-large"]) {
-      test(`${apiId} returns empty object`, () => {
-        expect(ProviderTransform.variants(sapModel(apiId))).toEqual({})
-      })
-    }
-
-    test("non-anthropic models with opus-like substrings do not get adaptive thinking", () => {
-      expect(ProviderTransform.variants(sapModel("aws--llama-opus-4.7-fake"))).toEqual({})
-    })
   })
 
   describe("ai-gateway-provider (cloudflare-ai-gateway)", () => {

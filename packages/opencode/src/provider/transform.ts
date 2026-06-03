@@ -611,6 +611,32 @@ function googleThinkingBudgetMax(apiId: string) {
   return 24_576
 }
 
+// SAP's Zod schema drops unknown top-level keys; reasoning controls survive
+// only via `modelParams` (catchall), forwarded verbatim by the SAP SDKs.
+function wrapInSapModelParams(
+  variants: Record<string, Record<string, any>>,
+): Record<string, Record<string, any>> {
+  return Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, { modelParams: v }]))
+}
+
+function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
+  const id = model.api.id.toLowerCase()
+  if (id.includes("2.5")) {
+    return {
+      high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+      max: {
+        thinkingConfig: { includeThoughts: true, thinkingBudget: googleThinkingBudgetMax(id) },
+      },
+    }
+  }
+  return Object.fromEntries(
+    googleThinkingLevelEfforts(id).map((effort) => [
+      effort,
+      { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } },
+    ]),
+  )
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
@@ -716,7 +742,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             max: {
               thinkingConfig: {
                 includeThoughts: true,
-                thinkingBudget: 24576,
+                thinkingBudget: googleThinkingBudgetMax(id),
               },
             },
           }
@@ -903,34 +929,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
     case "@ai-sdk/google":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
-      if (id.includes("2.5")) {
-        return {
-          high: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 16000,
-            },
-          },
-          max: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: googleThinkingBudgetMax(id),
-            },
-          },
-        }
-      }
-
-      return Object.fromEntries(
-        googleThinkingLevelEfforts(id).map((effort) => [
-          effort,
-          {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingLevel: effort,
-            },
-          },
-        ]),
-      )
+      return googleThinkingVariants(model)
 
     case "@ai-sdk/mistral":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
@@ -969,57 +968,43 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity
       return {}
 
-    case "@jerome-benoit/sap-ai-provider-v2":
-      if (model.api.id.includes("anthropic")) {
+    case "@jerome-benoit/sap-ai-provider-v2": {
+      if (id.includes("anthropic")) {
         if (adaptiveEfforts) {
-          return Object.fromEntries(
-            adaptiveEfforts.map((effort) => [
-              effort,
-              {
-                thinking: {
-                  type: "adaptive",
-                  ...(adaptiveOpus ? { display: "summarized" } : {}),
-                },
+          // Bedrock adaptive splits `effort` out into `output_config` (vs Anthropic
+          // native which inlines it). Opus 4.7+ flipped `display` default to "omitted".
+          return wrapInSapModelParams(
+            Object.fromEntries(
+              adaptiveEfforts.map((effort) => [
                 effort,
-              },
-            ]),
+                {
+                  thinking: { type: "adaptive", ...(adaptiveOpus ? { display: "summarized" } : {}) },
+                  output_config: { effort },
+                },
+              ]),
+            ),
           )
         }
-        return {
-          high: {
-            thinking: {
-              type: "enabled",
-              budgetTokens: 16000,
-            },
-          },
-          max: {
-            thinking: {
-              type: "enabled",
-              budgetTokens: 31999,
-            },
-          },
-        }
+        return wrapInSapModelParams({
+          high: { thinking: { type: "enabled", budget_tokens: 16000 } },
+          max: { thinking: { type: "enabled", budget_tokens: 31999 } },
+        })
       }
-      if (model.api.id.includes("gemini") && id.includes("2.5")) {
-        return {
-          high: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 16000,
-            },
-          },
-          max: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 24576,
-            },
-          },
-        }
+      if (id.includes("gemini") && id.includes("2.5")) {
+        return wrapInSapModelParams(googleThinkingVariants(model))
       }
-      if (model.api.id.includes("gpt") || /\bo[1-9]/.test(model.api.id)) {
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+      if (id.includes("gpt") || /\bo[1-9]/.test(id)) {
+        const efforts = openaiReasoningEfforts(id, model.release_date)
+        return wrapInSapModelParams(
+          Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])),
+        )
       }
-      return {}
+      return wrapInSapModelParams(
+        Object.fromEntries(
+          ["low", "medium", "high"].map((effort) => [effort, { reasoning_effort: effort }]),
+        ),
+      )
+    }
   }
   return {}
 }
