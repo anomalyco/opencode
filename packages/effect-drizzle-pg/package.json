@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "version": "1.15.13",
+  "name": "@opencode-ai/effect-drizzle-pg",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "bun test --timeout 30000",
+    "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "typecheck": "tsgo --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./effect-pg": "./src/effect-pg/driver.ts"
+  },
+  "devDependencies": {
+    "@effect/sql-pg": "catalog:",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  },
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:"
+  }
+}

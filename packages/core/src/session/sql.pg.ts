@@ -1,17 +1,16 @@
-import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
-import * as DatabasePath from "../database/path"
-import { ProjectTable } from "../project/sql"
+import { pgTable, text, integer, index, primaryKey, doublePrecision, jsonb, bigint, uniqueIndex } from "drizzle-orm/pg-core"
+import * as DatabasePath from "../database/path.pg"
+import { PgProjectTable } from "../project/sql.pg"
 import type { SessionMessage } from "./message"
 import type { Prompt } from "./prompt"
 import type { SessionInput } from "./input"
 import type { Snapshot } from "../snapshot"
-import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
+import { PermissionV1 } from "../v1/permission"
 import { WorkspaceV2 } from "../workspace"
-import { Timestamps } from "../database/schema.sql"
-import { DatabaseDialect } from "../database/dialect"
+import { PgTimestamps } from "../database/schema.pg"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 
@@ -19,44 +18,44 @@ type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
 type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
 
-const _SqliteSessionTable = sqliteTable(
+export const PgSessionTable = pgTable(
   "session",
   {
     id: text().$type<SessionSchema.ID>().primaryKey(),
     project_id: text()
       .$type<ProjectV2.ID>()
       .notNull()
-      .references(() => ProjectTable.id, { onDelete: "cascade" }),
+      .references(() => PgProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text().$type<WorkspaceV2.ID>(),
     parent_id: text().$type<SessionSchema.ID>(),
     slug: text().notNull(),
-    directory: DatabasePath.directoryColumn().notNull(),
-    path: DatabasePath.pathColumn(),
+    directory: DatabasePath.pgDirectoryColumn().notNull(),
+    path: DatabasePath.pgPathColumn(),
     title: text().notNull(),
     version: text().notNull(),
     share_url: text(),
     summary_additions: integer(),
     summary_deletions: integer(),
     summary_files: integer(),
-    summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
-    metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
-    cost: real().notNull().default(0),
+    summary_diffs: jsonb().$type<Snapshot.FileDiff[]>(),
+    metadata: jsonb().$type<Record<string, unknown>>(),
+    cost: doublePrecision().notNull().default(0),
     tokens_input: integer().notNull().default(0),
     tokens_output: integer().notNull().default(0),
     tokens_reasoning: integer().notNull().default(0),
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
-    revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
-    permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
+    revert: jsonb().$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
+    permission: jsonb().$type<PermissionV1.Ruleset>(),
     agent: text(),
-    model: text({ mode: "json" }).$type<{
+    model: jsonb().$type<{
       id: string
       providerID: string
       variant?: string
     }>(),
-    ...Timestamps,
-    time_compacting: integer(),
-    time_archived: integer(),
+    ...PgTimestamps,
+  time_compacting: bigint({ mode: "number" }),
+  time_archived: bigint({ mode: "number" }),
   },
   (table) => [
     index("session_project_idx").on(table.project_id),
@@ -65,31 +64,31 @@ const _SqliteSessionTable = sqliteTable(
   ],
 )
 
-const _SqliteMessageTable = sqliteTable(
+export const PgMessageTable = pgTable(
   "message",
   {
     id: text().$type<MessageID>().primaryKey(),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
-      .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
-    ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<V1MessageData>(),
+      .references(() => PgSessionTable.id, { onDelete: "cascade" }),
+    ...PgTimestamps,
+    data: jsonb().notNull().$type<V1MessageData>(),
   },
   (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
 )
 
-const _SqlitePartTable = sqliteTable(
+export const PgPartTable = pgTable(
   "part",
   {
     id: text().$type<PartID>().primaryKey(),
     message_id: text()
       .$type<MessageID>()
       .notNull()
-      .references(() => _SqliteMessageTable.id, { onDelete: "cascade" }),
+      .references(() => PgMessageTable.id, { onDelete: "cascade" }),
     session_id: text().$type<SessionSchema.ID>().notNull(),
-    ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<V1PartData>(),
+    ...PgTimestamps,
+    data: jsonb().notNull().$type<V1PartData>(),
   },
   (table) => [
     index("part_message_id_id_idx").on(table.message_id, table.id),
@@ -97,18 +96,18 @@ const _SqlitePartTable = sqliteTable(
   ],
 )
 
-const _SqliteTodoTable = sqliteTable(
+export const PgTodoTable = pgTable(
   "todo",
   {
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
-      .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
+      .references(() => PgSessionTable.id, { onDelete: "cascade" }),
     content: text().notNull(),
     status: text().notNull(),
     priority: text().notNull(),
     position: integer().notNull(),
-    ...Timestamps,
+    ...PgTimestamps,
   },
   (table) => [
     primaryKey({ columns: [table.session_id, table.position] }),
@@ -116,17 +115,17 @@ const _SqliteTodoTable = sqliteTable(
   ],
 )
 
-const _SqliteSessionMessageTable = sqliteTable(
+export const PgSessionMessageTable = pgTable(
   "session_message",
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
-      .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
+      .references(() => PgSessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionMessage.Type>().notNull(),
-    ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<SessionMessageData>(),
+    ...PgTimestamps,
+    data: jsonb().notNull().$type<SessionMessageData>(),
   },
   (table) => [
     index("session_message_session_idx").on(table.session_id),
@@ -135,25 +134,19 @@ const _SqliteSessionMessageTable = sqliteTable(
   ],
 )
 
-type SqliteSessionTable = typeof _SqliteSessionTable
-type SqliteMessageTable = typeof _SqliteMessageTable
-type SqlitePartTable = typeof _SqlitePartTable
-type SqliteTodoTable = typeof _SqliteTodoTable
-type SqliteSessionMessageTable = typeof _SqliteSessionMessageTable
-
-const _SqliteSessionInputTable = sqliteTable(
+export const PgSessionInputTable = pgTable(
   "session_input",
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
-      .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
-    prompt: text({ mode: "json" }).notNull().$type<Prompt>(),
+      .references(() => PgSessionTable.id, { onDelete: "cascade" }),
+    prompt: jsonb().notNull().$type<Prompt>(),
     delivery: text().$type<SessionInput.Delivery>().notNull(),
     admitted_seq: integer().notNull(),
     promoted_seq: integer(),
-    time_created: integer()
+    time_created: bigint({ mode: "number" })
       .notNull()
       .$default(() => Date.now()),
   },
@@ -169,36 +162,15 @@ const _SqliteSessionInputTable = sqliteTable(
   ],
 )
 
-const _SqliteSessionContextEpochTable = sqliteTable("session_context_epoch", {
+export const PgSessionContextEpochTable = pgTable("session_context_epoch", {
   session_id: text()
     .$type<SessionSchema.ID>()
     .primaryKey()
-    .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
+    .references(() => PgSessionTable.id, { onDelete: "cascade" }),
   baseline: text().notNull(),
   agent: text().$type<AgentV2.ID>().notNull().default(AgentV2.defaultID),
-  snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
+  snapshot: jsonb().notNull().$type<SystemContext.Snapshot>(),
   baseline_seq: integer().notNull(),
   replacement_seq: integer(),
   revision: integer().notNull().default(0),
 })
-
-type SqliteSessionInputTable = typeof _SqliteSessionInputTable
-type SqliteSessionContextEpochTable = typeof _SqliteSessionContextEpochTable
-
-import {
-  PgSessionTable,
-  PgMessageTable,
-  PgPartTable,
-  PgTodoTable,
-  PgSessionMessageTable,
-  PgSessionInputTable,
-  PgSessionContextEpochTable,
-} from "./sql.pg"
-
-export const SessionTable: SqliteSessionTable = DatabaseDialect.isPostgres() ? PgSessionTable as any : _SqliteSessionTable
-export const MessageTable: SqliteMessageTable = DatabaseDialect.isPostgres() ? PgMessageTable as any : _SqliteMessageTable
-export const PartTable: SqlitePartTable = DatabaseDialect.isPostgres() ? PgPartTable as any : _SqlitePartTable
-export const TodoTable: SqliteTodoTable = DatabaseDialect.isPostgres() ? PgTodoTable as any : _SqliteTodoTable
-export const SessionMessageTable: SqliteSessionMessageTable = DatabaseDialect.isPostgres() ? PgSessionMessageTable as any : _SqliteSessionMessageTable
-export const SessionInputTable: SqliteSessionInputTable = DatabaseDialect.isPostgres() ? PgSessionInputTable as any : _SqliteSessionInputTable
-export const SessionContextEpochTable: SqliteSessionContextEpochTable = DatabaseDialect.isPostgres() ? PgSessionContextEpochTable as any : _SqliteSessionContextEpochTable
