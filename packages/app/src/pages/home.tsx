@@ -270,72 +270,77 @@ function HomeDesign() {
   }
 
   return (
-    <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
-      <HomeProjectColumn
-        projects={projects()}
-        selected={selectedProject()?.worktree}
-        selectProject={selectProject}
-        openNewSession={openProjectNewSession}
-        chooseProject={(conn) => void chooseProject(conn)}
-        editProject={editProject}
-        closeProject={(directory) => {
-          layout.projects.close(directory)
-          if (state.project === directory) setState("project", undefined)
-        }}
-        clearNotifications={clearNotifications}
-        unseenCount={unseenCount}
-        openSettings={openSettings}
-        openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-        language={language}
-      />
-
-      <section class="min-w-0 flex-1 flex flex-col pt-12" aria-label={language.t("sidebar.project.recentSessions")}>
-        <HomeSessionSearch
-          value={state.search}
-          placeholder={language.t("home.sessions.search.placeholder")}
-          open={searchOpen()}
-          loading={sessionLoad.isLoading}
-          results={searchResults()}
-          noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
-          bindFocus={(focus) => {
-            focusSessionSearch = focus
+    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 bg-background-base self-stretch flex-1">
+      <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
+        <HomeProjectColumn
+          projects={projects()}
+          selected={selectedProject()?.worktree}
+          selectProject={selectProject}
+          openNewSession={openProjectNewSession}
+          chooseProject={(conn) => void chooseProject(conn)}
+          editProject={editProject}
+          closeProject={(directory) => {
+            layout.projects.close(directory)
+            if (state.project === directory) setState("project", undefined)
           }}
-          onInput={(value) => setState("search", value)}
-          onFocus={() => setState("searchFocused", true)}
-          onClose={closeSearch}
-          onSelect={selectSearchSession}
+          clearNotifications={clearNotifications}
+          unseenCount={unseenCount}
+          openSettings={openSettings}
+          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+          language={language}
         />
-        <div class="mt-3 min-h-0 flex-1 overflow-y-auto">
-          <div class="pt-3 flex flex-col gap-6">
-            <Show when={!sessionLoad.isLoading} fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}>
+
+        <section class="min-w-0 flex-1 flex flex-col pt-12" aria-label={language.t("sidebar.project.recentSessions")}>
+          <HomeSessionSearch
+            value={state.search}
+            placeholder={language.t("home.sessions.search.placeholder")}
+            open={searchOpen()}
+            loading={sessionLoad.isLoading}
+            results={searchResults()}
+            noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
+            bindFocus={(focus) => {
+              focusSessionSearch = focus
+            }}
+            onInput={(value) => setState("search", value)}
+            onFocus={() => setState("searchFocused", true)}
+            onClose={closeSearch}
+            onSelect={selectSearchSession}
+          />
+          <div class="mt-3 min-h-0 flex-1 overflow-y-auto">
+            <div class="pt-3 flex flex-col gap-6">
               <Show
-                when={groups().length > 0}
-                fallback={
-                  <div class="flex min-w-0 flex-col gap-4">
-                    <HomeSessionGroupHeader title={language.t("home.sessions.empty")} onNewSession={openNewSession} />
-                  </div>
-                }
+                when={!sessionLoad.isLoading}
+                fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}
               >
-                <For each={groups()}>
-                  {(group, index) => (
+                <Show
+                  when={groups().length > 0}
+                  fallback={
                     <div class="flex min-w-0 flex-col gap-4">
-                      <HomeSessionGroupHeader
-                        title={group.title}
-                        onNewSession={index() === 0 ? openNewSession : undefined}
-                      />
-                      <div class="flex min-w-0 flex-col gap-px">
-                        <For each={group.sessions}>
-                          {(record) => <HomeSessionRow record={record} openSession={openSession} />}
-                        </For>
-                      </div>
+                      <HomeSessionGroupHeader title={language.t("home.sessions.empty")} onNewSession={openNewSession} />
                     </div>
-                  )}
-                </For>
+                  }
+                >
+                  <For each={groups()}>
+                    {(group, index) => (
+                      <div class="flex min-w-0 flex-col gap-4">
+                        <HomeSessionGroupHeader
+                          title={group.title}
+                          onNewSession={index() === 0 ? openNewSession : undefined}
+                        />
+                        <div class="flex min-w-0 flex-col gap-px">
+                          <For each={group.sessions}>
+                            {(record) => <HomeSessionRow record={record} openSession={openSession} />}
+                          </For>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </Show>
               </Show>
-            </Show>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   )
 }
@@ -373,9 +378,7 @@ function HomeProjectColumn(props: {
       </div>
       <Show
         when={global.servers.list().length > 1}
-        fallback={
-          <HomeProjectList {...props} chooseProject={() => props.chooseProject(global.servers.list()[0]!)} />
-        }
+        fallback={<HomeProjectList {...props} chooseProject={() => props.chooseProject(global.servers.list()[0]!)} />}
       >
         <For each={global.servers.list()}>
           {(item) => {
