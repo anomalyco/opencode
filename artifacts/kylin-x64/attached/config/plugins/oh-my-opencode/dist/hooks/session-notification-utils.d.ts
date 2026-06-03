@@ -1,0 +1,10 @@
+type Platform = "darwin" | "linux" | "win32" | "unsupported";
+export declare const getNotifySendPath: () => Promise<string | null>;
+export declare const getOsascriptPath: () => Promise<string | null>;
+export declare const getPowershellPath: () => Promise<string | null>;
+export declare const getAfplayPath: () => Promise<string | null>;
+export declare const getPaplayPath: () => Promise<string | null>;
+export declare const getAplayPath: () => Promise<string | null>;
+export declare const getTerminalNotifierPath: () => Promise<string | null>;
+export declare function startBackgroundCheck(platform: Platform): void;
+export {};

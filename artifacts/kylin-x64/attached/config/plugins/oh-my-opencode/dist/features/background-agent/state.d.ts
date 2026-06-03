@@ -1,0 +1,35 @@
+import type { BackgroundTask, LaunchInput } from "./types";
+import type { QueueItem } from "./constants";
+export declare class TaskStateManager {
+    readonly tasks: Map<string, BackgroundTask>;
+    readonly notifications: Map<string, BackgroundTask[]>;
+    readonly pendingByParent: Map<string, Set<string>>;
+    readonly queuesByKey: Map<string, QueueItem[]>;
+    readonly processingKeys: Set<string>;
+    readonly completionTimers: Map<string, ReturnType<typeof setTimeout>>;
+    getTask(id: string): BackgroundTask | undefined;
+    findBySession(sessionID: string): BackgroundTask | undefined;
+    getTasksByParentSession(sessionID: string): BackgroundTask[];
+    getAllDescendantTasks(sessionID: string): BackgroundTask[];
+    getRunningTasks(): BackgroundTask[];
+    getNonRunningTasks(): BackgroundTask[];
+    hasRunningTasks(): boolean;
+    getConcurrencyKeyFromInput(input: LaunchInput): string;
+    getConcurrencyKeyFromTask(task: BackgroundTask): string;
+    addTask(task: BackgroundTask): void;
+    removeTask(taskId: string): void;
+    trackPendingTask(parentSessionID: string, taskId: string): void;
+    cleanupPendingByParent(task: BackgroundTask): void;
+    markForNotification(task: BackgroundTask): void;
+    getPendingNotifications(sessionID: string): BackgroundTask[];
+    clearNotifications(sessionID: string): void;
+    clearNotificationsForTask(taskId: string): void;
+    addToQueue(key: string, item: QueueItem): void;
+    getQueue(key: string): QueueItem[] | undefined;
+    removeFromQueue(key: string, taskId: string): boolean;
+    setCompletionTimer(taskId: string, timer: ReturnType<typeof setTimeout>): void;
+    clearCompletionTimer(taskId: string): void;
+    clearAllCompletionTimers(): void;
+    clear(): void;
+    cancelPendingTask(taskId: string): boolean;
+}

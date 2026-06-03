@@ -1,0 +1,11 @@
+import type { RunContext, EventPayload } from "./types";
+import type { EventState } from "./event-state";
+export declare function handleSessionIdle(ctx: RunContext, payload: EventPayload, state: EventState): void;
+export declare function handleSessionStatus(ctx: RunContext, payload: EventPayload, state: EventState): void;
+export declare function handleSessionError(ctx: RunContext, payload: EventPayload, state: EventState): void;
+export declare function handleMessagePartUpdated(ctx: RunContext, payload: EventPayload, state: EventState): void;
+export declare function handleMessagePartDelta(ctx: RunContext, payload: EventPayload, state: EventState): void;
+export declare function handleMessageUpdated(ctx: RunContext, payload: EventPayload, state: EventState): void;
+export declare function handleToolExecute(ctx: RunContext, payload: EventPayload, state: EventState): void;
+export declare function handleToolResult(ctx: RunContext, payload: EventPayload, state: EventState): void;
+export declare function handleTuiToast(_ctx: RunContext, payload: EventPayload, state: EventState): void;
