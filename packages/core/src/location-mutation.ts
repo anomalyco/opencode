@@ -62,7 +62,15 @@ export interface Target {
   /** Canonical mutation path. Leaf tools should mutate this path after revalidation. */
   readonly canonical: string
   readonly exists: boolean
-  readonly type?: "File" | "Directory" | "SymbolicLink" | "BlockDevice" | "CharacterDevice" | "FIFO" | "Socket" | "Unknown"
+  readonly type?:
+    | "File"
+    | "Directory"
+    | "SymbolicLink"
+    | "BlockDevice"
+    | "CharacterDevice"
+    | "FIFO"
+    | "Socket"
+    | "Unknown"
   /** Stable mutation-action resource: Location-relative internally, canonical externally. */
   readonly resource: string
   readonly externalDirectory?: ExternalDirectoryAuthorization
@@ -115,11 +123,13 @@ export const layer = Layer.effect(
 
     function identity(canonical: string) {
       return fs.stat(canonical).pipe(
-        Effect.map((info): Identity => ({
-          canonical,
-          dev: info.dev,
-          ino: Option.getOrUndefined(info.ino),
-        })),
+        Effect.map(
+          (info): Identity => ({
+            canonical,
+            dev: info.dev,
+            ino: Option.getOrUndefined(info.ino),
+          }),
+        ),
       )
     }
 
@@ -149,7 +159,13 @@ export const layer = Layer.effect(
       for (const part of suffix.split(path.sep)) {
         if (!part) continue
         current = path.join(current, part)
-        if (yield* fs.readLink(current).pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))) return true
+        if (
+          yield* fs.readLink(current).pipe(
+            Effect.as(true),
+            Effect.catch(() => Effect.succeed(false)),
+          )
+        )
+          return true
       }
       return false
     })
@@ -172,7 +188,8 @@ export const layer = Layer.effect(
         const canonical = yield* notFound(fs.realPath(anchor))
         if (canonical !== undefined) {
           const info = yield* fs.stat(canonical)
-          if (info.type !== "Directory") return yield* new PathError({ path: absolute, reason: "non_directory_ancestor" })
+          if (info.type !== "Directory")
+            return yield* new PathError({ path: absolute, reason: "non_directory_ancestor" })
           const suffix = path.relative(anchor, absolute)
           if (yield* hasUnresolvedSymlink(anchor, suffix)) {
             return yield* new PathError({ path: absolute, reason: "unresolved_symlink" })
@@ -191,9 +208,11 @@ export const layer = Layer.effect(
     })
 
     const externalDirectory = Effect.fnUntraced(function* (resolved: ResolvedPath, kind: Kind) {
-      const candidate = kind === "directory" && resolved.type === "Directory" ? resolved.canonical : path.dirname(resolved.canonical)
+      const candidate =
+        kind === "directory" && resolved.type === "Directory" ? resolved.canonical : path.dirname(resolved.canonical)
       const boundary = yield* resolvePath(candidate)
-      const directory = boundary.exists && boundary.type === "Directory" ? boundary.canonical : boundary.authority.canonical
+      const directory =
+        boundary.exists && boundary.type === "Directory" ? boundary.canonical : boundary.authority.canonical
       const authority = yield* identity(directory)
       const resource = slash(path.join(directory, "*"))
       return { action: "external_directory" as const, directory, resource, save: resource, authority }
@@ -212,7 +231,9 @@ export const layer = Layer.effect(
       }
 
       const external = !lexicallyInternal
-      const resource = external ? slash(resolved.canonical) : slash(path.relative(locationRoot, resolved.canonical) || ".")
+      const resource = external
+        ? slash(resolved.canonical)
+        : slash(path.relative(locationRoot, resolved.canonical) || ".")
       const target: Target = {
         absolute,
         canonical: resolved.canonical,
@@ -231,7 +252,7 @@ export const layer = Layer.effect(
         return yield* invalid("external directory identity changed")
       }
       const fresh = yield* resolve(plan.input).pipe(
-        Effect.mapError((error) => error instanceof PathError ? invalid(error.reason) : error),
+        Effect.mapError((error) => (error instanceof PathError ? invalid(error.reason) : error)),
       )
       if (!sameIdentity(fresh.authority, plan.authority)) return yield* invalid("mutation authority changed")
       if (fresh.target.canonical !== plan.target.canonical) return yield* invalid("canonical mutation target changed")

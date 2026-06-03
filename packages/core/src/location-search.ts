@@ -100,7 +100,8 @@ export const layer = Layer.effect(
 
     const candidate = Effect.fnUntraced(function* (root: FileSystem.RootTarget, cwd: string, value: string) {
       const absolute = path.resolve(cwd, value)
-      const lexicallyContained = root.type === "directory" ? FSUtil.contains(root.real, absolute) : absolute === root.real
+      const lexicallyContained =
+        root.type === "directory" ? FSUtil.contains(root.real, absolute) : absolute === root.real
       if (!lexicallyContained) return
       const canonical = yield* fs.realPath(absolute).pipe(Effect.catch(() => Effect.void))
       if (!canonical || !FSUtil.contains(root.root, canonical)) return
@@ -111,20 +112,35 @@ export const layer = Layer.effect(
         path: RelativePath.make(relative),
         canonical,
         resource: root.reference === undefined ? relative : `${root.reference}:${relative}`,
-        mtime: info.mtime.pipe(Option.map((date) => date.getTime()), Option.getOrElse(() => 0)),
+        mtime: info.mtime.pipe(
+          Option.map((date) => date.getTime()),
+          Option.getOrElse(() => 0),
+        ),
       }
     })
 
     return Service.of({
       files: Effect.fn("LocationSearch.files")(function* (input) {
         const root = yield* filesystem.resolveRoot(input)
-        if (root.type !== "directory") return yield* Effect.die(new globalThis.Error("Files search path must be a directory"))
-        const result = yield* ripgrep.files({ cwd: root.real, pattern: input.pattern, limit: cap(input.limit), signal: input.signal })
-        const mapped = yield* Effect.forEach(result.items, (item) => candidate(root, root.real, item), { concurrency: 16 })
+        if (root.type !== "directory")
+          return yield* Effect.die(new globalThis.Error("Files search path must be a directory"))
+        const result = yield* ripgrep.files({
+          cwd: root.real,
+          pattern: input.pattern,
+          limit: cap(input.limit),
+          signal: input.signal,
+        })
+        const mapped = yield* Effect.forEach(result.items, (item) => candidate(root, root.real, item), {
+          concurrency: 16,
+        })
         const items = mapped.filter((item): item is File => item !== undefined).map((item) => new File(item))
         // TODO: Decide result ordering policy: V1 mtime sorting versus stable path ordering.
         // TODO: Report inaccessible paths discovered after bounded ripgrep termination when practical.
-        return new FilesResult({ items, truncated: result.truncated, partial: result.partial || items.length !== result.items.length })
+        return new FilesResult({
+          items,
+          truncated: result.truncated,
+          partial: result.partial || items.length !== result.items.length,
+        })
       }),
       grep: Effect.fn("LocationSearch.grep")(function* (input) {
         const root = yield* filesystem.resolveRoot(input)
@@ -138,24 +154,39 @@ export const layer = Layer.effect(
           signal: input.signal,
         })
         const candidates = new Map<string, ReturnType<typeof candidate>>()
-        const mapped = yield* Effect.forEach(result.items, (item) => {
-          const file = candidates.get(item.path.text) ?? candidate(root, cwd, item.path.text)
-          candidates.set(item.path.text, file)
-          return file.pipe(
-            Effect.map((file) => file && new Match({
-              ...file,
-              lines: item.lines.text.slice(0, MAX_LINE_PREVIEW_LENGTH),
-              linePreviewTruncated: item.lines.text.length > MAX_LINE_PREVIEW_LENGTH,
-              line: item.line_number,
-              offset: item.absolute_offset,
-              submatches: item.submatches.map((submatch) => new Submatch({ text: submatch.match.text, start: submatch.start, end: submatch.end })),
-            })),
-          )
-        }, { concurrency: 16 })
+        const mapped = yield* Effect.forEach(
+          result.items,
+          (item) => {
+            const file = candidates.get(item.path.text) ?? candidate(root, cwd, item.path.text)
+            candidates.set(item.path.text, file)
+            return file.pipe(
+              Effect.map(
+                (file) =>
+                  file &&
+                  new Match({
+                    ...file,
+                    lines: item.lines.text.slice(0, MAX_LINE_PREVIEW_LENGTH),
+                    linePreviewTruncated: item.lines.text.length > MAX_LINE_PREVIEW_LENGTH,
+                    line: item.line_number,
+                    offset: item.absolute_offset,
+                    submatches: item.submatches.map(
+                      (submatch) =>
+                        new Submatch({ text: submatch.match.text, start: submatch.start, end: submatch.end }),
+                    ),
+                  }),
+              ),
+            )
+          },
+          { concurrency: 16 },
+        )
         const items = mapped.filter((item): item is Match => item !== undefined)
         // TODO: Decide result ordering policy: V1 mtime sorting versus stable path ordering.
         // TODO: Report inaccessible paths discovered after bounded ripgrep termination when practical.
-        return new GrepResult({ items, truncated: result.truncated, partial: result.partial || items.length !== result.items.length })
+        return new GrepResult({
+          items,
+          truncated: result.truncated,
+          partial: result.partial || items.length !== result.items.length,
+        })
       }),
     })
   }),

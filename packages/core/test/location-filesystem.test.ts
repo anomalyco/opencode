@@ -179,9 +179,7 @@ describe("FileSystem", () => {
       ).pipe(Layer.provide(FSUtil.defaultLayer))
       return Effect.gen(function* () {
         yield* Effect.promise(() =>
-          Promise.all(
-            Array.from({ length: 32 }, (_, index) => fs.writeFile(path.join(directory, `${index}.txt`), "")),
-          ),
+          Promise.all(Array.from({ length: 32 }, (_, index) => fs.writeFile(path.join(directory, `${index}.txt`), ""))),
         )
         const service = yield* FileSystem.Service
 
@@ -348,9 +346,9 @@ describe("FileSystem", () => {
   it.live("rejects aliases when project references are disabled", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        expect(
-          Exit.isFailure(yield* (yield* FileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit)),
-        ).toBe(true)
+        expect(Exit.isFailure(yield* (yield* FileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit))).toBe(
+          true,
+        )
       }).pipe(provide(directory)),
     ),
   )

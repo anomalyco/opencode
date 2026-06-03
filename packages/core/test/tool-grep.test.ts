@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Ripgrep as FileSystemRipgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { LocationSearch } from "@opencode-ai/core/location-search"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AppProcess } from "@opencode-ai/core/process"
@@ -116,6 +117,7 @@ function references(entries: Record<string, ProjectReference.Resolved>) {
 function provideLive(directory: string, projectReferences = references({})) {
   const dependencies = Layer.mergeAll(
     FSUtil.defaultLayer,
+    FileSystemRipgrep.defaultLayer,
     AppProcess.defaultLayer,
     Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
     Layer.succeed(ProjectReference.Service, projectReferences),
@@ -124,6 +126,7 @@ function provideLive(directory: string, projectReferences = references({})) {
   const search = LocationSearch.layer.pipe(
     Layer.provide(filesystem),
     Layer.provide(Ripgrep.layer.pipe(Layer.provide(dependencies))),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(dependencies),
   )
   const registry = ToolRegistry.layer.pipe(Layer.provide(permission))

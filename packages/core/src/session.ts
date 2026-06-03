@@ -17,7 +17,7 @@ import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
-import { SessionLegacy } from "./session/legacy"
+import { SessionV1 } from "./v1/session"
 import { InstallationVersion } from "./installation/version"
 import { Slug } from "./util/slug"
 import { ProjectTable } from "./project/sql"
@@ -226,7 +226,7 @@ export const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
         const now = Date.now()
-        const info = SessionLegacy.SessionInfo.make({
+        const info = SessionV1.SessionInfo.make({
           id: sessionID,
           slug: Slug.create(),
           version: InstallationVersion,
@@ -248,7 +248,7 @@ export const layer = Layer.effect(
           time: { created: now, updated: now },
         })
         const projected = yield* events
-          .publish(SessionLegacy.Event.Created, { sessionID, info }, { location: input.location })
+          .publish(SessionV1.Event.Created, { sessionID, info }, { location: input.location })
           .pipe(
             Effect.as({ type: "created" } as const),
             Effect.catchDefect((defect) => {

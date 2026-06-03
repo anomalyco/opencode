@@ -37,6 +37,7 @@ export type Event =
   | EventSessionNextToolInputEnded
   | EventSessionNextToolCalled
   | EventSessionNextToolProgress
+  | EventSessionNextToolProgressLive
   | EventSessionNextToolSuccess
   | EventSessionNextToolFailed
   | EventSessionNextRetried
@@ -817,8 +818,8 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          idempotencyKey?: string
           prompt: Prompt
+          delivery: "steer" | "queue"
         }
       }
     | {
@@ -902,7 +903,6 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          promptCursor?: number
         }
       }
     | {
@@ -921,6 +921,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          textID: string
         }
       }
     | {
@@ -929,6 +930,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          textID: string
           delta: string
         }
       }
@@ -938,6 +940,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          textID: string
           text: string
         }
       }
@@ -1018,7 +1021,9 @@ export type GlobalEvent = {
           provider: {
             executed: boolean
             metadata?: {
-              [key: string]: unknown
+              [key: string]: {
+                [key: string]: unknown
+              }
             }
           }
         }
@@ -1026,6 +1031,20 @@ export type GlobalEvent = {
     | {
         id: string
         type: "session.next.tool.progress"
+        properties: {
+          timestamp: number
+          sessionID: string
+          assistantMessageID: string
+          callID: string
+          structured: {
+            [key: string]: unknown
+          }
+          content: Array<ToolTextContent | ToolFileContent>
+        }
+      }
+    | {
+        id: string
+        type: "session.next.tool.progress.live"
         properties: {
           timestamp: number
           sessionID: string
@@ -1052,7 +1071,9 @@ export type GlobalEvent = {
           provider: {
             executed: boolean
             metadata?: {
-              [key: string]: unknown
+              [key: string]: {
+                [key: string]: unknown
+              }
             }
           }
         }
@@ -1069,7 +1090,9 @@ export type GlobalEvent = {
           provider: {
             executed: boolean
             metadata?: {
-              [key: string]: unknown
+              [key: string]: {
+                [key: string]: unknown
+              }
             }
           }
         }
@@ -1533,7 +1556,6 @@ export type GlobalEvent = {
     | SyncEventSessionNextTurnStarted
     | SyncEventSessionNextTurnSettled
     | SyncEventSessionNextTextStarted
-    | SyncEventSessionNextTextDelta
     | SyncEventSessionNextTextEnded
     | SyncEventSessionNextReasoningStarted
     | SyncEventSessionNextReasoningEnded
@@ -3028,8 +3050,8 @@ export type SyncEventSessionNextPrompted = {
   data: {
     timestamp: number
     sessionID: string
-    idempotencyKey?: string
     prompt: Prompt
+    delivery: "steer" | "queue"
   }
 }
 
@@ -3141,7 +3163,6 @@ export type SyncEventSessionNextTurnStarted = {
   data: {
     timestamp: number
     sessionID: string
-    promptCursor?: number
   }
 }
 
@@ -3168,19 +3189,7 @@ export type SyncEventSessionNextTextStarted = {
   data: {
     timestamp: number
     sessionID: string
-  }
-}
-
-export type SyncEventSessionNextTextDelta = {
-  type: "sync"
-  name: "session.next.text.delta.1"
-  id: string
-  seq: number
-  aggregateID: "sessionID"
-  data: {
-    timestamp: number
-    sessionID: string
-    delta: string
+    textID: string
   }
 }
 
@@ -3193,6 +3202,7 @@ export type SyncEventSessionNextTextEnded = {
   data: {
     timestamp: number
     sessionID: string
+    textID: string
     text: string
   }
 }
@@ -3272,7 +3282,9 @@ export type SyncEventSessionNextToolCalled = {
     provider: {
       executed: boolean
       metadata?: {
-        [key: string]: unknown
+        [key: string]: {
+          [key: string]: unknown
+        }
       }
     }
   }
@@ -3314,7 +3326,9 @@ export type SyncEventSessionNextToolSuccess = {
     provider: {
       executed: boolean
       metadata?: {
-        [key: string]: unknown
+        [key: string]: {
+          [key: string]: unknown
+        }
       }
     }
   }
@@ -3335,7 +3349,9 @@ export type SyncEventSessionNextToolFailed = {
     provider: {
       executed: boolean
       metadata?: {
-        [key: string]: unknown
+        [key: string]: {
+          [key: string]: unknown
+        }
       }
     }
   }
@@ -3444,7 +3460,20 @@ export type SessionV2Info = {
   subpath?: string
 }
 
-export type SessionDelivery = "immediate" | "deferred"
+export type SessionMessageUser = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  references?: Array<PromptReferenceAttachment>
+  type: "user"
+}
 
 export type SessionMessageAgentSwitched = {
   id: string
@@ -3472,21 +3501,6 @@ export type SessionMessageModelSwitched = {
     providerID: string
     variant?: string
   }
-}
-
-export type SessionMessageUser = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  text: string
-  files?: Array<PromptFileAttachment>
-  agents?: Array<PromptAgentAttachment>
-  references?: Array<PromptReferenceAttachment>
-  type: "user"
 }
 
 export type SessionMessageSynthetic = {
@@ -3519,6 +3533,7 @@ export type SessionMessageShell = {
 
 export type SessionMessageAssistantText = {
   type: "text"
+  id: string
   text: string
 }
 
@@ -3575,7 +3590,9 @@ export type SessionMessageAssistantTool = {
   provider?: {
     executed: boolean
     metadata?: {
-      [key: string]: unknown
+      [key: string]: {
+        [key: string]: unknown
+      }
     }
   }
   state:
@@ -3714,20 +3731,20 @@ export type PermissionSavedInfo = {
   resource: string
 }
 
-export type LocationFileSystemTextContent = {
+export type FileSystemTextContent = {
   type: "text"
   content: string
   mime: string
 }
 
-export type LocationFileSystemBinaryContent = {
+export type FileSystemBinaryContent = {
   type: "binary"
   content: string
   encoding: "base64"
   mime: string
 }
 
-export type LocationFileSystemEntry = {
+export type FileSystemEntry = {
   path: string
   uri: string
   type: "file" | "directory"
@@ -3923,8 +3940,8 @@ export type EventSessionNextPrompted = {
   properties: {
     timestamp: number
     sessionID: string
-    idempotencyKey?: string
     prompt: Prompt
+    delivery: "steer" | "queue"
   }
 }
 
@@ -4015,7 +4032,6 @@ export type EventSessionNextTurnStarted = {
   properties: {
     timestamp: number
     sessionID: string
-    promptCursor?: number
   }
 }
 
@@ -4036,6 +4052,7 @@ export type EventSessionNextTextStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    textID: string
   }
 }
 
@@ -4045,6 +4062,7 @@ export type EventSessionNextTextDelta = {
   properties: {
     timestamp: number
     sessionID: string
+    textID: string
     delta: string
   }
 }
@@ -4055,6 +4073,7 @@ export type EventSessionNextTextEnded = {
   properties: {
     timestamp: number
     sessionID: string
+    textID: string
     text: string
   }
 }
@@ -4142,7 +4161,9 @@ export type EventSessionNextToolCalled = {
     provider: {
       executed: boolean
       metadata?: {
-        [key: string]: unknown
+        [key: string]: {
+          [key: string]: unknown
+        }
       }
     }
   }
@@ -4151,6 +4172,21 @@ export type EventSessionNextToolCalled = {
 export type EventSessionNextToolProgress = {
   id: string
   type: "session.next.tool.progress"
+  properties: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<ToolTextContent | ToolFileContent>
+  }
+}
+
+export type EventSessionNextToolProgressLive = {
+  id: string
+  type: "session.next.tool.progress.live"
   properties: {
     timestamp: number
     sessionID: string
@@ -4178,7 +4214,9 @@ export type EventSessionNextToolSuccess = {
     provider: {
       executed: boolean
       metadata?: {
-        [key: string]: unknown
+        [key: string]: {
+          [key: string]: unknown
+        }
       }
     }
   }
@@ -4196,7 +4234,9 @@ export type EventSessionNextToolFailed = {
     provider: {
       executed: boolean
       metadata?: {
-        [key: string]: unknown
+        [key: string]: {
+          [key: string]: unknown
+        }
       }
     }
   }
@@ -8189,9 +8229,9 @@ export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListRe
 
 export type V2SessionPromptData = {
   body?: {
+    id?: string
     prompt: Prompt
-    idempotencyKey?: string
-    delivery?: SessionDelivery
+    delivery?: "steer" | "queue"
     resume?: boolean
   }
   path: {
@@ -8227,9 +8267,9 @@ export type V2SessionPromptError = V2SessionPromptErrors[keyof V2SessionPromptEr
 
 export type V2SessionPromptResponses = {
   /**
-   * Session.Message
+   * Session.Message.User
    */
-  200: SessionMessage
+  200: SessionMessageUser
 }
 
 export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPromptResponses]
@@ -8730,7 +8770,7 @@ export type V2FsReadResponses = {
   /**
    * Success
    */
-  200: LocationFileSystemTextContent | LocationFileSystemBinaryContent
+  200: FileSystemTextContent | FileSystemBinaryContent
 }
 
 export type V2FsReadResponse = V2FsReadResponses[keyof V2FsReadResponses]
@@ -8766,7 +8806,7 @@ export type V2FsListResponses = {
   /**
    * Success
    */
-  200: Array<LocationFileSystemEntry>
+  200: Array<FileSystemEntry>
 }
 
 export type V2FsListResponse = V2FsListResponses[keyof V2FsListResponses]

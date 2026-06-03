@@ -9695,10 +9695,10 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/LocationFileSystemTextContent"
+                      "$ref": "#/components/schemas/FileSystemTextContent"
                     },
                     {
-                      "$ref": "#/components/schemas/LocationFileSystemBinaryContent"
+                      "$ref": "#/components/schemas/FileSystemBinaryContent"
                     }
                   ]
                 }
@@ -9786,7 +9786,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/LocationFileSystemEntry"
+                    "$ref": "#/components/schemas/FileSystemEntry"
                   }
                 }
               }
@@ -11390,6 +11390,9 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionNextToolProgress"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextToolProgressLive"
           },
           {
             "$ref": "#/components/schemas/EventSessionNextToolSuccess"
@@ -14455,6 +14458,56 @@
                   "type": {
                     "type": "string",
                     "enum": ["session.next.tool.progress"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "assistantMessageID": {
+                        "type": "string"
+                      },
+                      "callID": {
+                        "type": "string"
+                      },
+                      "structured": {
+                        "type": "object"
+                      },
+                      "content": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/components/schemas/ToolTextContent"
+                            },
+                            {
+                              "$ref": "#/components/schemas/ToolFileContent"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "structured", "content"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.tool.progress.live"]
                   },
                   "properties": {
                     "type": "object",
@@ -19800,8 +19853,51 @@
             "type": "string",
             "enum": ["file"]
           },
-          "uri": {
-            "type": "string"
+          "source": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["data"]
+                  },
+                  "data": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "data"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["url"]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["file"]
+                  },
+                  "uri": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "uri"],
+                "additionalProperties": false
+              }
+            ]
           },
           "mime": {
             "type": "string"
@@ -19810,7 +19906,7 @@
             "type": "string"
           }
         },
-        "required": ["type", "uri", "mime"],
+        "required": ["type", "source", "mime"],
         "additionalProperties": false
       },
       "SessionNextRetry_error": {
@@ -22413,7 +22509,7 @@
         "required": ["id", "projectID", "action", "resource"],
         "additionalProperties": false
       },
-      "LocationFileSystemTextContent": {
+      "FileSystemTextContent": {
         "type": "object",
         "properties": {
           "type": {
@@ -22430,7 +22526,7 @@
         "required": ["type", "content", "mime"],
         "additionalProperties": false
       },
-      "LocationFileSystemBinaryContent": {
+      "FileSystemBinaryContent": {
         "type": "object",
         "properties": {
           "type": {
@@ -22451,7 +22547,7 @@
         "required": ["type", "content", "encoding", "mime"],
         "additionalProperties": false
       },
-      "LocationFileSystemEntry": {
+      "FileSystemEntry": {
         "type": "object",
         "properties": {
           "path": {
@@ -23775,6 +23871,56 @@
           "type": {
             "type": "string",
             "enum": ["session.next.tool.progress"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "structured": {
+                "type": "object"
+              },
+              "content": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ToolTextContent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ToolFileContent"
+                    }
+                  ]
+                }
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "structured", "content"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextToolProgressLive": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.progress.live"]
           },
           "properties": {
             "type": "object",

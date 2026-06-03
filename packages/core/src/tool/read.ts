@@ -42,14 +42,19 @@ export const layer = Layer.effectDiscard(
         execute: ({ parameters, sessionID, assertPermission }) => {
           const input = parameters
           return Effect.gen(function* () {
-            if ("resource" in input) return yield* resources.read({ sessionID, uri: input.resource, offset: input.offset, limit: input.limit })
+            if ("resource" in input)
+              return yield* resources.read({ sessionID, uri: input.resource, offset: input.offset, limit: input.limit })
             const resolved = yield* filesystem.resolveReadPath(input)
             if (resolved.type === "directory") {
               const { offset, limit } = input
               const target = resolved.target
               yield* assertPermission({ action: name, resources: [target.resource], save: ["*"] })
               const final = yield* filesystem.resolveReadPath(input)
-              if (final.type !== "directory" || final.target.resource !== target.resource || final.target.real !== target.real)
+              if (
+                final.type !== "directory" ||
+                final.target.resource !== target.resource ||
+                final.target.real !== target.real
+              )
                 return yield* Effect.die(new Error("Directory changed after permission approval"))
               return yield* filesystem.listPageResolved(final.target, { offset, limit })
             }
@@ -64,7 +69,8 @@ export const layer = Layer.effectDiscard(
             const final = yield* filesystem.resolveReadPath(input)
             if (final.type !== "file" || final.target.resource !== target.resource || final.target.real !== target.real)
               return yield* Effect.die(new Error("File changed after permission approval"))
-            if (final.target.size > MAX_BYTES) return yield* Effect.die(new Error(`File exceeds ${MAX_BYTES} byte read limit`))
+            if (final.target.size > MAX_BYTES)
+              return yield* Effect.die(new Error(`File exceeds ${MAX_BYTES} byte read limit`))
             return yield* filesystem.readResolved(final.target, MAX_BYTES)
           }).pipe(
             Effect.catchCause((cause) =>

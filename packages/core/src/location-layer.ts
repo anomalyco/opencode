@@ -61,20 +61,16 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const commits = FileMutation.locationLayer.pipe(Layer.provide(services))
     const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
     const resources = ToolOutputStore.layer.pipe(Layer.provide(services))
-    const builtInTools = BuiltInTools.locationLayer.pipe(Layer.provide(services), Layer.provide(commits), Layer.provide(searches), Layer.provide(resources))
+    const builtInTools = BuiltInTools.locationLayer.pipe(
+      Layer.provide(services),
+      Layer.provide(commits),
+      Layer.provide(searches),
+      Layer.provide(resources),
+    )
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.layer.pipe(Layer.provide(services), Layer.provide(model))
     const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
-    return Layer.mergeAll(
-      services,
-      commits,
-      searches,
-      resources,
-      model,
-      runner,
-      coordinator,
-      builtInTools,
-    ).pipe(
+    return Layer.mergeAll(services, commits, searches, resources, model, runner, coordinator, builtInTools).pipe(
       Layer.fresh,
     )
   },

@@ -11,7 +11,7 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -27,6 +27,7 @@ const projects = Layer.succeed(
   ProjectV2.Service,
   ProjectV2.Service.of({
     resolve: (directory) => Effect.succeed({ id: ProjectV2.ID.global, directory }),
+    directories: () => Effect.succeed([]),
     commit: () => Effect.void,
   }),
 )
@@ -159,9 +160,9 @@ describe("SessionV2.create", () => {
       const input = { id, location }
       const created = yield* session.create(input)
 
-      yield* events.publish(SessionLegacy.Event.Updated, {
+      yield* events.publish(SessionV1.Event.Updated, {
         sessionID: id,
-        info: SessionLegacy.SessionInfo.make({
+        info: SessionV1.SessionInfo.make({
           id,
           slug: "updated",
           version: "test",
@@ -185,7 +186,7 @@ describe("SessionV2.create", () => {
 
       expect(
         yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
-      ).toMatchObject([{ type: EventV2.versionedType(SessionLegacy.Event.Created.type, 1) }])
+      ).toMatchObject([{ type: EventV2.versionedType(SessionV1.Event.Created.type, 1) }])
     }),
   )
 
@@ -223,7 +224,7 @@ describe("SessionV2.create", () => {
       const session = yield* SessionV2.Service
       const event = yield* EventV2.Service
       const defect = new Error("unrelated projector defect")
-      yield* event.project(SessionLegacy.Event.Created, () => Effect.die(defect))
+      yield* event.project(SessionV1.Event.Created, () => Effect.die(defect))
 
       expect(yield* session.create({ id, location }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
     }),

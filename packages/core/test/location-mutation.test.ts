@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
-import { FSUtil } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -45,7 +45,9 @@ describe("LocationMutation", () => {
           resource: "hello.txt",
         })
         expect(plan.target.externalDirectory).toBeUndefined()
-        expect(yield* (yield* LocationMutation.Service).revalidate(plan)).toMatchObject({ canonical: plan.target.canonical })
+        expect(yield* (yield* LocationMutation.Service).revalidate(plan)).toMatchObject({
+          canonical: plan.target.canonical,
+        })
       }).pipe(provide(directory)),
     ),
   )
@@ -63,7 +65,9 @@ describe("LocationMutation", () => {
           resource: "src/new.txt",
         })
         expect(plan.authority.canonical).toBe(path.join(root, "src"))
-        expect(yield* (yield* LocationMutation.Service).revalidate(plan)).toMatchObject({ canonical: plan.target.canonical })
+        expect(yield* (yield* LocationMutation.Service).revalidate(plan)).toMatchObject({
+          canonical: plan.target.canonical,
+        })
       }).pipe(provide(directory)),
     ),
   )
@@ -86,7 +90,9 @@ describe("LocationMutation", () => {
           await fs.mkdir(outside)
           await fs.symlink(outside, path.join(directory, "escape"))
         })
-        const error = yield* Effect.flip((yield* LocationMutation.Service).resolve({ path: path.join("escape", "new.txt") }))
+        const error = yield* Effect.flip(
+          (yield* LocationMutation.Service).resolve({ path: path.join("escape", "new.txt") }),
+        )
         expect(error).toMatchObject({ _tag: "LocationMutation.PathError", reason: "location_escape" })
         yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
       }).pipe(provide(directory))
@@ -114,7 +120,10 @@ describe("LocationMutation", () => {
           const targetPath = path.join(outside, "new.txt")
           const plan = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
           const root = yield* Effect.promise(() => fs.realpath(outside))
-          expect(plan.target).toMatchObject({ canonical: path.join(root, "new.txt"), resource: path.join(root, "new.txt") })
+          expect(plan.target).toMatchObject({
+            canonical: path.join(root, "new.txt"),
+            resource: path.join(root, "new.txt"),
+          })
           expect(plan.target.externalDirectory).toMatchObject({
             action: "external_directory",
             directory: root,
@@ -192,7 +201,10 @@ describe("LocationMutation", () => {
         })
 
         const error = yield* Effect.flip(service.revalidate(plan))
-        expect(error).toMatchObject({ _tag: "LocationMutation.RevalidationError", reason: "mutation authority identity changed" })
+        expect(error).toMatchObject({
+          _tag: "LocationMutation.RevalidationError",
+          reason: "mutation authority identity changed",
+        })
       }).pipe(provide(directory)),
     ),
   )
@@ -205,7 +217,10 @@ describe("LocationMutation", () => {
         yield* Effect.promise(() => fs.mkdir(path.join(directory, "new")))
 
         const error = yield* Effect.flip(service.revalidate(plan))
-        expect(error).toMatchObject({ _tag: "LocationMutation.RevalidationError", reason: "mutation authority changed" })
+        expect(error).toMatchObject({
+          _tag: "LocationMutation.RevalidationError",
+          reason: "mutation authority changed",
+        })
       }).pipe(provide(directory)),
     ),
   )

@@ -20,13 +20,13 @@ export const ReadInput = Schema.Struct({
 })
 export type ReadInput = typeof ReadInput.Type
 
-export class TextContent extends Schema.Class<TextContent>("LocationFileSystem.TextContent")({
+export class TextContent extends Schema.Class<TextContent>("FileSystem.TextContent")({
   type: Schema.Literal("text"),
   content: Schema.String,
   mime: Schema.String,
 }) {}
 
-export class BinaryContent extends Schema.Class<BinaryContent>("LocationFileSystem.BinaryContent")({
+export class BinaryContent extends Schema.Class<BinaryContent>("FileSystem.BinaryContent")({
   type: Schema.Literal("binary"),
   content: Schema.String,
   encoding: Schema.Literal("base64"),
@@ -36,7 +36,7 @@ export class BinaryContent extends Schema.Class<BinaryContent>("LocationFileSyst
 export const Content = Schema.Union([TextContent, BinaryContent]).pipe(Schema.toTaggedUnion("type"))
 export type Content = typeof Content.Type
 
-export class ReadTarget extends Schema.Class<ReadTarget>("LocationFileSystem.ReadTarget")({
+export class ReadTarget extends Schema.Class<ReadTarget>("FileSystem.ReadTarget")({
   real: Schema.String,
   resource: Schema.String,
   size: NonNegativeInt,
@@ -55,7 +55,7 @@ export const ListPageInput = Schema.Struct({
 })
 export type ListPageInput = typeof ListPageInput.Type
 
-export class ListTarget extends Schema.Class<ListTarget>("LocationFileSystem.ListTarget")({
+export class ListTarget extends Schema.Class<ListTarget>("FileSystem.ListTarget")({
   absolute: Schema.String,
   real: Schema.String,
   directory: Schema.String,
@@ -64,7 +64,7 @@ export class ListTarget extends Schema.Class<ListTarget>("LocationFileSystem.Lis
 }) {}
 
 /** Canonical read authority for Location-scoped search and metadata leaves. */
-export class RootTarget extends Schema.Class<RootTarget>("LocationFileSystem.RootTarget")({
+export class RootTarget extends Schema.Class<RootTarget>("FileSystem.RootTarget")({
   absolute: Schema.String,
   real: Schema.String,
   directory: Schema.String,
@@ -78,14 +78,14 @@ export type ReadPathTarget =
   | { readonly type: "file"; readonly target: ReadTarget }
   | { readonly type: "directory"; readonly target: ListTarget }
 
-export class Entry extends Schema.Class<Entry>("LocationFileSystem.Entry")({
+export class Entry extends Schema.Class<Entry>("FileSystem.Entry")({
   path: RelativePath,
   uri: Schema.String,
   type: Schema.Literals(["file", "directory"]),
   mime: Schema.String,
 }) {}
 
-export class ListPage extends Schema.Class<ListPage>("LocationFileSystem.ListPage")({
+export class ListPage extends Schema.Class<ListPage>("FileSystem.ListPage")({
   entries: Schema.Array(Entry),
   truncated: Schema.Boolean,
   next: PositiveInt.pipe(Schema.optional),
@@ -105,7 +105,7 @@ export const GrepInput = Schema.Struct({
 })
 export type GrepInput = typeof GrepInput.Type
 
-export class GrepMatch extends Schema.Class<GrepMatch>("LocationFileSystem.GrepMatch")({
+export class GrepMatch extends Schema.Class<GrepMatch>("FileSystem.GrepMatch")({
   path: RelativePath,
   lines: Schema.String,
   line: PositiveInt,
@@ -139,7 +139,10 @@ export interface Interface {
   readonly resolveList: (input?: ListInput) => Effect.Effect<ListTarget>
   readonly listResolved: (target: ListTarget) => Effect.Effect<Entry[]>
   readonly listPage: (input?: ListPageInput) => Effect.Effect<ListPage>
-  readonly listPageResolved: (target: ListTarget, page?: Pick<ListPageInput, "offset" | "limit">) => Effect.Effect<ListPage>
+  readonly listPageResolved: (
+    target: ListTarget,
+    page?: Pick<ListPageInput, "offset" | "limit">,
+  ) => Effect.Effect<ListPage>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   readonly grep: (input: GrepInput) => Effect.Effect<GrepMatch[]>
   readonly isIgnored: (path: RelativePath, type: "file" | "directory") => boolean
@@ -252,32 +255,31 @@ export const layer = Layer.effect(
       if (resolved.type !== "file") return yield* Effect.die(new Error("Path is not a file"))
       return resolved.target
     })
-    const content = (target: ReadTarget, bytes: Uint8Array) => Effect.gen(function* () {
-      const mime = FSUtil.mimeType(target.real)
-      if (!bytes.includes(0)) {
-        const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
-          Effect.option,
-        )
-        if (content._tag === "Some") return new TextContent({ type: "text", content: content.value, mime })
-      }
-      return new BinaryContent({
-        type: "binary",
-        content: Buffer.from(bytes).toString("base64"),
-        encoding: "base64",
-        mime,
+    const content = (target: ReadTarget, bytes: Uint8Array) =>
+      Effect.gen(function* () {
+        const mime = FSUtil.mimeType(target.real)
+        if (!bytes.includes(0)) {
+          const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
+            Effect.option,
+          )
+          if (content._tag === "Some") return new TextContent({ type: "text", content: content.value, mime })
+        }
+        return new BinaryContent({
+          type: "binary",
+          content: Buffer.from(bytes).toString("base64"),
+          encoding: "base64",
+          mime,
+        })
       })
-    })
-    const readResolved = Effect.fn("FileSystem.readResolved")(function* (
-      target: ReadTarget,
-      maximumBytes?: number,
-    ) {
+    const readResolved = Effect.fn("FileSystem.readResolved")(function* (target: ReadTarget, maximumBytes?: number) {
       if (maximumBytes === undefined) return yield* content(target, yield* fs.readFile(target.real).pipe(Effect.orDie))
       return yield* Effect.scoped(
         Effect.gen(function* () {
           const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
           const info = yield* file.stat.pipe(Effect.orDie)
           if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-          if (info.size > maximumBytes) return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
+          if (info.size > maximumBytes)
+            return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
           const bytes = yield* file.readAlloc(maximumBytes + 1).pipe(Effect.orDie)
           if (bytes._tag === "Some" && bytes.value.length > maximumBytes)
             return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
@@ -331,23 +333,30 @@ export const layer = Layer.effect(
       const offset = page.offset ?? 1
       const limit = Math.min(page.limit ?? 2_000, 2_000)
       const items = yield* fs.readDirectoryEntries(target.real).pipe(Effect.orDie)
-      const candidates = yield* Effect.forEach(items, (item): Effect.Effect<Candidate | undefined> => {
-        if (item.type === "other") return Effect.succeed(undefined)
-        if (item.type === "symlink") return entry(path.join(target.absolute, item.name), target)
-        return Effect.succeed({ name: item.name, type: item.type } as const)
-      }, { concurrency: 16 }).pipe(
-        Effect.map((items) => items.filter((item): item is Candidate => item !== undefined)),
-      )
+      const candidates = yield* Effect.forEach(
+        items,
+        (item): Effect.Effect<Candidate | undefined> => {
+          if (item.type === "other") return Effect.succeed(undefined)
+          if (item.type === "symlink") return entry(path.join(target.absolute, item.name), target)
+          return Effect.succeed({ name: item.name, type: item.type } as const)
+        },
+        { concurrency: 16 },
+      ).pipe(Effect.map((items) => items.filter((item): item is Candidate => item !== undefined)))
       candidates.sort((a, b) => {
         return a.type === b.type
           ? (a instanceof Entry ? a.path : a.name).localeCompare(b instanceof Entry ? b.path : b.name)
-          : a.type === "directory" ? -1 : 1
+          : a.type === "directory"
+            ? -1
+            : 1
       })
       const selected = candidates.slice(offset - 1, offset - 1 + limit)
-      const entries = yield* Effect.forEach(selected, (item) =>
-        item instanceof Entry ? Effect.succeed(item) : entry(path.join(target.absolute, item.name), target), {
-        concurrency: 16,
-      }).pipe(Effect.map((items) => items.filter((item): item is Entry => item !== undefined)))
+      const entries = yield* Effect.forEach(
+        selected,
+        (item) => (item instanceof Entry ? Effect.succeed(item) : entry(path.join(target.absolute, item.name), target)),
+        {
+          concurrency: 16,
+        },
+      ).pipe(Effect.map((items) => items.filter((item): item is Entry => item !== undefined)))
       const truncated = offset - 1 + selected.length < candidates.length
       return new ListPage({ entries, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
     })

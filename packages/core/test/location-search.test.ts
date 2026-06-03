@@ -7,6 +7,7 @@ import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationSearch } from "@opencode-ai/core/location-search"
 import { AppProcess } from "@opencode-ai/core/process"
+import { Ripgrep as FileSystemRipgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
@@ -19,6 +20,7 @@ const inertReferences = references({})
 function provide(directory: string, projectReferences = inertReferences) {
   const dependencies = Layer.mergeAll(
     FSUtil.defaultLayer,
+    FileSystemRipgrep.defaultLayer,
     AppProcess.defaultLayer,
     Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
     Layer.succeed(ProjectReference.Service, projectReferences),
@@ -28,6 +30,7 @@ function provide(directory: string, projectReferences = inertReferences) {
     LocationSearch.layer.pipe(
       Layer.provide(filesystem),
       Layer.provide(Ripgrep.layer.pipe(Layer.provide(dependencies))),
+      Layer.provide(FSUtil.defaultLayer),
       Layer.provide(dependencies),
     ),
   )
@@ -76,9 +79,9 @@ describe("LocationSearch", () => {
         })
         const search = yield* LocationSearch.Service
 
-        expect((yield* search.files({ pattern: "*.ts", path: RelativePath.make("src") })).items.map((item) => item.path)).toEqual([
-          RelativePath.make("src/active.ts"),
-        ])
+        expect(
+          (yield* search.files({ pattern: "*.ts", path: RelativePath.make("src") })).items.map((item) => item.path),
+        ).toEqual([RelativePath.make("src/active.ts")])
         const guide = yield* Effect.promise(() => fs.realpath(path.join(docs, "guide.md")))
         expect((yield* search.files({ pattern: "*.md", reference: "docs" })).items).toMatchObject([
           { path: RelativePath.make("guide.md"), resource: "docs:guide.md", canonical: guide },
@@ -103,10 +106,11 @@ describe("LocationSearch", () => {
           RelativePath.make("src/one.ts"),
           RelativePath.make("src/two.txt"),
         ])
-        expect((yield* search.grep({ pattern: "needle", path: RelativePath.make("src") })).items.map((item) => item.path).sort()).toEqual([
-          RelativePath.make("src/one.ts"),
-          RelativePath.make("src/two.txt"),
-        ])
+        expect(
+          (yield* search.grep({ pattern: "needle", path: RelativePath.make("src") })).items
+            .map((item) => item.path)
+            .sort(),
+        ).toEqual([RelativePath.make("src/one.ts"), RelativePath.make("src/two.txt")])
         expect((yield* search.grep({ pattern: "needle", path: RelativePath.make("src/one.ts") })).items).toMatchObject([
           { path: RelativePath.make("src/one.ts"), resource: "src/one.ts", lines: "needle ts\n", line: 1, offset: 0 },
         ])
@@ -121,8 +125,13 @@ describe("LocationSearch", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
-          await Promise.all(Array.from({ length: 101 }, (_, index) => fs.writeFile(path.join(directory, `${index}.txt`), "needle\n")))
-          await fs.writeFile(path.join(directory, "long.txt"), `needle ${"x".repeat(LocationSearch.MAX_LINE_PREVIEW_LENGTH)}\n`)
+          await Promise.all(
+            Array.from({ length: 101 }, (_, index) => fs.writeFile(path.join(directory, `${index}.txt`), "needle\n")),
+          )
+          await fs.writeFile(
+            path.join(directory, "long.txt"),
+            `needle ${"x".repeat(LocationSearch.MAX_LINE_PREVIEW_LENGTH)}\n`,
+          )
         })
         const search = yield* LocationSearch.Service
         const files = yield* search.files({ pattern: "*.txt", limit: 2 })
@@ -166,8 +175,14 @@ describe("LocationSearch", () => {
         })
         const search = yield* LocationSearch.Service
 
-        expect(Exit.isFailure(yield* search.files({ pattern: "*", path: RelativePath.make("../outside") }).pipe(Effect.exit))).toBe(true)
-        expect(Exit.isFailure(yield* search.files({ pattern: "*", path: RelativePath.make("escape") }).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* search.files({ pattern: "*", path: RelativePath.make("../outside") }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(yield* search.files({ pattern: "*", path: RelativePath.make("escape") }).pipe(Effect.exit)),
+        ).toBe(true)
         yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
       }).pipe(provide(directory)),
     ),
@@ -178,7 +193,9 @@ describe("LocationSearch", () => {
       Effect.gen(function* () {
         const controller = new AbortController()
         controller.abort()
-        const exit = yield* (yield* LocationSearch.Service).files({ pattern: "*", signal: controller.signal }).pipe(Effect.exit)
+        const exit = yield* (yield* LocationSearch.Service)
+          .files({ pattern: "*", signal: controller.signal })
+          .pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)
       }).pipe(provide(directory)),
     ),
