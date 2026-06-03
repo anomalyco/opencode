@@ -1513,7 +1513,6 @@ export type GlobalEvent = {
     | SyncEventSessionNextReasoningStarted
     | SyncEventSessionNextReasoningEnded
     | SyncEventSessionNextToolInputStarted
-    | SyncEventSessionNextToolInputDelta
     | SyncEventSessionNextToolInputEnded
     | SyncEventSessionNextToolCalled
     | SyncEventSessionNextToolProgress
@@ -3171,21 +3170,6 @@ export type SyncEventSessionNextToolInputStarted = {
     assistantMessageID: string
     callID: string
     name: string
-  }
-}
-
-export type SyncEventSessionNextToolInputDelta = {
-  type: "sync"
-  name: "session.next.tool.input.delta.1"
-  id: string
-  seq: number
-  aggregateID: "sessionID"
-  data: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    delta: string
   }
 }
 

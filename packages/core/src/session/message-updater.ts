@@ -296,14 +296,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           )
         })
       },
-      "session.next.tool.input.delta": (event) => {
+      "session.next.tool.input.delta": () => Effect.void,
+      "session.next.tool.input.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
-          // oxlint-disable-next-line no-base-to-string -- event.delta is a Schema.String (runtime string)
-          if (match && match.state.status === "pending") match.state.input += event.data.delta
+          if (match && match.state.status === "pending") match.state.input = event.data.text
         })
       },
-      "session.next.tool.input.ended": () => Effect.void,
       "session.next.tool.called": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)

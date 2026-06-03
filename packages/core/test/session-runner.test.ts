@@ -1024,6 +1024,160 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("broadcasts provider tool input deltas without storing projection rewrites", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Stream tool input" }), resume: false })
+      const live: SessionEvent.Tool.Input.Delta[] = []
+      const unsubscribe = yield* EventV2.Service.pipe(
+        Effect.flatMap((events) => events.listen((event) => Effect.sync(() => {
+          if (event.type === SessionEvent.Tool.Input.Delta.type) live.push(event as SessionEvent.Tool.Input.Delta)
+        }))),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-input", name: "echo" }),
+        ...Array.from({ length: 32 }, (_, index) => LLMEvent.toolInputDelta({ id: "call-input", name: "echo", text: `${index},` })),
+        LLMEvent.toolInputEnd({ id: "call-input", name: "echo" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const deltas = yield* db
+        .select({ type: EventTable.type })
+        .from(EventTable)
+        .where(eq(EventTable.type, EventV2.versionedType(SessionEvent.Tool.Input.Delta.type, 1)))
+        .all()
+        .pipe(Effect.orDie)
+      const expected = Array.from({ length: 32 }, (_, index) => `${index},`).join("")
+      expect(live).toHaveLength(32)
+      expect(deltas).toHaveLength(0)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Stream tool input" },
+        { type: "assistant", content: [{ type: "tool", id: "call-input", state: { status: "pending", input: expected } }] },
+      ])
+      const recorded = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      yield* events.remove(sessionID)
+      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, sessionID)).run().pipe(Effect.orDie)
+      yield* events.replayAll(
+        recorded.map((event) => ({
+          id: event.id,
+          aggregateID: event.aggregate_id,
+          seq: event.seq,
+          type: event.type,
+          data: event.data,
+        })),
+      )
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Stream tool input" },
+        { type: "assistant", content: [{ type: "tool", id: "call-input", state: { status: "pending", input: expected } }] },
+      ])
+    }),
+  )
+
+  it.effect("durably closes partial tool input when the provider stream is interrupted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt tool input" }), resume: false })
+      const streamed = yield* Deferred.make<void>()
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolInputStart({ id: "call-interrupted", name: "echo" }),
+          LLMEvent.toolInputDelta({ id: "call-interrupted", name: "echo", text: "Partial" }),
+        ]),
+        Stream.fromEffect(Deferred.succeed(streamed, undefined)).pipe(Stream.flatMap(() => Stream.never)),
+      )
+
+      const fiber = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamed)
+      yield* Fiber.interrupt(fiber)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Interrupt tool input" },
+        { type: "assistant", content: [{ type: "tool", id: "call-interrupted", state: { status: "pending", input: "Partial" } }] },
+      ])
+    }),
+  )
+
+  it.effect("durably closes partial tool input when the provider stream fails", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail tool input" }), resume: false })
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new TransportReason({ message: "Provider unavailable" }),
+      })
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolInputStart({ id: "call-failed", name: "echo" }),
+          LLMEvent.toolInputDelta({ id: "call-failed", name: "echo", text: "Partial" }),
+        ]),
+        Stream.fail(failure),
+      )
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail tool input" },
+        { type: "assistant", content: [{ type: "tool", id: "call-failed", state: { status: "pending", input: "Partial" } }] },
+      ])
+    }),
+  )
+
+  it.effect("transitions streamed raw tool input to parsed called input", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Call provider tool" }), resume: false })
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-parsed", name: "web_search" }),
+        LLMEvent.toolInputDelta({ id: "call-parsed", name: "web_search", text: '{"query":"hello"}' }),
+        LLMEvent.toolInputEnd({ id: "call-parsed", name: "web_search" }),
+        LLMEvent.toolCall({ id: "call-parsed", name: "web_search", input: { query: "hello" }, providerExecuted: true }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Call provider tool" },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "call-parsed", state: { status: "running", input: { query: "hello" } } }],
+        },
+      ])
+    }),
+  )
+
   it.effect("rejects malformed streamed tool input ordering", () =>
     Effect.gen(function* () {
       yield* setup

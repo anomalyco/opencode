@@ -234,9 +234,9 @@ export namespace Tool {
     })
     export type Started = typeof Started.Type
 
+    // Stream fragments are live-only; Input.Ended is the replayable raw-input boundary.
     export const Delta = EventV2.define({
       type: "session.next.tool.input.delta",
-      ...options,
       schema: {
         ...ToolBase,
         delta: Schema.String,

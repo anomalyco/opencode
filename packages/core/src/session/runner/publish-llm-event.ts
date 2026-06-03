@@ -66,7 +66,7 @@ const output = (result: ToolResultValue): ToolOutput => {
 export const createLLMEventPublisher = (events: EventV2.Interface, input: Input) => {
   const tools = new Map<
     string,
-    { readonly assistantMessageID: EventV2.ID; readonly name: string; input: string; inputEnded: boolean; called: boolean; settled: boolean; providerExecuted: boolean }
+    { readonly assistantMessageID: EventV2.ID; readonly name: string; inputEnded: boolean; called: boolean; settled: boolean; providerExecuted: boolean }
   >()
   const timestamp = DateTime.now
   let assistantMessageID: EventV2.ID | undefined
@@ -123,16 +123,32 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       })
     }),
   )
+  const toolInput = fragments("tool input", (callID, value) =>
+    Effect.gen(function* () {
+      const tool = tools.get(callID)
+      if (!tool) return yield* Effect.die(`Tool input end before start: ${callID}`)
+      yield* events.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID: input.sessionID,
+        timestamp: yield* timestamp,
+        assistantMessageID: tool.assistantMessageID,
+        callID,
+        text: value,
+      })
+      tool.inputEnded = true
+    }),
+  )
 
-  const flush = Effect.fn("SessionRunner.flush")(function* () {
+  const flushFragments = Effect.fnUntraced(function* () {
     yield* text.flush()
     yield* reasoning.flush()
+    yield* toolInput.flush()
   })
 
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     if (tools.has(event.id)) return yield* Effect.die(`Duplicate tool input start: ${event.id}`)
     const assistantMessageID = yield* currentAssistantMessageID()
-    tools.set(event.id, { assistantMessageID, name: event.name, input: "", inputEnded: false, called: false, settled: false, providerExecuted: false })
+    tools.set(event.id, { assistantMessageID, name: event.name, inputEnded: false, called: false, settled: false, providerExecuted: false })
+    yield* toolInput.start(event.id)
     yield* events.publish(SessionEvent.Tool.Input.Started, {
       sessionID: input.sessionID,
       timestamp: yield* timestamp,
@@ -147,14 +163,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     if (!tool) return yield* Effect.die(`Tool input end before start: ${event.id}`)
     if (tool.name !== event.name) return yield* Effect.die(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`)
     if (tool.inputEnded) return yield* Effect.die(`Duplicate tool input end: ${event.id}`)
-    tool.inputEnded = true
-    yield* events.publish(SessionEvent.Tool.Input.Ended, {
-      sessionID: input.sessionID,
-      timestamp: yield* timestamp,
-      assistantMessageID: tool.assistantMessageID,
-      callID: event.id,
-      text: tool.input,
-    })
+    yield* toolInput.end(event.id)
+  })
+
+  const flush = Effect.fn("SessionRunner.flush")(function* () {
+    yield* flushFragments()
   })
 
   const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
@@ -206,7 +219,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         if (!tool) return yield* Effect.die(`Tool input delta before start: ${event.id}`)
         if (tool.name !== event.name) return yield* Effect.die(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.inputEnded) return yield* Effect.die(`Tool input delta after end: ${event.id}`)
-        tool.input += event.text
+        yield* toolInput.append(event.id, event.text)
         yield* events.publish(SessionEvent.Tool.Input.Delta, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
