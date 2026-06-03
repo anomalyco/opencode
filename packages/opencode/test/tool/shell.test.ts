@@ -920,6 +920,12 @@ describe("tool.shell permissions", () => {
           expect(extDirReq).toBeDefined()
           expect(extDirReq!.patterns).toContain(expected)
           expect(extDirReq!.always).toContain(expected)
+          expect(extDirReq!.metadata).toMatchObject({
+            command: `cat ${filepath}`,
+            description: "Read external file",
+            directories: [outerTmp],
+            patterns: [expected],
+          })
         }),
       )
     }),

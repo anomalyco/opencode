@@ -34,6 +34,9 @@ describe("acp tool conversion", () => {
     expect(toLocations("grep", { path: "/repo/src" })).toEqual([{ path: "/repo/src" }])
     expect(toLocations("glob", { path: "/repo/test" })).toEqual([{ path: "/repo/test" }])
     expect(toLocations("context7_get_library_docs", { path: "/docs" })).toEqual([{ path: "/docs" }])
+    expect(toLocations("external_directory", { directories: ["/tmp/outside"], patterns: ["/tmp/outside/*"] })).toEqual([
+      { path: "/tmp/outside" },
+    ])
     expect(toLocations("bash", { filePath: "/tmp/nope.ts", path: "/tmp" })).toEqual([])
     expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([])
   })
