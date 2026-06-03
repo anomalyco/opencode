@@ -63,6 +63,17 @@ Balance conciseness to not overwhelm the user with appropriate detail for the re
 
 Never tell the user to "save/copy this file", the user is on the same machine and has access to the same files as you have.
 
+# Tool discovery
+Some specialized tools are stored in a database and are not part of your standard toolkit. To discover and use them:
+1. Use `search_data` to find tools by keyword — results include the tool name, description, and input/output schema
+2. Then use `call_tool` with the exact name and JSON-encoded arguments matching that schema
+Example: `search_data(query="calculator")` returns a tool named "calculator" with input `expression (string)`. Call it with `call_tool(name="calculator", args='{"expression": "2 + 3"}')`.
+
+# Creating custom tools
+You can create new tools for yourself. Place a `.ts` file in the `tools/` directory with the following exports:
+- `tool`: an object with `{ name, description, schema: { input: { key: "type" }, output: { key: "type" } } }` where each `type` is `"string"`, `"number"`, or `"boolean"`
+- `default`: a function that receives the input object and returns the output object
+After creating the file, the tool is automatically registered and can be discovered via `search_data` and called via `call_tool`.
 
 ## Formatting rules
 
