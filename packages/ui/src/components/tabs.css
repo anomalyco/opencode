@@ -76,7 +76,7 @@
 
       &:focus-visible {
         outline: none;
-        box-shadow: none;
+        box-shadow: inset 0 0 0 2px var(--border-focus);
       }
     }
 
@@ -96,7 +96,6 @@
     }
     &:focus-visible {
       outline: none;
-      box-shadow: none;
     }
     &:has([data-selected]) {
       color: var(--text-strong);

@@ -2090,9 +2090,22 @@ function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
   )
 }
 
+function ComposerModelControlSkeleton(props: { style: JSX.CSSProperties | undefined }) {
+  return (
+    <div
+      aria-hidden="true"
+      class="flex h-7 w-[min(220px,45vw)] shrink-0 items-center gap-1.5 rounded px-2"
+      style={props.style}
+    >
+      <div class="size-4 shrink-0 rounded-full bg-v2-overlay-simple-overlay-hover opacity-80" />
+      <div class="h-3.5 w-24 rounded bg-v2-overlay-simple-overlay-hover opacity-80" />
+    </div>
+  )
+}
+
 function ComposerModelControl(props: { state: ComposerModelControlState }) {
   return (
-    <Show when={!props.state.loading}>
+    <Show when={!props.state.loading} fallback={<ComposerModelControlSkeleton style={props.state.style} />}>
       <Show
         when={props.state.paid}
         fallback={

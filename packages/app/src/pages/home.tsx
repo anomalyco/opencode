@@ -201,6 +201,7 @@ function HomeDesign() {
   return (
     <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
       <HomeProjectColumn
+        hasProjects={projects().length > 0}
         selectedProject={state.project}
         selectProject={selectProject}
         openNewSession={openProjectNewSession}
@@ -221,43 +222,70 @@ function HomeDesign() {
         class="min-w-0 flex-1 flex flex-col overflow-y-hidden pt-12"
         aria-label={language.t("sidebar.project.recentSessions")}
       >
-        <Show
-          when={projectDirectories().length > 0}
-          fallback={
+        <Switch>
+          <Match when={projectDirectories().length === 0 && !sync.ready}>
+            <HomeEmptyState
+              status
+              icon="folder-add-left"
+              title={language.t("home.loading.title")}
+              description={language.t("common.loading")}
+            />
+          </Match>
+          <Match when={projectDirectories().length === 0}>
             <HomeEmptyState
               icon="folder-add-left"
               title={language.t("home.empty.title")}
               description={language.t("home.empty.description")}
               action={language.t("home.project.add")}
+              actionVariant="primary"
               onAction={() => void chooseProject()}
+              hint={language.t("home.empty.hint")}
             />
-          }
-        >
-          <HomeSessionSearch
-            value={state.search}
-            placeholder={language.t("home.sessions.search.placeholder")}
-            onInput={(value) => setState("search", value)}
-            clearLabel={language.t("common.clear")}
-            onClear={() => setState("search", "")}
-          />
-          <div class="mt-3 overflow-auto flex-1">
-            <div class="pt-3 flex flex-col gap-6">
-              <Show
-                when={!sessionLoad.isLoading}
-                fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}
-              >
-                <Show
-                  when={groups().length > 0}
-                  fallback={
-                    <HomeEmptyState
-                      icon="edit"
-                      title={language.t("home.sessions.empty")}
-                      description={language.t("home.sessions.empty.description")}
-                      action={language.t("command.session.new")}
-                      onAction={openNewSession}
-                    />
-                  }
-                >
+          </Match>
+          <Match when={true}>
+            <HomeSessionsColumn />
+          </Match>
+        </Switch>
+      </section>
+    </div>
+  )
+
+  function HomeSessionsColumn() {
+    return (
+      <>
+        <HomeSessionSearch
+          value={state.search}
+          placeholder={language.t("home.sessions.search.placeholder")}
+          onInput={(value) => setState("search", value)}
+          clearLabel={language.t("common.clear")}
+          onClear={() => setState("search", "")}
+        />
+        <div class="mt-3 overflow-auto flex-1">
+          <div class="pt-3 flex flex-col gap-6">
+            <Show
+              when={!sessionLoad.isLoading}
+              fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}
+            >
+              <Switch>
+                <Match when={groups().length === 0 && search().length > 0}>
+                  <HomeEmptyState
+                    status
+                    icon="magnifying-glass"
+                    title={language.t("home.sessions.search.empty")}
+                    description={language.t("home.sessions.search.empty.description")}
+                  />
+                </Match>
+                <Match when={groups().length === 0}>
+                  <HomeEmptyState
+                    icon="edit"
+                    title={language.t("home.sessions.empty")}
+                    description={language.t("home.sessions.empty.description")}
+                    action={language.t("command.session.new")}
+                    actionVariant="primary"
+                    onAction={openNewSession}
+                  />
+                </Match>
+                <Match when={true}>
                   <For each={groups()}>
                     {(group, index) => (
                       <div class="flex min-w-0 flex-col gap-4">
@@ -273,17 +301,18 @@ function HomeDesign() {
                       </div>
                     )}
                   </For>
-                </Show>
-              </Show>
-            </div>
+                </Match>
+              </Switch>
+            </Show>
           </div>
-        </Show>
-      </section>
-    </div>
-  )
+        </div>
+      </>
+    )
+  }
 }
 
 function HomeProjectColumn(props: {
+  hasProjects: boolean
   selectedProject?: string
   selectProject: (directory: string) => void
   openNewSession: (directory: string) => void
@@ -303,15 +332,17 @@ function HomeProjectColumn(props: {
     <aside class="flex min-w-0 flex-col lg:pt-[52px] gap-4" aria-label={props.language.t("home.projects")}>
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
-        <IconButtonV2
-          data-action="home-add-project"
-          variant="ghost-muted"
-          size="large"
-          class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-          icon={<IconV2 name="folder-add-left" />}
-          onClick={props.chooseProject}
-          aria-label={props.language.t("home.project.add")}
-        />
+        <Show when={props.hasProjects}>
+          <IconButtonV2
+            data-action="home-add-project"
+            variant="ghost-muted"
+            size="large"
+            class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+            icon={<IconV2 name="folder-add-left" />}
+            onClick={props.chooseProject}
+            aria-label={props.language.t("home.project.add")}
+          />
+        </Show>
       </div>
       <Show
         when={servers.list().length > 1}
@@ -319,6 +350,7 @@ function HomeProjectColumn(props: {
           <ProjectList
             projects={projects()}
             selectedProject={props.selectedProject}
+            showEmptyFallback={false}
             onSelectedProjectChange={props.selectProject}
             onChooseProject={props.chooseProject}
             openNewSession={props.openNewSession}
@@ -371,6 +403,7 @@ function HomeProjectColumn(props: {
                   <ProjectList
                     projects={projects()}
                     selectedProject={props.selectedProject}
+                    showEmptyFallback={true}
                     onSelectedProjectChange={props.selectProject}
                     onChooseProject={props.chooseProject}
                     openNewSession={props.openNewSession}
@@ -389,7 +422,7 @@ function HomeProjectColumn(props: {
       <div class="flex min-w-0 flex-col gap-1">
         <button
           type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-base [&>[data-slot=icon-svg]]:text-v2-icon-icon-base`}
           onClick={props.openSettings}
         >
           <IconV2 name="settings-gear" size="small" />
@@ -397,7 +430,7 @@ function HomeProjectColumn(props: {
         </button>
         <button
           type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-base [&>[data-slot=icon-svg]]:text-v2-icon-icon-base`}
           onClick={props.openHelp}
         >
           <IconV2 name="help" size="small" />
@@ -535,21 +568,36 @@ function HomeEmptyState(props: {
   icon: Parameters<typeof IconV2>[0]["name"]
   title: string
   description: string
-  action: string
-  onAction: () => void
+  action?: string
+  actionVariant?: "primary" | "neutral"
+  onAction?: () => void
+  hint?: string
+  status?: boolean
 }) {
   return (
     <div class="flex min-h-[320px] flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
       <div class="flex size-10 items-center justify-center rounded-[10px] bg-v2-background-bg-deep text-v2-icon-icon-muted shadow-[var(--v2-elevation-raised)]">
-        <IconV2 name={props.icon} />
+        <Show when={props.status && props.icon === "folder-add-left"} fallback={<IconV2 name={props.icon} />}>
+          <Spinner class="size-[18px]" />
+        </Show>
       </div>
       <div class="flex max-w-[320px] flex-col gap-1">
         <div class="text-v2-text-text-base [font-weight:530]">{props.title}</div>
         <div class="text-v2-text-text-muted [font-weight:440]">{props.description}</div>
       </div>
-      <ButtonV2 variant="neutral" size="normal" icon={props.icon} onClick={props.onAction}>
-        {props.action}
-      </ButtonV2>
+      <Show when={props.action && props.onAction}>
+        <ButtonV2
+          variant={props.actionVariant === "primary" ? "contrast" : "neutral"}
+          size="normal"
+          icon={props.icon}
+          onClick={() => props.onAction?.()}
+        >
+          {props.action}
+        </ButtonV2>
+      </Show>
+      <Show when={props.hint}>
+        <div class="max-w-[320px] text-v2-text-text-muted [font-weight:440]">{props.hint}</div>
+      </Show>
     </div>
   )
 }
@@ -806,6 +854,7 @@ function LegacyHome() {
 function ProjectList(props: {
   projects: LocalProject[]
   selectedProject?: string
+  showEmptyFallback?: boolean
   onSelectedProjectChange?(project: string): void
   onChooseProject?(): void
   openNewSession: (directory: string) => void
@@ -819,14 +868,16 @@ function ProjectList(props: {
     <Show
       when={props.projects.length > 0}
       fallback={
-        <button
-          type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
-          onClick={() => props.onChooseProject?.()}
-        >
-          <IconV2 name="folder-add-left" size="small" />
-          <span>{props.language.t("home.project.add")}</span>
-        </button>
+        <Show when={props.showEmptyFallback}>
+          <button
+            type="button"
+            class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-base [&>[data-slot=icon-svg]]:text-v2-icon-icon-base`}
+            onClick={() => props.onChooseProject?.()}
+          >
+            <IconV2 name="folder-add-left" size="small" />
+            <span>{props.language.t("home.project.add")}</span>
+          </button>
+        </Show>
       }
     >
       <div class="flex flex-col gap-1">
