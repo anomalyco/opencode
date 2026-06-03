@@ -53,6 +53,10 @@ export type Event =
   | EventAccountRemoved
   | EventAccountSwitched
   | EventFileWatcherUpdated
+  | EventPtyCreated
+  | EventPtyUpdated
+  | EventPtyExited
+  | EventPtyDeleted
   | EventLspUpdated
   | EventPermissionAsked
   | EventPermissionReplied
@@ -65,10 +69,6 @@ export type Event =
   | EventCommandExecuted
   | EventProjectDirectoriesUpdated
   | EventProjectUpdated
-  | EventPtyCreated
-  | EventPtyUpdated
-  | EventPtyExited
-  | EventPtyDeleted
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -1193,6 +1193,35 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "pty.created"
+        properties: {
+          info: Pty
+        }
+      }
+    | {
+        id: string
+        type: "pty.updated"
+        properties: {
+          info: Pty
+        }
+      }
+    | {
+        id: string
+        type: "pty.exited"
+        properties: {
+          id: string
+          exitCode: number
+        }
+      }
+    | {
+        id: string
+        type: "pty.deleted"
+        properties: {
+          id: string
+        }
+      }
+    | {
+        id: string
         type: "lsp.updated"
         properties: {
           [key: string]: unknown
@@ -1333,35 +1362,6 @@ export type GlobalEvent = {
             initialized?: number
           }
           sandboxes: Array<string>
-        }
-      }
-    | {
-        id: string
-        type: "pty.created"
-        properties: {
-          info: Pty
-        }
-      }
-    | {
-        id: string
-        type: "pty.updated"
-        properties: {
-          info: Pty
-        }
-      }
-    | {
-        id: string
-        type: "pty.exited"
-        properties: {
-          id: string
-          exitCode: number
-        }
-      }
-    | {
-        id: string
-        type: "pty.deleted"
-        properties: {
-          id: string
         }
       }
     | {
@@ -4355,6 +4355,39 @@ export type EventFileWatcherUpdated = {
   }
 }
 
+export type EventPtyCreated = {
+  id: string
+  type: "pty.created"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyUpdated = {
+  id: string
+  type: "pty.updated"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyExited = {
+  id: string
+  type: "pty.exited"
+  properties: {
+    id: string
+    exitCode: number
+  }
+}
+
+export type EventPtyDeleted = {
+  id: string
+  type: "pty.deleted"
+  properties: {
+    id: string
+  }
+}
+
 export type EventLspUpdated = {
   id: string
   type: "lsp.updated"
@@ -4453,39 +4486,6 @@ export type EventProjectUpdated = {
       initialized?: number
     }
     sandboxes: Array<string>
-  }
-}
-
-export type EventPtyCreated = {
-  id: string
-  type: "pty.created"
-  properties: {
-    info: Pty
-  }
-}
-
-export type EventPtyUpdated = {
-  id: string
-  type: "pty.updated"
-  properties: {
-    info: Pty
-  }
-}
-
-export type EventPtyExited = {
-  id: string
-  type: "pty.exited"
-  properties: {
-    id: string
-    exitCode: number
-  }
-}
-
-export type EventPtyDeleted = {
-  id: string
-  type: "pty.deleted"
-  properties: {
-    id: string
   }
 }
 

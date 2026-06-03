@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { handlePtyInput } from "../../src/pty/input"
+import { handlePtyInput } from "@opencode-ai/core/pty/input"
 import { it } from "../lib/effect"
 
-describe("pty HttpApi websocket input", () => {
+describe("pty websocket input", () => {
   it.effect("does not forward invalid binary frames to the PTY handler", () =>
     Effect.gen(function* () {
       const messages: Array<string | ArrayBuffer> = []
