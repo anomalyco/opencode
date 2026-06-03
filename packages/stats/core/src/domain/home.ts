@@ -197,12 +197,12 @@ function buildMarketShare(rows: ProviderMetricRow[], range: UsageRange, window: 
 
 function buildCountryStats(rows: GeoMetricRow[], window: DateWindow) {
   const countries = aggregateByCountry(rowsForProduct(rows, "All Users", window.start, window.end))
-    .filter((item) => item.tokens > 0)
+    .filter((item) => item.tokens > 0 && item.country !== "AQ")
     .toSorted((a, b) => b.tokens - a.tokens)
   const totalTokens = countries.reduce((sum, item) => sum + item.tokens, 0)
   if (totalTokens === 0) return []
 
-  return countries.slice(0, 16).map((item, index) => ({
+  return countries.map((item, index) => ({
     country: item.country,
     continent: item.continent,
     tokens: round(item.tokens / 1_000_000_000_000, 4),

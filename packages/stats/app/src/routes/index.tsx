@@ -1,6 +1,11 @@
 import "./index.css"
 import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { geoEquirectangular, geoPath } from "d3-geo"
+import { scaleSqrt } from "d3-scale"
+import countryCodesSource from "i18n-iso-countries/codes.json?raw"
+import { feature, mesh } from "topojson-client"
+import countriesTopologySource from "world-atlas/countries-110m.json?raw"
 import ibmPlexMonoRegularLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2?url"
 import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2?url"
 import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
@@ -10,6 +15,7 @@ import statsUnfurlRankings from "../asset/unfurl-rankings.png?url"
 import {
   getStatsHomeData,
   type CacheRatioEntry,
+  type CountryEntry,
   type LeaderboardEntry,
   type MarketDay,
   type StatsHomeData,
@@ -21,6 +27,8 @@ import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
+import type { GeometryCollection, Topology } from "topojson-specification"
 
 const products = ["All Users", "Zen", "Go"] as const
 const tokenProducts = ["Zen", "Go"] as const
@@ -42,6 +50,7 @@ const headerLinks = [
   { href: "#token-cost", label: "Token Cost" },
   { href: "#cache-ratio", label: "Cache Ratio" },
   { href: "#market-share", label: "Market Share" },
+  { href: "#geo-breakdown", label: "Geo Breakdown" },
 ] as const
 const githubLink = {
   href: "https://github.com/anomalyco/opencode",
@@ -75,11 +84,43 @@ const themePreferenceLabels = {
   system: "System",
 } as const
 const themeStorageKey = "opencode:stats-theme"
+const geoMapWidth = 960
+const geoMapHeight = 430
+const countryDisplayNames = new Intl.DisplayNames(["en"], { type: "region" })
 
 type UsageProduct = (typeof products)[number]
 type TokenProduct = (typeof tokenProducts)[number]
 type UsageRange = (typeof ranges)[number]
 type ThemePreference = (typeof themePreferences)[number]
+type IsoCountryCode = readonly [string, string, string]
+type WorldCountryProperties = GeoJsonProperties & { name?: string }
+type WorldTopology = Topology<{ countries: GeometryCollection<WorldCountryProperties> }>
+
+const countryNumericIds = new Map(
+  (JSON.parse(countryCodesSource) as IsoCountryCode[]).map((country) => [country[0], country[2]] as const),
+)
+const worldTopology = JSON.parse(countriesTopologySource) as WorldTopology
+const worldCountryGeometries: GeometryCollection<WorldCountryProperties> = {
+  ...worldTopology.objects.countries,
+  geometries: worldTopology.objects.countries.geometries.filter((country) => String(country.id ?? "") !== "010"),
+}
+const worldCountries = feature<WorldCountryProperties>(
+  worldTopology,
+  worldCountryGeometries,
+) as FeatureCollection<GeometryObject, WorldCountryProperties>
+const worldProjection = geoEquirectangular().fitExtent(
+  [
+    [10, 12],
+    [geoMapWidth - 10, geoMapHeight - 12],
+  ],
+  worldCountries,
+)
+const worldPath = geoPath(worldProjection)
+const worldCountryPaths = worldCountries.features.map((country) => ({
+  id: String(country.id ?? "").padStart(3, "0"),
+  path: worldPath(country) ?? "",
+}))
+const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
 const getData = query(async () => {
   "use server"
@@ -165,6 +206,7 @@ export default function StatsHome() {
                 <TokenCostSection data={stats().tokenCost} />
                 <CacheRatioSection data={stats().cacheRatio} />
                 <MarketShareSection data={stats().market} />
+                <GeoBreakdownSection data={stats().country} />
               </>
             )}
           </Show>
@@ -1194,6 +1236,181 @@ function MarketShareList(props: {
   )
 }
 
+function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
+  const [activeCountry, setActiveCountry] = createSignal<string>()
+  const data = createMemo(() => props.data["2M"])
+  const countryById = createMemo(
+    () =>
+      new Map(
+        data().flatMap((country) => {
+          const id = countryNumericId(country.country)
+          return id ? [[id, country] as const] : []
+        }),
+      ),
+  )
+  const maxTokens = createMemo(() => Math.max(0, ...data().map((country) => country.tokens)) || 1)
+  const topCountries = createMemo(() => data().slice(0, 15))
+  const active = createMemo(() => data().find((country) => country.country === activeCountry()) ?? data()[0])
+
+  return (
+    <section
+      id="geo-breakdown"
+      data-section="geo-breakdown"
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        setActiveCountry(undefined)
+      }}
+    >
+      <SectionBridge label="MARKET SHARE" href="#market-share" />
+      <SectionTitle title="Geo Breakdown" description="Tokens used by country." />
+      <Show
+        when={data().length > 0}
+        fallback={<EmptyState title="No geo data" description="No geo_stat rows matched this range." />}
+      >
+        <div data-component="geo-breakdown">
+          <div data-slot="geo-map-panel">
+            <GeoWorldMap
+              countryById={countryById()}
+              activeCountry={activeCountry()}
+              maxTokens={maxTokens()}
+              onActiveCountryChange={setActiveCountry}
+            />
+            <Show when={active()}>
+              {(country) => (
+                <div data-slot="geo-active-country">
+                  <span>#{String(country().rank).padStart(2, "0")}</span>
+                  <strong>{formatCountryName(country().country)}</strong>
+                  <p>
+                    <b>{formatGeoTokens(country().tokens)}</b>
+                    <em>{formatGeoShare(country().share)}</em>
+                  </p>
+                </div>
+              )}
+            </Show>
+          </div>
+          <GeoCountryList
+            data={topCountries()}
+            activeCountry={activeCountry()}
+            maxTokens={maxTokens()}
+            onActiveCountryChange={setActiveCountry}
+          />
+        </div>
+      </Show>
+    </section>
+  )
+}
+
+function GeoWorldMap(props: {
+  countryById: Map<string, CountryEntry>
+  activeCountry: string | undefined
+  maxTokens: number
+  onActiveCountryChange: (country: string | undefined) => void
+}) {
+  const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
+  const countryOpacity = (country: CountryEntry | undefined) => {
+    if (!country) return 0
+    const opacity = opacityScale()(country.tokens)
+    if (!props.activeCountry || props.activeCountry === country.country) return opacity
+    return Math.max(0.18, opacity * 0.36)
+  }
+
+  return (
+    <svg
+      data-component="geo-world-map"
+      viewBox={`0 0 ${geoMapWidth} ${geoMapHeight}`}
+      role="img"
+      aria-label="World map of token usage by country"
+    >
+      <title>Geo Breakdown map</title>
+      <g data-slot="geo-countries">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <path
+                d={country.path}
+                data-has-data={entry() ? "true" : undefined}
+                data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                aria-hidden="true"
+                onPointerEnter={() => {
+                  const item = entry()
+                  if (!item) return
+                  props.onActiveCountryChange(item.country)
+                }}
+                onClick={() => {
+                  const item = entry()
+                  if (!item) return
+                  props.onActiveCountryChange(item.country)
+                }}
+              />
+            )
+          }}
+        </For>
+      </g>
+      <path data-slot="geo-borders" d={worldBorderPath} aria-hidden="true" />
+    </svg>
+  )
+}
+
+function GeoCountryList(props: {
+  data: CountryEntry[]
+  activeCountry: string | undefined
+  maxTokens: number
+  onActiveCountryChange: (country: string | undefined) => void
+}) {
+  const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
+
+  return (
+    <ol data-component="geo-country-list">
+      <For each={props.data}>
+        {(country) => (
+          <li>
+            <button
+              type="button"
+              data-active={props.activeCountry === country.country ? "true" : undefined}
+              style={{ "--geo-row-opacity": String(opacityScale()(country.tokens)) } as JSX.CSSProperties}
+              aria-label={`${formatCountryName(country.country)} ${formatGeoTokens(country.tokens)} ${formatGeoShare(
+                country.share,
+              )}`}
+              onClick={() => props.onActiveCountryChange(country.country)}
+              onPointerEnter={() => props.onActiveCountryChange(country.country)}
+              onFocus={() => props.onActiveCountryChange(country.country)}
+            >
+              <span>{String(country.rank).padStart(2, "0")}</span>
+              <i />
+              <strong>{formatCountryName(country.country)}</strong>
+              <em>{formatGeoTokens(country.tokens)}</em>
+              <b>{formatGeoShare(country.share)}</b>
+            </button>
+          </li>
+        )}
+      </For>
+    </ol>
+  )
+}
+
+function countryNumericId(country: string) {
+  return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
+}
+
+function formatCountryName(country: string) {
+  const code = country.toUpperCase()
+  if (code === "ZZ") return "Unknown"
+  if (!countryNumericId(code)) return code
+  return countryDisplayNames.of(code) ?? code
+}
+
+function formatGeoTokens(value: number) {
+  if (value >= 1) return formatTrillions(value)
+  if (value >= 0.001) return `${Number((value * 1000).toFixed(value >= 0.01 ? 0 : 1))}B`
+  return `${Math.round(value * 1_000_000)}M`
+}
+
+function formatGeoShare(value: number) {
+  return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`
+}
+
 function getMarketSegmentColor(author: string, color: string, activeAuthor: string | undefined) {
   if (!activeAuthor) return color
   if (activeAuthor === author) return color
@@ -1747,6 +1964,7 @@ function Footer(props: {
     { href: "#token-cost", label: "Token Cost" },
     { href: "#cache-ratio", label: "Cache Ratio" },
     { href: "#market-share", label: "Market Share" },
+    { href: "#geo-breakdown", label: "Geo Breakdown" },
   ]
   const legal = [
     { href: "https://opencode.ai/legal/terms-of-service", label: "Terms of service" },
@@ -1762,7 +1980,7 @@ function Footer(props: {
 
   return (
     <footer data-component="footer">
-      <SectionBridge label="MARKET SHARE" href="#market-share" />
+      <SectionBridge label="GEO BREAKDOWN" href="#geo-breakdown" />
       <div data-slot="footer-grid">
         <a data-slot="footer-mark" href="https://opencode.ai" aria-label="OpenCode home">
           <OpenCodeMark />
