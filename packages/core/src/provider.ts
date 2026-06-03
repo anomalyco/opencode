@@ -25,59 +25,27 @@ export type ID = typeof ID.Type
 export const ModelID = Schema.String.pipe(Schema.brand("ModelID"))
 export type ModelID = typeof ModelID.Type
 
-const OpenAIResponses = Schema.Struct({
-  type: Schema.Literal("openai/responses"),
-  url: Schema.String,
-  websocket: Schema.optional(Schema.Boolean),
-})
-
-const OpenAICompletions = Schema.Struct({
-  type: Schema.Literal("openai/completions"),
-  url: Schema.String,
-  reasoning: Schema.Union([
-    Schema.Struct({
-      type: Schema.Literal("reasoning_content"),
-    }),
-    Schema.Struct({
-      type: Schema.Literal("reasoning_details"),
-    }),
-  ]).pipe(Schema.optional),
-})
-export type OpenAICompletions = typeof OpenAICompletions.Type
-
-const AISDK = Schema.Struct({
+export const AISDK = Schema.Struct({
   type: Schema.Literal("aisdk"),
   package: Schema.String,
   url: Schema.String.pipe(Schema.optional),
+  settings: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 })
 
-const AnthropicMessages = Schema.Struct({
-  type: Schema.Literal("anthropic/messages"),
-  url: Schema.String,
+export const Native = Schema.Struct({
+  type: Schema.Literal("native"),
+  url: Schema.String.pipe(Schema.optional),
+  settings: Schema.Record(Schema.String, Schema.Unknown),
 })
 
-const UnknownEndpoint = Schema.Struct({
-  type: Schema.Literal("unknown"),
-})
+export const Api = Schema.Union([AISDK, Native]).pipe(Schema.toTaggedUnion("type"))
+export type Api = typeof Api.Type
 
-export const Endpoint = Schema.Union([
-  UnknownEndpoint,
-  OpenAIResponses,
-  OpenAICompletions,
-  AnthropicMessages,
-  AISDK,
-]).pipe(Schema.toTaggedUnion("type"))
-export type Endpoint = typeof Endpoint.Type
-
-export const Options = Schema.Struct({
+export const Request = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.Record(Schema.String, Schema.Any),
-  aisdk: Schema.Struct({
-    provider: Schema.Record(Schema.String, Schema.Any),
-    request: Schema.Record(Schema.String, Schema.Any),
-  }),
 })
-export type Options = typeof Options.Type
+export type Request = typeof Request.Type
 
 export class Info extends Schema.Class<Info>("ProviderV2.Info")({
   id: ID,
@@ -98,26 +66,23 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
     }),
   ]),
   env: Schema.String.pipe(Schema.Array),
-  endpoint: Endpoint,
-  options: Options,
+  api: Api,
+  request: Request,
 }) {
   static empty(providerID: ID): Info {
-    return {
+    return new Info({
       id: providerID,
       name: providerID,
       enabled: false,
       env: [],
-      endpoint: {
-        type: "unknown",
+      api: {
+        type: "native",
+        settings: {},
       },
-      options: {
+      request: {
         headers: {},
         body: {},
-        aisdk: {
-          provider: {},
-          request: {},
-        },
       },
-    }
+    })
   }
 }
