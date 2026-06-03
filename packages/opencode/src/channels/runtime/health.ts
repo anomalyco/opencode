@@ -1,33 +1,35 @@
 import { Effect } from "effect"
-import { Channel } from "../contracts/channel"
-import { registry } from "./registry"
+import type { Channel, ChannelHealth } from "../contracts/channel"
+import { Service as RegistryService } from "./registry"
 
 export const health = {
-  checkAll: (): Effect.Effect<Record<string, ChannelHealth>> =>
+  checkAll: (): Effect.Effect<Record<string, ChannelHealth>, never, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const types = yield* registry.list()
-      const healthPromises = types.map(type =>
+      const healthChecks = types.map(type =>
         Effect.gen(function* () {
           const channel = yield* registry.get(type)
           if (!channel) {
-            return [type, { connected: false, status: "not_found" } as ChannelHealth]
+            return [type, { connected: false, status: "not_found" } as ChannelHealth] as const
           }
-          
-          const health = yield* channel.health()
-          return [type, health]
+
+          const channelHealth = yield* channel.health()
+          return [type, channelHealth] as const
         })
       )
-      
-      const results = yield* Effect.all(healthPromises)
+
+      const results = yield* Effect.all(healthChecks)
       return Object.fromEntries(results)
     }),
-    
-  checkOne: (channelId: string): Effect.Effect<ChannelHealth> =>
+
+  checkOne: (channelId: string): Effect.Effect<ChannelHealth, Error, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const channel = yield* registry.get(channelId)
       if (!channel) {
-        return Effect.fail(new Error(`Channel not found: ${channelId}`))
+        return yield* Effect.fail(new Error(`Channel not found: ${channelId}`))
       }
-      return channel.health()
+      return yield* channel.health()
     })
 }

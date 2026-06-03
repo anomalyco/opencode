@@ -1,104 +1,106 @@
 import { Effect } from "effect"
-import { MessageSender } from "../contracts/sender"
-import { MessageEditor } from "../contracts/editor"
-import { TypingCapable } from "../contracts/typing"
-import { ReactionCapable } from "../contracts/reactions"
-import { MediaSender, MediaPart } from "../contracts/media"
-import { StreamingCapable } from "../contracts/streaming"
-import { Channel } from "../contracts/channel"
-import { registry } from "./registry"
+import type { MessageSender } from "../contracts/sender"
+import type { MessageEditor } from "../contracts/editor"
+import type { TypingCapable } from "../contracts/typing"
+import type { ReactionCapable } from "../contracts/reactions"
+import type { MediaSender, MediaPart } from "../contracts/media"
+import type { StreamingCapable } from "../contracts/streaming"
+import { Service as RegistryService } from "./registry"
 
 export const router = {
-  sendMessage: (channelId: string, message: string): Effect.Effect<void> =>
+  sendMessage: (channelId: string, message: string): Effect.Effect<void, Error, RegistryService> =>
     Effect.gen(function* () {
-      // In a real implementation, we'd look up the channel by ID from a database
-      // For now, we'll assume channelId maps to type for simplicity
+      const registry = yield* RegistryService
       const channel = yield* registry.get(channelId)
-      
+
       if (!channel) {
-        return Effect.fail(new Error(`Channel not found: ${channelId}`))
+        return yield* Effect.fail(new Error(`Channel not found: ${channelId}`))
       }
-      
-      // Check if channel implements MessageSender
+
       if ("send" in channel && typeof channel.send === "function") {
-        return (channel as MessageSender).send(channelId, message)
+        return yield* (channel as unknown as MessageSender).send(channelId, message)
       }
-      
-      return Effect.fail(new Error(`Channel ${channelId} does not support messaging`))
+
+      return yield* Effect.fail(new Error(`Channel ${channelId} does not support messaging`))
     }),
-    
-  editMessage: (channelId: string, messageId: string, content: string): Effect.Effect<void> =>
+
+  editMessage: (channelId: string, messageId: string, content: string): Effect.Effect<void, Error, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const channel = yield* registry.get(channelId)
-      
+
       if (!channel) {
-        return Effect.fail(new Error(`Channel not found: ${channelId}`))
+        return yield* Effect.fail(new Error(`Channel not found: ${channelId}`))
       }
-      
+
       if ("edit" in channel && typeof channel.edit === "function") {
-        return (channel as MessageEditor).edit(channelId, messageId, content)
+        return yield* (channel as unknown as MessageEditor).edit(channelId, messageId, content)
       }
-      
-      return Effect.fail(new Error(`Channel ${channelId} does not support message editing`))
+
+      return yield* Effect.fail(new Error(`Channel ${channelId} does not support message editing`))
     }),
-    
-  sendTyping: (channelId: string): Effect.Effect<() => void> =>
+
+  sendTyping: (channelId: string): Effect.Effect<() => void, Error, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const channel = yield* registry.get(channelId)
-      
+
       if (!channel) {
-        return Effect.fail(new Error(`Channel not found: ${channelId}`))
+        return yield* Effect.fail(new Error(`Channel not found: ${channelId}`))
       }
-      
+
       if ("startTyping" in channel && typeof channel.startTyping === "function") {
-        return (channel as TypingCapable).startTyping(channelId)
+        return yield* (channel as unknown as TypingCapable).startTyping(channelId)
       }
-      
-      return Effect.fail(new Error(`Channel ${channelId} does not support typing indicators`))
+
+      return yield* Effect.fail(new Error(`Channel ${channelId} does not support typing indicators`))
     }),
-    
-  react: (channelId: string, messageId: string, emoji: string): Effect.Effect<void> =>
+
+  react: (channelId: string, messageId: string, emoji: string): Effect.Effect<void, Error, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const channel = yield* registry.get(channelId)
-      
+
       if (!channel) {
-        return Effect.fail(new Error(`Channel not found: ${channelId}`))
+        return yield* Effect.fail(new Error(`Channel not found: ${channelId}`))
       }
-      
+
       if ("react" in channel && typeof channel.react === "function") {
-        return (channel as ReactionCapable).react(channelId, messageId, emoji)
+        return yield* (channel as unknown as ReactionCapable).react(channelId, messageId, emoji)
       }
-      
-      return Effect.fail(new Error(`Channel ${channelId} does not support reactions`))
+
+      return yield* Effect.fail(new Error(`Channel ${channelId} does not support reactions`))
     }),
-    
-  sendMedia: (channelId: string, media: MediaPart[]): Effect.Effect<void> =>
+
+  sendMedia: (channelId: string, media: MediaPart[]): Effect.Effect<void, Error, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const channel = yield* registry.get(channelId)
-      
+
       if (!channel) {
-        return Effect.fail(new Error(`Channel not found: ${channelId}`))
+        return yield* Effect.fail(new Error(`Channel not found: ${channelId}`))
       }
-      
+
       if ("sendMedia" in channel && typeof channel.sendMedia === "function") {
-        return (channel as MediaSender).sendMedia(channelId, media)
+        return yield* (channel as unknown as MediaSender).sendMedia(channelId, media)
       }
-      
-      return Effect.fail(new Error(`Channel ${channelId} does not support media sending`))
+
+      return yield* Effect.fail(new Error(`Channel ${channelId} does not support media sending`))
     }),
-    
-  stream: (channelId: string, chunks: AsyncIterable<string>): Effect.Effect<void> =>
+
+  stream: (channelId: string, chunks: AsyncIterable<string>): Effect.Effect<void, Error, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const channel = yield* registry.get(channelId)
-      
+
       if (!channel) {
-        return Effect.fail(new Error(`Channel not found: ${channelId}`))
+        return yield* Effect.fail(new Error(`Channel not found: ${channelId}`))
       }
-      
+
       if ("stream" in channel && typeof channel.stream === "function") {
-        return (channel as StreamingCapable).stream(channelId, chunks)
+        return yield* (channel as unknown as StreamingCapable).stream(channelId, chunks)
       }
-      
-      return Effect.fail(new Error(`Channel ${channelId} does not support streaming`))
+
+      return yield* Effect.fail(new Error(`Channel ${channelId} does not support streaming`))
     })
 }

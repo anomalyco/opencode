@@ -1,12 +1,13 @@
 import { Effect } from "effect"
-import { ChannelCapabilities } from "../contracts/channel"
-import { registry } from "./registry"
+import type { ChannelCapabilities } from "../contracts/channel"
+import { Service as RegistryService } from "./registry"
 
 export const capabilities = {
-  getAll: (): Effect.Effect<Record<string, ChannelCapabilities>> =>
+  getAll: (): Effect.Effect<Record<string, ChannelCapabilities>, never, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const types = yield* registry.list()
-      const capabilityPromises = types.map(type =>
+      const capabilityChecks = types.map(type =>
         Effect.gen(function* () {
           const channel = yield* registry.get(type)
           if (!channel) {
@@ -19,24 +20,25 @@ export const capabilities = {
               voice: false,
               streaming: false,
               files: false
-            } as ChannelCapabilities]
+            } as ChannelCapabilities] as const
           }
-          
-          const capabilities = yield* channel.capabilities()
-          return [type, capabilities]
+
+          const channelCapabilities = yield* channel.capabilities()
+          return [type, channelCapabilities] as const
         })
       )
-      
-      const results = yield* Effect.all(capabilityPromises)
+
+      const results = yield* Effect.all(capabilityChecks)
       return Object.fromEntries(results)
     }),
-    
-  getOne: (channelId: string): Effect.Effect<ChannelCapabilities> =>
+
+  getOne: (channelId: string): Effect.Effect<ChannelCapabilities, Error, RegistryService> =>
     Effect.gen(function* () {
+      const registry = yield* RegistryService
       const channel = yield* registry.get(channelId)
       if (!channel) {
-        return Effect.fail(new Error(`Channel not found: ${channelId}`))
+        return yield* Effect.fail(new Error(`Channel not found: ${channelId}`))
       }
-      return channel.capabilities()
+      return yield* channel.capabilities()
     })
 }
