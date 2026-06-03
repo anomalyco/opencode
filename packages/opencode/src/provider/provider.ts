@@ -1257,6 +1257,17 @@ export const layer = Layer.effect(
           const providerID = ProviderV2.ID.make(p.id)
           if (disabled.has(providerID)) continue
 
+          // Seed provider entry if the plugin declares one but it's not in models.dev or config
+          if (!database[providerID]) {
+            database[providerID] = {
+              id: providerID,
+              name: providerID,
+              source: "env",
+              env: [],
+              options: {},
+              models: {},
+            }
+          }
           const provider = database[providerID]
           if (!provider) continue
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
@@ -1274,6 +1285,11 @@ export const layer = Layer.effect(
               ]),
             )
           })
+
+          // Ensure plugin-seeded providers appear in the state
+          if (!providers[providerID]) {
+            mergeProvider(providerID, { source: "env" })
+          }
         }
 
         // extend database from config

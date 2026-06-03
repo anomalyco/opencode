@@ -11,17 +11,19 @@ export async function LiteLLMPlugin(input: PluginInput): Promise<Hooks> {
       async models(provider, ctx) {
         const baseURL = (() => {
           if (provider.options?.baseURL) return provider.options.baseURL as string
+          if (process.env["LITELLM_BASE_URL"]) return process.env["LITELLM_BASE_URL"]
           return undefined
         })()
 
         if (!baseURL) {
-          log.warn("LiteLLM base URL not configured; set LITELLM_BASE_URL or provider.options.baseURL")
           return provider.models
         }
 
         const headers: Record<string, string> = {}
         if (ctx.auth?.type === "api" && ctx.auth.key) {
           headers["Authorization"] = `Bearer ${ctx.auth.key}`
+        } else if (process.env["LITELLM_API_KEY"]) {
+          headers["Authorization"] = `Bearer ${process.env["LITELLM_API_KEY"]}`
         }
 
         return LiteLLMModels.get(baseURL, headers, provider.models).catch((error) => {
@@ -34,7 +36,12 @@ export async function LiteLLMPlugin(input: PluginInput): Promise<Hooks> {
       provider: "litellm",
       async loader(getAuth) {
         const auth = await getAuth()
-        if (auth.type !== "api") return {}
+        if (auth.type !== "api") {
+          // Fall back to env var
+          const envKey = process.env["LITELLM_API_KEY"]
+          if (envKey) return { apiKey: envKey }
+          return {}
+        }
 
         return {
           apiKey: auth.key,
