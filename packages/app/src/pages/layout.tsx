@@ -1472,6 +1472,8 @@ export default function Layout(props: ParentProps) {
   }
 
   async function chooseProject() {
+    const conn = server.current
+    if (!conn) return
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
         for (const directory of result) {
@@ -1494,7 +1496,7 @@ export default function Layout(props: ParentProps) {
       void import("@/components/dialog-select-directory").then((x) => {
         if (dialogDead || dialogRun !== run) return
         dialog.show(
-          () => <x.DialogSelectDirectory multiple={true} onSelect={resolve} />,
+          () => <x.DialogSelectDirectory multiple={true} onSelect={resolve} server={conn} />,
           () => resolve(null),
         )
       })

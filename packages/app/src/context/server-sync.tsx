@@ -1,11 +1,21 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import {
+  batch,
+  createContext,
+  createEffect,
+  getOwner,
+  onCleanup,
+  onMount,
+  type ParentProps,
+  untrack,
+  useContext,
+} from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
-import { useServerSDK } from "./server-sdk"
+import { ServerSDK, useServerSDK } from "./server-sdk"
 import {
   bootstrapDirectory,
   bootstrapGlobal,
@@ -32,6 +42,8 @@ import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
 import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 import { createRefCountMap } from "@/utils/refcount"
+import { useGlobal } from "./global"
+import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
 
 type GlobalStore = {
@@ -75,8 +87,8 @@ function makeQueryOptionsApi(serverSDK: () => OpencodeClient, sdkFor: (dir: Path
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContext() {
-  const serverSDK = useServerSDK()
+export function createServerSyncContext(_serverSDK?: ServerSDK) {
+  const serverSDK: ServerSDK = _serverSDK ?? useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("ServerSync must be created within owner")
@@ -107,7 +119,7 @@ export function createServerSyncContext() {
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     get ready() {
-      return bootstrap.isPending
+      return !bootstrap.isPending
     },
     project: [],
     session_todo: {},
@@ -130,6 +142,7 @@ export function createServerSyncContext() {
       return updateConfigMutation.isPending ? "pending" : undefined
     },
   })
+
   const queryClient = useQueryClient()
 
   let bootedAt = 0
@@ -501,17 +514,22 @@ export function createServerSyncContext() {
 
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
-  init: () => {
-    const sync = createServerSyncContext()
+  init: (props: { server?: ServerConnection.Any }) => {
+    const global = useGlobal()
+    const language = useLanguage()
+    const server = useServer()
 
-    return {
-      ...sync,
+    const conn = props.server ?? server.current
+    if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
+    const ctx = global.createServerCtx(conn)
+
+    return Object.assign(ctx.sync, {
       createDirSyncContext: createRefCountMap(
-        (dir) => createDirSyncContext(dir, sync),
-        (dir) => sync.disableMcp(dir),
+        (dir) => createDirSyncContext(dir, ctx.sync),
+        (dir) => ctx.sync.disableMcp(dir),
         directoryKey,
       ),
-    }
+    })
   },
 })
 
