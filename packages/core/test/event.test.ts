@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
@@ -317,6 +317,36 @@ describe("EventV2", () => {
         [0, "zero"],
         [1, "one"],
       ])
+    }),
+  )
+
+  it.effect("retains a durable wake committed while historical replay is paused", () =>
+    Effect.gen(function* () {
+      const readStarted = yield* Deferred.make<void>()
+      const continueRead = yield* Deferred.make<void>()
+      let pause = true
+      const database = Database.layerFromPath(":memory:")
+      const eventLayer = EventV2.layerWith({
+        beforeAggregateRead: () =>
+          pause
+            ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
+            : Effect.void,
+      }).pipe(Layer.provide(database))
+
+      yield* Effect.gen(function* () {
+        const events = yield* EventV2.Service
+        const aggregateID = EventV2.ID.create()
+        const fiber = yield* events.aggregateEvents({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        yield* Deferred.await(readStarted)
+
+        pause = false
+        yield* events.publish(SyncMessage, { id: aggregateID, text: "during handoff" })
+        yield* Deferred.succeed(continueRead, undefined)
+
+        expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual([
+          [0, { id: aggregateID, text: "during handoff" }],
+        ])
+      }).pipe(Effect.provide(Layer.mergeAll(database, eventLayer)))
     }),
   )
 

@@ -156,7 +156,11 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
 
-export const layer = Layer.effect(
+export interface LayerOptions {
+  readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
+}
+
+export const layerWith = (options?: LayerOptions) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const all = yield* PubSub.unbounded<Payload>()
@@ -425,30 +429,33 @@ export const layer = Layer.effect(
     }
 
     const readAfter = (aggregateID: string, after: number) =>
-      db
-        .select()
-        .from(EventTable)
-        .where(and(eq(EventTable.aggregate_id, aggregateID), gt(EventTable.seq, after)))
-        .orderBy(asc(EventTable.seq))
-        .all()
-        .pipe(
-          Effect.orDie,
-          Effect.map((rows) =>
-            rows.map((event) =>
-              decodeSerializedEvent({
-                id: event.id,
-                aggregateID: event.aggregate_id,
-                seq: event.seq,
-                type: event.type,
-                data: event.data,
-              }),
-            ),
+      (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
+        Effect.andThen(
+          db
+            .select()
+            .from(EventTable)
+            .where(and(eq(EventTable.aggregate_id, aggregateID), gt(EventTable.seq, after)))
+            .orderBy(asc(EventTable.seq))
+            .all(),
+        ),
+        Effect.orDie,
+        Effect.map((rows) =>
+          rows.map((event) =>
+            decodeSerializedEvent({
+              id: event.id,
+              aggregateID: event.aggregate_id,
+              seq: event.seq,
+              type: event.type,
+              data: event.data,
+            }),
           ),
-        )
+        ),
+      )
 
     const subscribeSynchronized = (aggregateID: string) =>
       Effect.gen(function* () {
         const pubsub = yield* PubSub.sliding<void>(1)
+        const subscription = yield* PubSub.subscribe(pubsub)
         yield* Effect.acquireRelease(
           Effect.sync(() => {
             const pubsubs = synchronized.get(aggregateID) ?? new Set()
@@ -462,7 +469,7 @@ export const layer = Layer.effect(
               if (pubsubs?.size === 0) synchronized.delete(aggregateID)
             }).pipe(Effect.andThen(PubSub.shutdown(pubsub))),
         )
-        return pubsub
+        return subscription
       })
 
     const streamEvents = (input: { readonly aggregateID: string; readonly after?: number }): Stream.Stream<CursorEvent> =>
@@ -478,7 +485,7 @@ export const layer = Layer.effect(
             ),
           )
           const historical = yield* read
-          const live = Stream.fromPubSub(synchronized).pipe(
+          const live = Stream.fromSubscription(synchronized).pipe(
             Stream.mapEffect(() => read),
             Stream.flattenIterable,
           )
@@ -514,5 +521,7 @@ export const layer = Layer.effect(
     return Service.of({ publish, subscribe, all: streamAll, aggregateEvents: streamEvents, sync, listen, project, replay, replayAll, remove, claim })
   }),
 )
+
+export const layer = layerWith()
 
 export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))

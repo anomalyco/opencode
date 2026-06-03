@@ -543,7 +543,7 @@ Affected schema:
 Change:
 
 - Replace the process-global unbounded aggregate-ID PubSub with one sliding-capacity-1 dirty signal per active tail and aggregate.
-- Register the signal before historical SQLite replay and remove it when the tail closes.
+- Subscribe and register the signal before historical SQLite replay, then remove it when the tail closes.
 - Re-query durable rows after each dirty edge and advance only by persisted aggregate sequence.
 
 Reason:
