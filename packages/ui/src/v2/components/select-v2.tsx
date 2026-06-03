@@ -2,16 +2,6 @@ import { Select as Kobalte } from "@kobalte/core/select"
 import { Show, createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import "./select-v2.css"
 
-function selectPortalMount() {
-  if (typeof document === "undefined") return undefined
-  return document.querySelector('[data-component="dialog-stack"]') ?? document.body
-}
-
-function syncSelectContentSurface(el: HTMLElement) {
-  const scheme = document.documentElement.getAttribute("data-color-scheme")
-  if (scheme) el.setAttribute("data-color-scheme", scheme)
-}
-
 function groupOptions<T>(options: T[], groupBy?: (x: T) => string): { category: string; options: T[] }[] {
   if (!groupBy) {
     return [{ category: "", options }]
@@ -208,12 +198,8 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
           <ChevronDown />
         </span>
       </Kobalte.Trigger>
-      <Kobalte.Portal mount={selectPortalMount()}>
-        <Kobalte.Content
-          ref={syncSelectContentSurface}
-          data-component="menu-v2-content"
-          data-slot="select-v2-content"
-        >
+      <Kobalte.Portal>
+        <Kobalte.Content data-component="menu-v2-content" data-slot="select-v2-content">
           <Kobalte.Listbox data-slot="select-v2-listbox" />
         </Kobalte.Content>
       </Kobalte.Portal>
