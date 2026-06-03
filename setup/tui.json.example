@@ -1,4 +1,13 @@
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "securecode"
+  // SecureCode TUI のグローバル設定。
+  // プロジェクト固有の設定は .opencode/tui.json で上書きできます。
+  //
+  // テーマは通常 /themes コマンドで切り替えた値が
+  // ~/.local/state/securecode/kv.json に保存され、以後の起動でも維持されます。
+  // 初期テーマは installer が kv.json に "securecode" を書き込みます。
+  //
+  // マシン全体やプロジェクトでテーマを強制したいときだけ、ここで宣言してください。
+  // (宣言すると /themes で切り替えてもセッション限りになります)
+  //   "theme": "securecode"
+  "$schema": "https://opencode.ai/tui.json"
 }

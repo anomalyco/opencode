@@ -5,10 +5,11 @@
 #   - copy securecode.json into ~/.config/securecode/    (preserves any existing one)
 #   - copy tui.json into  ~/.config/securecode/         (preserves any existing one)
 #   - copy themes/*.json into ~/.config/securecode/themes/ (preserves any existing one)
+#   - seed ~/.local/state/securecode/kv.json with initial theme (only when missing)
 #
 # Branding (SecureCode wordmark / sidebar badge) is shipped inside the binary
-# and does not need a separate plugin file. The bundled TUI theme that
-# tui.json.example selects (`theme: "securecode"`) lives in `themes/` and is
+# and does not need a separate plugin file. The bundled TUI theme that the
+# initial kv.json seeds (`theme: "securecode"`) lives in `themes/` and is
 # copied alongside.
 #
 # After install, set SECURECODE_QWEN3_API_KEY in your shell environment to the
@@ -54,3 +55,14 @@ for theme in "$src/themes"/*.json; do
     echo "skipped (already exists): $dest/themes/$name"
   fi
 done
+
+# 初期テーマを kv.json に書き込む (まだ存在しないときのみ)。
+# /themes で切り替えた値もここに保存され、次回起動で読み込まれる。
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/securecode"
+mkdir -p "$state_dir"
+if [ ! -e "$state_dir/kv.json" ]; then
+  printf '{"theme":"securecode"}\n' > "$state_dir/kv.json"
+  echo "installed: $state_dir/kv.json (initial theme: securecode)"
+else
+  echo "skipped (already exists): $state_dir/kv.json"
+fi
