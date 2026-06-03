@@ -42,6 +42,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { UiProjectView } from "@/ui/project-view"
+import { UiSettings } from "@/ui/settings"
 import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
@@ -233,6 +234,7 @@ export function createRoutes(
       Todo.defaultLayer,
       ToolRegistry.defaultLayer,
       UiProjectView.defaultLayer,
+      UiSettings.defaultLayer,
       Vcs.defaultLayer,
       Workspace.defaultLayer,
       Worktree.appLayer,

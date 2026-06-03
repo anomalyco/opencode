@@ -5,6 +5,14 @@ import {
   type ReplaceOpenProjectsInput,
   type UpdateOpenProjectInput,
 } from "@/ui/project-view"
+import {
+  UiSettings,
+  type AppSettings,
+  type KeybindsInput,
+  type ModelPreferenceInput,
+  type ModelVariantInput,
+  type RecentModelsInput,
+} from "@/ui/settings"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -14,6 +22,7 @@ import { InvalidRequestError, ProjectNotFoundError } from "../errors"
 export const uiHandlers = HttpApiBuilder.group(InstanceHttpApi, "ui", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* UiProjectView.Service
+    const settings = yield* UiSettings.Service
 
     const getProjectView = Effect.fn("UiHttpApi.getProjectView")(function* () {
       return yield* svc.get()
@@ -89,6 +98,38 @@ export const uiHandlers = HttpApiBuilder.group(InstanceHttpApi, "ui", (handlers)
       )
     })
 
+    const getSettings = Effect.fn("UiHttpApi.getSettings")(function* () {
+      return yield* settings.get()
+    })
+
+    const updateAppSettings = Effect.fn("UiHttpApi.updateAppSettings")(function* (ctx: { payload: AppSettings }) {
+      return yield* settings.updateApp(ctx.payload)
+    })
+
+    const replaceKeybinds = Effect.fn("UiHttpApi.replaceKeybinds")(function* (ctx: { payload: KeybindsInput }) {
+      return yield* settings.replaceKeybinds(ctx.payload)
+    })
+
+    const updateModelPreference = Effect.fn("UiHttpApi.updateModelPreference")(function* (ctx: {
+      params: { providerID: string; modelID: string }
+      payload: ModelPreferenceInput
+    }) {
+      return yield* settings.updateModelPreference(ctx.params.providerID, ctx.params.modelID, ctx.payload)
+    })
+
+    const replaceRecentModels = Effect.fn("UiHttpApi.replaceRecentModels")(function* (ctx: {
+      payload: RecentModelsInput
+    }) {
+      return yield* settings.replaceRecentModels(ctx.payload)
+    })
+
+    const updateModelVariant = Effect.fn("UiHttpApi.updateModelVariant")(function* (ctx: {
+      params: { providerID: string; modelID: string }
+      payload: ModelVariantInput
+    }) {
+      return yield* settings.updateModelVariant(ctx.params.providerID, ctx.params.modelID, ctx.payload)
+    })
+
     return handlers
       .handle("getProjectView", getProjectView)
       .handle("replaceOpenProjects", replaceOpenProjects)
@@ -96,5 +137,11 @@ export const uiHandlers = HttpApiBuilder.group(InstanceHttpApi, "ui", (handlers)
       .handle("updateOpenProject", updateOpenProject)
       .handle("closeProject", closeProject)
       .handle("setLastProject", setLastProject)
+      .handle("getSettings", getSettings)
+      .handle("updateAppSettings", updateAppSettings)
+      .handle("replaceKeybinds", replaceKeybinds)
+      .handle("updateModelPreference", updateModelPreference)
+      .handle("replaceRecentModels", replaceRecentModels)
+      .handle("updateModelVariant", updateModelVariant)
   }),
 )

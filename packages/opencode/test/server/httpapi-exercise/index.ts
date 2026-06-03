@@ -188,6 +188,150 @@ const scenarios: Scenario[] = [
     check(body.projects.length === 0, "initial project view should have no open projects")
     check(body.lastProject === undefined, "initial project view should not include lastProject")
   }),
+  http.protected.get("/ui/settings", "ui.settings.get").json(200, (body) => {
+    object(body)
+    object(body.settings)
+    const settings = body.settings
+    object(settings.general)
+    check(settings.general.autoSave === true, "default settings should enable autosave")
+    check(settings.general.followup === "steer", "default settings should normalize followup to steer")
+    object(body.settings.keybinds)
+    object(body.model)
+    const model = body.model
+    array(model.user)
+    array(model.recent)
+    object(model.variant)
+  }),
+  http.protected
+    .put("/ui/settings/app", "ui.settings.app.update")
+    .mutating()
+    .at((ctx) => ({
+      path: "/ui/settings/app",
+      headers: ctx.headers(),
+      body: {
+        general: {
+          autoSave: false,
+          releaseNotes: true,
+          followup: "steer",
+          showFileTree: true,
+          showNavigation: false,
+          showSearch: false,
+          showStatus: false,
+          showTerminal: false,
+          showReasoningSummaries: false,
+          shellToolPartsExpanded: false,
+          editToolPartsExpanded: false,
+          showSessionProgressBar: true,
+          showCustomAgents: false,
+          newLayoutDesigns: true,
+        },
+        updates: { startup: true },
+        appearance: { fontSize: 15, mono: "Mono", sans: "Sans", terminal: "Term" },
+        permissions: { autoApprove: true },
+        notifications: { agent: true, permissions: true, errors: true },
+        sounds: {
+          agentEnabled: true,
+          agent: "staplebops-01",
+          permissionsEnabled: true,
+          permissions: "staplebops-02",
+          errorsEnabled: true,
+          errors: "nope-03",
+        },
+      },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.settings)
+      const settings = body.settings
+      object(settings.general)
+      object(settings.appearance)
+      object(settings.permissions)
+      check(settings.general.autoSave === false, "app settings update should store autosave")
+      check(settings.general.showFileTree === true, "app settings update should store booleans")
+      check(settings.appearance.fontSize === 15, "app settings update should store font size")
+      check(settings.permissions.autoApprove === true, "app settings update should store permissions")
+    }),
+  http.protected
+    .put("/ui/settings/keybinds", "ui.settings.keybinds.replace")
+    .mutating()
+    .at((ctx) => ({
+      path: "/ui/settings/keybinds",
+      headers: ctx.headers(),
+      body: { keybinds: { "session.new": "ctrl+n" } },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.settings)
+      const settings = body.settings
+      object(settings.keybinds)
+      check(settings.keybinds["session.new"] === "ctrl+n", "keybind update should store override")
+    }),
+  http.protected
+    .patch("/ui/settings/models/{providerID}/{modelID}", "ui.settings.models.update")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/ui/settings/models/{providerID}/{modelID}", { providerID: "anthropic", modelID: "claude" }),
+      headers: ctx.headers(),
+      body: { visibility: "hide", favorite: true },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.model)
+      const model = body.model
+      array(model.user)
+      const item = model.user.find((entry: unknown) => {
+        object(entry)
+        return entry.providerID === "anthropic" && entry.modelID === "claude"
+      })
+      object(item)
+      check(item.visibility === "hide", "model preference should store visibility")
+      check(item.favorite === true, "model preference should store favorite")
+    }),
+  http.protected
+    .put("/ui/settings/models/recent", "ui.settings.models.recent.replace")
+    .mutating()
+    .at((ctx) => ({
+      path: "/ui/settings/models/recent",
+      headers: ctx.headers(),
+      body: {
+        models: [
+          { providerID: "anthropic", modelID: "claude" },
+          { providerID: "openai", modelID: "gpt-5" },
+          { providerID: "anthropic", modelID: "claude" },
+        ],
+      },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.model)
+      const model = body.model
+      array(model.recent)
+      check(model.recent.length === 2, "recent model update should dedupe duplicate models")
+      object(model.recent[0])
+      check(model.recent[0].providerID === "anthropic", "recent model update should store provider")
+      object(model.recent[1])
+      check(model.recent[1].providerID === "openai", "recent model update should preserve first occurrence order")
+    }),
+  http.protected
+    .patch("/ui/settings/models/{providerID}/{modelID}/variant", "ui.settings.models.variant.update")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/ui/settings/models/{providerID}/{modelID}/variant", {
+        providerID: "anthropic",
+        modelID: "claude",
+      }),
+      headers: ctx.headers(),
+      body: { variant: "thinking" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.model)
+      const model = body.model
+      object(model.variant)
+      const variant = model.variant
+      object(variant)
+      check(variant["anthropic/claude"] === "thinking", "model variant update should store variant")
+    }),
   http.protected
     .post("/ui/project-view/open-projects", "ui.projectView.openProjects.open")
     .inProject({ git: false })
