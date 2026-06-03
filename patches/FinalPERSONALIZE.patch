@@ -1,0 +1,3262 @@
+diff --git a/.github/opencode-build-state/last-success-time.txt b/.github/opencode-build-state/last-success-time.txt
+new file mode 100644
+index 000000000..43d0d5f6b
+--- /dev/null
++++ b/.github/opencode-build-state/last-success-time.txt
+@@ -0,0 +1 @@
++2026-05-25T22:33:25Z
+diff --git a/.github/opencode-build-state/last-success-upstream.txt b/.github/opencode-build-state/last-success-upstream.txt
+new file mode 100644
+index 000000000..98f7d5def
+--- /dev/null
++++ b/.github/opencode-build-state/last-success-upstream.txt
+@@ -0,0 +1 @@
++633b5d62084743a33a403c7bc9b0dbfddf625236
+diff --git a/.github/workflows/beta.yml b/.github/workflows/beta.yml
+deleted file mode 100644
+index e93d5fbdb..000000000
+--- a/.github/workflows/beta.yml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-name: beta
+-
+-on:
+-  workflow_dispatch:
+-  schedule:
+-    - cron: "0 * * * *"
+-
+-jobs:
+-  sync:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: write
+-      pull-requests: write
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 0
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Setup Git Committer
+-        id: setup-git-committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Install OpenCode
+-        run: bun i -g opencode-ai
+-
+-      - name: Sync beta branch
+-        env:
+-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-        run: bun script/beta.ts
+diff --git a/.github/workflows/close-issues.yml b/.github/workflows/close-issues.yml
+deleted file mode 100644
+index b8a2e3f57..000000000
+--- a/.github/workflows/close-issues.yml
++++ /dev/null
+@@ -1,24 +0,0 @@
+-name: close-issues
+-
+-on:
+-  schedule:
+-    - cron: "0 2 * * *" # Daily at 2:00 AM
+-  workflow_dispatch:
+-
+-jobs:
+-  close:
+-    runs-on: ubuntu-latest
+-    permissions:
+-      contents: read
+-      issues: write
+-    steps:
+-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-
+-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+-        with:
+-          bun-version: latest
+-
+-      - name: Close stale issues
+-        env:
+-          GITHUB_TOKEN: ${{ github.token }}
+-        run: bun script/github/close-issues.ts
+diff --git a/.github/workflows/close-prs.yml b/.github/workflows/close-prs.yml
+deleted file mode 100644
+index a1e603a88..000000000
+--- a/.github/workflows/close-prs.yml
++++ /dev/null
+@@ -1,50 +0,0 @@
+-name: close-prs
+-
+-on:
+-  schedule:
+-    - cron: "0 22 * * *" # Daily at 10:00 PM UTC
+-  workflow_dispatch:
+-    inputs:
+-      dry-run:
+-        description: "Log matching PRs without closing them"
+-        type: boolean
+-        default: true
+-      max-close:
+-        description: "Maximum matching PRs to close"
+-        type: string
+-        required: false
+-        default: "50"
+-
+-jobs:
+-  close:
+-    runs-on: ubuntu-latest
+-    timeout-minutes: 240
+-    permissions:
+-      contents: read
+-      issues: write
+-      pull-requests: write
+-    steps:
+-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-
+-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+-        with:
+-          bun-version: latest
+-
+-      - name: Close old PRs without enough positive reactions
+-        env:
+-          GITHUB_TOKEN: ${{ github.token }}
+-        run: |
+-          max_close="${{ inputs['max-close'] }}"
+-          if [ -z "$max_close" ]; then
+-            max_close="50"
+-          fi
+-
+-          args=("--threshold" "2" "--age-months" "1" "--sleep-ms" "20000" "--max-close" "$max_close")
+-
+-          if [ "${{ github.event_name }}" = "schedule" ]; then
+-            args+=("--execute")
+-          elif [ "${{ inputs['dry-run'] }}" = "false" ]; then
+-            args+=("--execute")
+-          fi
+-
+-          bun script/github/close-prs.ts "${args[@]}"
+diff --git a/.github/workflows/compliance-close.yml b/.github/workflows/compliance-close.yml
+deleted file mode 100644
+index 14e68701e..000000000
+--- a/.github/workflows/compliance-close.yml
++++ /dev/null
+@@ -1,95 +0,0 @@
+-name: compliance-close
+-
+-on:
+-  schedule:
+-    # Run every 30 minutes to check for expired compliance windows
+-    - cron: "*/30 * * * *"
+-  workflow_dispatch:
+-
+-permissions:
+-  contents: read
+-  issues: write
+-  pull-requests: write
+-
+-jobs:
+-  close-non-compliant:
+-    runs-on: ubuntu-latest
+-    steps:
+-      - name: Close non-compliant issues and PRs after 2 hours
+-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+-        with:
+-          script: |
+-            const { data: items } = await github.rest.issues.listForRepo({
+-              owner: context.repo.owner,
+-              repo: context.repo.repo,
+-              labels: 'needs:compliance',
+-              state: 'open',
+-              per_page: 100,
+-            });
+-
+-            if (items.length === 0) {
+-              core.info('No open issues/PRs with needs:compliance label');
+-              return;
+-            }
+-
+-            const now = Date.now();
+-            const twoHours = 2 * 60 * 60 * 1000;
+-
+-            for (const item of items) {
+-              const isPR = !!item.pull_request;
+-              const kind = isPR ? 'PR' : 'issue';
+-
+-              const { data: comments } = await github.rest.issues.listComments({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: item.number,
+-              });
+-
+-              const complianceComment = comments.find(c => c.body.includes('<!-- issue-compliance -->'));
+-              if (!complianceComment) continue;
+-
+-              const commentAge = now - new Date(complianceComment.created_at).getTime();
+-              if (commentAge < twoHours) {
+-                core.info(`${kind} #${item.number} still within 2-hour window (${Math.round(commentAge / 60000)}m elapsed)`);
+-                continue;
+-              }
+-
+-              const closeMessage = isPR
+-                ? 'This pull request has been automatically closed because it was not updated to meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md) within the 2-hour window.\n\nFeel free to open a new pull request that follows our guidelines.'
+-                : 'This issue has been automatically closed because it was not updated to meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md) within the 2-hour window.\n\nFeel free to open a new issue that follows our issue templates.';
+-
+-              await github.rest.issues.createComment({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: item.number,
+-                body: closeMessage,
+-              });
+-
+-              try {
+-                await github.rest.issues.removeLabel({
+-                  owner: context.repo.owner,
+-                  repo: context.repo.repo,
+-                  issue_number: item.number,
+-                  name: 'needs:compliance',
+-                });
+-              } catch (e) {}
+-
+-              if (isPR) {
+-                await github.rest.pulls.update({
+-                  owner: context.repo.owner,
+-                  repo: context.repo.repo,
+-                  pull_number: item.number,
+-                  state: 'closed',
+-                });
+-              } else {
+-                await github.rest.issues.update({
+-                  owner: context.repo.owner,
+-                  repo: context.repo.repo,
+-                  issue_number: item.number,
+-                  state: 'closed',
+-                  state_reason: 'not_planned',
+-                });
+-              }
+-
+-              core.info(`Closed non-compliant ${kind} #${item.number} after 2-hour window`);
+-            }
+diff --git a/.github/workflows/containers.yml b/.github/workflows/containers.yml
+deleted file mode 100644
+index 15bf07831..000000000
+--- a/.github/workflows/containers.yml
++++ /dev/null
+@@ -1,45 +0,0 @@
+-name: containers
+-
+-on:
+-  push:
+-    branches:
+-      - dev
+-    paths:
+-      - packages/containers/**
+-      - .github/workflows/containers.yml
+-      - package.json
+-  workflow_dispatch:
+-
+-permissions:
+-  contents: read
+-  packages: write
+-
+-jobs:
+-  build:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    env:
+-      REGISTRY: ghcr.io/${{ github.repository_owner }}
+-      TAG: "24.04"
+-    steps:
+-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Set up QEMU
+-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+-
+-      - name: Set up Docker Buildx
+-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+-
+-      - name: Login to GHCR
+-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+-        with:
+-          registry: ghcr.io
+-          username: ${{ github.repository_owner }}
+-          password: ${{ secrets.GITHUB_TOKEN }}
+-
+-      - name: Build and push containers
+-        run: bun ./packages/containers/script/build.ts --push
+-        env:
+-          REGISTRY: ${{ env.REGISTRY }}
+-          TAG: ${{ env.TAG }}
+diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml
+deleted file mode 100644
+index 18e6cf7ac..000000000
+--- a/.github/workflows/deploy.yml
++++ /dev/null
+@@ -1,48 +0,0 @@
+-name: deploy
+-
+-on:
+-  push:
+-    branches:
+-      - dev
+-      - production
+-  workflow_dispatch:
+-
+-concurrency: ${{ github.workflow }}-${{ github.ref }}
+-
+-permissions:
+-  contents: read
+-  id-token: write
+-
+-jobs:
+-  deploy:
+-    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
+-    runs-on: ubuntu-latest
+-    environment: ${{ github.ref_name }}
+-    steps:
+-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+-        with:
+-          node-version: "24"
+-
+-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+-        with:
+-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+-          role-session-name: opencode-${{ github.run_id }}
+-          aws-region: us-east-1
+-
+-      - run: bun sst deploy --stage=${{ github.ref_name }}
+-        env:
+-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+-          PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
+-          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+-          STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
+-          HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
+-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+-          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
+-          SENTRY_RELEASE: web@${{ github.sha }}
+-          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
+-          VITE_SENTRY_RELEASE: web@${{ github.sha }}
+diff --git a/.github/workflows/docs-locale-sync.yml b/.github/workflows/docs-locale-sync.yml
+deleted file mode 100644
+index 5f921e8bb..000000000
+--- a/.github/workflows/docs-locale-sync.yml
++++ /dev/null
+@@ -1,100 +0,0 @@
+-name: docs-locale-sync
+-
+-on:
+-  push:
+-    branches:
+-      - dev
+-    paths:
+-      - packages/web/src/content/docs/*.mdx
+-
+-jobs:
+-  sync-locales:
+-    if: false
+-    #if: github.actor != 'opencode-agent[bot]'
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: write
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          persist-credentials: false
+-          fetch-depth: 0
+-          ref: ${{ github.ref_name }}
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Setup git committer
+-        id: committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Compute changed English docs
+-        id: changes
+-        run: |
+-          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- ':(glob)packages/web/src/content/docs/*.mdx' || true)
+-          if [ -z "$FILES" ]; then
+-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+-            echo "No English docs changed in push range"
+-            exit 0
+-          fi
+-          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+-          {
+-            echo "files<<EOF"
+-            echo "$FILES"
+-            echo "EOF"
+-          } >> "$GITHUB_OUTPUT"
+-
+-      - name: Install OpenCode
+-        if: steps.changes.outputs.has_changes == 'true'
+-        run: curl -fsSL https://opencode.ai/install | bash
+-
+-      - name: Sync locale docs with OpenCode
+-        if: steps.changes.outputs.has_changes == 'true'
+-        env:
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-          OPENCODE_CONFIG_CONTENT: |
+-            {
+-              "permission": {
+-                "*": "deny",
+-                "read": "allow",
+-                "edit": "allow",
+-                "glob": "allow",
+-                "task": "allow"
+-              }
+-            }
+-        run: |
+-          opencode run --agent docs --model opencode/gpt-5.3-codex <<'EOF'
+-            Update localized docs to match the latest English docs changes.
+-
+-            Changed English doc files:
+-            <changed_english_docs>
+-            ${{ steps.changes.outputs.files }}
+-            </changed_english_docs>
+-
+-            Requirements:
+-            1. Update all relevant locale docs under packages/web/src/content/docs/<locale>/ so they reflect these English page changes.
+-            2. You MUST use the Task tool for translation work and launch subagents with subagent_type `translator` (defined in .opencode/agent/translator.md).
+-            3. Do not translate directly in the primary agent. Use translator subagent output as the source for locale text updates.
+-            4. Run translator subagent Task calls in parallel whenever file/locale translation work is independent.
+-            5. Use only the minimum tools needed for this task (read/glob, file edits, and translator Task). Do not use shell, web, search, or GitHub tools for translation work.
+-            6. Preserve frontmatter keys, internal links, code blocks, and existing locale-specific metadata unless the English change requires an update.
+-            7. Keep locale docs structure aligned with their corresponding English pages.
+-            8. Do not modify English source docs in packages/web/src/content/docs/*.mdx.
+-            9. If no locale updates are needed, make no changes.
+-          EOF
+-
+-      - name: Commit and push locale docs updates
+-        if: steps.changes.outputs.has_changes == 'true'
+-        run: |
+-          if [ -z "$(git status --porcelain)" ]; then
+-            echo "No locale docs changes to commit"
+-            exit 0
+-          fi
+-          git add -A
+-          git commit -m "docs(i18n): sync locale docs from english changes"
+-          git pull --rebase --autostash origin "$GITHUB_REF_NAME"
+-          git push origin HEAD:"$GITHUB_REF_NAME"
+diff --git a/.github/workflows/docs-update.yml b/.github/workflows/docs-update.yml
+deleted file mode 100644
+index 4767dec53..000000000
+--- a/.github/workflows/docs-update.yml
++++ /dev/null
+@@ -1,72 +0,0 @@
+-name: docs-update
+-
+-on:
+-  schedule:
+-    - cron: "0 */12 * * *"
+-  workflow_dispatch:
+-
+-env:
+-  LOOKBACK_HOURS: 4
+-
+-jobs:
+-  update-docs:
+-    if: github.repository == 'sst/opencode'
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      id-token: write
+-      contents: write
+-      pull-requests: write
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 0 # Fetch full history to access commits
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Get recent commits
+-        id: commits
+-        run: |
+-          COMMITS=$(git log --since="${{ env.LOOKBACK_HOURS }} hours ago" --pretty=format:"- %h %s" 2>/dev/null || echo "")
+-          if [ -z "$COMMITS" ]; then
+-            echo "No commits in the last ${{ env.LOOKBACK_HOURS }} hours"
+-            echo "has_commits=false" >> $GITHUB_OUTPUT
+-          else
+-            echo "has_commits=true" >> $GITHUB_OUTPUT
+-            {
+-              echo "list<<EOF"
+-              echo "$COMMITS"
+-              echo "EOF"
+-            } >> $GITHUB_OUTPUT
+-          fi
+-
+-      - name: Run opencode
+-        if: steps.commits.outputs.has_commits == 'true'
+-        uses: sst/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671 # latest
+-        env:
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-        with:
+-          model: opencode/gpt-5.2
+-          agent: docs
+-          prompt: |
+-            Review the following commits from the last ${{ env.LOOKBACK_HOURS }} hours and identify any new features that may need documentation.
+-
+-            <recent_commits>
+-            ${{ steps.commits.outputs.list }}
+-            </recent_commits>
+-
+-            Steps:
+-            1. For each commit that looks like a new feature or significant change:
+-               - Read the changed files to understand what was added
+-               - Check if the feature is already documented in packages/web/src/content/docs/*
+-            2. If you find undocumented features:
+-               - Update the relevant documentation files in packages/web/src/content/docs/*
+-               - Follow the existing documentation style and structure
+-               - Make sure to document the feature clearly with examples where appropriate
+-            3. If all new features are already documented, report that no updates are needed
+-            4. If you are creating a new documentation file be sure to update packages/web/astro.config.mjs too.
+-
+-            Focus on user-facing features and API changes. Skip internal refactors, bug fixes, and test updates unless they affect user-facing behavior.
+-            Don't feel the need to document every little thing. It is perfectly okay to make 0 changes at all.
+-            Try to keep documentation only for large features or changes that already have a good spot to be documented.
+diff --git a/.github/workflows/duplicate-issues.yml b/.github/workflows/duplicate-issues.yml
+deleted file mode 100644
+index 4648a2d0c..000000000
+--- a/.github/workflows/duplicate-issues.yml
++++ /dev/null
+@@ -1,177 +0,0 @@
+-name: duplicate-issues
+-
+-on:
+-  issues:
+-    types: [opened, edited]
+-
+-jobs:
+-  check-duplicates:
+-    if: github.event.action == 'opened'
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: read
+-      issues: write
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 1
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Install opencode
+-        run: curl -fsSL https://opencode.ai/install | bash
+-
+-      - name: Check duplicates and compliance
+-        env:
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-          OPENCODE_PERMISSION: |
+-            {
+-              "bash": {
+-                "*": "deny",
+-                "gh issue*": "allow"
+-              },
+-              "webfetch": "deny"
+-            }
+-        run: |
+-          opencode run -m opencode/claude-sonnet-4-6 "A new issue has been created:
+-
+-          Issue number: ${{ github.event.issue.number }}
+-
+-          Lookup this issue with gh issue view ${{ github.event.issue.number }}.
+-
+-          You have TWO tasks. Perform both, then post a SINGLE comment (if needed).
+-
+-          ---
+-
+-          TASK 1: CONTRIBUTING GUIDELINES COMPLIANCE CHECK
+-
+-          Check whether the issue follows our contributing guidelines and issue templates.
+-
+-          This project has three issue templates that every issue MUST use one of:
+-
+-          1. Bug Report - requires a Description field with real content
+-          2. Feature Request - requires a verification checkbox and description, title should start with [FEATURE]:
+-          3. Question - requires the Question field with real content
+-
+-          Additionally check:
+-          - No AI-generated walls of text (long, AI-generated descriptions are not acceptable)
+-          - The issue has real content, not just template placeholder text left unchanged
+-          - Bug reports should include some context about how to reproduce
+-          - Feature requests should explain the problem or need
+-          - We want to push for having the user provide system description & information
+-
+-          Do NOT be nitpicky about optional fields. Only flag real problems like: no template used, required fields empty or placeholder text only, obviously AI-generated walls of text, or completely empty/nonsensical content.
+-
+-          ---
+-
+-          TASK 2: DUPLICATE CHECK
+-
+-          Search through existing issues (excluding #${{ github.event.issue.number }}) to find potential duplicates.
+-          Consider:
+-          1. Similar titles or descriptions
+-          2. Same error messages or symptoms
+-          3. Related functionality or components
+-          4. Similar feature requests
+-
+-          Additionally, if the issue mentions keybinds, keyboard shortcuts, or key bindings, note the pinned keybinds issue #4997.
+-
+-          ---
+-
+-          POSTING YOUR COMMENT:
+-
+-          Based on your findings, post a SINGLE comment on issue #${{ github.event.issue.number }}. Build the comment as follows:
+-
+-          If the issue is NOT compliant, start the comment with:
+-          <!-- issue-compliance -->
+-          Then explain what needs to be fixed and that they have 2 hours to edit the issue before it is automatically closed. Also add the label needs:compliance to the issue using: gh issue edit ${{ github.event.issue.number }} --add-label needs:compliance
+-
+-          If duplicates were found, include a section about potential duplicates with links.
+-
+-          If the issue mentions keybinds/keyboard shortcuts, include a note about #4997.
+-
+-          If the issue IS compliant AND no duplicates were found AND no keybind reference, do NOT comment at all.
+-
+-          Use this format for the comment:
+-
+-          [If not compliant:]
+-          <!-- issue-compliance -->
+-          This issue doesn't fully meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md).
+-
+-          **What needs to be fixed:**
+-          - [specific reasons]
+-
+-          Please edit this issue to address the above within **2 hours**, or it will be automatically closed.
+-
+-          [If duplicates found, add:]
+-          ---
+-          This issue might be a duplicate of existing issues. Please check:
+-          - #[issue_number]: [brief description of similarity]
+-
+-          [If keybind-related, add:]
+-          For keybind-related issues, please also check our pinned keybinds documentation: #4997
+-
+-          [End with if not compliant:]
+-          If you believe this was flagged incorrectly, please let a maintainer know.
+-
+-          Remember: post at most ONE comment combining all findings. If everything is fine, post nothing."
+-
+-  recheck-compliance:
+-    if: github.event.action == 'edited' && contains(github.event.issue.labels.*.name, 'needs:compliance')
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: read
+-      issues: write
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 1
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Install opencode
+-        run: curl -fsSL https://opencode.ai/install | bash
+-
+-      - name: Recheck compliance
+-        env:
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-          OPENCODE_PERMISSION: |
+-            {
+-              "bash": {
+-                "*": "deny",
+-                "gh issue*": "allow"
+-              },
+-              "webfetch": "deny"
+-            }
+-        run: |
+-          opencode run -m opencode/claude-sonnet-4-6 "Issue #${{ github.event.issue.number }} was previously flagged as non-compliant and has been edited.
+-
+-          Lookup this issue with gh issue view ${{ github.event.issue.number }}.
+-
+-          Re-check whether the issue now follows our contributing guidelines and issue templates.
+-
+-          This project has three issue templates that every issue MUST use one of:
+-
+-          1. Bug Report - requires a Description field with real content
+-          2. Feature Request - requires a verification checkbox and description, title should start with [FEATURE]:
+-          3. Question - requires the Question field with real content
+-
+-          Additionally check:
+-          - No AI-generated walls of text (long, AI-generated descriptions are not acceptable)
+-          - The issue has real content, not just template placeholder text left unchanged
+-          - Bug reports should include some context about how to reproduce
+-          - Feature requests should explain the problem or need
+-          - We want to push for having the user provide system description & information
+-
+-          Do NOT be nitpicky about optional fields. Only flag real problems like: no template used, required fields empty or placeholder text only, obviously AI-generated walls of text, or completely empty/nonsensical content.
+-
+-          If the issue is NOW compliant:
+-          1. Remove the needs:compliance label: gh issue edit ${{ github.event.issue.number }} --remove-label needs:compliance
+-          2. Find and delete the previous compliance comment (the one containing <!-- issue-compliance -->) using: gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments --jq '.[] | select(.body | contains(\"<!-- issue-compliance -->\")) | .id' then delete it with: gh api -X DELETE repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments/{id}
+-          3. Post a short comment thanking them for updating the issue.
+-
+-          If the issue is STILL not compliant:
+-          Post a comment explaining what still needs to be fixed. Keep the needs:compliance label."
+diff --git a/.github/workflows/generate.yml b/.github/workflows/generate.yml
+deleted file mode 100644
+index 324cfec02..000000000
+--- a/.github/workflows/generate.yml
++++ /dev/null
+@@ -1,51 +0,0 @@
+-name: generate
+-
+-on:
+-  push:
+-    branches:
+-      - dev
+-
+-jobs:
+-  generate:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: write
+-      pull-requests: write
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Setup git committer
+-        id: committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Generate
+-        run: ./script/generate.ts
+-
+-      - name: Commit and push
+-        run: |
+-          if [ -z "$(git status --porcelain)" ]; then
+-            echo "No changes to commit"
+-            exit 0
+-          fi
+-          git add -A
+-          git commit -m "chore: generate" --allow-empty
+-          git push origin HEAD:${{ github.ref_name }} --no-verify
+-          # if ! git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify; then
+-          #   echo ""
+-          #   echo "============================================"
+-          #   echo "Failed to push generated code."
+-          #   echo "Please run locally and push:"
+-          #   echo ""
+-          #   echo "  ./script/generate.ts"
+-          #   echo "  git add -A && git commit -m \"chore: generate\" && git push"
+-          #   echo ""
+-          #   echo "============================================"
+-          #   exit 1
+-          # fi
+diff --git a/.github/workflows/nix-eval.yml b/.github/workflows/nix-eval.yml
+deleted file mode 100644
+index 75332695a..000000000
+--- a/.github/workflows/nix-eval.yml
++++ /dev/null
+@@ -1,95 +0,0 @@
+-name: nix-eval
+-
+-on:
+-  push:
+-    branches: [dev]
+-  pull_request:
+-    branches: [dev]
+-  workflow_dispatch:
+-
+-concurrency:
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: true
+-
+-permissions:
+-  contents: read
+-
+-jobs:
+-  nix-eval:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    timeout-minutes: 15
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+-
+-      - name: Setup Nix
+-        uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
+-
+-      - name: Evaluate flake outputs (all systems)
+-        run: |
+-          set -euo pipefail
+-          nix --version
+-
+-          echo "=== Flake metadata ==="
+-          nix flake metadata
+-
+-          echo ""
+-          echo "=== Flake structure ==="
+-          nix flake show --all-systems
+-
+-          SYSTEMS="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
+-          PACKAGES="opencode"
+-          # TODO: move 'desktop' to PACKAGES when #11755 is fixed
+-          OPTIONAL_PACKAGES="desktop"
+-
+-          echo ""
+-          echo "=== Evaluating packages for all systems ==="
+-          for system in $SYSTEMS; do
+-            echo ""
+-            echo "--- $system ---"
+-            for pkg in $PACKAGES; do
+-              printf "  %s: " "$pkg"
+-              if output=$(nix eval ".#packages.$system.$pkg.drvPath" --raw 2>&1); then
+-                echo "✓"
+-              else
+-                echo "✗"
+-                echo "::error::Evaluation failed for packages.$system.$pkg"
+-                echo "$output"
+-                exit 1
+-              fi
+-            done
+-          done
+-
+-          echo ""
+-          echo "=== Evaluating optional packages ==="
+-          for system in $SYSTEMS; do
+-            echo ""
+-            echo "--- $system ---"
+-            for pkg in $OPTIONAL_PACKAGES; do
+-              printf "  %s: " "$pkg"
+-              if output=$(nix eval ".#packages.$system.$pkg.drvPath" --raw 2>&1); then
+-                echo "✓"
+-              else
+-                echo "✗"
+-                echo "::warning::Evaluation failed for packages.$system.$pkg"
+-                echo "$output"
+-              fi
+-            done
+-          done
+-
+-          echo ""
+-          echo "=== Evaluating devShells for all systems ==="
+-          for system in $SYSTEMS; do
+-            printf "%s: " "$system"
+-            if output=$(nix eval ".#devShells.$system.default.drvPath" --raw 2>&1); then
+-              echo "✓"
+-            else
+-              echo "✗"
+-              echo "::error::Evaluation failed for devShells.$system.default"
+-              echo "$output"
+-              exit 1
+-            fi
+-          done
+-
+-          echo ""
+-          echo "=== All evaluations passed ==="
+diff --git a/.github/workflows/nix-hashes.yml b/.github/workflows/nix-hashes.yml
+deleted file mode 100644
+index 085f8895c..000000000
+--- a/.github/workflows/nix-hashes.yml
++++ /dev/null
+@@ -1,152 +0,0 @@
+-name: nix-hashes
+-
+-permissions:
+-  contents: write
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    branches: [dev, beta]
+-    paths:
+-      - "bun.lock"
+-      - "package.json"
+-      - "packages/*/package.json"
+-      - "flake.lock"
+-      - "nix/node_modules.nix"
+-      - "nix/scripts/**"
+-      - "patches/**"
+-      - ".github/workflows/nix-hashes.yml"
+-
+-concurrency:
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: true
+-
+-jobs:
+-  # Native runners required: bun install cross-compilation flags (--os/--cpu)
+-  # do not produce byte-identical node_modules as native installs.
+-  compute-hash:
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        include:
+-          - system: x86_64-linux
+-            runner: blacksmith-4vcpu-ubuntu-2404
+-          - system: aarch64-linux
+-            runner: blacksmith-4vcpu-ubuntu-2404-arm
+-          - system: x86_64-darwin
+-            runner: macos-15-intel
+-          - system: aarch64-darwin
+-            runner: macos-latest
+-    runs-on: ${{ matrix.runner }}
+-
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+-
+-      - name: Setup Nix
+-        uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
+-
+-      - name: Compute node_modules hash
+-        id: hash
+-        env:
+-          SYSTEM: ${{ matrix.system }}
+-        run: |
+-          set -euo pipefail
+-
+-          BUILD_LOG=$(mktemp)
+-          trap 'rm -f "$BUILD_LOG"' EXIT
+-
+-          # Build with fakeHash to trigger hash mismatch and reveal correct hash
+-          nix build ".#packages.${SYSTEM}.node_modules_updater" --no-link 2>&1 | tee "$BUILD_LOG" || true
+-
+-          # Extract hash from build log with portability
+-          HASH="$(nix run --inputs-from . nixpkgs#gnugrep -- -oP 'got:\s*\Ksha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | tail -n1 || true)"
+-
+-          if [ -z "$HASH" ]; then
+-            echo "::error::Failed to compute hash for ${SYSTEM}"
+-            cat "$BUILD_LOG"
+-            exit 1
+-          fi
+-
+-          echo "$HASH" > hash.txt
+-          echo "Computed hash for ${SYSTEM}: $HASH"
+-
+-      - name: Upload hash
+-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+-        with:
+-          name: hash-${{ matrix.system }}
+-          path: hash.txt
+-          retention-days: 1
+-
+-  update-hashes:
+-    needs: compute-hash
+-    if: github.event_name != 'pull_request'
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          persist-credentials: false
+-          fetch-depth: 0
+-          ref: ${{ github.ref_name }}
+-
+-      - name: Setup git committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Pull latest changes
+-        run: |
+-          git pull --rebase --autostash origin "$GITHUB_REF_NAME"
+-
+-      - name: Download hash artifacts
+-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+-        with:
+-          path: hashes
+-          pattern: hash-*
+-
+-      - name: Update hashes.json
+-        run: |
+-          set -euo pipefail
+-
+-          HASH_FILE="nix/hashes.json"
+-
+-          [ -f "$HASH_FILE" ] || echo '{"nodeModules":{}}' > "$HASH_FILE"
+-
+-          for SYSTEM in x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin; do
+-            FILE="hashes/hash-${SYSTEM}/hash.txt"
+-            if [ -f "$FILE" ]; then
+-              HASH="$(tr -d '[:space:]' < "$FILE")"
+-              echo "${SYSTEM}: ${HASH}"
+-              jq --arg sys "$SYSTEM" --arg h "$HASH" '.nodeModules[$sys] = $h' "$HASH_FILE" > tmp.json
+-              mv tmp.json "$HASH_FILE"
+-            else
+-              echo "::warning::Missing hash for ${SYSTEM}"
+-            fi
+-          done
+-
+-          cat "$HASH_FILE"
+-
+-      - name: Commit changes
+-        run: |
+-          set -euo pipefail
+-
+-          HASH_FILE="nix/hashes.json"
+-
+-          if [ -z "$(git status --short -- "$HASH_FILE")" ]; then
+-            echo "No changes to commit"
+-            echo "### Nix hashes" >> "$GITHUB_STEP_SUMMARY"
+-            echo "Status: no changes" >> "$GITHUB_STEP_SUMMARY"
+-            exit 0
+-          fi
+-
+-          git add "$HASH_FILE"
+-          git commit -m "chore: update nix node_modules hashes"
+-
+-          git pull --rebase --autostash origin "$GITHUB_REF_NAME"
+-          git push origin HEAD:"$GITHUB_REF_NAME"
+-
+-          echo "### Nix hashes" >> "$GITHUB_STEP_SUMMARY"
+-          echo "Status: committed $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+diff --git a/.github/workflows/notify-discord.yml b/.github/workflows/notify-discord.yml
+deleted file mode 100644
+index 0b2b1cde0..000000000
+--- a/.github/workflows/notify-discord.yml
++++ /dev/null
+@@ -1,14 +0,0 @@
+-name: notify-discord
+-
+-on:
+-  release:
+-    types: [released] # fires when a draft release is published
+-
+-jobs:
+-  notify:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - name: Send nicely-formatted embed to Discord
+-        uses: SethCohen/github-releases-to-discord@24d166886aee4646d448c8a389ff9e1ebcab3682 # v1.20.0
+-        with:
+-          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+diff --git a/.github/workflows/opencode.yml b/.github/workflows/opencode.yml
+deleted file mode 100644
+index 3469c2191..000000000
+--- a/.github/workflows/opencode.yml
++++ /dev/null
+@@ -1,34 +0,0 @@
+-name: opencode
+-
+-on:
+-  issue_comment:
+-    types: [created]
+-  pull_request_review_comment:
+-    types: [created]
+-
+-jobs:
+-  opencode:
+-    if: |
+-      contains(github.event.comment.body, ' /oc') ||
+-      startsWith(github.event.comment.body, '/oc') ||
+-      contains(github.event.comment.body, ' /opencode') ||
+-      startsWith(github.event.comment.body, '/opencode')
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      id-token: write
+-      contents: read
+-      pull-requests: read
+-      issues: read
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Run opencode
+-        uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671 # latest
+-        env:
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-          OPENCODE_PERMISSION: '{"bash": "deny"}'
+-        with:
+-          model: opencode/claude-opus-4-5
+diff --git a/.github/workflows/pr-management.yml b/.github/workflows/pr-management.yml
+deleted file mode 100644
+index b6aa4e589..000000000
+--- a/.github/workflows/pr-management.yml
++++ /dev/null
+@@ -1,95 +0,0 @@
+-name: pr-management
+-
+-on:
+-  pull_request_target:
+-    types: [opened]
+-
+-jobs:
+-  check-duplicates:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: read
+-      pull-requests: write
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 1
+-
+-      - name: Check team membership
+-        id: team-check
+-        run: |
+-          LOGIN="${{ github.event.pull_request.user.login }}"
+-          if [ "$LOGIN" = "opencode-agent[bot]" ] || grep -qxF "$LOGIN" .github/TEAM_MEMBERS; then
+-            echo "is_team=true" >> "$GITHUB_OUTPUT"
+-            echo "Skipping: $LOGIN is a team member or bot"
+-          else
+-            echo "is_team=false" >> "$GITHUB_OUTPUT"
+-          fi
+-
+-      - name: Setup Bun
+-        if: steps.team-check.outputs.is_team != 'true'
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Install dependencies
+-        if: steps.team-check.outputs.is_team != 'true'
+-        run: bun install
+-
+-      - name: Install opencode
+-        if: steps.team-check.outputs.is_team != 'true'
+-        run: curl -fsSL https://opencode.ai/install | bash
+-
+-      - name: Build prompt
+-        if: steps.team-check.outputs.is_team != 'true'
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-          PR_NUMBER: ${{ github.event.pull_request.number }}
+-        run: |
+-          {
+-            echo "Check for duplicate PRs related to this new PR:"
+-            echo ""
+-            echo "CURRENT_PR_NUMBER: $PR_NUMBER"
+-            echo ""
+-            echo "Title: $(gh pr view "$PR_NUMBER" --json title --jq .title)"
+-            echo ""
+-            echo "Description:"
+-            gh pr view "$PR_NUMBER" --json body --jq .body
+-          } > pr_info.txt
+-
+-      - name: Check for duplicate PRs
+-        if: steps.team-check.outputs.is_team != 'true'
+-        env:
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-          PR_NUMBER: ${{ github.event.pull_request.number }}
+-        run: |
+-          COMMENT=$(bun script/duplicate-pr.ts -f pr_info.txt "Check the attached file for PR details and search for duplicates")
+-
+-          if [ "$COMMENT" != "No duplicate PRs found" ]; then
+-            gh pr comment "$PR_NUMBER" --body "_The following comment was made by an LLM, it may be inaccurate:_
+-
+-          $COMMENT"
+-          fi
+-
+-  add-contributor-label:
+-    runs-on: ubuntu-latest
+-    permissions:
+-      pull-requests: write
+-      issues: write
+-    steps:
+-      - name: Add Contributor Label
+-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+-        with:
+-          script: |
+-            const isPR = !!context.payload.pull_request;
+-            const issueNumber = isPR ? context.payload.pull_request.number : context.payload.issue.number;
+-            const authorAssociation = isPR ? context.payload.pull_request.author_association : context.payload.issue.author_association;
+-
+-            if (authorAssociation === 'CONTRIBUTOR') {
+-              await github.rest.issues.addLabels({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: issueNumber,
+-                labels: ['contributor']
+-              });
+-            }
+diff --git a/.github/workflows/pr-standards.yml b/.github/workflows/pr-standards.yml
+deleted file mode 100644
+index 06838089d..000000000
+--- a/.github/workflows/pr-standards.yml
++++ /dev/null
+@@ -1,351 +0,0 @@
+-name: pr-standards
+-
+-on:
+-  pull_request_target:
+-    types: [opened, edited, synchronize]
+-
+-jobs:
+-  check-standards:
+-    runs-on: ubuntu-latest
+-    permissions:
+-      contents: read
+-      pull-requests: write
+-    steps:
+-      - name: Check PR standards
+-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+-        with:
+-          script: |
+-            const pr = context.payload.pull_request;
+-            const login = pr.user.login;
+-
+-            // Skip PRs older than Feb 18, 2026 at 6PM EST (Feb 19, 2026 00:00 UTC)
+-            const cutoff = new Date('2026-02-19T00:00:00Z');
+-            const prCreated = new Date(pr.created_at);
+-            if (prCreated < cutoff) {
+-              console.log(`Skipping: PR #${pr.number} was created before cutoff (${prCreated.toISOString()})`);
+-              return;
+-            }
+-
+-            // Check if author is a team member or bot
+-            if (login === 'opencode-agent[bot]') return;
+-            const { data: file } = await github.rest.repos.getContent({
+-              owner: context.repo.owner,
+-              repo: context.repo.repo,
+-              path: '.github/TEAM_MEMBERS',
+-              ref: 'dev'
+-            });
+-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
+-            if (members.includes(login)) {
+-              console.log(`Skipping: ${login} is a team member`);
+-              return;
+-            }
+-
+-            const title = pr.title;
+-
+-            async function addLabel(label) {
+-              await github.rest.issues.addLabels({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: pr.number,
+-                labels: [label]
+-              });
+-            }
+-
+-            async function removeLabel(label) {
+-              try {
+-                await github.rest.issues.removeLabel({
+-                  owner: context.repo.owner,
+-                  repo: context.repo.repo,
+-                  issue_number: pr.number,
+-                  name: label
+-                });
+-              } catch (e) {
+-                // Label wasn't present, ignore
+-              }
+-            }
+-
+-            async function comment(marker, body) {
+-              const markerText = `<!-- pr-standards:${marker} -->`;
+-              const { data: comments } = await github.rest.issues.listComments({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: pr.number
+-              });
+-              
+-              const existing = comments.find(c => c.body.includes(markerText));
+-              if (existing) return;
+-              
+-              await github.rest.issues.createComment({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: pr.number,
+-                body: markerText + '\n' + body
+-              });
+-            }
+-
+-            // Step 1: Check title format
+-            // Matches: feat:, feat(scope):, feat (scope):, etc.
+-            const titlePattern = /^(feat|fix|docs|chore|refactor|test)\s*(\([a-zA-Z0-9-]+\))?\s*:/;
+-            const hasValidTitle = titlePattern.test(title);
+-
+-            if (!hasValidTitle) {
+-              await addLabel('needs:title');
+-              await comment('title', `Hey! Your PR title \`${title}\` doesn't follow conventional commit format.
+-
+-            Please update it to start with one of:
+-            - \`feat:\` or \`feat(scope):\` new feature
+-            - \`fix:\` or \`fix(scope):\` bug fix
+-            - \`docs:\` or \`docs(scope):\` documentation changes
+-            - \`chore:\` or \`chore(scope):\` maintenance tasks
+-            - \`refactor:\` or \`refactor(scope):\` code refactoring
+-            - \`test:\` or \`test(scope):\` adding or updating tests
+-
+-            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`opencode\`).
+-
+-            See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#pr-titles) for details.`);
+-              return;
+-            }
+-
+-            await removeLabel('needs:title');
+-
+-            // Step 2: Check for linked issue (skip for docs/refactor/feat PRs)
+-            const skipIssueCheck = /^(docs|refactor|feat)\s*(\([a-zA-Z0-9-]+\))?\s*:/.test(title);
+-            if (skipIssueCheck) {
+-              await removeLabel('needs:issue');
+-              console.log('Skipping issue check for docs/refactor/feat PR');
+-              return;
+-            }
+-            const query = `
+-              query($owner: String!, $repo: String!, $number: Int!) {
+-                repository(owner: $owner, name: $repo) {
+-                  pullRequest(number: $number) {
+-                    closingIssuesReferences(first: 1) {
+-                      totalCount
+-                    }
+-                  }
+-                }
+-              }
+-            `;
+-
+-            const result = await github.graphql(query, {
+-              owner: context.repo.owner,
+-              repo: context.repo.repo,
+-              number: pr.number
+-            });
+-
+-            const linkedIssues = result.repository.pullRequest.closingIssuesReferences.totalCount;
+-
+-            if (linkedIssues === 0) {
+-              await addLabel('needs:issue');
+-              await comment('issue', `Thanks for your contribution!
+-
+-            This PR doesn't have a linked issue. All PRs must reference an existing issue.
+-
+-            Please:
+-            1. Open an issue describing the bug/feature (if one doesn't exist)
+-            2. Add \`Fixes #<number>\` or \`Closes #<number>\` to this PR description
+-
+-            See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#issue-first-policy) for details.`);
+-              return;
+-            }
+-
+-            await removeLabel('needs:issue');
+-            console.log('PR meets all standards');
+-
+-  check-compliance:
+-    runs-on: ubuntu-latest
+-    permissions:
+-      contents: read
+-      pull-requests: write
+-    steps:
+-      - name: Check PR template compliance
+-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+-        with:
+-          script: |
+-            const pr = context.payload.pull_request;
+-            const login = pr.user.login;
+-
+-            // Skip PRs older than Feb 18, 2026 at 6PM EST (Feb 19, 2026 00:00 UTC)
+-            const cutoff = new Date('2026-02-19T00:00:00Z');
+-            const prCreated = new Date(pr.created_at);
+-            if (prCreated < cutoff) {
+-              console.log(`Skipping: PR #${pr.number} was created before cutoff (${prCreated.toISOString()})`);
+-              return;
+-            }
+-
+-            // Check if author is a team member or bot
+-            if (login === 'opencode-agent[bot]') return;
+-            const { data: file } = await github.rest.repos.getContent({
+-              owner: context.repo.owner,
+-              repo: context.repo.repo,
+-              path: '.github/TEAM_MEMBERS',
+-              ref: 'dev'
+-            });
+-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
+-            if (members.includes(login)) {
+-              console.log(`Skipping: ${login} is a team member`);
+-              return;
+-            }
+-
+-            const body = pr.body || '';
+-            const title = pr.title;
+-            const isDocsRefactorOrFeat = /^(docs|refactor|feat)\s*(\([a-zA-Z0-9-]+\))?\s*:/.test(title);
+-
+-            const issues = [];
+-
+-            // Check: template sections exist
+-            const hasWhatSection = /### What does this PR do\?/.test(body);
+-            const hasTypeSection = /### Type of change/.test(body);
+-            const hasVerifySection = /### How did you verify your code works\?/.test(body);
+-            const hasChecklistSection = /### Checklist/.test(body);
+-            const hasIssueSection = /### Issue for this PR/.test(body);
+-
+-            if (!hasWhatSection || !hasTypeSection || !hasVerifySection || !hasChecklistSection || !hasIssueSection) {
+-              issues.push('PR description is missing required template sections. Please use the [PR template](../blob/dev/.github/pull_request_template.md).');
+-            }
+-
+-            // Check: "What does this PR do?" has real content (not just placeholder text)
+-            if (hasWhatSection) {
+-              const whatMatch = body.match(/### What does this PR do\?\s*\n([\s\S]*?)(?=###|$)/);
+-              const whatContent = whatMatch ? whatMatch[1].trim() : '';
+-              const placeholder = 'Please provide a description of the issue';
+-              const onlyPlaceholder = whatContent.includes(placeholder) && whatContent.replace(placeholder, '').replace(/[*\s]/g, '').length < 20;
+-              if (!whatContent || onlyPlaceholder) {
+-                issues.push('"What does this PR do?" section is empty or only contains placeholder text. Please describe your changes.');
+-              }
+-            }
+-
+-            // Check: at least one "Type of change" checkbox is checked
+-            if (hasTypeSection) {
+-              const typeMatch = body.match(/### Type of change\s*\n([\s\S]*?)(?=###|$)/);
+-              const typeContent = typeMatch ? typeMatch[1] : '';
+-              const hasCheckedBox = /- \[x\]/i.test(typeContent);
+-              if (!hasCheckedBox) {
+-                issues.push('No "Type of change" checkbox is checked. Please select at least one.');
+-              }
+-            }
+-
+-            // Check: issue reference (skip for docs/refactor/feat)
+-            if (!isDocsRefactorOrFeat && hasIssueSection) {
+-              const issueMatch = body.match(/### Issue for this PR\s*\n([\s\S]*?)(?=###|$)/);
+-              const issueContent = issueMatch ? issueMatch[1].trim() : '';
+-              const hasIssueRef = /(closes|fixes|resolves)\s+#\d+/i.test(issueContent) || /#\d+/.test(issueContent);
+-              if (!hasIssueRef) {
+-                issues.push('No issue referenced. Please add `Closes #<number>` linking to the relevant issue.');
+-              }
+-            }
+-
+-            // Check: "How did you verify" has content
+-            if (hasVerifySection) {
+-              const verifyMatch = body.match(/### How did you verify your code works\?\s*\n([\s\S]*?)(?=###|$)/);
+-              const verifyContent = verifyMatch ? verifyMatch[1].trim() : '';
+-              if (!verifyContent) {
+-                issues.push('"How did you verify your code works?" section is empty. Please explain how you tested.');
+-              }
+-            }
+-
+-            // Check: checklist boxes are checked
+-            if (hasChecklistSection) {
+-              const checklistMatch = body.match(/### Checklist\s*\n([\s\S]*?)(?=###|$)/);
+-              const checklistContent = checklistMatch ? checklistMatch[1] : '';
+-              const unchecked = (checklistContent.match(/- \[ \]/g) || []).length;
+-              const checked = (checklistContent.match(/- \[x\]/gi) || []).length;
+-              if (checked < 2) {
+-                issues.push('Not all checklist items are checked. Please confirm you have tested locally and have not included unrelated changes.');
+-              }
+-            }
+-
+-            // Helper functions
+-            async function addLabel(label) {
+-              await github.rest.issues.addLabels({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: pr.number,
+-                labels: [label]
+-              });
+-            }
+-
+-            async function removeLabel(label) {
+-              try {
+-                await github.rest.issues.removeLabel({
+-                  owner: context.repo.owner,
+-                  repo: context.repo.repo,
+-                  issue_number: pr.number,
+-                  name: label
+-                });
+-              } catch (e) {}
+-            }
+-
+-            const hasComplianceLabel = pr.labels.some(l => l.name === 'needs:compliance');
+-
+-            if (issues.length > 0) {
+-              // Non-compliant
+-              if (!hasComplianceLabel) {
+-                await addLabel('needs:compliance');
+-              }
+-
+-              const marker = '<!-- issue-compliance -->';
+-              const { data: comments } = await github.rest.issues.listComments({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: pr.number
+-              });
+-              const existing = comments.find(c => c.body.includes(marker));
+-
+-              const body_text = `${marker}
+-            This PR doesn't fully meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md) and [PR template](../blob/dev/.github/pull_request_template.md).
+-
+-            **What needs to be fixed:**
+-            ${issues.map(i => `- ${i}`).join('\n')}
+-
+-            Please edit this PR description to address the above within **2 hours**, or it will be automatically closed.
+-
+-            If you believe this was flagged incorrectly, please let a maintainer know.`;
+-
+-              if (existing) {
+-                await github.rest.issues.updateComment({
+-                  owner: context.repo.owner,
+-                  repo: context.repo.repo,
+-                  comment_id: existing.id,
+-                  body: body_text
+-                });
+-              } else {
+-                await github.rest.issues.createComment({
+-                  owner: context.repo.owner,
+-                  repo: context.repo.repo,
+-                  issue_number: pr.number,
+-                  body: body_text
+-                });
+-              }
+-
+-              console.log(`PR #${pr.number} is non-compliant: ${issues.join(', ')}`);
+-            } else if (hasComplianceLabel) {
+-              // Was non-compliant, now fixed
+-              await removeLabel('needs:compliance');
+-
+-              const { data: comments } = await github.rest.issues.listComments({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: pr.number
+-              });
+-              const marker = '<!-- issue-compliance -->';
+-              const existing = comments.find(c => c.body.includes(marker));
+-              if (existing) {
+-                await github.rest.issues.deleteComment({
+-                  owner: context.repo.owner,
+-                  repo: context.repo.repo,
+-                  comment_id: existing.id
+-                });
+-              }
+-
+-              await github.rest.issues.createComment({
+-                owner: context.repo.owner,
+-                repo: context.repo.repo,
+-                issue_number: pr.number,
+-                body: 'Thanks for updating your PR! It now meets our contributing guidelines. :+1:'
+-              });
+-
+-              console.log(`PR #${pr.number} is now compliant, label removed`);
+-            } else {
+-              console.log(`PR #${pr.number} is compliant`);
+-            }
+diff --git a/.github/workflows/publish-github-action.yml b/.github/workflows/publish-github-action.yml
+deleted file mode 100644
+index e5ca91b56..000000000
+--- a/.github/workflows/publish-github-action.yml
++++ /dev/null
+@@ -1,30 +0,0 @@
+-name: publish-github-action
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    tags:
+-      - "github-v*.*.*"
+-      - "!github-v1"
+-
+-concurrency: ${{ github.workflow }}-${{ github.ref }}
+-
+-permissions:
+-  contents: write
+-
+-jobs:
+-  publish:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+-        with:
+-          fetch-depth: 0
+-
+-      - run: git fetch --force --tags
+-
+-      - name: Publish
+-        run: |
+-          git config --global user.email "opencode@sst.dev"
+-          git config --global user.name "opencode"
+-          ./script/publish
+-        working-directory: ./github
+diff --git a/.github/workflows/publish-vscode.yml b/.github/workflows/publish-vscode.yml
+deleted file mode 100644
+index 00c7e2604..000000000
+--- a/.github/workflows/publish-vscode.yml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-name: publish-vscode
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    tags:
+-      - "vscode-v*.*.*"
+-
+-concurrency: ${{ github.workflow }}-${{ github.ref }}
+-
+-permissions:
+-  contents: write
+-
+-jobs:
+-  publish:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+-        with:
+-          fetch-depth: 0
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - run: git fetch --force --tags
+-      - run: bun install -g @vscode/vsce
+-
+-      - name: Install extension dependencies
+-        run: bun install
+-        working-directory: ./sdks/vscode
+-
+-      - name: Publish
+-        run: |
+-          ./script/publish
+-        working-directory: ./sdks/vscode
+-        env:
+-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+-          OPENVSX_TOKEN: ${{ secrets.OPENVSX_TOKEN }}
+diff --git a/.github/workflows/publish.yml b/.github/workflows/publish.yml
+deleted file mode 100644
+index 9887cbe4d..000000000
+--- a/.github/workflows/publish.yml
++++ /dev/null
+@@ -1,491 +0,0 @@
+-name: publish
+-run-name: "${{ format('release {0}', inputs.bump) }}"
+-
+-on:
+-  push:
+-    branches:
+-      - ci
+-      - dev
+-      - beta
+-      - fix/npm-native-binary-install
+-      - snapshot-*
+-  workflow_dispatch:
+-    inputs:
+-      bump:
+-        description: "Bump major, minor, or patch"
+-        required: false
+-        type: choice
+-        options:
+-          - major
+-          - minor
+-          - patch
+-      version:
+-        description: "Override version (optional)"
+-        required: false
+-        type: string
+-
+-concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
+-
+-permissions:
+-  id-token: write
+-  contents: write
+-  packages: write
+-
+-jobs:
+-  version:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    if: github.repository == 'anomalyco/opencode'
+-    steps:
+-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+-        with:
+-          fetch-depth: 0
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Setup git committer
+-        id: committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Install OpenCode
+-        if: inputs.bump || inputs.version
+-        run: bun i -g opencode-ai
+-
+-      - id: version
+-        run: |
+-          ./script/version.ts
+-        env:
+-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+-          OPENCODE_BUMP: ${{ inputs.bump }}
+-          OPENCODE_VERSION: ${{ inputs.version }}
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-          GH_REPO: ${{ (github.ref_name == 'beta' && 'anomalyco/opencode-beta') || github.repository }}
+-    outputs:
+-      version: ${{ steps.version.outputs.version }}
+-      release: ${{ steps.version.outputs.release }}
+-      tag: ${{ steps.version.outputs.tag }}
+-      repo: ${{ steps.version.outputs.repo }}
+-
+-  build-cli:
+-    needs: version
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    if: github.repository == 'anomalyco/opencode'
+-    steps:
+-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+-        with:
+-          fetch-tags: true
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Setup git committer
+-        id: committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Build
+-        id: build
+-        run: |
+-          ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+-        env:
+-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+-          GH_REPO: ${{ needs.version.outputs.repo }}
+-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+-
+-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+-        with:
+-          name: opencode-cli
+-          path: |
+-            packages/opencode/dist/opencode-darwin*
+-            packages/opencode/dist/opencode-linux*
+-
+-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+-        with:
+-          name: opencode-cli-windows
+-          path: packages/opencode/dist/opencode-windows*
+-    outputs:
+-      version: ${{ needs.version.outputs.version }}
+-
+-  sign-cli-windows:
+-    needs:
+-      - build-cli
+-      - version
+-    runs-on: blacksmith-4vcpu-windows-2025
+-    if: github.repository == 'anomalyco/opencode'
+-    env:
+-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+-      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+-    steps:
+-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+-
+-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+-        with:
+-          name: opencode-cli-windows
+-          path: packages/opencode/dist
+-
+-      - name: Setup git committer
+-        id: committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Azure login
+-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+-        with:
+-          client-id: ${{ env.AZURE_CLIENT_ID }}
+-          tenant-id: ${{ env.AZURE_TENANT_ID }}
+-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+-
+-      - uses: azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1.2.0
+-        with:
+-          endpoint: ${{ env.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+-          signing-account-name: ${{ env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+-          certificate-profile-name: ${{ env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+-          files: |
+-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe
+-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe
+-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe
+-          exclude-environment-credential: true
+-          exclude-workload-identity-credential: true
+-          exclude-managed-identity-credential: true
+-          exclude-shared-token-cache-credential: true
+-          exclude-visual-studio-credential: true
+-          exclude-visual-studio-code-credential: true
+-          exclude-azure-cli-credential: false
+-          exclude-azure-powershell-credential: true
+-          exclude-azure-developer-cli-credential: true
+-          exclude-interactive-browser-credential: true
+-
+-      - name: Verify Windows CLI signatures
+-        shell: pwsh
+-        run: |
+-          $files = @(
+-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe",
+-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe",
+-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
+-          )
+-
+-          foreach ($file in $files) {
+-            $sig = Get-AuthenticodeSignature $file
+-            if ($sig.Status -ne "Valid") {
+-              throw "Invalid signature for ${file}: $($sig.Status)"
+-            }
+-          }
+-
+-      - name: Repack Windows CLI archives
+-        working-directory: packages/opencode/dist
+-        shell: pwsh
+-        run: |
+-          Compress-Archive -Path "opencode-windows-arm64\bin\*" -DestinationPath "opencode-windows-arm64.zip" -Force
+-          Compress-Archive -Path "opencode-windows-x64\bin\*" -DestinationPath "opencode-windows-x64.zip" -Force
+-          Compress-Archive -Path "opencode-windows-x64-baseline\bin\*" -DestinationPath "opencode-windows-x64-baseline.zip" -Force
+-
+-      - name: Upload signed Windows CLI release assets
+-        if: needs.version.outputs.release != ''
+-        shell: pwsh
+-        env:
+-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+-        run: |
+-          gh release upload "v${{ needs.version.outputs.version }}" `
+-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64.zip" `
+-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64.zip" `
+-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline.zip" `
+-            --clobber `
+-            --repo "${{ needs.version.outputs.repo }}"
+-
+-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+-        with:
+-          name: opencode-cli-signed-windows
+-          path: |
+-            packages/opencode/dist/opencode-windows-arm64
+-            packages/opencode/dist/opencode-windows-x64
+-            packages/opencode/dist/opencode-windows-x64-baseline
+-
+-  build-electron:
+-    needs:
+-      - build-cli
+-      - version
+-    if: github.repository == 'anomalyco/opencode'
+-    continue-on-error: false
+-    env:
+-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+-      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        settings:
+-          - host: macos-26-intel
+-            target: x86_64-apple-darwin
+-            platform_flag: --mac --x64
+-            bun_install_flags: --os=darwin --cpu=x64
+-          - host: macos-26
+-            target: aarch64-apple-darwin
+-            platform_flag: --mac --arm64
+-            bun_install_flags: --os=darwin --cpu=arm64
+-          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
+-          - host: "windows-2025"
+-            target: aarch64-pc-windows-msvc
+-            platform_flag: --win --arm64
+-          - host: "blacksmith-4vcpu-windows-2025"
+-            target: x86_64-pc-windows-msvc
+-            platform_flag: --win
+-          - host: "blacksmith-4vcpu-ubuntu-2404"
+-            target: x86_64-unknown-linux-gnu
+-            platform_flag: --linux
+-          - host: "blacksmith-4vcpu-ubuntu-2404-arm"
+-            target: aarch64-unknown-linux-gnu
+-            platform_flag: --linux --arm64
+-    runs-on: ${{ matrix.settings.host }}
+-    steps:
+-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+-
+-      - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
+-        if: runner.os == 'macOS'
+-        with:
+-          keychain: build
+-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+-
+-      - name: Setup Apple API Key
+-        if: runner.os == 'macOS'
+-        run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
+-
+-      - uses: ./.github/actions/setup-bun
+-        with:
+-          install-flags: ${{ matrix.settings.bun_install_flags }}
+-
+-      - name: Azure login
+-        if: runner.os == 'Windows'
+-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+-        with:
+-          client-id: ${{ env.AZURE_CLIENT_ID }}
+-          tenant-id: ${{ env.AZURE_TENANT_ID }}
+-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+-
+-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+-        with:
+-          node-version: "24"
+-
+-      - name: Cache apt packages
+-        if: contains(matrix.settings.host, 'ubuntu')
+-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+-        with:
+-          path: ~/apt-cache
+-          key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-electron-${{ hashFiles('.github/workflows/publish.yml') }}
+-          restore-keys: |
+-            ${{ runner.os }}-${{ matrix.settings.target }}-apt-electron-
+-
+-      - name: Install dependencies (ubuntu only)
+-        if: contains(matrix.settings.host, 'ubuntu')
+-        run: |
+-          mkdir -p ~/apt-cache && chmod -R a+rw ~/apt-cache
+-          sudo apt-get update
+-          sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" rpm
+-          sudo chmod -R a+rw ~/apt-cache
+-
+-      - name: Setup git committer
+-        id: committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Prepare
+-        run: bun ./scripts/prepare.ts
+-        working-directory: packages/desktop
+-        env:
+-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+-          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
+-          RUST_TARGET: ${{ matrix.settings.target }}
+-          GH_TOKEN: ${{ github.token }}
+-          GITHUB_RUN_ID: ${{ github.run_id }}
+-
+-      - name: Build
+-        run: bun run build
+-        working-directory: packages/desktop
+-        env:
+-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+-          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
+-          SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+-          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
+-          VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
+-          VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+-
+-      - name: Package and publish
+-        if: needs.version.outputs.release
+-        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish always --config electron-builder.config.ts
+-        working-directory: packages/desktop
+-        timeout-minutes: 60
+-        env:
+-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+-          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
+-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+-          APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
+-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+-
+-      - name: Package (no publish)
+-        if: ${{ !needs.version.outputs.release }}
+-        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
+-        working-directory: packages/desktop
+-        timeout-minutes: 60
+-        env:
+-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+-
+-      - name: Create and upload macOS .app.tar.gz
+-        if: runner.os == 'macOS' && needs.version.outputs.release
+-        working-directory: packages/desktop/dist
+-        env:
+-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+-        run: |
+-          if [[ "${{ matrix.settings.target }}" == "x86_64-apple-darwin" ]]; then
+-            APP_DIR="mac"
+-            OUT_NAME="opencode-desktop-mac-x64.app.tar.gz"
+-          elif [[ "${{ matrix.settings.target }}" == "aarch64-apple-darwin" ]]; then
+-            APP_DIR="mac-arm64"
+-            OUT_NAME="opencode-desktop-mac-arm64.app.tar.gz"
+-          else
+-            echo "Unknown macOS target: ${{ matrix.settings.target }}"
+-            exit 1
+-          fi
+-          APP_PATH=$(find "$APP_DIR" -maxdepth 1 -name "*.app" -type d | head -1)
+-          if [ -z "$APP_PATH" ]; then
+-            echo "No .app bundle found in $APP_DIR"
+-            exit 1
+-          fi
+-          tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+-          gh release upload "v${{ needs.version.outputs.version }}" "$OUT_NAME" --clobber --repo "${{ needs.version.outputs.repo }}"
+-
+-      - name: Verify signed Windows Electron artifacts
+-        if: runner.os == 'Windows'
+-        shell: pwsh
+-        run: |
+-          $files = @()
+-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*.exe" | Select-Object -ExpandProperty FullName
+-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*unpacked\*.exe" | Select-Object -ExpandProperty FullName
+-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*unpacked\resources\opencode-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+-
+-          foreach ($file in $files | Select-Object -Unique) {
+-            $sig = Get-AuthenticodeSignature $file
+-            if ($sig.Status -ne "Valid") {
+-              throw "Invalid signature for ${file}: $($sig.Status)"
+-            }
+-          }
+-
+-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+-        with:
+-          name: opencode-desktop-${{ matrix.settings.target }}
+-          path: packages/desktop/dist/*
+-
+-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+-        if: needs.version.outputs.release
+-        with:
+-          name: latest-yml-${{ matrix.settings.target }}
+-          path: packages/desktop/dist/latest*.yml
+-
+-  publish:
+-    needs:
+-      - version
+-      - build-cli
+-      - sign-cli-windows
+-      - build-electron
+-    if: always() && !failure() && !cancelled()
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Login to GitHub Container Registry
+-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+-        with:
+-          registry: ghcr.io
+-          username: ${{ github.repository_owner }}
+-          password: ${{ secrets.GITHUB_TOKEN }}
+-
+-      - name: Set up QEMU
+-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+-
+-      - name: Set up Docker Buildx
+-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+-
+-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+-        with:
+-          node-version: "24"
+-          registry-url: "https://registry.npmjs.org"
+-
+-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+-        with:
+-          name: opencode-cli
+-          path: packages/opencode/dist
+-
+-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+-        with:
+-          name: opencode-cli-windows
+-          path: packages/opencode/dist
+-
+-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+-        with:
+-          name: opencode-cli-signed-windows
+-          path: packages/opencode/dist
+-
+-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+-        if: needs.version.outputs.release
+-        with:
+-          pattern: latest-yml-*
+-          path: /tmp/latest-yml
+-
+-      - name: Setup git committer
+-        id: committer
+-        uses: ./.github/actions/setup-git-committer
+-        with:
+-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+-
+-      - name: Cache apt packages (AUR)
+-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+-        with:
+-          path: /var/cache/apt/archives
+-          key: ${{ runner.os }}-apt-aur-${{ hashFiles('.github/workflows/publish.yml') }}
+-          restore-keys: |
+-            ${{ runner.os }}-apt-aur-
+-
+-      - name: Setup SSH for AUR
+-        run: |
+-          sudo apt-get update
+-          sudo apt-get install -y pacman-package-manager
+-          mkdir -p ~/.ssh
+-          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
+-          chmod 600 ~/.ssh/id_rsa
+-          git config --global user.email "opencode@sst.dev"
+-          git config --global user.name "opencode"
+-          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
+-
+-      - run: ./script/publish.ts
+-        env:
+-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+-          AUR_KEY: ${{ secrets.AUR_KEY }}
+-          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
+-          GH_REPO: ${{ needs.version.outputs.repo }}
+-          NPM_CONFIG_PROVENANCE: false
+-          LATEST_YML_DIR: /tmp/latest-yml
+-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+diff --git a/.github/workflows/release-github-action.yml b/.github/workflows/release-github-action.yml
+deleted file mode 100644
+index 4a1d7218b..000000000
+--- a/.github/workflows/release-github-action.yml
++++ /dev/null
+@@ -1,29 +0,0 @@
+-name: release-github-action
+-
+-on:
+-  push:
+-    branches:
+-      - dev
+-    paths:
+-      - "github/**"
+-
+-concurrency: ${{ github.workflow }}-${{ github.ref }}
+-
+-permissions:
+-  contents: write
+-
+-jobs:
+-  release:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 0
+-
+-      - run: git fetch --force --tags
+-
+-      - name: Release
+-        run: |
+-          git config --global user.email "opencode@sst.dev"
+-          git config --global user.name "opencode"
+-          ./github/script/release
+diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml
+deleted file mode 100644
+index 00a4fba8c..000000000
+--- a/.github/workflows/review.yml
++++ /dev/null
+@@ -1,83 +0,0 @@
+-name: review
+-
+-on:
+-  issue_comment:
+-    types: [created]
+-
+-jobs:
+-  check-guidelines:
+-    if: |
+-      github.event.issue.pull_request &&
+-      startsWith(github.event.comment.body, '/review') &&
+-      contains(fromJson('["OWNER","MEMBER"]'), github.event.comment.author_association)
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: read
+-      pull-requests: write
+-    steps:
+-      - name: Get PR number
+-        id: pr-number
+-        run: |
+-          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
+-            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+-          else
+-            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+-          fi
+-
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 1
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Install opencode
+-        run: curl -fsSL https://opencode.ai/install | bash
+-
+-      - name: Get PR details
+-        id: pr-details
+-        run: |
+-          gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} > pr_data.json
+-          echo "title=$(jq -r .title pr_data.json)" >> $GITHUB_OUTPUT
+-          echo "sha=$(jq -r .head.sha pr_data.json)" >> $GITHUB_OUTPUT
+-        env:
+-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-
+-      - name: Check PR guidelines compliance
+-        env:
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-          OPENCODE_PERMISSION: '{ "bash": {  "*": "deny", "gh*": "allow", "gh pr review*": "deny" } }'
+-          PR_TITLE: ${{ steps.pr-details.outputs.title }}
+-        run: |
+-          PR_BODY=$(jq -r .body pr_data.json)
+-          opencode run -m opencode/gpt-5.5 --variant medium "A new pull request has been created: '${PR_TITLE}'
+-
+-          <pr-number>
+-          ${{ steps.pr-number.outputs.number }}
+-          </pr-number>
+-
+-          <pr-description>
+-          $PR_BODY
+-          </pr-description>
+-
+-          Please check all the code changes in this pull request against the style guide, also look for any bugs if they exist. Diffs are important but make sure you read the entire file to get proper context. Make it clear the suggestions are merely suggestions and the human can decide what to do
+-
+-          When critiquing code against the style guide, be sure that the code is ACTUALLY in violation, don't complain about else statements if they already use early returns there. You may complain about excessive nesting though, regardless of else statement usage.
+-          When critiquing code style don't be a zealot, we don't like "let" statements but sometimes they are the simplest option, if someone does a bunch of nesting with let, they should consider using iife (see packages/opencode/src/util.iife.ts)
+-
+-          Use the gh cli to create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix include it in a suggestion code block.
+-          If you are writing suggested fixes, BE SURE THAT the change you are recommending is actually valid typescript, often I have seen missing closing "}" or other syntax errors.
+-          Generally, write a comment instead of writing suggested change if you can help it.
+-
+-          Command MUST be like this.
+-          \`\`\`
+-          gh api \
+-            --method POST \
+-            -H \"Accept: application/vnd.github+json\" \
+-            -H \"X-GitHub-Api-Version: 2022-11-28\" \
+-            /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }}/comments \
+-            -f 'body=[summary of issue]' -f 'commit_id=${{ steps.pr-details.outputs.sha }}' -f 'path=[path-to-file]' -F \"line=[line]\" -f 'side=RIGHT'
+-          \`\`\`
+-
+-          Only create comments for actual violations. If the code follows all guidelines, comment on the issue using gh cli: 'lgtm' AND NOTHING ELSE!!!!."
+diff --git a/.github/workflows/stats.yml b/.github/workflows/stats.yml
+deleted file mode 100644
+index bc97cfcd7..000000000
+--- a/.github/workflows/stats.yml
++++ /dev/null
+@@ -1,35 +0,0 @@
+-name: stats
+-
+-on:
+-  schedule:
+-    - cron: "0 12 * * *" # Run daily at 12:00 UTC
+-  workflow_dispatch: # Allow manual trigger
+-
+-concurrency: ${{ github.workflow }}-${{ github.ref }}
+-
+-jobs:
+-  stats:
+-    if: github.repository == 'anomalyco/opencode'
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: write
+-
+-    steps:
+-      - name: Checkout
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Run stats script
+-        run: bun script/stats.ts
+-
+-      - name: Commit stats
+-        run: |
+-          git config --local user.email "action@github.com"
+-          git config --local user.name "GitHub Action"
+-          git add STATS.md
+-          git diff --staged --quiet || git commit -m "ignore: update download stats $(date -I)"
+-          git push
+-        env:
+-          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+diff --git a/.github/workflows/storybook.yml b/.github/workflows/storybook.yml
+deleted file mode 100644
+index 1e652104d..000000000
+--- a/.github/workflows/storybook.yml
++++ /dev/null
+@@ -1,38 +0,0 @@
+-name: storybook
+-
+-on:
+-  push:
+-    branches: [dev]
+-    paths:
+-      - ".github/workflows/storybook.yml"
+-      - "package.json"
+-      - "bun.lock"
+-      - "packages/storybook/**"
+-      - "packages/ui/**"
+-  pull_request:
+-    branches: [dev]
+-    paths:
+-      - ".github/workflows/storybook.yml"
+-      - "package.json"
+-      - "bun.lock"
+-      - "packages/storybook/**"
+-      - "packages/ui/**"
+-  workflow_dispatch:
+-
+-concurrency:
+-  group: ${{ github.workflow }}-${{ github.ref }}
+-  cancel-in-progress: true
+-
+-jobs:
+-  build:
+-    name: storybook build
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Build Storybook
+-        run: bun --cwd packages/storybook build
+diff --git a/.github/workflows/sync-zed-extension.yml b/.github/workflows/sync-zed-extension.yml
+deleted file mode 100644
+index 6e4b44083..000000000
+--- a/.github/workflows/sync-zed-extension.yml
++++ /dev/null
+@@ -1,35 +0,0 @@
+-name: "sync-zed-extension"
+-
+-on:
+-  workflow_dispatch:
+-  release:
+-    types: [published]
+-
+-jobs:
+-  zed:
+-    name: Release Zed Extension
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 0
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - name: Get version tag
+-        id: get_tag
+-        run: |
+-          if [ "${{ github.event_name }}" = "release" ]; then
+-            TAG="${{ github.event.release.tag_name }}"
+-          else
+-            TAG=$(git tag --list 'v[0-9]*.*' --sort=-version:refname | head -n 1)
+-          fi
+-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+-          echo "Using tag: ${TAG}"
+-
+-      - name: Sync Zed extension
+-        run: |
+-          ./script/sync-zed.ts ${{ steps.get_tag.outputs.tag }}
+-        env:
+-          ZED_EXTENSIONS_PAT: ${{ secrets.ZED_EXTENSIONS_PAT }}
+-          ZED_PR_PAT: ${{ secrets.ZED_PR_PAT }}
+diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
+deleted file mode 100644
+index 4a65b9927..000000000
+--- a/.github/workflows/test.yml
++++ /dev/null
+@@ -1,166 +0,0 @@
+-name: test
+-
+-on:
+-  push:
+-    branches:
+-      - dev
+-  pull_request:
+-  workflow_dispatch:
+-
+-concurrency:
+-  # Keep every run on dev so cancelled checks do not pollute the default branch
+-  # commit history. PRs and other branches still share a group and cancel stale runs.
+-  group: ${{ case(github.ref == 'refs/heads/dev', format('{0}-{1}', github.workflow, github.run_id), format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref)) }}
+-  cancel-in-progress: true
+-
+-permissions:
+-  contents: read
+-  checks: write
+-
+-env:
+-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+-
+-jobs:
+-  unit:
+-    name: unit (${{ matrix.settings.name }})
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        settings:
+-          - name: linux
+-            host: blacksmith-4vcpu-ubuntu-2404
+-          - name: windows
+-            host: blacksmith-4vcpu-windows-2025
+-    runs-on: ${{ matrix.settings.host }}
+-    defaults:
+-      run:
+-        shell: bash
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          token: ${{ secrets.GITHUB_TOKEN }}
+-
+-      - name: Setup Node
+-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+-        with:
+-          node-version: "24"
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Configure git identity
+-        run: |
+-          git config --global user.email "bot@opencode.ai"
+-          git config --global user.name "opencode"
+-
+-      - name: Cache Turbo
+-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+-        with:
+-          path: node_modules/.cache/turbo
+-          key: turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-${{ github.sha }}
+-          restore-keys: |
+-            turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-
+-            turbo-${{ runner.os }}-
+-
+-      - name: Run unit tests
+-        run: bun turbo test:ci
+-        env:
+-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+-
+-      - name: Run HttpApi exerciser gates
+-        if: runner.os == 'Linux'
+-        working-directory: packages/opencode
+-        run: bun run test:httpapi
+-
+-      - name: Publish unit reports
+-        if: always()
+-        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0
+-        with:
+-          report_paths: packages/*/.artifacts/unit/junit.xml
+-          check_name: "unit results (${{ matrix.settings.name }})"
+-          detailed_summary: true
+-          include_time_in_summary: true
+-          fail_on_failure: false
+-
+-      - name: Upload unit artifacts
+-        if: always()
+-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+-        with:
+-          name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
+-          include-hidden-files: true
+-          if-no-files-found: ignore
+-          retention-days: 7
+-          path: packages/*/.artifacts/unit/junit.xml
+-
+-  e2e:
+-    name: e2e (${{ matrix.settings.name }})
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        settings:
+-          - name: linux
+-            host: blacksmith-4vcpu-ubuntu-2404
+-          - name: windows
+-            host: blacksmith-4vcpu-windows-2025
+-    runs-on: ${{ matrix.settings.host }}
+-    env:
+-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+-    defaults:
+-      run:
+-        shell: bash
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          token: ${{ secrets.GITHUB_TOKEN }}
+-
+-      - name: Setup Node
+-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+-        with:
+-          node-version: "24"
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Read Playwright version
+-        id: playwright-version
+-        run: |
+-          version=$(node -e 'console.log(require("./package.json").workspaces.catalog["@playwright/test"])')
+-          echo "version=$version" >> "$GITHUB_OUTPUT"
+-
+-      - name: Cache Playwright browsers
+-        id: playwright-cache
+-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+-        with:
+-          path: ${{ github.workspace }}/.playwright-browsers
+-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
+-
+-      - name: Install Playwright system dependencies
+-        if: runner.os == 'Linux'
+-        working-directory: packages/app
+-        run: bunx playwright install-deps chromium
+-
+-      - name: Install Playwright browsers
+-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+-        working-directory: packages/app
+-        run: bunx playwright install chromium
+-
+-      - name: Run app e2e tests
+-        run: bun --cwd packages/app test:e2e:local
+-        env:
+-          CI: true
+-          PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
+-        timeout-minutes: 30
+-
+-      - name: Upload Playwright artifacts
+-        if: always()
+-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+-        with:
+-          name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
+-          if-no-files-found: ignore
+-          retention-days: 7
+-          path: |
+-            packages/app/e2e/junit-*.xml
+-            packages/app/e2e/test-results
+-            packages/app/e2e/playwright-report
+diff --git a/.github/workflows/triage.yml b/.github/workflows/triage.yml
+deleted file mode 100644
+index 27852a12c..000000000
+--- a/.github/workflows/triage.yml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-name: triage
+-
+-on:
+-  issues:
+-    types: [opened]
+-
+-jobs:
+-  triage:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    permissions:
+-      contents: read
+-      issues: write
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-        with:
+-          fetch-depth: 1
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Install opencode
+-        run: curl -fsSL https://opencode.ai/install | bash
+-
+-      - name: Triage issue
+-        env:
+-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+-          ISSUE_TITLE: ${{ github.event.issue.title }}
+-          ISSUE_BODY: ${{ github.event.issue.body }}
+-        run: |
+-          opencode run --agent triage "The following issue was just opened, triage it:
+-
+-          Title: $ISSUE_TITLE
+-
+-          $ISSUE_BODY"
+diff --git a/.github/workflows/typecheck.yml b/.github/workflows/typecheck.yml
+deleted file mode 100644
+index fc9a52797..000000000
+--- a/.github/workflows/typecheck.yml
++++ /dev/null
+@@ -1,21 +0,0 @@
+-name: typecheck
+-
+-on:
+-  push:
+-    branches: [dev]
+-  pull_request:
+-    branches: [dev]
+-  workflow_dispatch:
+-
+-jobs:
+-  typecheck:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+-
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
+-
+-      - name: Run typecheck
+-        run: bun typecheck
+diff --git a/.github/workflows/weekly_customautorel.yml b/.github/workflows/weekly_customautorel.yml
+new file mode 100644
+index 000000000..3261a83e4
+--- /dev/null
++++ b/.github/workflows/weekly_customautorel.yml
+@@ -0,0 +1,489 @@
++name: Patched OpenCode WeeklyAuto Build
++
++on:
++  push:
++  workflow_dispatch:
++    inputs:
++      upstream_ref:
++        description: "Upstream branch/ref/tag"
++        required: true
++        default: "dev"
++  schedule:
++    - cron: "0 3 * * 1"
++
++permissions:
++  contents: write
++
++concurrency:
++  group: patched-opencode-build
++  cancel-in-progress: false
++
++jobs:
++  build:
++    runs-on: ubuntu-latest
++
++    env:
++      UPSTREAM_REPO: https://github.com/anomalyco/opencode.git
++      UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'production' }}
++      STATE_BRANCH: dev
++      STATE_FILE_DIR: .github/opencode-build-state
++
++    steps:
++      - name: Checkout patch repo
++        uses: actions/checkout@v4
++        with:
++          fetch-depth: 0
++
++      - name: Validate final personalize patch
++        shell: bash
++        run: |
++          set -euo pipefail
++
++          PATCH="patches/FinalPERSONALIZE.patch"
++
++          if [ ! -f "$PATCH" ]; then
++            echo "ERROR: Missing patch:"
++            echo "  $PATCH"
++            exit 1
++          fi
++
++          echo "Using patch:"
++          echo "  $PATCH"
++
++          if ! grep -qE '^(diff --git|--- |\+\+\+ )' "$PATCH"; then
++            echo "ERROR: Patch does not look like a git/unified diff:"
++            echo "  $PATCH"
++            exit 1
++          fi
++
++          echo "Checking patch for literal conflict markers..."
++          if grep -nE '^(<<<<<<<|=======|>>>>>>>)' "$PATCH"; then
++            echo "ERROR: conflict markers exist inside patch:"
++            echo "  $PATCH"
++            exit 1
++          fi
++
++          echo "Patch validation OK."
++
++      - name: Load last successful upstream ref
++        id: load_state
++        shell: bash
++        run: |
++          set -euo pipefail
++
++          git fetch origin "$STATE_BRANCH" || true
++
++          LAST_SUCCESS=""
++
++          if git show "origin/$STATE_BRANCH:$STATE_FILE_DIR/last-success-upstream.txt" >/tmp/last-success-upstream.txt 2>/dev/null; then
++            LAST_SUCCESS="$(cat /tmp/last-success-upstream.txt | tr -d '[:space:]')"
++          fi
++
++          echo "last_success=$LAST_SUCCESS" >> "$GITHUB_OUTPUT"
++          echo "Last successful upstream ref from $STATE_BRANCH: ${LAST_SUCCESS:-<none>}"
++
++      - name: Resolve upstream Bun version
++        id: bunver
++        shell: bash
++        run: |
++          set -euo pipefail
++
++          rm -rf upstream-meta
++          git clone --no-checkout "$UPSTREAM_REPO" upstream-meta
++
++          cd upstream-meta
++          git fetch origin "$UPSTREAM_REF" --depth=1
++          git checkout --detach FETCH_HEAD
++
++          BUN_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")"
++
++          echo "bun_version=$BUN_VERSION" >> "$GITHUB_OUTPUT"
++          echo "Using upstream Bun version: $BUN_VERSION"
++
++      - name: Setup Bun
++        uses: oven-sh/setup-bun@v2
++        with:
++          bun-version: ${{ steps.bunver.outputs.bun_version }}
++
++      - name: Build latest upstream or fallback
++        id: build
++        shell: bash
++        run: |
++          set -euo pipefail
++
++          final_patch_file() {
++            echo "../patches/FinalPERSONALIZE.patch"
++          }
++
++          auto_resolve_git_apply_conflict_take_patch_side() {
++            echo "Auto-resolving git-apply conflicts by taking PATCH side (--theirs)."
++
++            CONFLICT_FILES="$(git diff --name-only --diff-filter=U || true)"
++
++            if [ -z "$CONFLICT_FILES" ]; then
++              echo "No conflicted files found."
++              return 1
++            fi
++
++            echo "Conflicted files:"
++            echo "$CONFLICT_FILES"
++
++            while IFS= read -r f; do
++              [ -z "$f" ] && continue
++
++              echo ""
++              echo "Resolving conflict by taking patch side:"
++              echo "  $f"
++
++              echo "Index stages:"
++              git ls-files -u -- "$f" || true
++
++              if git ls-files -u -- "$f" | awk '$3 == "3" { found=1 } END { exit found ? 0 : 1 }'; then
++                echo "Patch side exists. Taking --theirs:"
++                git checkout --theirs -- "$f"
++                git add -- "$f"
++              else
++                echo "Patch side has no stage-3 version. Treating as patch-side delete:"
++                git rm -f -- "$f"
++              fi
++            done <<< "$CONFLICT_FILES"
++
++            if git diff --name-only --diff-filter=U | grep -q .; then
++              echo "ERROR: Unmerged files remain after auto-resolve:"
++              git diff --name-only --diff-filter=U
++              return 1
++            fi
++
++            return 0
++          }
++
++          apply_custom_git_patches() {
++            PATCH="$(final_patch_file)"
++
++            echo ""
++            echo "Applying final personalize patch:"
++            echo "  $PATCH"
++
++            if [ ! -f "$PATCH" ]; then
++              echo "ERROR: Missing patch:"
++              echo "  $PATCH"
++              return 20
++            fi
++
++            if git apply --3way --index --whitespace=fix "$PATCH"; then
++              echo "Patch applied cleanly:"
++              echo "  $PATCH"
++            else
++              echo "Patch conflicted or failed:"
++              echo "  $PATCH"
++
++              git status --short || true
++
++              echo ""
++              echo "Conflict markers before auto-resolve:"
++              git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- . || true
++
++              if auto_resolve_git_apply_conflict_take_patch_side; then
++                echo "Auto-resolved by taking patch side."
++              else
++                echo "ERROR: auto-resolve failed for:"
++                echo "  $PATCH"
++                git status --short || true
++                return 20
++              fi
++            fi
++
++            echo ""
++            echo "Checking for remaining unmerged index entries..."
++            if git ls-files -u | grep -q .; then
++              echo "ERROR: unmerged index entries remain:"
++              git ls-files -u
++              return 21
++            fi
++
++            echo ""
++            echo "Checking for conflict markers after patch apply..."
++            if git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- .; then
++              echo "ERROR: conflict markers remain after auto-resolve"
++              return 22
++            fi
++
++            echo ""
++            echo "Patch status:"
++            git status --short
++
++            if git diff --cached --quiet; then
++              echo "ERROR: final patch produced no staged changes"
++              return 23
++            fi
++
++            git commit -m "Apply FinalPERSONALIZE patch"
++
++            echo "Applied final personalize patch."
++            return 0
++          }
++
++          try_build() {
++            local ref="$1"
++            local label="$2"
++
++            echo ""
++            echo "================================================="
++            echo "TRY BUILD: $label"
++            echo "REF: $ref"
++            echo "================================================="
++
++            rm -rf opencode-src
++            git clone --no-checkout "$UPSTREAM_REPO" opencode-src
++
++            cd opencode-src
++
++            if ! git fetch origin "$ref" --depth=1; then
++              echo "ERROR: failed to fetch upstream ref: $ref"
++              cd ..
++              return 10
++            fi
++
++            if ! git checkout --detach FETCH_HEAD; then
++              echo "ERROR: failed to checkout FETCH_HEAD"
++              cd ..
++              return 11
++            fi
++
++            UPSTREAM_SHA="$(git rev-parse HEAD)"
++            echo "Checked out upstream SHA: $UPSTREAM_SHA"
++
++            git config user.name "patched-build-bot"
++            git config user.email "patched-build-bot@example.local"
++
++            if ! apply_custom_git_patches; then
++              echo "ERROR: custom patch application failed"
++              cd ..
++              return 20
++            fi
++
++            echo "Final conflict marker check before build..."
++            if git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- .; then
++              echo "ERROR: unresolved conflict markers before build"
++              cd ..
++              return 23
++            fi
++
++            echo "Patched commits:"
++            git log --oneline -12
++
++            if ! bun install; then
++              echo "ERROR: bun install failed"
++              cd ..
++              return 30
++            fi
++
++            if ! bun run --cwd packages/opencode build; then
++              echo "ERROR: opencode build failed"
++              cd ..
++              return 40
++            fi
++
++            echo "Checking expected build outputs..."
++
++            test -d packages/opencode/dist/opencode-windows-x64 || return 51
++            test -d packages/opencode/dist/opencode-windows-x64-baseline || return 52
++
++            test -d packages/opencode/dist/opencode-linux-x64 || return 53
++            test -d packages/opencode/dist/opencode-linux-x64-baseline || return 54
++            test -d packages/opencode/dist/opencode-linux-arm64 || return 55
++
++            test -d packages/opencode/dist/opencode-darwin-x64 || return 56
++            test -d packages/opencode/dist/opencode-darwin-x64-baseline || return 57
++            test -d packages/opencode/dist/opencode-darwin-arm64 || return 58
++
++            cd ..
++
++            echo "built_ref=$ref" >> "$GITHUB_OUTPUT"
++            echo "built_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
++            echo "built_label=$label" >> "$GITHUB_OUTPUT"
++
++            return 0
++          }
++
++          LATEST_REF="$UPSTREAM_REF"
++          LAST_SUCCESS="${{ steps.load_state.outputs.last_success }}"
++
++          if try_build "$LATEST_REF" "latest"; then
++            echo "Latest upstream build succeeded."
++            exit 0
++          fi
++
++          echo ""
++          echo "Latest upstream build FAILED."
++
++          if [ -z "$LAST_SUCCESS" ]; then
++            echo "No last successful upstream ref exists. Cannot fallback."
++            exit 1
++          fi
++
++          echo "Falling back to last successful upstream ref: $LAST_SUCCESS"
++
++          if try_build "$LAST_SUCCESS" "fallback-last-success"; then
++            echo "Fallback build succeeded."
++            exit 0
++          fi
++
++          echo "Fallback build also failed. Manual patch maintenance required."
++          exit 1
++
++      - name: Package CLI artifacts
++        shell: bash
++        run: |
++          set -euo pipefail
++
++          DIST="opencode-src/packages/opencode/dist"
++          OUT="$PWD/out"
++
++          rm -rf "$OUT"
++          mkdir -p "$OUT"
++
++          package_zip() {
++            local src="$1"
++            local name="$2"
++            echo "Packaging zip: $name"
++            (cd "$src/bin" && zip -9 -r "$OUT/$name.zip" .)
++          }
++
++          package_tar() {
++            local src="$1"
++            local name="$2"
++            echo "Packaging tar.gz: $name"
++            tar -czf "$OUT/$name.tar.gz" -C "$src/bin" .
++          }
++
++          package_zip "$DIST/opencode-windows-x64" "opencode-windows-x64-custom"
++          package_zip "$DIST/opencode-windows-x64-baseline" "opencode-windows-x64-baseline-custom"
++
++          package_tar "$DIST/opencode-linux-x64" "opencode-linux-x64-custom"
++          package_tar "$DIST/opencode-linux-x64-baseline" "opencode-linux-x64-baseline-custom"
++          package_tar "$DIST/opencode-linux-arm64" "opencode-linux-arm64-custom"
++
++          package_zip "$DIST/opencode-darwin-x64" "opencode-darwin-x64-custom"
++          package_zip "$DIST/opencode-darwin-x64-baseline" "opencode-darwin-x64-baseline-custom"
++          package_zip "$DIST/opencode-darwin-arm64" "opencode-darwin-arm64-custom"
++
++          cd "$OUT"
++          sha256sum * > SHA256SUMS.txt
++          cat SHA256SUMS.txt
++
++      - name: Upload all CLI artifacts
++        uses: actions/upload-artifact@v4
++        with:
++          name: oc-${{ steps.build.outputs.built_label }}-${{ github.run_id }}-${{ github.run_attempt }}
++          path: |
++            out/*.zip
++            out/*.tar.gz
++            out/SHA256SUMS.txt
++
++      - name: Create or update GitHub Release
++        if: steps.build.outputs.built_label == 'latest'
++        shell: bash
++        env:
++          GITHUB_TOKEN: ${{ github.token }}
++        run: |
++          set -euo pipefail
++
++          BUILT_SHA="${{ steps.build.outputs.built_sha }}"
++          SHORT_SHA="${BUILT_SHA:0:12}"
++          TAG="patched-opencode-${SHORT_SHA}"
++          TITLE="Patched OpenCode ${SHORT_SHA}"
++
++          echo "Creating/updating release:"
++          echo "  tag=$TAG"
++          echo "  title=$TITLE"
++
++          git config user.name "patched-build-bot"
++          git config user.email "patched-build-bot@example.local"
++
++          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
++            echo "Tag already exists: $TAG"
++          else
++            git tag "$TAG"
++            git push origin "$TAG"
++          fi
++
++          NOTES_FILE="release-notes.md"
++
++          cat > "$NOTES_FILE" <<EOF
++          # Patched OpenCode Build
++
++          Upstream commit:
++
++          \`\`\`
++          $BUILT_SHA
++          \`\`\`
++
++          Build label:
++
++          \`\`\`
++          ${{ steps.build.outputs.built_label }}
++          \`\`\`
++
++          Artifacts:
++
++          - Windows x64
++          - Windows x64 baseline
++          - Linux x64
++          - Linux x64 baseline
++          - Linux arm64
++          - macOS x64
++          - macOS x64 baseline
++          - macOS arm64
++
++          SHA256 hashes are included in \`SHA256SUMS.txt\`.
++          EOF
++
++          if gh release view "$TAG" >/dev/null 2>&1; then
++            echo "Release exists; updating assets."
++            gh release upload "$TAG" out/*.zip out/*.tar.gz out/SHA256SUMS.txt --clobber
++          else
++            echo "Creating release."
++            gh release create "$TAG" \
++              out/*.zip \
++              out/*.tar.gz \
++              out/SHA256SUMS.txt \
++              --title "$TITLE" \
++              --notes-file "$NOTES_FILE"
++          fi
++
++      - name: Update last successful upstream ref on dev
++        if: steps.build.outputs.built_label == 'latest'
++        shell: bash
++        run: |
++          set -euo pipefail
++
++          BUILT_SHA="${{ steps.build.outputs.built_sha }}"
++
++          if [ -z "$BUILT_SHA" ]; then
++            echo "ERROR: built_sha is empty"
++            exit 1
++          fi
++
++          echo "Updating dev with successful upstream SHA: $BUILT_SHA"
++
++          git config user.name "patched-build-bot"
++          git config user.email "patched-build-bot@example.local"
++
++          git fetch origin "$STATE_BRANCH"
++          git checkout -B "$STATE_BRANCH" "origin/$STATE_BRANCH"
++
++          mkdir -p "$STATE_FILE_DIR"
++
++          echo "$BUILT_SHA" > "$STATE_FILE_DIR/last-success-upstream.txt"
++          date -u +"%Y-%m-%dT%H:%M:%SZ" > "$STATE_FILE_DIR/last-success-time.txt"
++
++          git add "$STATE_FILE_DIR/last-success-upstream.txt" "$STATE_FILE_DIR/last-success-time.txt"
++
++          if git diff --cached --quiet; then
++            echo "No state change to commit."
++            exit 0
++          fi
++
++          git commit -m "ci: autopullupstream $BUILT_SHA [skip ci]"
++          git push origin "HEAD:$STATE_BRANCH"
+diff --git a/packages/opencode/src/cli/logo.ts b/packages/opencode/src/cli/logo.ts
+index a58a8cf99..3ff28659a 100644
+--- a/packages/opencode/src/cli/logo.ts
++++ b/packages/opencode/src/cli/logo.ts
+@@ -1,5 +1,5 @@
+ export const logo = {
+-  left: ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"],
++  left: [" █▀▀▀▀▀▀█ ", " ▀█    █▀ ", "  ▀█__█▀  ", "█▄▄█  █▄▄█"],
+   right: ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"],
+ }
+ 
+diff --git a/packages/opencode/src/cli/ui.ts b/packages/opencode/src/cli/ui.ts
+index 6ad6495cf..e42e257e9 100644
+--- a/packages/opencode/src/cli/ui.ts
++++ b/packages/opencode/src/cli/ui.ts
+@@ -3,10 +3,10 @@ import { Schema } from "effect"
+ import { logo as glyphs } from "./logo"
+ 
+ const wordmark = [
+-  `⠀                                ▄     `,
+-  `█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
+-  `█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀`,
+-  `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
++  `⠀█▀▀▀▀▀▀█               ▄     `,
++  ` ▀█    █▀  █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
++  `  ▀█__█▀   █    █  █ █  █ █▀▀▀`,
++  `█▄▄█  █▄▄█ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
+ ]
+ 
+ export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("UICancelledError", {}) {}
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 6ae1028f1..22982dd09 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -97,6 +97,65 @@ export interface Interface {
+   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
+ }
+ 
++//PATCH START to custom ROLE>
++//import path from "path"
++import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs"
++
++type RoleEvalConfig = {
++  usersystem: string
++  assistant_system: string
++}
++
++function loadRoleEvalConfig(projectRoot: string): RoleEvalConfig {
++  const root = path.resolve(projectRoot || process.cwd())
++  const file = process.env.OPENCODE_ROLE_FILE
++    ? path.resolve(process.env.OPENCODE_ROLE_FILE)
++    : path.join(root, ".opencode", "role.json")
++
++  const stock: RoleEvalConfig = {
++    usersystem: "",
++    assistant_system: "",
++  }
++
++  const debugFile = path.join(root, ".opencode", "role-debug.log")
++
++  try {
++    mkdirSync(path.dirname(file), { recursive: true })
++    appendFileSync(
++      debugFile,
++      [
++        `[${new Date().toISOString()}]`,
++        `cwd=${process.cwd()}`,
++        `projectRoot=${projectRoot}`,
++        `root=${root}`,
++        `file=${file}`,
++        `exists=${existsSync(file)}`,
++        "",
++      ].join("\n"),
++      "utf8",
++    )
++
++    if (!existsSync(file)) {
++      writeFileSync(file, JSON.stringify(stock, null, 2) + "\n", "utf8")
++      appendFileSync(debugFile, `created=${file}\n\n`, "utf8")
++      return stock
++    }
++
++    const parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<RoleEvalConfig>
++
++    return {
++      usersystem: typeof parsed.usersystem === "string" ? parsed.usersystem : "",
++      assistant_system: typeof parsed.assistant_system === "string" ? parsed.assistant_system : "",
++    }
++  } catch (err) {
++    try {
++      appendFileSync(debugFile, `ERROR=${String(err)}\n\n`, "utf8")
++    } catch {}
++    return stock
++  }
++}
++//PATCH END,P1.P2 is per user&assistant function edit to use var>roleEvalConfig.assistant etc.
++
+ export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
+ 
+ export const layer = Layer.effect(
+@@ -1265,13 +1324,12 @@ export const layer = Layer.effect(
+           const lastAssistantMsg = msgs.findLast(
+             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
+           )
+-          // Some providers return "stop" even when the assistant message contains
+-          // tool calls. Keep the loop running so tool results can be sent back to
+-          // the model, but ignore cleanup-marked interrupted orphans.
++          // Some providers return "stop" even when the assistant message contains tool calls.
++          // Keep the loop running so tool results can be sent back to the model.
++          // Skip provider-executed tool parts — those were fully handled within the
++          // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
+           const hasToolCalls =
+-            lastAssistantMsg?.parts.some(
+-              (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
+-            ) ?? false
++            lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+ 
+           if (
+             lastAssistant?.finish &&
+@@ -1289,6 +1347,7 @@ export const layer = Layer.effect(
+                 callID: orphan.callID,
+               })
+             }
++
+             yield* slog.info("exiting loop")
+             break
+           }
+@@ -1441,7 +1500,20 @@ export const layer = Layer.effect(
+               instruction.system().pipe(Effect.orDie),
+               MessageV2.toModelMessagesEffect(msgs, model),
+             ])
+-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
++
++            // CUSTOM-ROLE-SYSTEM START
++            const roleRoot = ctx.worktree === "/" || ctx.worktree === "\\" ? ctx.directory : ctx.worktree
++            const roleEvalConfig = loadRoleEvalConfig(roleRoot)
++
++            const system = [
++              roleEvalConfig.assistant_system,
++              ...env,
++              ...instructions,
++              ...(skills ? [skills] : []),
++            ].filter(Boolean)
++            // CUSTOM-ROLE-SYSTEM END
++
++            //const system = [...env, ...instructions, ...(skills ? [skills] : [])]//ori
+             const format = lastUser.format ?? { type: "text" as const }
+             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+             const result = yield* handle.process({
