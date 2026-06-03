@@ -467,6 +467,7 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
         keybinds: {
           leader: { key: { name: "g", ctrl: true } },
           command_list: "alt+p",
+          diff_open: "<leader>d",
           which_key_toggle: "alt+k",
           editor_open: "ctrl+e",
           "prompt.autocomplete.next": "ctrl+j",
@@ -482,6 +483,7 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
       expect(config.keybinds.get("leader")?.[0]?.key).toEqual({ name: "g", ctrl: true })
       expect(config.leader_timeout).toBe(1234)
       expect(config.keybinds.get("command.palette.show")?.[0]?.key).toBe("alt+p")
+      expect(config.keybinds.get("diff.open")?.[0]?.key).toBe("<leader>d")
       expect(config.keybinds.get("session.new")?.[0]?.key).toBe("<leader>n")
       expect(config.keybinds.get("which-key.toggle")?.[0]?.key).toBe("alt+k")
       expect(config.keybinds.get("which-key.layout.toggle")?.[0]?.key).toBe("ctrl+alt+shift+k")
