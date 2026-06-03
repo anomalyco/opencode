@@ -25,11 +25,18 @@ export type Result =
 export const ensureLegacySessionMessagesBackfilled = Effect.fn("SessionMessageBackfillService.ensureLegacySessionMessagesBackfilled")(
   function* (sessionID: SessionSchema.ID | string) {
     const { db } = yield* Database.Service
+    const marker = `${markerPrefix}${sessionID}`
+    const markerExists = yield* db
+      .select({ name: DataMigrationTable.name })
+      .from(DataMigrationTable)
+      .where(eq(DataMigrationTable.name, marker))
+      .get()
+    if (markerExists) return { status: "already_completed" } as Result
+
     return yield* db
       .transaction(
         (tx) =>
           Effect.gen(function* () {
-            const marker = `${markerPrefix}${sessionID}`
             const existingMarker = yield* tx
               .select({ name: DataMigrationTable.name })
               .from(DataMigrationTable)
@@ -59,6 +66,11 @@ export const ensureLegacySessionMessagesBackfilled = Effect.fn("SessionMessageBa
               ? legacyMessages.filter((message) => message.info.time.created < cutoff.time_created)
               : legacyMessages
             const mapped = SessionMessageBackfill.mapLegacyMessages(eligible, { sessionID })
+            if (cutoff) {
+              legacyMessages
+                .filter((message) => message.info.time.created > cutoff.time_created)
+                .forEach(() => addStat(mapped.stats.skipped, "backfill", "legacy_newer_than_cutoff_omitted"))
+            }
             const rows = mapped.messages.map((message) => targetRow(sessionID, message))
             const existingRows = rows.length === 0
               ? []
@@ -97,9 +109,40 @@ export const ensureLegacySessionMessagesBackfilled = Effect.fn("SessionMessageBa
           }),
         { behavior: "immediate" },
       )
+      .pipe(Effect.tap((result) => logResult(sessionID, result)))
       .pipe(Effect.orDie)
   },
 )
+
+function logResult(sessionID: SessionSchema.ID | string, result: Result) {
+  if (result.status === "already_completed") return Effect.void
+  if (
+    result.status === "completed" &&
+    result.inserted === 0 &&
+    result.repaired === 0 &&
+    result.stats.degraded.length === 0 &&
+    result.stats.skipped.length === 0
+  )
+    return Effect.void
+  return (result.status === "completed" ? Effect.logInfo : Effect.logWarning)(
+    `legacy session message backfill ${result.status}`,
+  ).pipe(
+    Effect.annotateLogs({
+      sessionID,
+      status: result.status,
+      inserted: result.status === "completed" ? result.inserted : 0,
+      repaired: result.status === "completed" ? result.repaired : 0,
+      ...(result.status === "aborted" ? { reason: result.reason } : {}),
+      mapped: summarizeStats(result.stats.mapped),
+      degraded: summarizeStats(result.stats.degraded),
+      skipped: summarizeStats(result.stats.skipped),
+    }),
+  )
+}
+
+function summarizeStats(stats: SessionMessageBackfill.Stat[]) {
+  return stats.map((stat) => `${stat.type}:${stat.reason}=${stat.count}`)
+}
 
 function hydrateLegacyMessages(sessionID: SessionSchema.ID | string, db: Transaction) {
   return Effect.gen(function* () {

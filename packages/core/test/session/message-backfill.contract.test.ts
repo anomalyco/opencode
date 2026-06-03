@@ -209,7 +209,7 @@ describe("SessionMessageBackfillService contract", () => {
     )
   })
 
-  test("marker exists: returns already_completed and does not duplicate or write rows", async () => {
+  test("marker exists: returns already_completed and does not trip marker insert trigger", async () => {
     const dbPath = await makeDbPath()
 
     await run(
@@ -218,6 +218,7 @@ describe("SessionMessageBackfillService contract", () => {
         yield* seedSession()
         yield* seedLegacy([user("msg_marked", 10, "already marked")])
         yield* seedMarker()
+        yield* failBackfillMarkerInsert()
 
         const result = yield* SessionMessageBackfillService.ensureLegacySessionMessagesBackfilled(sessionID)
 
@@ -267,6 +268,7 @@ describe("SessionMessageBackfillService contract", () => {
         expect(result.status).toBe("completed")
         if (result.status !== "completed") throw new Error("expected completed")
         expect(result.inserted).toBe(1)
+        expect(statCount(result.stats.skipped, "legacy_newer_than_cutoff_omitted")).toBe(1)
         expect(yield* markerExists()).toBe(true)
         expect(rows.map((row) => row.id)).toEqual([expectedRows([older])[0]?.id, SessionMessage.ID.make("evt_live_newer")])
       }),
