@@ -741,7 +741,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             max: {
               thinkingConfig: {
                 includeThoughts: true,
-                thinkingBudget: googleThinkingBudgetMax(model.api.id),
+                thinkingBudget: googleThinkingBudgetMax(id),
               },
             },
           }
