@@ -839,79 +839,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
-    litellm: Effect.fnUntraced(function* (input: Info) {
-      const env = yield* dep.env()
-      const auth = yield* dep.auth(input.id)
-
-      const apiKey = iife(() => {
-        if (input.env.some((item) => env[item])) return input.env.map((item) => env[item]).find(Boolean)
-        if (auth?.type === "api") return auth.key
-        if (input.options?.apiKey) return input.options.apiKey
-        return undefined
-      })
-
-      const baseURL = iife(() => {
-        if (input.options?.baseURL) return input.options.baseURL
-        if (env["LITELLM_BASE_URL"]) return env["LITELLM_BASE_URL"]
-        return undefined
-      })
-
-      if (!baseURL) return { autoload: false }
-
-      return {
-        autoload: true,
-        options: {
-          ...(apiKey ? { apiKey } : {}),
-          baseURL,
-        },
-        async discoverModels(): Promise<Record<string, Model>> {
-          try {
-            const url = `${baseURL.replace(/\/+$/, "")}/v1/models`
-            const headers: Record<string, string> = {
-              "User-Agent": `opencode/${InstallationVersion} litellm (${os.platform()} ${os.release()}; ${os.arch()})`,
-            }
-            if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`
-            const res = await fetch(url, { headers })
-            if (!res.ok) return {}
-            const body = (await res.json()) as { data?: Array<{ id: string; created?: number }> }
-            if (!Array.isArray(body.data)) return {}
-            const models: Record<string, Model> = {}
-            for (const entry of body.data) {
-              const id = entry.id
-              models[id] = {
-                id: ProviderV2.ModelID.make(id),
-                providerID: ProviderV2.ID.make("litellm"),
-                name: id,
-                api: {
-                  id,
-                  url: baseURL,
-                  npm: "@ai-sdk/openai-compatible",
-                },
-                status: "active",
-                headers: {},
-                options: {},
-                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                limit: { context: 128_000, output: 16_384 },
-                capabilities: {
-                  temperature: true,
-                  reasoning: false,
-                  attachment: true,
-                  toolcall: true,
-                  input: { text: true, audio: false, image: true, video: false, pdf: false },
-                  output: { text: true, audio: false, image: false, video: false, pdf: false },
-                  interleaved: false,
-                },
-                release_date: "",
-                variants: {},
-              }
-            }
-            return models
-          } catch {
-            return {}
-          }
-        },
-      }
-    }),
   }
 }
 
@@ -1490,25 +1417,6 @@ export const layer = Layer.effect(
           mergeProvider(providerID, patch)
         }
 
-        // Seed LiteLLM into database if env vars or stored auth indicate it should be available
-        // but it's not already in models.dev or config. This lets the custom loader and
-        // model discovery run without requiring a manual config entry.
-        if (!database["litellm"] && !disabled.has(ProviderV2.ID.make("litellm"))) {
-          const litellmBaseURL = envs["LITELLM_BASE_URL"]
-          const litellmKey = envs["LITELLM_API_KEY"]
-          const litellmAuth = auths["litellm"]
-          if (litellmBaseURL || litellmKey || litellmAuth) {
-            database["litellm"] = {
-              id: ProviderV2.ID.make("litellm"),
-              name: "LiteLLM",
-              source: "env",
-              env: ["LITELLM_API_KEY"],
-              options: {},
-              models: {},
-            }
-          }
-        }
-
         for (const [id, fn] of Object.entries(custom(dep))) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
@@ -1550,22 +1458,6 @@ export const layer = Layer.effect(
               }
             } catch (e) {
               log.warn("state discovery error", { id: "gitlab", error: e })
-            }
-          })
-        }
-
-        const litellm = ProviderV2.ID.make("litellm")
-        if (discoveryLoaders[litellm] && providers[litellm] && isProviderAllowed(litellm)) {
-          yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[litellm]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[litellm].models[modelID]) {
-                  providers[litellm].models[modelID] = model
-                }
-              }
-            } catch (e) {
-              log.warn("state discovery error", { id: "litellm", error: e })
             }
           })
         }
