@@ -136,6 +136,7 @@ export function registerIpcHandlers(deps: Deps) {
   )
 
   ipcMain.on("open-link", (_event: IpcMainEvent, url: string) => {
+    if (!isSafeExternalUrl(url)) return
     void shell.openExternal(url)
   })
 
@@ -209,4 +210,14 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 
 export function sendDeepLinks(win: BrowserWindow, urls: string[]) {
   win.webContents.send("deep-link", urls)
+}
+
+const SAFE_PROTOCOLS = new Set(["http:", "https:", "mailto:"])
+
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    return SAFE_PROTOCOLS.has(new URL(url).protocol)
+  } catch {
+    return false
+  }
 }
