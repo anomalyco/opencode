@@ -4,8 +4,6 @@ import { testRender, useRenderer } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Global } from "@opencode-ai/core/global"
 import { onCleanup, onMount } from "solid-js"
-import { mkdir } from "node:fs/promises"
-import path from "node:path"
 import { ProjectProvider, useProject } from "../../../src/cli/cmd/tui/context/project"
 import { SDKProvider } from "../../../src/cli/cmd/tui/context/sdk"
 import { KVProvider } from "../../../src/cli/cmd/tui/context/kv"
@@ -16,6 +14,7 @@ import {
   registerOpencodeKeymap,
 } from "../../../src/cli/cmd/tui/keymap"
 import { QuestionPrompt } from "../../../src/cli/cmd/tui/routes/session/question"
+import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { createFetch, directory, json } from "../../fixture/tui-sdk"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -70,8 +69,10 @@ const multipleRequest: QuestionRequest = {
 }
 
 test("question prompt replies through the active workspace", async () => {
-  await mkdir(Global.Path.state, { recursive: true })
-  await Bun.write(path.join(Global.Path.state, "kv.json"), "{}")
+  const previous = Global.Path.state
+  await using tmp = await tmpdir()
+  Global.Path.state = tmp.path
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
 
   const replies: URL[] = []
   const calls = createFetch((url) => {
@@ -131,12 +132,15 @@ test("question prompt replies through the active workspace", async () => {
     expect(replies[0]?.searchParams.get("workspace")).toBe("ws_question")
   } finally {
     app.renderer.destroy()
+    Global.Path.state = previous
   }
 })
 
 test("multiple question prompt replies through the active workspace", async () => {
-  await mkdir(Global.Path.state, { recursive: true })
-  await Bun.write(path.join(Global.Path.state, "kv.json"), "{}")
+  const previous = Global.Path.state
+  await using tmp = await tmpdir()
+  Global.Path.state = tmp.path
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
 
   const replies: URL[] = []
   const calls = createFetch((url) => {
@@ -198,12 +202,15 @@ test("multiple question prompt replies through the active workspace", async () =
     expect(replies[0]?.searchParams.get("workspace")).toBe("ws_question")
   } finally {
     app.renderer.destroy()
+    Global.Path.state = previous
   }
 })
 
 test("question prompt rejects through the active workspace", async () => {
-  await mkdir(Global.Path.state, { recursive: true })
-  await Bun.write(path.join(Global.Path.state, "kv.json"), "{}")
+  const previous = Global.Path.state
+  await using tmp = await tmpdir()
+  Global.Path.state = tmp.path
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
 
   const rejects: URL[] = []
   const calls = createFetch((url) => {
@@ -263,5 +270,6 @@ test("question prompt rejects through the active workspace", async () => {
     expect(rejects[0]?.searchParams.get("workspace")).toBe("ws_question")
   } finally {
     app.renderer.destroy()
+    Global.Path.state = previous
   }
 })
