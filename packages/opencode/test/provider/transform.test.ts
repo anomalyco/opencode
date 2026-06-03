@@ -3646,68 +3646,52 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
-    test("gemini 2.5 pro returns thinkingConfig with 32k budget under modelParams", () => {
-      const result = ProviderTransform.variants(sapModel("gemini-2.5-pro"))
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({
-        modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+    for (const testCase of [
+      { apiId: "gemini-2.5-pro", maxBudget: 32768 },
+      { apiId: "gemini-2.5-flash", maxBudget: 24576 },
+    ]) {
+      test(`${testCase.apiId} returns thinkingConfig variants under modelParams`, () => {
+        const result = ProviderTransform.variants(sapModel(testCase.apiId))
+        expect(Object.keys(result)).toEqual(["high", "max"])
+        expect(result.high).toEqual({
+          modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+        })
+        expect(result.max).toEqual({
+          modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: testCase.maxBudget } },
+        })
       })
-      expect(result.max).toEqual({
-        modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 32768 } },
-      })
-    })
+    }
 
-    test("gemini 2.5 flash returns thinkingConfig with 24k budget under modelParams", () => {
-      const result = ProviderTransform.variants(sapModel("gemini-2.5-flash"))
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({
-        modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+    for (const testCase of [
+      { apiId: "gpt-5", releaseDate: "2025-08-07", efforts: ["minimal", "low", "medium", "high"] },
+      { apiId: "gpt-5-mini", releaseDate: "2025-08-07", efforts: ["minimal", "low", "medium", "high"] },
+      { apiId: "gpt-5-nano", releaseDate: "2025-08-07", efforts: ["minimal", "low", "medium", "high"] },
+      { apiId: "gpt-5.4", releaseDate: "2026-01-15", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { apiId: "azure-openai--o3-mini", releaseDate: "2024-01-01", efforts: ["low", "medium", "high"] },
+    ]) {
+      test(`${testCase.apiId} returns reasoning_effort variants under modelParams`, () => {
+        const result = ProviderTransform.variants(sapModel(testCase.apiId, testCase.releaseDate))
+        expect(Object.keys(result)).toEqual(testCase.efforts)
+        for (const effort of testCase.efforts) {
+          expect(result[effort]).toEqual({ modelParams: { reasoning_effort: effort } })
+        }
       })
-      expect(result.max).toEqual({
-        modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 24576 } },
-      })
-    })
+    }
 
-    test("gemini 3 flash-lite falls through to harmonized reasoning_effort", () => {
-      const result = ProviderTransform.variants(sapModel("gemini-3.1-flash-lite"))
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
-      expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
-    })
-
-    for (const apiId of ["cohere--command-a-reasoning", "sonar-deep-research"]) {
-      test(`${apiId} falls through to harmonized reasoning_effort`, () => {
+    for (const apiId of [
+      "gemini-3.1-flash-lite",
+      "cohere--command-a-reasoning",
+      "sonar-deep-research",
+      "aws--llama-opus-4.7-fake",
+    ]) {
+      test(`${apiId} falls through to harmonized reasoning_effort fallback`, () => {
         const result = ProviderTransform.variants(sapModel(apiId))
         expect(Object.keys(result)).toEqual(["low", "medium", "high"])
-        expect(result.medium).toEqual({ modelParams: { reasoning_effort: "medium" } })
+        for (const effort of ["low", "medium", "high"]) {
+          expect(result[effort]).toEqual({ modelParams: { reasoning_effort: effort } })
+        }
       })
     }
-
-    for (const apiId of ["gpt-5", "gpt-5-mini", "gpt-5-nano"]) {
-      test(`${apiId} returns reasoning_effort variants under modelParams with minimal tier`, () => {
-        const result = ProviderTransform.variants(sapModel(apiId, "2025-08-07"))
-        expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
-        expect(result.minimal).toEqual({ modelParams: { reasoning_effort: "minimal" } })
-        expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
-      })
-    }
-
-    test("gpt-5.4 picks up xhigh tier from openaiReasoningEfforts", () => {
-      const result = ProviderTransform.variants(sapModel("gpt-5.4", "2026-01-15"))
-      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
-      expect(result.xhigh).toEqual({ modelParams: { reasoning_effort: "xhigh" } })
-    })
-
-    test("o-series returns reasoning_effort variants under modelParams", () => {
-      const result = ProviderTransform.variants(sapModel("azure-openai--o3-mini"))
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
-      expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
-    })
-
-    test("non-anthropic models with opus-like substrings fall through to harmonized fallback", () => {
-      const result = ProviderTransform.variants(sapModel("aws--llama-opus-4.7-fake"))
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
-      expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
-    })
   })
 
   describe("ai-gateway-provider (cloudflare-ai-gateway)", () => {
