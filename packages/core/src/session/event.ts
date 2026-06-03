@@ -217,13 +217,18 @@ export namespace Reasoning {
 }
 
 export namespace Tool {
+  const ToolBase = {
+    ...Base,
+    assistantMessageID: EventV2.ID,
+    callID: Schema.String,
+  }
+
   export namespace Input {
     export const Started = EventV2.define({
       type: "session.next.tool.input.started",
       ...options,
       schema: {
-        ...Base,
-        callID: Schema.String,
+        ...ToolBase,
         name: Schema.String,
       },
     })
@@ -233,8 +238,7 @@ export namespace Tool {
       type: "session.next.tool.input.delta",
       ...options,
       schema: {
-        ...Base,
-        callID: Schema.String,
+        ...ToolBase,
         delta: Schema.String,
       },
     })
@@ -244,8 +248,7 @@ export namespace Tool {
       type: "session.next.tool.input.ended",
       ...options,
       schema: {
-        ...Base,
-        callID: Schema.String,
+        ...ToolBase,
         text: Schema.String,
       },
     })
@@ -256,8 +259,7 @@ export namespace Tool {
     type: "session.next.tool.called",
     ...options,
     schema: {
-      ...Base,
-      callID: Schema.String,
+      ...ToolBase,
       tool: Schema.String,
       input: Schema.Record(Schema.String, Schema.Unknown),
       provider: Schema.Struct({
@@ -272,8 +274,7 @@ export namespace Tool {
     type: "session.next.tool.progress",
     ...options,
     schema: {
-      ...Base,
-      callID: Schema.String,
+      ...ToolBase,
       structured: ToolOutput.Structured,
       content: Schema.Array(ToolOutput.Content),
     },
@@ -284,8 +285,7 @@ export namespace Tool {
     type: "session.next.tool.success",
     ...options,
     schema: {
-      ...Base,
-      callID: Schema.String,
+      ...ToolBase,
       structured: ToolOutput.Structured,
       content: Schema.Array(ToolOutput.Content),
       provider: Schema.Struct({
@@ -300,8 +300,7 @@ export namespace Tool {
     type: "session.next.tool.failed",
     ...options,
     schema: {
-      ...Base,
-      callID: Schema.String,
+      ...ToolBase,
       error: UnknownError,
       provider: Schema.Struct({
         executed: Schema.Boolean,

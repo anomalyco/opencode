@@ -30,6 +30,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
+import type { EventV2 } from "@opencode-ai/core/event"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
@@ -65,6 +67,7 @@ export interface Interface {
 }
 
 type ToolCall = {
+  assistantMessageID?: EventV2.ID
   partID: SessionV1.ToolPart["id"]
   messageID: SessionV1.ToolPart["messageID"]
   sessionID: SessionV1.ToolPart["sessionID"]
@@ -80,6 +83,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  v2AssistantMessageID: EventV2.ID | undefined
 }
 
 type StreamEvent = LLMEvent
@@ -120,6 +124,7 @@ export const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        v2AssistantMessageID: undefined,
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
@@ -135,6 +140,27 @@ export const layer = Layer.effect(
         delete ctx.toolcalls[toolCallID]
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
+
+      const ensureV2AssistantMessage = Effect.fn("SessionProcessor.ensureV2AssistantMessage")(function* () {
+        if (ctx.v2AssistantMessageID) return ctx.v2AssistantMessageID
+        ctx.v2AssistantMessageID = (yield* events.publish(SessionEvent.Step.Started, {
+          sessionID: ctx.sessionID,
+          agent: input.assistantMessage.agent,
+          model: {
+            id: ModelV2.ID.make(ctx.model.id),
+            providerID: ProviderV2.ID.make(ctx.model.providerID),
+            variant: ModelV2.VariantID.make(input.assistantMessage.variant ?? "default"),
+          },
+          snapshot: ctx.snapshot,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+        })).id
+        return ctx.v2AssistantMessageID
+      })
+
+      const requireV2AssistantMessage = (toolCall?: ToolCall) =>
+        toolCall?.assistantMessageID === undefined
+          ? Effect.die("V2 tool settlement has no owning assistant message")
+          : Effect.succeed(toolCall.assistantMessageID)
 
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
@@ -251,9 +277,11 @@ export const layer = Layer.effect(
           return { call: ctx.toolcalls[input.id], part }
         }
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (flags.experimentalEventSystem) {
+        const assistantMessageID = flags.experimentalEventSystem ? yield* ensureV2AssistantMessage() : undefined
+        if (assistantMessageID) {
           yield* events.publish(SessionEvent.Tool.Input.Started, {
             sessionID: ctx.sessionID,
+            assistantMessageID,
             callID: input.id,
             name: input.name,
             timestamp: DateTime.makeUnsafe(Date.now()),
@@ -270,6 +298,7 @@ export const layer = Layer.effect(
           metadata: input.providerExecuted ? { providerExecuted: true } : undefined,
         } satisfies SessionV1.ToolPart)
         ctx.toolcalls[input.id] = {
+          assistantMessageID,
           done: yield* Deferred.make<void>(),
           partID: part.id,
           messageID: part.messageID,
@@ -363,8 +392,10 @@ export const layer = Layer.effect(
             const toolCall = yield* ensureToolCall(value)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
+              const assistantMessageID = yield* requireV2AssistantMessage(toolCall.call)
               yield* events.publish(SessionEvent.Tool.Input.Ended, {
                 sessionID: ctx.sessionID,
+                assistantMessageID,
                 callID: value.id,
                 text: "",
                 timestamp: DateTime.makeUnsafe(Date.now()),
@@ -383,8 +414,10 @@ export const layer = Layer.effect(
             if (!toolCall.call.inputEnded) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (flags.experimentalEventSystem) {
+                const assistantMessageID = yield* requireV2AssistantMessage(toolCall.call)
                 yield* events.publish(SessionEvent.Tool.Input.Ended, {
                   sessionID: ctx.sessionID,
+                  assistantMessageID,
                   callID: value.id,
                   text: "",
                   timestamp: DateTime.makeUnsafe(Date.now()),
@@ -393,8 +426,10 @@ export const layer = Layer.effect(
             }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
+              const assistantMessageID = yield* requireV2AssistantMessage(toolCall.call)
               yield* events.publish(SessionEvent.Tool.Called, {
                 sessionID: ctx.sessionID,
+                assistantMessageID,
                 callID: value.id,
                 tool: value.name,
                 input,
@@ -453,6 +488,7 @@ export const layer = Layer.effect(
 
           case "tool-result": {
             const toolCall = yield* readToolCall(value.id)
+            if (!toolCall && value.result.type === "error") return
             const rawOutput = toolResultOutput(value)
             const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
               attachment.mime.startsWith("image/")
@@ -477,21 +513,18 @@ export const layer = Layer.effect(
             }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
+              const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
               yield* events.publish(SessionEvent.Tool.Success, {
                 sessionID: ctx.sessionID,
+                assistantMessageID,
                 callID: value.id,
                 structured: output.metadata,
                 content: [
-                  {
-                    type: "text",
-                    text: output.output,
-                  },
-                  ...(output.attachments?.map((item: SessionV1.FilePart) => ({
-                    type: "file" as const,
-                    uri: item.url,
-                    mime: item.mime,
-                    name: item.filename,
-                  })) ?? []),
+                  ToolOutput.text({ type: "text", text: output.output }),
+                  ...(output.attachments?.map(
+                    (item: SessionV1.FilePart) =>
+                      ToolOutput.file({ type: "file", uri: item.url, mime: item.mime, name: item.filename }),
+                  ) ?? []),
                 ],
                 provider: {
                   executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
@@ -507,8 +540,10 @@ export const layer = Layer.effect(
             const toolCall = yield* readToolCall(value.id)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
+              const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
               yield* events.publish(SessionEvent.Tool.Failed, {
                 sessionID: ctx.sessionID,
+                assistantMessageID,
                 callID: value.id,
                 error: {
                   type: "unknown",
@@ -532,17 +567,7 @@ export const layer = Layer.effect(
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (flags.experimentalEventSystem) {
-                yield* events.publish(SessionEvent.Step.Started, {
-                  sessionID: ctx.sessionID,
-                  agent: input.assistantMessage.agent,
-                  model: {
-                    id: ModelV2.ID.make(ctx.model.id),
-                    providerID: ProviderV2.ID.make(ctx.model.providerID),
-                    variant: ModelV2.VariantID.make(input.assistantMessage.variant ?? "default"),
-                  },
-                  snapshot: ctx.snapshot,
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
+                yield* ensureV2AssistantMessage()
               }
             }
             yield* session.updatePart({
@@ -573,6 +598,7 @@ export const layer = Layer.effect(
                   snapshot: completedSnapshot,
                   timestamp: DateTime.makeUnsafe(Date.now()),
                 })
+                ctx.v2AssistantMessageID = undefined
               }
             }
             ctx.assistantMessage.finish = value.reason
@@ -734,6 +760,16 @@ export const layer = Layer.effect(
           const match = yield* readToolCall(toolCallID)
           if (!match) continue
           const part = match.part
+          if (flags.experimentalEventSystem && match.call.assistantMessageID) {
+            yield* events.publish(SessionEvent.Tool.Failed, {
+              sessionID: ctx.sessionID,
+              assistantMessageID: match.call.assistantMessageID,
+              callID: toolCallID,
+              error: { type: "unknown", message: "Tool execution aborted" },
+              provider: { executed: part.metadata?.providerExecuted === true },
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
+          }
           const end = Date.now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
           yield* session.updatePart({

@@ -1,11 +1,12 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { V2Schema } from "@opencode-ai/core/v2-schema"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -65,6 +66,18 @@ const VersionedMessage = EventV2.define({
   schema: {
     id: Schema.String,
     text: Schema.String,
+  },
+})
+
+const SyncTimestamp = EventV2.define({
+  type: "test.timestamp",
+  sync: {
+    version: 1,
+    aggregate: "id",
+  },
+  schema: {
+    id: Schema.String,
+    timestamp: V2Schema.DateTimeUtcFromMillis,
   },
 })
 
@@ -335,6 +348,29 @@ describe("EventV2", () => {
         .pipe(Effect.exit)
 
       expect(String(exit)).toContain("Sequence mismatch")
+    }),
+  )
+
+  it.effect("replay decodes synchronized transformed values before projection", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const received = new Array<typeof SyncTimestamp.Type>()
+      yield* events.project(SyncTimestamp, (event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+
+      yield* events.replay({
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType(SyncTimestamp.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, timestamp: 0 },
+      })
+
+      expect(received[0]?.data.timestamp).toEqual(DateTime.makeUnsafe(0))
     }),
   )
 

@@ -61,7 +61,15 @@ export function versionedType(type: string, version: number) {
 }
 
 export const registry = new Map<string, Definition>()
-const syncRegistry = new Map<string, Definition & { readonly sync: NonNullable<Definition["sync"]> }>()
+type SyncDefinition = Definition & {
+  readonly sync: NonNullable<Definition["sync"]>
+  readonly encode: (data: unknown) => unknown
+  readonly decode: (data: unknown) => unknown
+}
+const syncRegistry = new Map<string, SyncDefinition>()
+
+// Synchronized events cross a JSON boundary, so their data schemas must encode and decode without services.
+const syncCodec = (definition: Definition) => definition.data as Schema.Codec<unknown, unknown, never, never>
 
 export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
   readonly type: Type
@@ -93,7 +101,10 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
   if (input.sync)
     syncRegistry.set(
       versionedType(input.type, input.sync.version),
-      definition as Definition & { readonly sync: NonNullable<Definition["sync"]> },
+      Object.assign(definition, {
+        encode: Schema.encodeUnknownSync(syncCodec(definition)),
+        decode: Schema.decodeUnknownSync(syncCodec(definition)),
+      }) as SyncDefinition,
     )
   return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
     Definition<Type, Schema.Struct<Fields>>
@@ -211,6 +222,7 @@ export const layer = Layer.effect(
                     for (const projector of list) {
                       yield* projector(event as Payload)
                     }
+                    const encoded = syncRegistry.get(versionedType(definition.type, sync.version))!.encode(event.data)
                     yield* db
                       .insert(EventSequenceTable)
                       .values([{ aggregate_id: aggregateID, seq, owner_id: input?.ownerID }])
@@ -228,7 +240,7 @@ export const layer = Layer.effect(
                           aggregate_id: aggregateID,
                           seq,
                           type: versionedType(definition.type, sync.version),
-                          data: event.data as Record<string, unknown>,
+                          data: encoded as Record<string, unknown>,
                         },
                       ])
                       .run()
@@ -289,7 +301,7 @@ export const layer = Layer.effect(
             id: event.id,
             type: definition.type,
             version: definition.sync.version,
-            data: event.data,
+            data: definition.decode(event.data),
           } as Payload
           yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
           if (options?.publish) {

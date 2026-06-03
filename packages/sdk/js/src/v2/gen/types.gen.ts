@@ -953,6 +953,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           callID: string
           name: string
         }
@@ -963,6 +964,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           callID: string
           delta: string
         }
@@ -973,6 +975,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           callID: string
           text: string
         }
@@ -983,6 +986,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           callID: string
           tool: string
           input: {
@@ -1002,6 +1006,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           callID: string
           structured: {
             [key: string]: unknown
@@ -1015,6 +1020,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           callID: string
           structured: {
             [key: string]: unknown
@@ -1034,6 +1040,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           callID: string
           error: SessionErrorUnknown
           provider: {
@@ -3176,6 +3183,7 @@ export type SyncEventSessionNextToolInputStarted = {
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     name: string
   }
@@ -3190,6 +3198,7 @@ export type SyncEventSessionNextToolInputDelta = {
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     delta: string
   }
@@ -3204,6 +3213,7 @@ export type SyncEventSessionNextToolInputEnded = {
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     text: string
   }
@@ -3218,6 +3228,7 @@ export type SyncEventSessionNextToolCalled = {
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     tool: string
     input: {
@@ -3241,6 +3252,7 @@ export type SyncEventSessionNextToolProgress = {
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     structured: {
       [key: string]: unknown
@@ -3258,6 +3270,7 @@ export type SyncEventSessionNextToolSuccess = {
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     structured: {
       [key: string]: unknown
@@ -3281,6 +3294,7 @@ export type SyncEventSessionNextToolFailed = {
   data: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     error: SessionErrorUnknown
     provider: {
@@ -4025,6 +4039,7 @@ export type EventSessionNextToolInputStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     name: string
   }
@@ -4036,6 +4051,7 @@ export type EventSessionNextToolInputDelta = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     delta: string
   }
@@ -4047,6 +4063,7 @@ export type EventSessionNextToolInputEnded = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     text: string
   }
@@ -4058,6 +4075,7 @@ export type EventSessionNextToolCalled = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     tool: string
     input: {
@@ -4078,6 +4096,7 @@ export type EventSessionNextToolProgress = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     structured: {
       [key: string]: unknown
@@ -4092,6 +4111,7 @@ export type EventSessionNextToolSuccess = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     structured: {
       [key: string]: unknown
@@ -4112,6 +4132,7 @@ export type EventSessionNextToolFailed = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     callID: string
     error: SessionErrorUnknown
     provider: {

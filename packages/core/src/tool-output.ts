@@ -13,6 +13,9 @@ export class FileContent extends Schema.Class<FileContent>("Tool.FileContent")({
   name: Schema.String.pipe(Schema.optional),
 }) {}
 
+export const text = (value: ConstructorParameters<typeof TextContent>[0]) => new TextContent(value)
+export const file = (value: ConstructorParameters<typeof FileContent>[0]) => new FileContent(value)
+
 export const Content = Schema.Union([TextContent, FileContent]).pipe(Schema.toTaggedUnion("type"))
 
 export const Structured = Schema.Record(Schema.String, Schema.Any)

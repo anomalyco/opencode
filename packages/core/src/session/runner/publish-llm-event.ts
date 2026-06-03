@@ -2,6 +2,7 @@ import { type LLMEvent, type ToolResultValue, type Usage } from "@opencode-ai/ll
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
+import { ToolOutput } from "../../tool-output"
 import { SessionEvent } from "../event"
 import { SessionSchema } from "../schema"
 
@@ -46,14 +47,14 @@ const output = (result: ToolResultValue): ToolOutput => {
     case "json":
       return { structured: record(result.value), content: [] }
     case "text":
-      return { structured: {}, content: [{ type: "text" as const, text: message(result.value) }] }
+      return { structured: {}, content: [ToolOutput.text({ type: "text", text: message(result.value) })] }
     case "content":
       return {
         structured: {},
         content: result.value.map((item: (typeof result.value)[number]) =>
           item.type === "text"
-            ? { type: "text" as const, text: item.text }
-            : { type: "file" as const, uri: item.data, mime: item.mediaType, name: item.filename }),
+            ? ToolOutput.text({ type: "text", text: item.text })
+            : ToolOutput.file({ type: "file", uri: item.data, mime: item.mediaType, name: item.filename })),
       }
     case "error":
       return { error: { type: "unknown" as const, message: message(result.value) } }
@@ -67,16 +68,24 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const reasoning = new Map<string, string>()
   const tools = new Map<
     string,
-    { readonly name: string; input: string; inputEnded: boolean; called: boolean; settled: boolean; providerExecuted: boolean }
+    { readonly assistantMessageID: EventV2.ID; readonly name: string; input: string; inputEnded: boolean; called: boolean; settled: boolean; providerExecuted: boolean }
   >()
   const timestamp = DateTime.now
+  let assistantMessageID: EventV2.ID | undefined
+
+  const currentAssistantMessageID = () =>
+    assistantMessageID === undefined
+      ? Effect.die("Tool event before assistant step start")
+      : Effect.succeed(assistantMessageID)
 
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     if (tools.has(event.id)) return yield* Effect.die(`Duplicate tool input start: ${event.id}`)
-    tools.set(event.id, { name: event.name, input: "", inputEnded: false, called: false, settled: false, providerExecuted: false })
+    const assistantMessageID = yield* currentAssistantMessageID()
+    tools.set(event.id, { assistantMessageID, name: event.name, input: "", inputEnded: false, called: false, settled: false, providerExecuted: false })
     yield* events.publish(SessionEvent.Tool.Input.Started, {
       sessionID: input.sessionID,
       timestamp: yield* timestamp,
+      assistantMessageID,
       callID: event.id,
       name: event.name,
     })
@@ -91,6 +100,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* events.publish(SessionEvent.Tool.Input.Ended, {
       sessionID: input.sessionID,
       timestamp: yield* timestamp,
+      assistantMessageID: tool.assistantMessageID,
       callID: event.id,
       text: tool.input,
     })
@@ -99,7 +109,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   return Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
-        yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp })
+        assistantMessageID = (yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp })).id
         return
       case "text-start":
         text.set(event.id, "")
@@ -170,6 +180,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Tool.Input.Delta, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
+          assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           delta: event.text,
         })
@@ -189,6 +200,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
+          assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           tool: event.name,
           input: record(event.input),
@@ -217,6 +229,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
             timestamp: yield* timestamp,
+            assistantMessageID: tool.assistantMessageID,
             callID: event.id,
             error: result.error,
             provider,
@@ -226,6 +239,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Tool.Success, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
+          assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
           provider,
@@ -241,6 +255,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Tool.Failed, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
+          assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           error: { type: "unknown", message: event.message },
           provider: {

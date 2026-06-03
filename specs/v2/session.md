@@ -33,7 +33,9 @@ SessionExecution.resume(sessionID)
 
 `SessionExecution` and the read-side `SessionStore` are process-global. `SessionRunner`, catalog, model resolver, tool registry, permission state, and filesystem are cached per Location. No layer takes a Session ID. An omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.
 
-The local runner issues one explicit `llm.stream(request)` per provider turn, projects provider events durably, settles recorded local calls through the tool registry, reloads projected history before continuation, and fails after 25 model steps. It joins concurrent resumes for one Session in the current process while allowing different Sessions to run concurrently. Joining is not queued steering: a prompt recorded during an already-active run still needs an explicit pending-input continuation rule so it cannot be stranded when that run settles without local-tool continuation. Durable multi-node ownership, stale-owner fencing, interruption, retry policy, queued steering, and replayable consumer events remain future work.
+The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started settlement after the provider stream closes, reloads projected history once before continuation, and fails after 25 model steps. Tool settlement events carry the owning assistant-message ID because provider-local call IDs may repeat across turns. It joins concurrent resumes for one Session in the current process while allowing different Sessions to run concurrently. Joining is not queued steering: a prompt recorded during an already-active run still needs an explicit pending-input continuation rule so it cannot be stranded when that run settles without local-tool continuation. Durable multi-node ownership, stale-owner fencing, interruption, retry policy, queued steering, and replayable consumer events remain future work.
+
+Eager local-tool execution is intentionally unbounded in the current local slice. This minimizes tool latency but does not increase SQLite settlement throughput: Session-event publication remains serialized per provider turn. Before broadening exposure, revisit per-turn call limits, output truncation, and operational backpressure using observed workloads. The `session.next.*` event schemas remain experimental and unshipped; databases created by earlier experimental builds are disposable rather than compatibility targets.
 
 Core already persists synchronized Session events and exposes internal replay for projection reconstruction. This is distinct from the missing consumer stream: replay durable events after a cursor, then tail live events without a race.
 
@@ -55,7 +57,7 @@ resolve one path relative to the Location or a named project reference
 
 ### Current Runner Follow-Ups
 
-- Settle eligible recorded local tool calls with bounded concurrency after consuming one provider turn. Current settlement is serial and inline during provider-stream consumption.
+- Keep eager structured local-tool settlement: durably record each complete call, start its child execution immediately, await all started settlements after provider-turn consumption, persist every result, and reload history once before continuation.
 - Buffer or coalesce streamed deltas before rewriting growing assistant projections.
 - Add covering indexes for `(session_id, time_created, id)` and `(session_id, type, time_created, id)`.
 - Add `event(aggregate_id, seq)` for ordered replay and history access.

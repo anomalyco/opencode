@@ -1,5 +1,5 @@
 import { LLM, LLMClient, LLMEvent } from "@opencode-ai/llm"
-import { Deferred, Effect, Layer, Ref, Stream } from "effect"
+import { Cause, Deferred, Effect, FiberSet, Layer, Ref, Semaphore, Stream } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
@@ -51,7 +51,7 @@ import { SessionRunnerModel } from "./model"
  *   - [x] Durably record each tool call before side effects begin.
  *   - [x] Authorize and execute recorded local calls through a core-owned registry hook.
  *   - [x] Persist typed success, failure, and provider-executed tool outcomes.
- *   - [ ] Consume one provider turn before settling eligible local calls with bounded concurrency.
+ *   - [x] Start each recorded local call eagerly and await all settlements before continuation.
  *   - [ ] Add scoped runtime context, progress updates, output truncation, attachment normalization,
  *     plugins, and cancellation settlement.
  *   - [x] Reload projected history and start the next explicit provider turn after local tool results.
@@ -97,6 +97,7 @@ export const layer = Layer.effect(
       const runTurn = Effect.fn("SessionRunner.runTurn")(function* (session: SessionSchema.Info) {
         const model = yield* models.resolve(session)
         return yield* Effect.gen(function* () {
+            const settlements = yield* FiberSet.make<void>()
             let settledLocalTool = false
             const context = yield* getContext(session.id)
             const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
@@ -109,21 +110,29 @@ export const layer = Layer.effect(
                 ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
               },
             })
+            const publication = Semaphore.makeUnsafe(1)
+            const publish = (event: LLMEvent) => publication.withPermit(publishLLMEvent(event))
 
             yield* llm.stream(request).pipe(
               Stream.runForEach((event) =>
                 Effect.gen(function* () {
-                  yield* publishLLMEvent(event)
-                  if (event.type !== "tool-call" || event.providerExecuted) return
-                  const result = yield* tools.execute({ sessionID: session.id, call: event })
-                  yield* publishLLMEvent(LLMEvent.toolResult({ id: event.id, name: event.name, result }))
-                  settledLocalTool = true
-                }),
-              ),
-            )
-            return settledLocalTool
+                   yield* publish(event)
+                   if (event.type !== "tool-call" || event.providerExecuted) return
+                   settledLocalTool = true
+                   yield* tools.execute({ sessionID: session.id, call: event }).pipe(
+                       Effect.catchCause((cause) =>
+                         Effect.succeed({ type: "error" as const, value: String(Cause.squash(cause)) }),
+                       ),
+                       Effect.flatMap((result) => publish(LLMEvent.toolResult({ id: event.id, name: event.name, result }))),
+                       FiberSet.run(settlements, { startImmediately: true }),
+                     )
+                 }),
+               ),
+             )
+             yield* FiberSet.awaitEmpty(settlements)
+             return settledLocalTool
         })
-      })
+      }, Effect.scoped)
 
       const runOwned = Effect.fn("SessionRunner.runOwned")(function* (sessionID: SessionSchema.ID) {
         const session = yield* getSession(sessionID)

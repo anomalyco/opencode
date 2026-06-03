@@ -113,6 +113,17 @@ function applyUsage(
 
 function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
+    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) => decodeMessage({ ...row.data, id: row.id, type: row.type })
+    const writeMessage = (message: SessionMessage.Message) => {
+      const encoded = encodeMessage(message)
+      const { id, type, ...data } = encoded
+      return db
+        .insert(SessionMessageTable)
+        .values([{ id: SessionMessage.ID.make(id), session_id: event.data.sessionID, type, time_created: DateTime.toEpochMillis(message.time.created), data }])
+        .onConflictDoUpdate({ target: SessionMessageTable.id, set: { type, time_created: DateTime.toEpochMillis(message.time.created), data } })
+        .run()
+        .pipe(Effect.orDie)
+    }
     const adapter: SessionMessageUpdater.Adapter = {
       getCurrentAssistant() {
         return Effect.gen(function* () {
@@ -125,10 +136,29 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .all()
             .pipe(Effect.orDie)
           return rows
-            .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+            .map(decodeRow)
             .find(
               (message): message is SessionMessage.Assistant => message.type === "assistant" && !message.time.completed,
             )
+        })
+      },
+      getAssistant(messageID) {
+        return Effect.gen(function* () {
+          const row = yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.id, messageID),
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.type, "assistant"),
+              ),
+            )
+            .get()
+            .pipe(Effect.orDie)
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "assistant" ? message : undefined
         })
       },
       getCurrentCompaction() {
@@ -142,7 +172,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .all()
             .pipe(Effect.orDie)
           return rows
-            .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+            .map(decodeRow)
             .find((message): message is SessionMessage.Compaction => message.type === "compaction")
         })
       },
@@ -155,118 +185,14 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .all()
             .pipe(Effect.orDie)
           return rows
-            .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+            .map(decodeRow)
             .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
         })
       },
-      updateAssistant(message) {
-        return Effect.gen(function* () {
-          const encoded = encodeMessage(message)
-          const { id, type, ...data } = encoded
-          yield* db
-            .insert(SessionMessageTable)
-            .values([
-              {
-                id: SessionMessage.ID.make(id),
-                session_id: event.data.sessionID,
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            ])
-            .onConflictDoUpdate({
-              target: SessionMessageTable.id,
-              set: {
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            })
-            .run()
-            .pipe(Effect.orDie)
-        })
-      },
-      updateCompaction(message) {
-        return Effect.gen(function* () {
-          const encoded = encodeMessage(message)
-          const { id, type, ...data } = encoded
-          yield* db
-            .insert(SessionMessageTable)
-            .values([
-              {
-                id: SessionMessage.ID.make(id),
-                session_id: event.data.sessionID,
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            ])
-            .onConflictDoUpdate({
-              target: SessionMessageTable.id,
-              set: {
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            })
-            .run()
-            .pipe(Effect.orDie)
-        })
-      },
-      updateShell(message) {
-        return Effect.gen(function* () {
-          const encoded = encodeMessage(message)
-          const { id, type, ...data } = encoded
-          yield* db
-            .insert(SessionMessageTable)
-            .values([
-              {
-                id: SessionMessage.ID.make(id),
-                session_id: event.data.sessionID,
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            ])
-            .onConflictDoUpdate({
-              target: SessionMessageTable.id,
-              set: {
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            })
-            .run()
-            .pipe(Effect.orDie)
-        })
-      },
-      appendMessage(message) {
-        return Effect.gen(function* () {
-          const encoded = encodeMessage(message)
-          const { id, type, ...data } = encoded
-          yield* db
-            .insert(SessionMessageTable)
-            .values([
-              {
-                id: SessionMessage.ID.make(id),
-                session_id: event.data.sessionID,
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            ])
-            .onConflictDoUpdate({
-              target: SessionMessageTable.id,
-              set: {
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            })
-            .run()
-            .pipe(Effect.orDie)
-        })
-      },
+      updateAssistant: writeMessage,
+      updateCompaction: writeMessage,
+      updateShell: writeMessage,
+      appendMessage: writeMessage,
     }
     yield* SessionMessageUpdater.update(adapter, event)
   })
@@ -409,8 +335,8 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Input.Delta, (event) => run(db, event))
-    yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Progress, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))

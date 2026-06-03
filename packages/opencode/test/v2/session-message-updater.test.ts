@@ -7,6 +7,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
 
 test.skip("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
@@ -111,10 +112,11 @@ test.skip("tool completion stores completed timestamp", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
   const callID = "call"
+  const assistantMessageID = EventV2.ID.create()
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
-      id: EventV2.ID.create(),
+      id: assistantMessageID,
       type: "session.next.step.started",
       data: {
         sessionID,
@@ -135,6 +137,7 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.input.started",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(2),
         callID,
         name: "bash",
@@ -148,6 +151,7 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.called",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(3),
         callID,
         tool: "bash",
@@ -163,10 +167,11 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.success",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(4),
         callID,
         structured: {},
-        content: [{ type: "text", text: "/tmp" }],
+        content: [ToolOutput.text({ type: "text", text: "/tmp" })],
         provider: { executed: true, metadata: { fake: { status: "done" } } },
       },
     } satisfies SessionEvent.Event),

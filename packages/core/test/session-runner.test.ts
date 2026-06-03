@@ -3,6 +3,7 @@ import { LLMClient, LLMError, LLMEvent, Model, Tool, TransportReason, type LLMCl
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -14,9 +15,10 @@ import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
@@ -26,13 +28,23 @@ const store = SessionStore.layer.pipe(Layer.provide(database))
 const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
+let responseStream: Stream.Stream<LLMEvent, LLMError> | undefined
 let streamGate: Deferred.Deferred<void> | undefined
 let streamStarted: Deferred.Deferred<void> | undefined
 let streamFailure: LLMError | undefined
+let toolExecutionGate: Deferred.Deferred<void> | undefined
+let toolExecutionsStarted: Deferred.Deferred<void> | undefined
+let activeToolExecutions = 0
+let maxActiveToolExecutions = 0
 const client = Layer.succeed(LLMClient.Service, LLMClient.Service.of({
   prepare: () => Effect.die("unused"),
   stream: ((request: LLMRequest) => {
     requests.push(request)
+    if (responseStream) {
+      const stream = responseStream
+      responseStream = undefined
+      return stream
+    }
     const events = streamFailure
       ? Stream.fail(streamFailure)
       : Stream.fromIterable(responses === undefined ? response : (responses.shift() ?? []))
@@ -52,7 +64,7 @@ const executions: string[] = []
 const registry = ToolRegistry.layer
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
-    registry.contribute((editor) =>
+    registry.contribute((editor) => {
       editor.set("echo", {
         authorize: (input) => Effect.sync(() => {
           authorizations.push(input)
@@ -61,13 +73,28 @@ const echo = Layer.effectDiscard(
           description: "Echo text",
           parameters: Schema.Struct({ text: Schema.String }),
           success: Schema.Struct({ text: Schema.String }),
-          execute: ({ text }) => Effect.sync(() => {
-            executions.push(text)
-            return { text }
-          }),
+          execute: ({ text }) =>
+            Effect.gen(function* () {
+              executions.push(text)
+              activeToolExecutions++
+              maxActiveToolExecutions = Math.max(maxActiveToolExecutions, activeToolExecutions)
+              if (activeToolExecutions === 5 && toolExecutionsStarted) {
+                yield* Deferred.succeed(toolExecutionsStarted, undefined)
+              }
+              if (toolExecutionGate) yield* Deferred.await(toolExecutionGate)
+              return { text }
+            }).pipe(Effect.ensuring(Effect.sync(() => activeToolExecutions--))),
         }),
       }),
-    ),
+      editor.set("defect", {
+        tool: Tool.make({
+          description: "Fail unexpectedly",
+          parameters: Schema.Struct({}),
+          success: Schema.Struct({}),
+          execute: () => Effect.die("unexpected tool defect"),
+        }),
+      })
+    }),
   ),
 ).pipe(Layer.provide(registry))
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
@@ -115,6 +142,11 @@ const insertSession = (id: SessionV2.ID) =>
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
   streamFailure = undefined
+  responseStream = undefined
+  toolExecutionGate = undefined
+  toolExecutionsStarted = undefined
+  activeToolExecutions = 0
+  maxActiveToolExecutions = 0
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
@@ -158,7 +190,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(1)
       expect(requests[0]?.model).toBe(model)
-      expect(requests[0]?.tools).toMatchObject([{ name: "echo", description: "Echo text" }])
+      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["echo", "defect"])
       expect(requests[0]?.messages.map((message) => ({ role: message.role, content: message.content }))).toEqual([
         { role: "user", content: [{ type: "text", text: "First" }] },
         { role: "user", content: [{ type: "text", text: "Second" }] },
@@ -219,7 +251,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.tools).toMatchObject([{ name: "echo" }])
+      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["echo", "defect"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Use tools" },
         {
@@ -256,6 +288,7 @@ describe("SessionRunnerLLM", () => {
           ],
         },
       ])
+
     }),
   )
 
@@ -308,6 +341,142 @@ describe("SessionRunnerLLM", () => {
           ],
         },
         { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-final", text: "Done" }] },
+      ])
+    }),
+  )
+
+  it.effect("starts recorded local tools eagerly and awaits settlement before continuing", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Echo five times" }), resume: false })
+
+      requests.length = 0
+      executions.length = 0
+      toolExecutionGate = yield* Deferred.make<void>()
+      toolExecutionsStarted = yield* Deferred.make<void>()
+      const providerGate = yield* Deferred.make<void>()
+      response = []
+      responses = undefined
+      const initial = Stream.fromIterable([
+        LLMEvent.stepStart({ index: 0 }),
+        ...Array.from({ length: 5 }, (_, index) =>
+          LLMEvent.toolCall({ id: `call-echo-${index}`, name: "echo", input: { text: `${index}` } }),
+        ),
+      ])
+      const final = Stream.fromIterable([
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ])
+      streamGate = undefined
+      responseStream = Stream.concat(
+        initial,
+        Stream.fromEffect(Deferred.await(providerGate)).pipe(Stream.flatMap(() => final)),
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(toolExecutionsStarted)
+
+      expect(executions).toHaveLength(5)
+      expect(maxActiveToolExecutions).toBe(5)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Echo five times" },
+        {
+          type: "assistant",
+          content: Array.from({ length: 5 }, (_, index) => ({
+            type: "tool",
+            id: `call-echo-${index}`,
+            state: { status: "running", input: { text: `${index}` } },
+          })),
+        },
+      ])
+
+      yield* Deferred.succeed(providerGate, undefined)
+      yield* Effect.yieldNow
+      expect(requests).toHaveLength(1)
+
+      yield* Deferred.succeed(toolExecutionGate, undefined)
+      yield* Fiber.join(run)
+      toolExecutionGate = undefined
+      toolExecutionsStarted = undefined
+
+      expect(executions).toHaveLength(5)
+      expect(maxActiveToolExecutions).toBe(5)
+      expect(requests).toHaveLength(2)
+    }),
+  )
+
+  it.effect("settles repeated provider-local tool call IDs against their owning assistant messages", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Echo twice" }), resume: false })
+
+      requests.length = 0
+      executions.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "tool_0", name: "echo", input: { text: "first" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "tool_0", name: "echo", input: { text: "second" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(executions).toEqual(["first", "second"])
+      expect(requests).toHaveLength(3)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Echo twice" },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "first" } } }],
+        },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "second" } } }],
+        },
+      ])
+
+      const { db } = yield* Database.Service
+      const event = yield* EventV2.Service
+      const recorded = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      yield* event.remove(sessionID)
+      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, sessionID)).run().pipe(Effect.orDie)
+      yield* event.replayAll(
+        recorded.map((event) => ({
+          id: event.id,
+          aggregateID: event.aggregate_id,
+          seq: event.seq,
+          type: event.type,
+          data: event.data,
+        })),
+      )
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Echo twice" },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "first" } } }],
+        },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "second" } } }],
+        },
       ])
     }),
   )
@@ -456,6 +625,42 @@ describe("SessionRunnerLLM", () => {
           ],
         },
         { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-after-error", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("durably settles unexpected local tool defects before continuing", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Call defect" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-defect", name: "defect", input: {} }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Call defect" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-defect",
+              state: { status: "error", error: { message: "unexpected tool defect" } },
+            },
+          ],
+        },
       ])
     }),
   )

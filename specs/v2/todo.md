@@ -35,8 +35,14 @@ before relying on prompts recorded during an already-active run.
 
 Next reviewed slices:
 
-- settle recorded local tool calls with bounded concurrency after consuming one
-  provider turn
+- preserve eager structured local-tool settlement: durably record each complete
+  call, start its child execution immediately, await every settlement after the
+  provider turn closes, then reload projected history once
+- revisit per-turn tool-call limits, output truncation, and operational
+  backpressure before broadening exposure; eager local execution is deliberately
+  unbounded in the current local slice while SQLite publication stays serialized
+- remove the public in-memory `@opencode-ai/llm` tool loop after replacing its
+  remaining one-turn native-adapter use with a narrow typed dispatcher
 - batch streamed deltas and add covering context indexes
 - add replayable Session event cursors
 - add compaction, queued steering, interruption, retries, and stale-owner fencing
