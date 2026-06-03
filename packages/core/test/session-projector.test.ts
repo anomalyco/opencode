@@ -43,7 +43,7 @@ const assistantRow = (
 }
 
 describe("SessionProjector", () => {
-  it.effect("orders projected context by durable aggregate sequence", () =>
+  it.effect("orders projected messages and context by durable aggregate sequence", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       yield* db
@@ -76,8 +76,28 @@ describe("SessionProjector", () => {
         { id: SessionMessage.ID.make("evt_a") },
       )
 
+      const sessions = yield* SessionV2.Service
+      const firstPage = yield* sessions.messages({ sessionID, limit: 1, order: "asc" })
+      expect(firstPage.map((message) => (message.type === "user" ? message.text : message.type))).toEqual(["first"])
+      const secondPage = yield* sessions.messages({
+        sessionID,
+        limit: 1,
+        order: "asc",
+        cursor: { id: firstPage[0]!.id, direction: "next" },
+      })
+      expect(secondPage.map((message) => (message.type === "user" ? message.text : message.type))).toEqual(["second"])
       expect(
-        (yield* SessionV2.Service.pipe(Effect.flatMap((sessions) => sessions.context(sessionID)))).map((message) =>
+        (
+          yield* sessions.messages({
+            sessionID,
+            limit: 1,
+            order: "asc",
+            cursor: { id: secondPage[0]!.id, direction: "previous" },
+          })
+        ).map((message) => (message.type === "user" ? message.text : message.type)),
+      ).toEqual(["first"])
+      expect(
+        (yield* sessions.context(sessionID)).map((message) =>
           message.type === "user" ? message.text : message.type,
         ),
       ).toEqual(["first", "second"])
@@ -127,6 +147,81 @@ describe("SessionProjector", () => {
       expect(
         yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie),
       ).toMatchObject({ promoted_seq: event.seq })
+    }),
+  )
+
+  it.effect("projects durable context messages supported by the updater", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+
+      yield* events.publish(SessionEvent.AgentSwitched, { sessionID, timestamp: created, agent: "build" })
+      yield* events.publish(SessionEvent.ModelSwitched, { sessionID, timestamp: created, model })
+      yield* events.publish(SessionEvent.Synthetic, { sessionID, timestamp: created, text: "synthetic context" })
+      yield* events.publish(SessionEvent.Shell.Started, {
+        sessionID,
+        timestamp: created,
+        callID: "shell-1",
+        command: "pwd",
+      })
+      yield* events.publish(SessionEvent.Shell.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        callID: "shell-1",
+        output: "/project",
+      })
+      yield* events.publish(SessionEvent.Compaction.Started, { sessionID, timestamp: created, reason: "manual" })
+      yield* events.publish(SessionEvent.Compaction.Delta, { sessionID, timestamp: created, text: "partial" })
+      yield* events.publish(SessionEvent.Compaction.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        text: "summary",
+        include: "msg-1",
+      })
+
+      const rows = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .orderBy(asc(SessionMessageTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      const messages = rows.map((row) =>
+        Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }),
+      )
+
+      expect(messages.map((message) => message.type)).toEqual([
+        "agent-switched",
+        "model-switched",
+        "synthetic",
+        "shell",
+        "compaction",
+      ])
+      expect(messages.find((message) => message.type === "shell")).toMatchObject({
+        output: "/project",
+        time: { completed: DateTime.makeUnsafe(1) },
+      })
+      expect(messages.find((message) => message.type === "compaction")).toMatchObject({
+        summary: "summary",
+        include: "msg-1",
+      })
     }),
   )
 

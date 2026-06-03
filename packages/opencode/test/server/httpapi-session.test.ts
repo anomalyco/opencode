@@ -129,7 +129,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
     (info) => Workspace.use.remove(info.id).pipe(Effect.ignore),
   )
 
-const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
+const insertLegacyAssistantMessage = (sessionID: SessionIDType, seq = 1, time = seq) =>
   Effect.gen(function* () {
     const message = new SessionMessage.Assistant({
       id: SessionMessage.ID.create(),
@@ -151,7 +151,7 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
           id: message.id,
           session_id: sessionID,
           type: message.type,
-          seq: time,
+          seq,
           time_created: time,
           data: {
             time: { created: time },
@@ -163,6 +163,7 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
       ])
       .run()
       .pipe(Effect.orDie)
+    return message
   })
 
 const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
@@ -443,8 +444,8 @@ describe("session HttpApi", () => {
         const test = yield* TestInstance
         const headers = { "x-opencode-directory": test.directory }
         const session = yield* createSession({ title: "v2 cursor" })
-        yield* insertLegacyAssistantMessage(session.id, 1)
-        yield* insertLegacyAssistantMessage(session.id, 2)
+        const firstMessage = yield* insertLegacyAssistantMessage(session.id, 1, 2)
+        const secondMessage = yield* insertLegacyAssistantMessage(session.id, 2, 1)
 
         const sessionPage = yield* request(
           `/api/session?${new URLSearchParams({
@@ -482,8 +483,30 @@ describe("session HttpApi", () => {
         })
 
         const messagePage = yield* request(`/api/session/${session.id}/message?limit=1`, { headers })
-        const messageCursor = (yield* json<{ cursor: { next?: string } }>(messagePage)).cursor.next
+        const messageBody = yield* json<{ items: SessionMessage.Message[]; cursor: { next?: string } }>(messagePage)
+        const messageCursor = messageBody.cursor.next
         expect(messageCursor).toBeTruthy()
+        expect(messageBody.items.map((message) => message.id)).toEqual([secondMessage.id])
+        expect(JSON.parse(Buffer.from(messageCursor!, "base64url").toString("utf8"))).toEqual({
+          id: secondMessage.id,
+          order: "desc",
+          direction: "next",
+        })
+
+        const nextMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${messageCursor}`, { headers })
+        expect((yield* json<{ items: SessionMessage.Message[] }>(nextMessagePage)).items.map((message) => message.id)).toEqual([
+          firstMessage.id,
+        ])
+
+        const legacyMessageCursor = Buffer.from(
+          JSON.stringify({ id: secondMessage.id, time: 1, order: "desc", direction: "next" }),
+        ).toString("base64url")
+        const legacyMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${legacyMessageCursor}`, {
+          headers,
+        })
+        expect((yield* json<{ items: SessionMessage.Message[] }>(legacyMessagePage)).items.map((message) => message.id)).toEqual([
+          firstMessage.id,
+        ])
 
         const messageCursorWithOrder = yield* request(
           `/api/session/${session.id}/message?cursor=${messageCursor}&order=asc`,

@@ -2,6 +2,7 @@ export * as Ripgrep from "./ripgrep"
 
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
+import { Ripgrep as FileSystemRipgrep } from "./filesystem/ripgrep"
 import { AppProcess, collectStream, waitForAbort } from "./process"
 import { NonNegativeInt, PositiveInt } from "./schema"
 
@@ -82,6 +83,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const process = yield* AppProcess.Service
+    const binary = yield* FileSystemRipgrep.Service
 
     const run = <A>(input: {
       readonly cwd: string
@@ -94,7 +96,7 @@ export const layer = Layer.effect(
       const program = Effect.scoped(
         Effect.gen(function* () {
           const handle = yield* process.spawn(
-            ChildProcess.make("rg", input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
+            ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
             Effect.map((output) => output.buffer.toString("utf8")),
@@ -134,9 +136,10 @@ export const layer = Layer.effect(
           args: [
             "--no-config",
             "--files",
-            "--hidden", // TODO: Review hidden-file policy before leaf tool exposure.
             "--glob=!.git/*", // TODO: Review .git exclusion policy before leaf tool exposure.
             `--glob=${input.pattern}`,
+            "--glob=!.*",
+            "--glob=!**/.*",
             ".",
           ],
           parse: (line) => Effect.succeed(line.replace(/^\.\//, "")),
@@ -149,10 +152,11 @@ export const layer = Layer.effect(
           args: [
             "--no-config",
             "--json",
-            "--hidden", // TODO: Review hidden-file policy before leaf tool exposure.
             "--glob=!.git/*", // TODO: Review .git exclusion policy before leaf tool exposure.
             "--no-messages",
             ...(input.include ? [`--glob=${input.include}`] : []),
+            "--glob=!.*",
+            "--glob=!**/.*",
             "--",
             input.pattern,
             input.file ?? ".",
@@ -175,4 +179,4 @@ export const layer = Layer.effect(
         }),
     })
   }),
-)
+).pipe(Layer.provide(FileSystemRipgrep.defaultLayer))

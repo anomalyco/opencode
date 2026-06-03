@@ -7,6 +7,7 @@ import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { QuestionV2 } from "@opencode-ai/core/question"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
@@ -44,6 +45,7 @@ export class V2LocationMiddleware extends HttpApiMiddleware.Service<
       | PermissionV2.Service
       | ProjectReference.Service
       | FileSystem.Service
+      | QuestionV2.Service
   }
 >()("@opencode/ExperimentalHttpApiV2Location") {}
 

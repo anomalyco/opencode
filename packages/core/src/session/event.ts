@@ -221,6 +221,7 @@ export namespace Reasoning {
     schema: {
       ...Base,
       reasoningID: Schema.String,
+      providerMetadata: ProviderMetadata.pipe(Schema.optional),
     },
   })
   export type Started = typeof Started.Type
@@ -243,6 +244,7 @@ export namespace Reasoning {
       ...Base,
       reasoningID: Schema.String,
       text: Schema.String,
+      providerMetadata: ProviderMetadata.pipe(Schema.optional),
     },
   })
   export type Ended = typeof Ended.Type
@@ -338,6 +340,7 @@ export namespace Tool {
       ...ToolBase,
       structured: ToolOutput.Structured,
       content: Schema.Array(ToolOutput.Content),
+      result: Schema.Unknown.pipe(Schema.optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: ProviderMetadata.pipe(Schema.optional),
@@ -352,6 +355,7 @@ export namespace Tool {
     schema: {
       ...ToolBase,
       error: UnknownError,
+      result: Schema.Unknown.pipe(Schema.optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: ProviderMetadata.pipe(Schema.optional),

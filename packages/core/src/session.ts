@@ -118,7 +118,6 @@ export interface Interface {
     order?: "asc" | "desc"
     cursor?: {
       id: SessionMessage.ID
-      time: number
       direction: "previous" | "next"
     }
   }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
@@ -315,22 +314,19 @@ export const layer = Layer.effect(
         const direction = input.cursor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const boundary = input.cursor
+        const anchor = input.cursor
+          ? yield* db
+              .select({ seq: SessionMessageTable.seq })
+              .from(SessionMessageTable)
+              .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)))
+              .get()
+              .pipe(Effect.orDie)
+          : undefined
+        if (input.cursor && !anchor) return []
+        const boundary = anchor
           ? order === "asc"
-            ? or(
-                gt(SessionMessageTable.time_created, input.cursor.time),
-                and(
-                  eq(SessionMessageTable.time_created, input.cursor.time),
-                  gt(SessionMessageTable.id, input.cursor.id),
-                ),
-              )
-            : or(
-                lt(SessionMessageTable.time_created, input.cursor.time),
-                and(
-                  eq(SessionMessageTable.time_created, input.cursor.time),
-                  lt(SessionMessageTable.id, input.cursor.id),
-                ),
-              )
+            ? gt(SessionMessageTable.seq, anchor.seq)
+            : lt(SessionMessageTable.seq, anchor.seq)
           : undefined
         const where = boundary
           ? and(eq(SessionMessageTable.session_id, input.sessionID), boundary)
@@ -339,10 +335,7 @@ export const layer = Layer.effect(
           .select()
           .from(SessionMessageTable)
           .where(where)
-          .orderBy(
-            order === "asc" ? asc(SessionMessageTable.time_created) : desc(SessionMessageTable.time_created),
-            order === "asc" ? asc(SessionMessageTable.id) : desc(SessionMessageTable.id),
-          )
+          .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )

@@ -239,19 +239,24 @@ describe("BashTool", () => {
     ),
   )
 
-  it.live("requires external-directory approval for absolute command arguments", () =>
+  it.live("reports external command arguments as advisory warnings without enforcing approval", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([active, outside]) => {
         reset()
         denyAction = "external_directory"
         const target = path.join(outside.path, "secret.txt")
-        return withTool(active.path, (registry) => registry.execute(call({ command: `cat ${target}` }))).pipe(
-          Effect.andThen(
+        return withTool(active.path, (registry) => registry.settle(call({ command: `cat ${target}` }))).pipe(
+          Effect.andThen((settled) =>
             Effect.sync(() => {
-              expect(assertions.map((item) => item.action)).toEqual(["external_directory"])
-              expect(assertions[0]).toMatchObject({ resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")] })
-              expect(runs).toEqual([])
+              expect(assertions.map((item) => item.action)).toEqual(["bash"])
+              expect(runs).toHaveLength(1)
+              expect(settled.output?.structured).toMatchObject({
+                warnings: [
+                  `Command argument references external directory ${path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
+                ],
+              })
+              expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("Warnings:") })
             }),
           ),
         )
@@ -338,7 +343,7 @@ test("keeps locked deferred parity TODOs visible", async () => {
   for (const todo of [
     "Port tree-sitter bash / PowerShell parser-based approval reduction.",
     "Port BashArity reusable command-prefix approvals.",
-    "Discover command argument paths and request external_directory for external argument targets, not only cwd.",
+    "Replace token-based command-argument external-directory advisories with parser-based detection.",
     "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
     "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
     "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",

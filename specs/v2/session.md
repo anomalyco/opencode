@@ -53,7 +53,7 @@ Inbox promotion coalesces pending steers in durable admission order and opens on
 
 Eager local-tool execution is intentionally unbounded in the current local slice. This minimizes tool latency but does not increase SQLite settlement throughput: Session-event publication remains serialized per provider turn. Before broadening exposure, revisit per-turn call limits, output truncation, and operational backpressure using observed workloads. The `session.next.*` event schemas remain experimental and unshipped; databases created by earlier experimental builds are disposable rather than compatibility targets.
 
-Core persists synchronized Session events and exposes internal replay for projection reconstruction. Projected Session messages retain their source aggregate sequence so canonical context ordering follows durable event order even when caller-supplied IDs or timestamps do not. Consumers can use `sessions.events({ sessionID, after? })` to replay durable `session.next.*` events after an aggregate sequence cursor, then tail durable events without a race. Live-only text, reasoning, and tool-input fragments remain available through EventV2 subscriptions for connected renderers; they are intentionally absent from the replayable Session stream.
+Core persists synchronized Session events and exposes internal replay for projection reconstruction. Projected Session messages retain their source aggregate sequence so canonical context ordering and `sessions.messages(...)` pagination follow durable event order even when caller-supplied IDs or timestamps do not. Consumers can use `sessions.events({ sessionID, after? })` to replay durable `session.next.*` events after an aggregate sequence cursor, then tail durable events without a race. Live-only text, reasoning, and tool-input fragments remain available through EventV2 subscriptions for connected renderers; they are intentionally absent from the replayable Session stream.
 
 The first `sessions.events(...)` contract is durable-only during both replay and live tailing. This keeps one cursor equal to one persisted aggregate sequence and is sufficient for reconnect-safe consumers such as Discord publication. A later UI-facing API may optionally interleave live-only deltas while connected, but those fragments must remain explicitly ephemeral: they cannot advance the durable cursor, replay after reconnect, or be mistaken for publication boundaries. Until that contract is designed, connected renderers can combine `sessions.events(...)` with direct EventV2 delta subscriptions.
 
@@ -73,6 +73,8 @@ resolve one path relative to the Location or a named project reference
 -> for a directory: return direct children in directory-first alphabetical order
 -> page directory results with one-based offset and next cursor
 ```
+
+V2 `bash` is isolated behind a safe default. It is denied unless the selected agent's configured rules contain a matching exact-action `bash` rule with `ask` or `allow`. A remembered approval cannot enable bash by itself, and an authored catch-all allow rule does not count as explicit bash opt-in. Once opted in, bash is not sandboxed: the spawned shell runs with the host user's filesystem, process, and network authority. Structured external `workdir` resolution remains an enforced `external_directory` authority check. Best-effort scans of absolute command arguments produce advisory warnings only; they are not sandbox boundaries and do not request or enforce `external_directory` approval.
 
 ### Current Runner Follow-Ups
 

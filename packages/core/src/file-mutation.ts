@@ -1,6 +1,6 @@
 export * as FileMutation from "./file-mutation"
 
-import { Context, Effect, Layer, Semaphore } from "effect"
+import { Context, Effect, Layer, Schema, Semaphore } from "effect"
 import { FSUtil } from "./fs-util"
 import { LocationMutation } from "./location-mutation"
 
@@ -9,9 +9,17 @@ export interface WriteInput {
   readonly content: string | Uint8Array
 }
 
+export interface ConditionalWriteInput extends WriteInput {
+  readonly expected: Uint8Array
+}
+
 export interface RemoveInput {
   readonly plan: LocationMutation.Plan
 }
+
+export class StaleContentError extends Schema.TaggedErrorClass<StaleContentError>()("FileMutation.StaleContentError", {
+  path: Schema.String,
+}) {}
 
 export interface WriteReceipt {
   readonly operation: "write"
@@ -34,6 +42,10 @@ export interface RemoveReceipt {
 export interface Interface {
   /** Commit one planned write after immediately re-proving its mutation authority. */
   readonly write: (input: WriteInput) => Effect.Effect<WriteReceipt, LocationMutation.RevalidationError | FSUtil.Error>
+  /** Commit only if an existing target still has the expected bytes. */
+  readonly writeIfUnchanged: (
+    input: ConditionalWriteInput,
+  ) => Effect.Effect<WriteReceipt, StaleContentError | LocationMutation.RevalidationError | FSUtil.Error>
   /** Commit one planned removal after immediately re-proving its mutation authority. */
   readonly remove: (input: RemoveInput) => Effect.Effect<RemoveReceipt, LocationMutation.RevalidationError | FSUtil.Error>
 }
@@ -46,7 +58,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
  * This boundary deliberately does not ask for permission. Future leaf tools own
  * the policy sequence: resolve a plan, approve external_directory when present,
  * approve edit, then call write/remove. Each commit locks its canonical target
- * and revalidates inside that lock immediately before filesystem mechanics. The
+ * and revalidates inside that lock immediately before filesystem mechanics.
+ * Conditional writes additionally compare and write under that same lock so
+ * cooperating process-local edits cannot both stale-pass and clobber. The
  * revalidation narrows the TOCTOU window; path-based filesystem APIs cannot make
  * the proof and final syscall atomic.
  *
@@ -95,6 +109,23 @@ export const layer = Layer.effect(
       ),
     )
 
+    const writeIfUnchanged = Effect.fn("FileMutation.writeIfUnchanged")((input: ConditionalWriteInput) =>
+      withTargetLock(input.plan.target.canonical)(
+        Effect.gen(function* () {
+          const target = yield* mutation.revalidate(input.plan)
+          const current = yield* fs.readFile(target.canonical)
+          if (!sameBytes(current, input.expected)) return yield* new StaleContentError({ path: target.canonical })
+          yield* fs.writeWithDirs(target.canonical, input.content)
+          return {
+            operation: "write",
+            target: target.canonical,
+            resource: target.resource,
+            existed: target.exists,
+          } satisfies WriteReceipt
+        }),
+      ),
+    )
+
     const remove = Effect.fn("FileMutation.remove")((input: RemoveInput) =>
       withTargetLock(input.plan.target.canonical)(
         Effect.gen(function* () {
@@ -110,9 +141,14 @@ export const layer = Layer.effect(
       ),
     )
 
-    return Service.of({ write, remove })
+    return Service.of({ write, writeIfUnchanged, remove })
   }),
 )
+
+function sameBytes(left: Uint8Array, right: Uint8Array) {
+  if (left.length !== right.length) return false
+  return left.every((byte, index) => byte === right[index])
+}
 
 export const locationLayer = layer
 

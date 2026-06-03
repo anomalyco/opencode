@@ -83,6 +83,7 @@ interface ProcessorContext extends Input {
   blocked: boolean
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
+  currentTextID: string | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
   v2AssistantMessageID: EventV2.ID | undefined
 }
@@ -124,6 +125,7 @@ export const layer = Layer.effect(
         blocked: false,
         needsCompaction: false,
         currentText: undefined,
+        currentTextID: undefined,
         reasoningMap: {},
         v2AssistantMessageID: undefined,
       }
@@ -252,6 +254,7 @@ export const layer = Layer.effect(
             sessionID: ctx.sessionID,
             reasoningID,
             text: ctx.reasoningMap[reasoningID].text,
+            providerMetadata: ctx.reasoningMap[reasoningID].metadata,
             timestamp: DateTime.makeUnsafe(Date.now()),
           })
         }
@@ -260,6 +263,27 @@ export const layer = Layer.effect(
         ctx.reasoningMap[reasoningID].time = { ...ctx.reasoningMap[reasoningID].time, end: Date.now() }
         yield* session.updatePart(ctx.reasoningMap[reasoningID])
         delete ctx.reasoningMap[reasoningID]
+      })
+
+      const flushV2Fragments = Effect.fn("SessionProcessor.flushV2Fragments")(function* () {
+        if (!flags.experimentalEventSystem) return
+        if (!ctx.assistantMessage.summary && ctx.currentText && ctx.currentTextID) {
+          yield* events.publish(SessionEvent.Text.Ended, {
+            sessionID: ctx.sessionID,
+            textID: ctx.currentTextID,
+            text: ctx.currentText.text,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
+        yield* Effect.forEach(Object.entries(ctx.reasoningMap), ([reasoningID, part]) =>
+          events.publish(SessionEvent.Reasoning.Ended, {
+            sessionID: ctx.sessionID,
+            reasoningID,
+            text: part.text,
+            providerMetadata: part.metadata,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          }),
+        )
       })
 
       const ensureToolCall = Effect.fn("SessionProcessor.ensureToolCall")(function* (input: {
@@ -347,6 +371,7 @@ export const layer = Layer.effect(
               yield* events.publish(SessionEvent.Reasoning.Started, {
                 sessionID: ctx.sessionID,
                 reasoningID: value.id,
+                providerMetadata: value.providerMetadata,
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
@@ -516,6 +541,26 @@ export const layer = Layer.effect(
           case "tool-result": {
             const toolCall = yield* readToolCall(value.id)
             if (!toolCall && value.result.type === "error") return
+            if (value.result.type === "error") {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              if (flags.experimentalEventSystem) {
+                const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
+                yield* events.publish(SessionEvent.Tool.Failed, {
+                  sessionID: ctx.sessionID,
+                  assistantMessageID,
+                  callID: value.id,
+                  error: { type: "unknown", message: errorMessage(value.result.value) },
+                  result: value.result,
+                  provider: {
+                    executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+                    ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+                  },
+                  timestamp: DateTime.makeUnsafe(Date.now()),
+                })
+              }
+              yield* failToolCall(value.id, value.result.value)
+              return
+            }
             const rawOutput = toolResultOutput(value)
             const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
               attachment.mime.startsWith("image/")
@@ -559,6 +604,7 @@ export const layer = Layer.effect(
                   },
                   provider: {
                     executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+                    ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
                   },
                   timestamp: DateTime.makeUnsafe(Date.now()),
                 })
@@ -568,8 +614,10 @@ export const layer = Layer.effect(
                 callID: value.id,
                 structured: output.metadata,
                 content,
+                result: value.result,
                 provider: {
                   executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+                  ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
                 },
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
@@ -593,6 +641,7 @@ export const layer = Layer.effect(
                 },
                 provider: {
                   executed: toolCall?.part.metadata?.providerExecuted === true,
+                  ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
                 },
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
@@ -707,6 +756,7 @@ export const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            ctx.currentTextID = value.id
             yield* session.updatePart(ctx.currentText)
             return
 
@@ -762,6 +812,7 @@ export const layer = Layer.effect(
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePart(ctx.currentText)
             ctx.currentText = undefined
+            ctx.currentTextID = undefined
             return
 
           case "finish":
@@ -790,6 +841,7 @@ export const layer = Layer.effect(
           ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
           yield* session.updatePart(ctx.currentText)
           ctx.currentText = undefined
+          ctx.currentTextID = undefined
         }
 
         for (const part of Object.values(ctx.reasoningMap)) {
@@ -842,6 +894,7 @@ export const layer = Layer.effect(
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
         slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
         const error = parse(e)
+        yield* flushV2Fragments()
         if (SessionV1.ContextOverflowError.isInstance(error)) {
           ctx.needsCompaction = true
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
@@ -877,6 +930,7 @@ export const layer = Layer.effect(
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
+            ctx.currentTextID = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
@@ -916,7 +970,8 @@ export const layer = Layer.effect(
                         timestamp: DateTime.makeUnsafe(Date.now()),
                       })
                     : Effect.void
-                  return event.pipe(
+                  return flushV2Fragments().pipe(
+                    Effect.andThen(event),
                     Effect.andThen(
                       status.set(ctx.sessionID, {
                         type: "retry",

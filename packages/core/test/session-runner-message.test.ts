@@ -86,7 +86,12 @@ describe("toLLMMessages", () => {
         model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
         content: [
           new SessionMessage.AssistantText({ type: "text", id: "text-1", text: "Checking" }),
-          new SessionMessage.AssistantReasoning({ type: "reasoning", id: "reasoning-1", text: "Think" }),
+          new SessionMessage.AssistantReasoning({
+            type: "reasoning",
+            id: "reasoning-1",
+            text: "Think",
+            providerMetadata: { anthropic: { signature: "sig_1" } },
+          }),
           new SessionMessage.AssistantTool({
             type: "tool",
             id: "pending",
@@ -110,7 +115,6 @@ describe("toLLMMessages", () => {
             type: "tool",
             id: "completed",
             name: "read",
-            provider: { executed: true, metadata: { fake: { continuation: "completed" } } },
             state: new SessionMessage.ToolStateCompleted({
               status: "completed",
               input: { path: "README.md" },
@@ -129,7 +133,20 @@ describe("toLLMMessages", () => {
           }),
           new SessionMessage.AssistantTool({
             type: "tool",
-            id: "failed",
+            id: "hosted",
+            name: "web_search",
+            provider: { executed: true, metadata: { fake: { continuation: "hosted" } } },
+            state: new SessionMessage.ToolStateCompleted({
+              status: "completed",
+              input: { query: "Effect" },
+              content: [new ToolOutput.TextContent({ type: "text", text: "Found it" })],
+              structured: {},
+            }),
+            time: { created, completed: created },
+          }),
+          new SessionMessage.AssistantTool({
+            type: "tool",
+            id: "hosted-failed",
             name: "write",
             provider: { executed: true, metadata: { fake: { continuation: "failed" } } },
             state: new SessionMessage.ToolStateError({
@@ -146,10 +163,10 @@ describe("toLLMMessages", () => {
       }),
     ])
 
-    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool", "tool"])
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Checking" },
-      { type: "reasoning", text: "Think" },
+      { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "sig_1" } } },
       { type: "tool-call", id: "pending", name: "read", input: { path: "README.md" } },
       { type: "tool-call", id: "running", name: "read", input: { path: "README.md" } },
       {
@@ -157,16 +174,38 @@ describe("toLLMMessages", () => {
         id: "completed",
         name: "read",
         input: { path: "README.md" },
-        providerExecuted: true,
-        providerMetadata: { fake: { continuation: "completed" } },
       },
       {
         type: "tool-call",
-        id: "failed",
+        id: "hosted",
+        name: "web_search",
+        input: { query: "Effect" },
+        providerExecuted: true,
+        providerMetadata: { fake: { continuation: "hosted" } },
+      },
+      {
+        type: "tool-result",
+        id: "hosted",
+        name: "web_search",
+        providerExecuted: true,
+        providerMetadata: { fake: { continuation: "hosted" } },
+        result: { type: "text", value: "Found it" },
+      },
+      {
+        type: "tool-call",
+        id: "hosted-failed",
         name: "write",
         input: { path: "README.md" },
         providerExecuted: true,
         providerMetadata: { fake: { continuation: "failed" } },
+      },
+      {
+        type: "tool-result",
+        id: "hosted-failed",
+        name: "write",
+        providerExecuted: true,
+        providerMetadata: { fake: { continuation: "failed" } },
+        result: { type: "error", value: { error: { type: "unknown", message: "Denied" }, content: [], structured: {} } },
       },
     ])
     expect(messages[1]?.content).toEqual([
@@ -174,8 +213,6 @@ describe("toLLMMessages", () => {
         type: "tool-result",
         id: "completed",
         name: "read",
-        providerExecuted: true,
-        providerMetadata: { fake: { continuation: "completed" } },
         result: {
           type: "content",
           value: [
@@ -185,14 +222,32 @@ describe("toLLMMessages", () => {
         },
       },
     ])
-    expect(messages[2]?.content).toEqual([
+  })
+
+  test("restores OpenAI encrypted reasoning metadata", () => {
+    const messages = toLLMMessages([
+      new SessionMessage.Assistant({
+        id: id("assistant-openai-reasoning"),
+        type: "assistant",
+        agent: "build",
+        model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+        content: [
+          new SessionMessage.AssistantReasoning({
+            type: "reasoning",
+            id: "reasoning-openai",
+            text: "Think",
+            providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          }),
+        ],
+        time: { created, completed: created },
+      }),
+    ])
+
+    expect(messages[0]?.content).toEqual([
       {
-        type: "tool-result",
-        id: "failed",
-        name: "write",
-        providerExecuted: true,
-        providerMetadata: { fake: { continuation: "failed" } },
-        result: { type: "error", value: { error: { type: "unknown", message: "Denied" }, content: [], structured: {} } },
+        type: "reasoning",
+        text: "Think",
+        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
       },
     ])
   })

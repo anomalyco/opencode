@@ -77,6 +77,26 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
 
     event.subscribe((event) => {
       switch (event.type) {
+        case "session.next.agent.switched":
+          update(event.properties.sessionID, (draft) => {
+            draft.unshift({
+              id: event.id,
+              type: "agent-switched",
+              agent: event.properties.agent,
+              time: { created: event.properties.timestamp },
+            })
+          })
+          break
+        case "session.next.model.switched":
+          update(event.properties.sessionID, (draft) => {
+            draft.unshift({
+              id: event.id,
+              type: "model-switched",
+              model: event.properties.model,
+              time: { created: event.properties.timestamp },
+            })
+          })
+          break
         case "session.next.prompted": {
           update(event.properties.sessionID, (draft) => {
             draft.unshift({
@@ -232,13 +252,13 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         case "session.next.tool.failed":
           update(event.properties.sessionID, (draft) => {
             const match = latestTool(ownedAssistant(draft, event.properties.assistantMessageID), event.properties.callID)
-            if (match?.state.status !== "running") return
+            if (!match || (match.state.status !== "pending" && match.state.status !== "running")) return
             match.state = {
               status: "error",
               error: event.properties.error,
-              input: match.state.input,
-              structured: match.state.structured,
-              content: match.state.content,
+              input: typeof match.state.input === "string" ? {} : match.state.input,
+              structured: match.state.status === "running" ? match.state.structured : {},
+              content: match.state.status === "running" ? match.state.content : [],
             }
             match.provider = event.properties.provider
             match.time.completed = event.properties.timestamp

@@ -47,7 +47,7 @@ const splitBom = (text: string) =>
 const joinBom = (text: string, bom: boolean) => (bom ? `\uFEFF${text}` : text)
 const decodeUtf8 = (content: Uint8Array) => {
   const bom = content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
-  return { bom, text: new TextDecoder().decode(bom ? content.slice(3) : content) }
+  return { bom, content, text: new TextDecoder().decode(bom ? content.slice(3) : content) }
 }
 
 const countOccurrences = (content: string, search: string) => {
@@ -108,11 +108,14 @@ export const layer = Layer.effectDiscard(
         execute: ({ parameters, assertPermission }) => {
           const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
             effect.pipe(
-              Effect.catchCause((cause) =>
-                Effect.fail(
-                  new ToolFailure({ message: `Unable to edit ${parameters.path}`, error: Cause.squash(cause) }),
-                ),
-              ),
+              Effect.catchCause((cause) => {
+                const error = Cause.squash(cause)
+                return Effect.fail(
+                  error instanceof FileMutation.StaleContentError
+                    ? new ToolFailure({ message: "File changed after permission approval. Read it again before editing." })
+                    : new ToolFailure({ message: `Unable to edit ${parameters.path}`, error }),
+                )
+              }),
             )
 
           return Effect.gen(function* () {
@@ -131,6 +134,7 @@ export const layer = Layer.effectDiscard(
               )
             }
 
+            yield* unableToEdit(assertPermission({ action: "edit", resources: [plan.target.resource], save: ["*"] }))
             const readable = yield* unableToEdit(mutation.revalidate(plan))
             const source = decodeUtf8(yield* unableToEdit(fs.readFile(readable.canonical)))
             const ending = detectLineEnding(source.text)
@@ -155,13 +159,8 @@ export const layer = Layer.effectDiscard(
                 ? source.text.replaceAll(oldString, newString)
                 : source.text.replace(oldString, newString)
             const next = splitBom(replaced)
-            yield* unableToEdit(assertPermission({ action: "edit", resources: [plan.target.resource], save: ["*"] }))
-            const current = decodeUtf8(yield* unableToEdit(fs.readFile(plan.target.canonical)))
-            if (current.bom !== source.bom || current.text !== source.text) {
-              return yield* new ToolFailure({ message: "File changed after permission approval. Read it again before editing." })
-            }
             const receipt = yield* unableToEdit(
-              files.write({ plan, content: joinBom(next.text, source.bom || next.bom) }),
+              files.writeIfUnchanged({ plan, expected: source.content, content: joinBom(next.text, source.bom || next.bom) }),
             )
             return { ...receipt, replacements } satisfies Success
           })

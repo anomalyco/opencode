@@ -15,6 +15,7 @@ import { providerHandlers } from "./v2/provider"
 import { sessionHandlers } from "./v2/session"
 import { permissionHandlers, savedPermissionHandlers, sessionPermissionHandlers } from "./v2/permission"
 import { fileSystemHandlers } from "./v2/fs"
+import { questionHandlers, sessionQuestionHandlers } from "./v2/question"
 
 const routedSessions = SessionV2.layer.pipe(
   Layer.provide(SessionProjector.layer),
@@ -36,6 +37,8 @@ export const v2Handlers = Layer.mergeAll(
   sessionPermissionHandlers,
   savedPermissionHandlers,
   fileSystemHandlers,
+  questionHandlers,
+  sessionQuestionHandlers,
 ).pipe(
   Layer.provide(v2LocationLayer),
   Layer.provide(LocationServiceMap.layer),

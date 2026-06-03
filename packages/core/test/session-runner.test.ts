@@ -30,7 +30,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
-import { asc, eq } from "drizzle-orm"
+import { and, asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
@@ -244,6 +244,23 @@ const replaySessionProjection = (id: SessionV2.ID) =>
         data: event.data,
       })),
     )
+  })
+
+const turnOutcomes = (id: SessionV2.ID) =>
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    return (yield* db
+      .select({ data: EventTable.data })
+      .from(EventTable)
+      .where(
+        and(
+          eq(EventTable.aggregate_id, id),
+          eq(EventTable.type, EventV2.versionedType(SessionEvent.Turn.Settled.type, SessionEvent.Turn.Settled.sync!.version)),
+        ),
+      )
+      .orderBy(asc(EventTable.seq))
+      .all()
+      .pipe(Effect.orDie)).map((event) => event.data.outcome)
   })
 
 type FragmentKind = "text" | "reasoning" | "tool input"
@@ -588,6 +605,117 @@ describe("SessionRunnerLLM", () => {
           ],
         },
         { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-final", text: "Done" }] },
+      ])
+    }),
+  )
+
+  it.effect("restores durable reasoning provider metadata in a second-turn request", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Think first" }), resume: false })
+
+      requests.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({ id: "reasoning-anthropic" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-anthropic", text: "Signed thought" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-anthropic", providerMetadata: { anthropic: { signature: "sig_1" } } }),
+        LLMEvent.reasoningStart({
+          id: "reasoning-openai",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        }),
+        LLMEvent.reasoningDelta({ id: "reasoning-openai", text: "Encrypted thought" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-openai",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+      yield* session.resume(sessionID)
+      yield* replaySessionProjection(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Think first" },
+        {
+          type: "assistant",
+          content: [
+            { type: "reasoning", text: "Signed thought", providerMetadata: { anthropic: { signature: "sig_1" } } },
+            {
+              type: "reasoning",
+              text: "Encrypted thought",
+              providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+            },
+          ],
+        },
+      ])
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests[1]?.messages[1]?.content).toEqual([
+        { type: "reasoning", text: "Signed thought", providerMetadata: { anthropic: { signature: "sig_1" } } },
+        {
+          type: "reasoning",
+          text: "Encrypted thought",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("replays durable provider-executed tool results inline in a second-turn request", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Search first" }), resume: false })
+
+      requests.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({
+          id: "hosted-search",
+          name: "web_search",
+          input: { query: "Effect" },
+          providerExecuted: true,
+        }),
+        LLMEvent.toolResult({
+          id: "hosted-search",
+          name: "web_search",
+          result: { type: "json", value: [{ title: "Effect" }] },
+          providerExecuted: true,
+          providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+      yield* session.resume(sessionID)
+      yield* replaySessionProjection(sessionID)
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
+      expect(requests[1]?.messages[1]?.content).toMatchObject([
+        {
+          type: "tool-call",
+          id: "hosted-search",
+          name: "web_search",
+          input: { query: "Effect" },
+          providerExecuted: true,
+          providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
+        },
+        {
+          type: "tool-result",
+          id: "hosted-search",
+          name: "web_search",
+          result: { type: "json", value: [{ title: "Effect" }] },
+          providerExecuted: true,
+          providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
+        },
       ])
     }),
   )
@@ -1407,11 +1535,12 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("interrupts blocked local tools when the provider turn is interrupted", () =>
+  it.effect("durably fails blocked local tools before settling an interrupted provider turn", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt blocked tool" }), resume: false })
+      executions.length = 0
       toolExecutionGate = yield* Deferred.make<void>()
       responseStream = Stream.concat(
         Stream.fromIterable([
@@ -1421,12 +1550,77 @@ describe("SessionRunnerLLM", () => {
         Stream.never,
       )
 
-      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      const runner = yield* SessionRunner.Service
+      const run = yield* runner.run({ sessionID, force: true }).pipe(Effect.forkChild)
       while (executions.length === 0) yield* Effect.yieldNow
       yield* Fiber.interrupt(run)
       toolExecutionGate = undefined
 
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      expect(yield* turnOutcomes(sessionID)).toEqual(["interrupted"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Interrupt blocked tool" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-before-interrupt",
+              state: { status: "error", error: { type: "unknown", message: "Tool execution interrupted" } },
+            },
+          ],
+        },
+      ])
+
+      yield* replaySessionProjection(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Interrupt blocked tool" },
+        { type: "assistant", content: [{ type: "tool", id: "call-before-interrupt", state: { status: "error" } }] },
+      ])
+      requests.length = 0
+      responseStream = undefined
+      response = []
+      yield* session.resume(sessionID)
+      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+    }),
+  )
+
+  it.effect("durably fails blocked local tools when interrupted while awaiting settlement", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt tool settlement" }), resume: false })
+      executions.length = 0
+      toolExecutionGate = yield* Deferred.make<void>()
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-await-interrupt", name: "echo", input: { text: "blocked" } }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ]
+
+      const runner = yield* SessionRunner.Service
+      const run = yield* runner.run({ sessionID, force: true }).pipe(Effect.forkChild)
+      while (executions.length === 0) yield* Effect.yieldNow
+      yield* Fiber.interrupt(run)
+      toolExecutionGate = undefined
+
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      expect(yield* turnOutcomes(sessionID)).toEqual(["interrupted"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Interrupt tool settlement" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-await-interrupt",
+              state: { status: "error", error: { type: "unknown", message: "Tool execution interrupted" } },
+            },
+          ],
+        },
+      ])
     }),
   )
 
@@ -1528,6 +1722,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
+      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail durably" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },
@@ -1547,6 +1742,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
+      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail before step" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },

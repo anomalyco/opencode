@@ -328,6 +328,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
               input: match.state.input,
               structured: event.data.structured,
               content: [...event.data.content],
+              result: event.data.result,
             }))
           }
         })
@@ -344,6 +345,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
               input: typeof match.state.input === "string" ? {} : match.state.input,
               structured: match.state.status === "running" ? match.state.structured : {},
               content: match.state.status === "running" ? match.state.content : [],
+              result: event.data.result,
             }))
           }
         })
@@ -359,6 +361,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                     type: "reasoning",
                     id: event.data.reasoningID,
                     text: "",
+                    providerMetadata: event.data.providerMetadata,
                   })),
                 )
               }),
@@ -386,7 +389,10 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
                 const match = latestReasoning(draft, event.data.reasoningID)
-                if (match) match.text = event.data.text
+                if (match) {
+                  match.text = event.data.text
+                  if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
+                }
               }),
             )
           }

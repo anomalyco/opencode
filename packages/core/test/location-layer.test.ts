@@ -74,7 +74,10 @@ describe("LocationServiceMap", () => {
             "edit",
             "glob",
             "grep",
+            "question",
             "read",
+            "todowrite",
+            "webfetch",
             "websearch",
             "write",
           ])
@@ -85,7 +88,10 @@ describe("LocationServiceMap", () => {
             "edit",
             "glob",
             "grep",
+            "question",
             "read",
+            "todowrite",
+            "webfetch",
             "websearch",
             "write",
           ])

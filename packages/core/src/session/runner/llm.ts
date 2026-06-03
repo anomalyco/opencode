@@ -130,38 +130,56 @@ export const layer = Layer.effect(
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent) => withPublication(publisher.publish(event))
 
-      const stream = yield* llm.stream(request).pipe(
-        Stream.runForEach((event) =>
-          Effect.gen(function* () {
-            yield* publish(event)
-            if (event.type !== "tool-call" || event.providerExecuted) return
-            needsContinuation = true
-            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.succeed({ result: { type: "error" as const, value: String(Cause.squash(cause)) }, output: undefined }),
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const stream = yield* restore(
+            llm.stream(request).pipe(
+              Stream.runForEach((event) =>
+                Effect.gen(function* () {
+                  yield* publish(event)
+                  if (event.type !== "tool-call" || event.providerExecuted) return
+                  needsContinuation = true
+                  yield* tools.settle({ sessionID: session.id, call: event }).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.succeed({ result: { type: "error" as const, value: String(Cause.squash(cause)) }, output: undefined }),
+                    ),
+                    Effect.flatMap((settlement) =>
+                      publish(LLMEvent.toolResult({ id: event.id, name: event.name, result: settlement.result, output: settlement.output })),
+                    ),
+                    FiberSet.run(toolFibers),
+                  )
+                }),
               ),
-              Effect.flatMap((settlement) =>
-                publish(LLMEvent.toolResult({ id: event.id, name: event.name, result: settlement.result, output: settlement.output })),
-              ),
-              FiberSet.run(toolFibers),
-            )
-          }),
-        ),
-        Effect.ensuring(withPublication(publisher.flush())),
-        Effect.exit,
+              Effect.ensuring(withPublication(publisher.flush())),
+            ),
+          ).pipe(Effect.exit)
+          if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
+          const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
+          const attempt = stream._tag === "Failure" ? stream : settled
+          if (
+            (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) ||
+            (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
+          ) {
+            yield* FiberSet.clear(toolFibers)
+            yield* withPublication(publisher.failUnsettledLocalTools("Tool execution interrupted"))
+          }
+          yield* events.publish(SessionEvent.Turn.Settled, {
+            sessionID: session.id,
+            timestamp: yield* DateTime.now,
+            turnID: turn.id,
+            outcome:
+              attempt._tag === "Success"
+                ? publisher.hasProviderError()
+                  ? "failed"
+                  : "completed"
+                : Cause.hasInterruptsOnly(attempt.cause)
+                  ? "interrupted"
+                  : "failed",
+          })
+          if (attempt._tag === "Failure") return yield* Effect.failCause(attempt.cause)
+          return needsContinuation
+        }),
       )
-      if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
-      const settled = yield* awaitToolFibers(toolFibers).pipe(Effect.exit)
-      const attempt = stream._tag === "Failure" ? stream : settled
-      yield* events.publish(SessionEvent.Turn.Settled, {
-        sessionID: session.id,
-        timestamp: yield* DateTime.now,
-        turnID: turn.id,
-        outcome:
-          attempt._tag === "Success" ? "completed" : Cause.hasInterruptsOnly(attempt.cause) ? "interrupted" : "failed",
-      })
-      if (attempt._tag === "Failure") return yield* Effect.failCause(attempt.cause)
-      return needsContinuation
     }, Effect.scoped)
 
     const run = Effect.fn("SessionRunner.run")(function* (input: {

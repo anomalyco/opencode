@@ -1,4 +1,4 @@
-import { Message, ToolCallPart, ToolOutput, type ContentPart } from "@opencode-ai/llm"
+import { Message, ToolCallPart, ToolOutput, ToolResultPart, type ContentPart } from "@opencode-ai/llm"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
@@ -33,19 +33,26 @@ const toolResult = (tool: SessionMessage.AssistantTool) => {
     // TODO: Materialize remote URL and managed file sources before provider-history lowering.
     // ToolOutput.toResultValue intentionally rejects unmaterialized sources rather than
     // guessing whether a provider can fetch them or leaking host-local resource paths.
-    return Message.tool({
+    const result =
+      tool.provider?.executed === true && tool.state.result !== undefined
+        ? tool.state.result
+        : ToolOutput.toResultValue({ structured: tool.state.structured, content: tool.state.content })
+    return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
-      result: ToolOutput.toResultValue({ structured: tool.state.structured, content: tool.state.content }),
+      result,
       providerExecuted: tool.provider?.executed,
       providerMetadata: tool.provider?.metadata,
     })
   }
   if (tool.state.status === "error") {
-    return Message.tool({
+    return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
-      result: { error: tool.state.error, content: tool.state.content, structured: tool.state.structured },
+      result:
+        tool.provider?.executed === true && tool.state.result !== undefined
+          ? tool.state.result
+          : { error: tool.state.error, content: tool.state.content, structured: tool.state.structured },
       resultType: "error",
       providerExecuted: tool.provider?.executed,
       providerMetadata: tool.provider?.metadata,
@@ -54,15 +61,18 @@ const toolResult = (tool: SessionMessage.AssistantTool) => {
 }
 
 const assistant = (message: SessionMessage.Assistant) => {
-  const content = message.content.map((item): ContentPart => {
-    if (item.type === "text") return { type: "text", text: item.text }
-    if (item.type === "reasoning") return { type: "reasoning", text: item.text }
-    return toolCall(item)
+  const content = message.content.flatMap((item): ContentPart[] => {
+    if (item.type === "text") return [{ type: "text", text: item.text }]
+    if (item.type === "reasoning") return [{ type: "reasoning", text: item.text, providerMetadata: item.providerMetadata }]
+    const call = toolCall(item)
+    const result = toolResult(item)
+    return item.provider?.executed === true && result ? [call, result] : [call]
   })
   const results = message.content
-    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool")
+    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
     .map(toolResult)
     .filter((message) => message !== undefined)
+    .map(Message.tool)
   return [Message.make({ id: message.id, role: "assistant", content, metadata: message.metadata }), ...results]
 }
 

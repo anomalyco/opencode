@@ -41,6 +41,7 @@ const Success = Schema.Struct({
   stderrTruncated: Schema.Boolean.pipe(Schema.optional),
   resource: ToolOutputStore.Resource.pipe(Schema.optional),
   timedOut: Schema.Boolean.pipe(Schema.optional),
+  warnings: Schema.Array(Schema.String).pipe(Schema.optional),
 })
 
 type Success = typeof Success.Type
@@ -59,15 +60,16 @@ const captureNotice = (stdoutTruncated: boolean, stderrTruncated: boolean) => {
 }
 
 const modelOutput = (output: Success) => {
-  if (output.timedOut) return `${output.output}\n\nCommand timed out before completion.`
-  return `${output.output}\n\nCommand exited with code ${output.exitCode}.`
+  const warnings = output.warnings?.length ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}` : ""
+  if (output.timedOut) return `${output.output}${warnings}\n\nCommand timed out before completion.`
+  return `${output.output}${warnings}\n\nCommand exited with code ${output.exitCode}.`
 }
 
 const isTimeout = (error: AppProcess.AppProcessError) =>
   error.cause instanceof Error && error.cause.message === "Timed out"
 
 const definition = Tool.make({
-  description: `Execute one shell command string. The active Location is the default working directory. Relative workdir values resolve from that Location. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows.`,
+  description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows.`,
   parameters: Parameters,
   success: Success,
   toModelOutput: ({ output }) => [toolText({ type: "text", text: modelOutput(output) })],
@@ -79,7 +81,7 @@ const definition = Tool.make({
  */
 // TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
 // TODO: Port BashArity reusable command-prefix approvals.
-// TODO: Discover command argument paths and request external_directory for external argument targets, not only cwd.
+// TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
 // TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.
@@ -123,10 +125,9 @@ export const layer = Layer.effectDiscard(
                 save: [external.save],
               })
             }
-            for (const directory of externalCommandDirectories(parameters.command, plan.target.canonical)) {
-              const resource = path.join(directory, "*").replaceAll("\\", "/")
-              yield* assertPermission({ action: "external_directory", resources: [resource], save: [resource] })
-            }
+            const warnings = externalCommandDirectories(parameters.command, plan.target.canonical).map((directory) =>
+              `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`
+            )
             yield* assertPermission({ action: name, resources: [parameters.command], save: [parameters.command] })
 
             const target = yield* mutation.revalidate(plan)
@@ -160,6 +161,7 @@ export const layer = Layer.effectDiscard(
                 output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
                 truncated: false,
                 timedOut: true,
+                ...(warnings.length ? { warnings } : {}),
               }
             }
 
@@ -176,6 +178,7 @@ export const layer = Layer.effectDiscard(
               exitCode: result.exitCode,
               output: truncated.content,
               truncated: truncated.truncated || result.stdoutTruncated || result.stderrTruncated,
+              ...(warnings.length ? { warnings } : {}),
               ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
               ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
               ...(truncated.truncated && !result.stdoutTruncated && !result.stderrTruncated ? { resource: truncated.resource } : {}),

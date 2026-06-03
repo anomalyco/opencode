@@ -31,6 +31,8 @@ import { ToolOutputStore } from "./tool-output-store"
 import { AppProcess } from "./process"
 import { Ripgrep } from "./ripgrep"
 import { SessionStore } from "./session/store"
+import { SessionTodo } from "./session/todo"
+import { QuestionV2 } from "./question"
 import { LLMClient } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
@@ -61,18 +63,31 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const commits = FileMutation.locationLayer.pipe(Layer.provide(services))
     const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
     const resources = ToolOutputStore.layer.pipe(Layer.provide(services))
+    const todos = SessionTodo.layer.pipe(Layer.provide(services))
+    const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
       Layer.provide(services),
       Layer.provide(commits),
       Layer.provide(searches),
       Layer.provide(resources),
+      Layer.provide(todos),
+      Layer.provide(questions),
     )
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.layer.pipe(Layer.provide(services), Layer.provide(model))
     const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
-    return Layer.mergeAll(services, commits, searches, resources, model, runner, coordinator, builtInTools).pipe(
-      Layer.fresh,
-    )
+    return Layer.mergeAll(
+      services,
+      commits,
+      searches,
+      resources,
+      todos,
+      questions,
+      model,
+      runner,
+      coordinator,
+      builtInTools,
+    ).pipe(Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
   dependencies: [

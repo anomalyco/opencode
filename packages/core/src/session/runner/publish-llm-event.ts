@@ -1,4 +1,4 @@
-import { ToolOutput as LLMToolOutput, type LLMEvent, type ToolOutput as LLMToolOutputType, type ToolResultValue, type Usage } from "@opencode-ai/llm"
+import { ToolOutput as LLMToolOutput, type LLMEvent, type ProviderMetadata, type ToolOutput as LLMToolOutputType, type ToolResultValue, type Usage } from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
@@ -56,6 +56,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   >()
   const timestamp = DateTime.now
   let assistantMessageID: EventV2.ID | undefined
+  let providerFailed = false
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
@@ -66,7 +67,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     ? Effect.die("Tool event before assistant step start")
     : Effect.succeed(assistantMessageID)
 
-  const fragments = (name: string, ended: (id: string, value: string) => Effect.Effect<void>) => {
+  const fragments = (name: string, ended: (id: string, value: string, providerMetadata?: ProviderMetadata) => Effect.Effect<void>) => {
     const chunks = new Map<string, string[]>()
     const start = (id: string) =>
       Effect.suspend(() => {
@@ -81,10 +82,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         current.push(value)
         return Effect.void
       })
-    const end = Effect.fnUntraced(function* (id: string) {
+    const end = Effect.fnUntraced(function* (id: string, providerMetadata?: ProviderMetadata) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(`${name} end before start: ${id}`)
-      yield* ended(id, current.join(""))
+      yield* ended(id, current.join(""), providerMetadata)
       chunks.delete(id)
     })
     const flush = Effect.fnUntraced(function* () {
@@ -103,13 +104,14 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       })
     }),
   )
-  const reasoning = fragments("reasoning", (reasoningID, value) =>
+  const reasoning = fragments("reasoning", (reasoningID, value, providerMetadata) =>
     Effect.gen(function* () {
       yield* events.publish(SessionEvent.Reasoning.Ended, {
         sessionID: input.sessionID,
         timestamp: yield* timestamp,
         reasoningID,
         text: value,
+        providerMetadata,
       })
     }),
   )
@@ -160,6 +162,21 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* flushFragments()
   })
 
+  const failUnsettledLocalTools = Effect.fn("SessionRunner.failUnsettledLocalTools")(function* (message: string) {
+    for (const [callID, tool] of tools) {
+      if (!tool.called || tool.settled || tool.providerExecuted) continue
+      tool.settled = true
+      yield* events.publish(SessionEvent.Tool.Failed, {
+        sessionID: input.sessionID,
+        timestamp: yield* timestamp,
+        assistantMessageID: tool.assistantMessageID,
+        callID,
+        error: { type: "unknown", message },
+        provider: { executed: false },
+      })
+    }
+  })
+
   const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
@@ -187,6 +204,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
           reasoningID: event.id,
+          providerMetadata: event.providerMetadata,
         })
         return
       case "reasoning-delta":
@@ -199,7 +217,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         })
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id)
+        yield* reasoning.end(event.id, event.providerMetadata)
         return
       case "tool-input-start":
         yield* startToolInput(event)
@@ -265,6 +283,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
             assistantMessageID: tool.assistantMessageID,
             callID: event.id,
             error: result.error,
+            result: event.result,
             provider,
           })
           return
@@ -275,6 +294,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
+          result: event.result,
           provider,
         })
         return
@@ -312,6 +332,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "finish":
         return
       case "provider-error":
+        providerFailed = true
         yield* flush()
         yield* events.publish(SessionEvent.Step.Failed, {
           sessionID: input.sessionID,
@@ -323,5 +344,5 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  return { publish, flush }
+  return { publish, flush, failUnsettledLocalTools, hasProviderError: () => providerFailed }
 }

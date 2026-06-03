@@ -621,6 +621,7 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
     .json(404, object, "status"),
   http.protected.get("/api/permission/request", "v2.permission.request.list").json(200, array),
+  http.protected.get("/api/question/request", "v2.question.request.list").json(200, array),
   http.protected
     .get("/api/session/{sessionID}/permission/request", "v2.session.permission.list")
     .seeded((ctx) => ctx.session({ title: "Permission list owner" }))
@@ -639,6 +640,29 @@ const scenarios: Scenario[] = [
       }),
       headers: ctx.headers(),
       body: { reply: "once" },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/question/request/{requestID}/reply", "v2.session.question.reply")
+    .seeded((ctx) => ctx.session({ title: "Question reply owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/question/request/{requestID}/reply", {
+        sessionID: ctx.state.id,
+        requestID: "que_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+      body: { answers: [] },
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .post("/api/session/{sessionID}/question/request/{requestID}/reject", "v2.session.question.reject")
+    .seeded((ctx) => ctx.session({ title: "Question reject owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/question/request/{requestID}/reject", {
+        sessionID: ctx.state.id,
+        requestID: "que_httpapi_missing",
+      }),
+      headers: ctx.headers(),
     }))
     .json(404, object, "status"),
   http.protected.get("/api/permission/saved", "v2.permission.saved.list").json(200, array),

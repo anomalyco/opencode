@@ -121,6 +121,32 @@ describe("LocationSearch", () => {
     ),
   )
 
+  it.live("does not discover hidden files during broad V2 searches", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(directory, "nested", ".private"), { recursive: true })
+          await fs.writeFile(path.join(directory, "visible.txt"), "needle visible\n")
+          await fs.writeFile(path.join(directory, ".env"), "needle root secret\n")
+          await fs.writeFile(path.join(directory, "nested", "visible.txt"), "needle nested visible\n")
+          await fs.writeFile(path.join(directory, "nested", ".env"), "needle nested secret\n")
+          await fs.writeFile(path.join(directory, "nested", ".private", "secret.txt"), "needle hidden directory\n")
+        })
+        const search = yield* LocationSearch.Service
+
+        expect((yield* search.files({ pattern: "*" })).items.map((item) => item.path).sort()).toEqual([
+          RelativePath.make("nested/visible.txt"),
+          RelativePath.make("visible.txt"),
+        ])
+        expect((yield* search.files({ pattern: ".env" })).items).toEqual([])
+        expect((yield* search.grep({ pattern: "needle", include: "*" })).items.map((item) => item.path).sort()).toEqual([
+          RelativePath.make("nested/visible.txt"),
+          RelativePath.make("visible.txt"),
+        ])
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("caps result counts and line previews", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

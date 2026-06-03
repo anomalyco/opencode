@@ -169,13 +169,21 @@ export const layer = Layer.effect(
       return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
     }
 
+    function bashDeniedByDefault(input: AssertInput, rules: Ruleset) {
+      if (input.action !== "bash") return false
+      return input.resources.some((resource) => {
+        const rule = rules.findLast((rule) => rule.action === "bash" && Wildcard.match(resource, rule.resource))
+        return rule?.effect !== "ask" && rule?.effect !== "allow"
+      })
+    }
+
     function relevant(input: AssertInput, rules: Ruleset) {
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
     const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID)
-      if (denied(input, rules)) return { effect: "deny" as const, rules }
+      if (denied(input, rules) || bashDeniedByDefault(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"

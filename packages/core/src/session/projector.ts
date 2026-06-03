@@ -174,17 +174,19 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       },
       getCurrentCompaction() {
         return Effect.gen(function* () {
-          const rows = yield* db
+          const row = yield* db
             .select()
             .from(SessionMessageTable)
             .where(
               and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "compaction")),
             )
-            .all()
+            .orderBy(desc(SessionMessageTable.seq))
+            .limit(1)
+            .get()
             .pipe(Effect.orDie)
-          return rows
-            .map(decodeRow)
-            .find((message): message is SessionMessage.Compaction => message.type === "compaction")
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "compaction" ? message : undefined
         })
       },
       getCurrentShell(callID) {
@@ -193,6 +195,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .select()
             .from(SessionMessageTable)
             .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "shell")))
+            .orderBy(desc(SessionMessageTable.seq))
             .all()
             .pipe(Effect.orDie)
           return rows
@@ -313,7 +316,8 @@ export const layer = Layer.effectDiscard(
         if (next) yield* applyUsage(db, sessionID, next)
       }),
     )
-    // Agent/model switches, synthetic messages, shells, retries, and compaction remain future slices.
+    yield* events.project(SessionEvent.AgentSwitched, (event) => run(db, event))
+    yield* events.project(SessionEvent.ModelSwitched, (event) => run(db, event))
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
         const existing = yield* db
@@ -345,9 +349,9 @@ export const layer = Layer.effectDiscard(
         })
       }),
     )
-    // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
+    yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
@@ -362,8 +366,9 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Delta, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
   }),
 )
 

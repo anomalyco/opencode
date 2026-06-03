@@ -154,12 +154,15 @@ export const layer = Layer.effect(
           signal: input.signal,
         })
         const candidates = new Map<string, ReturnType<typeof candidate>>()
+        for (const item of result.items) {
+          if (!candidates.has(item.path.text)) {
+            candidates.set(item.path.text, yield* Effect.cached(candidate(root, cwd, item.path.text)))
+          }
+        }
         const mapped = yield* Effect.forEach(
           result.items,
-          (item) => {
-            const file = candidates.get(item.path.text) ?? candidate(root, cwd, item.path.text)
-            candidates.set(item.path.text, file)
-            return file.pipe(
+          (item) =>
+            candidates.get(item.path.text)!.pipe(
               Effect.map(
                 (file) =>
                   file &&
@@ -175,8 +178,7 @@ export const layer = Layer.effect(
                     ),
                   }),
               ),
-            )
-          },
+            ),
           { concurrency: 16 },
         )
         const items = mapped.filter((item): item is Match => item !== undefined)

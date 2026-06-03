@@ -18,8 +18,10 @@ import { testEffect } from "./lib/effect"
 const sessionID = SessionV2.ID.make("ses_edit_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
 const writes: string[] = []
+let reads = 0
 let denyAction: string | undefined
 let afterAssertion = (_input: PermissionV2.AssertInput): Effect.Effect<void> => Effect.void
+let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
 
 const permission = Layer.succeed(
   PermissionV2.Service,
@@ -43,8 +45,10 @@ const permission = Layer.succeed(
 const reset = () => {
   assertions.length = 0
   writes.length = 0
+  reads = 0
   denyAction = undefined
   afterAssertion = () => Effect.void
+  afterRead = () => Effect.void
 }
 
 const filesystem = Layer.effect(
@@ -53,6 +57,12 @@ const filesystem = Layer.effect(
     const fs = yield* FSUtil.Service
     return FSUtil.Service.of({
       ...fs,
+      readFile: (target) =>
+        fs.readFile(target).pipe(
+          Effect.tap((content) =>
+            Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, content)))),
+          ),
+        ),
       writeWithDirs: (target, content, mode) =>
         Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
     })
@@ -195,6 +205,7 @@ describe("EditTool", () => {
             value: `Unable to edit ${external}`,
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
+          expect(reads).toBe(0)
           expect(writes).toEqual([])
 
           reset()
@@ -208,6 +219,7 @@ describe("EditTool", () => {
             value: `Unable to edit ${external}`,
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
+          expect(reads).toBe(0)
           expect(writes).toEqual([])
           expect(yield* Effect.promise(() => fs.readFile(external, "utf8"))).toBe("before")
         }),
@@ -215,6 +227,38 @@ describe("EditTool", () => {
         Effect.promise(() =>
           Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
         ),
+    ),
+  )
+
+  it.live("denied edit reads no target content and does not disclose whether oldString matches", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        denyAction = "edit"
+        const target = path.join(tmp.path, "secret.txt")
+        return Effect.promise(() => fs.writeFile(target, "secret content")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const matching = yield* registry.execute(
+                  call({ path: "secret.txt", oldString: "secret content", newString: "replacement" }),
+                )
+                const missing = yield* registry.execute(
+                  call({ path: "secret.txt", oldString: "not present", newString: "replacement" }),
+                )
+
+                expect(matching).toEqual({ type: "error", value: "Unable to edit secret.txt" })
+                expect(missing).toEqual(matching)
+                expect(assertions.map((input) => input.action)).toEqual(["edit", "edit"])
+                expect(reads).toBe(0)
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
 
@@ -309,14 +353,13 @@ describe("EditTool", () => {
     ),
   )
 
-  it.live("rejects an in-place content change while edit approval is pending", () =>
+  it.live("rejects an in-place content change after matching but before conditional commit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
         const target = path.join(tmp.path, "concurrent.txt")
-        afterAssertion = (input) =>
-          input.action === "edit" ? Effect.promise(() => fs.writeFile(target, "newer\n")) : Effect.void
+        afterRead = () => (reads === 1 ? Effect.promise(() => fs.writeFile(target, "newer\n")) : Effect.void)
         return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>

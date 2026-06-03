@@ -132,6 +132,50 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("denies bash by default until an exact-action configured rule opts in", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const service = yield* PermissionV2.Service
+      const bash = assertion({ action: "bash", resources: ["pwd"] })
+      let spawned = false
+
+      expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "deny" })
+      const denied = yield* service.assert(bash).pipe(
+        Effect.andThen(Effect.sync(() => {
+          spawned = true
+        })),
+        Effect.flip,
+      )
+      expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
+      expect(spawned).toBe(false)
+      expect(yield* service.ask(assertion({ action: "read" }))).toEqual({
+        id: PermissionV2.ID.create("per_test"),
+        effect: "allow",
+      })
+
+      yield* setRules([{ action: "bash", resource: "*", effect: "ask" }])
+      expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "ask" })
+
+      yield* setRules([{ action: "bash", resource: "*", effect: "allow" }])
+      expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "allow" })
+    }),
+  )
+
+  it.effect("does not let a saved approval bypass bash default denial", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "bash", resources: ["pwd"] })
+
+      const service = yield* PermissionV2.Service
+      expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
+        id: PermissionV2.ID.create("per_test"),
+        effect: "deny",
+      })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("resolves an asked permission once", () =>
     Effect.gen(function* () {
       yield* setup()
