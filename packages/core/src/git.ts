@@ -186,7 +186,13 @@ export const layer = Layer.effect(
     })
 
     const worktreeRemove = Effect.fn("Git.worktreeRemove")(function* (input: { repo: Repo; directory: AbsolutePath }) {
-      yield* worktree("remove", input.repo, ["worktree", "remove", "--force", input.directory], input.directory, input.repo.store)
+      yield* worktree(
+        "remove",
+        input.repo,
+        ["worktree", "remove", "--force", input.directory],
+        input.directory,
+        input.repo.store,
+      )
     })
 
     const worktreeList = Effect.fn("Git.worktreeList")(function* (repo: Repo) {

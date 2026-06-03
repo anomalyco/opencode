@@ -54,9 +54,11 @@ async function rootCommit(dir: string) {
 describe("Project directories schemas", () => {
   it.effect("decodes project directory input and inline directory results", () =>
     Effect.sync(() => {
-      expect(Schema.decodeUnknownSync(ProjectV2.DirectoriesInput)({ projectID: ProjectV2.ID.make("project") })).toEqual({
-        projectID: ProjectV2.ID.make("project"),
-      })
+      expect(Schema.decodeUnknownSync(ProjectV2.DirectoriesInput)({ projectID: ProjectV2.ID.make("project") })).toEqual(
+        {
+          projectID: ProjectV2.ID.make("project"),
+        },
+      )
       expect(Schema.decodeUnknownSync(ProjectV2.Directories)([AbsolutePath.make("/tmp/project")])).toEqual([
         AbsolutePath.make("/tmp/project"),
       ])

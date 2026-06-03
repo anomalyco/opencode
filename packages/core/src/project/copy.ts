@@ -120,7 +120,9 @@ export const layer = Layer.effect(
       const row = yield* db
         .select({ directory: ProjectDirectoryTable.directory })
         .from(ProjectDirectoryTable)
-        .where(and(eq(ProjectDirectoryTable.project_id, projectID), eq(ProjectDirectoryTable.directory, sourceDirectory)))
+        .where(
+          and(eq(ProjectDirectoryTable.project_id, projectID), eq(ProjectDirectoryTable.directory, sourceDirectory)),
+        )
         .get()
         .pipe(Effect.orDie)
       if (!row) return yield* new SourceDirectoryNotFoundError({ directory: sourceDirectory })
@@ -135,10 +137,18 @@ export const layer = Layer.effect(
               const row = yield* tx
                 .select({ directory: ProjectDirectoryTable.directory })
                 .from(ProjectDirectoryTable)
-                .where(and(eq(ProjectDirectoryTable.project_id, projectID), eq(ProjectDirectoryTable.directory, copyDirectory)))
+                .where(
+                  and(
+                    eq(ProjectDirectoryTable.project_id, projectID),
+                    eq(ProjectDirectoryTable.directory, copyDirectory),
+                  ),
+                )
                 .get()
               if (row) return false
-              yield* tx.insert(ProjectDirectoryTable).values({ project_id: projectID, directory: copyDirectory, type }).run()
+              yield* tx
+                .insert(ProjectDirectoryTable)
+                .values({ project_id: projectID, directory: copyDirectory, type })
+                .run()
               return true
             }),
           { behavior: "immediate" },
@@ -150,7 +160,9 @@ export const layer = Layer.effect(
       return (
         (yield* db
           .delete(ProjectDirectoryTable)
-          .where(and(eq(ProjectDirectoryTable.project_id, projectID), eq(ProjectDirectoryTable.directory, copyDirectory)))
+          .where(
+            and(eq(ProjectDirectoryTable.project_id, projectID), eq(ProjectDirectoryTable.directory, copyDirectory)),
+          )
           .returning({ directory: ProjectDirectoryTable.directory })
           .get()
           .pipe(Effect.orDie)) !== undefined
@@ -171,7 +183,8 @@ export const layer = Layer.effect(
     })
 
     const create = Effect.fn("ProjectCopy.create")(function* (input: CreateInput) {
-      if (yield* fs.existsSafe(input.directory)) return yield* new DestinationExistsError({ directory: input.directory })
+      if (yield* fs.existsSafe(input.directory))
+        return yield* new DestinationExistsError({ directory: input.directory })
       const result = yield* strategy(input.strategy).create({
         directory: input.directory,
         sourceDirectory: yield* source(input.sourceDirectory, input.projectID),
@@ -192,7 +205,12 @@ export const layer = Layer.effect(
       const roots = yield* db
         .select({ directory: ProjectDirectoryTable.directory })
         .from(ProjectDirectoryTable)
-        .where(and(eq(ProjectDirectoryTable.project_id, input.projectID), inArray(ProjectDirectoryTable.type, ["main", "root"])))
+        .where(
+          and(
+            eq(ProjectDirectoryTable.project_id, input.projectID),
+            inArray(ProjectDirectoryTable.type, ["main", "root"]),
+          ),
+        )
         .all()
         .pipe(Effect.orDie)
       const sourceDirectories = yield* Effect.forEach(roots, (item) => canonical(AbsolutePath.make(item.directory)), {
@@ -207,16 +225,18 @@ export const layer = Layer.effect(
               .pipe(Effect.map((items) => items.map((item) => ({ ...item, type: strategy.id })))),
           ),
         { concurrency: "unbounded" },
-      ).pipe(Effect.map((sets) => new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray()))
+      ).pipe(
+        Effect.map((sets) => new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray()),
+      )
       const stored = yield* db
         .select({ directory: ProjectDirectoryTable.directory })
         .from(ProjectDirectoryTable)
         .where(eq(ProjectDirectoryTable.project_id, input.projectID))
         .all()
         .pipe(Effect.orDie)
-      const inserted = yield* Effect.forEach(discovered, (item) => insert(input.projectID, item.directory, item.type)).pipe(
-        Effect.map((items) => items.some(Boolean)),
-      )
+      const inserted = yield* Effect.forEach(discovered, (item) =>
+        insert(input.projectID, item.directory, item.type),
+      ).pipe(Effect.map((items) => items.some(Boolean)))
       const removed = yield* Effect.forEach(stored, (item) =>
         fs
           .isDir(item.directory)

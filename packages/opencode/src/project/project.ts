@@ -232,7 +232,9 @@ export const layer = Layer.effect(
               const hasMain = yield* d
                 .select({ directory: ProjectDirectoryTable.directory })
                 .from(ProjectDirectoryTable)
-                .where(and(eq(ProjectDirectoryTable.project_id, input.projectID), eq(ProjectDirectoryTable.type, "main")))
+                .where(
+                  and(eq(ProjectDirectoryTable.project_id, input.projectID), eq(ProjectDirectoryTable.type, "main")),
+                )
                 .get()
               yield* d
                 .insert(ProjectDirectoryTable)

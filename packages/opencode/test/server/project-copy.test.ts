@@ -22,13 +22,7 @@ afterEach(async () => {
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const testInstanceStore = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
 const it = testEffect(
-  Layer.mergeAll(
-    FSUtil.defaultLayer,
-    Database.defaultLayer,
-    Snapshot.defaultLayer,
-    testInstanceStore,
-    httpApiLayer,
-  ),
+  Layer.mergeAll(FSUtil.defaultLayer, Database.defaultLayer, Snapshot.defaultLayer, testInstanceStore, httpApiLayer),
 )
 
 function request(directory: string, url: string, init: RequestInit = {}) {
