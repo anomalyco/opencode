@@ -1,13 +1,12 @@
-import { Effect } from "effect"
-import { Channel, ChannelHealth, ChannelCapabilities } from "../contracts/channel"
-import { Schedule } from "effect"
+import { Effect, Schedule } from "effect"
+import type { Channel, ChannelHealth, ChannelCapabilities } from "../contracts/channel"
 
 export const lifecycle = {
   start: (channel: Channel): Effect.Effect<void> =>
-    Effect.scopedEffect(channel.start()),
+    Effect.scoped(channel.start()),
     
   stop: (channel: Channel): Effect.Effect<void> =>
-    Effect.scopedEffect(channel.stop()),
+    Effect.scoped(channel.stop()),
     
   health: (channel: Channel): Effect.Effect<ChannelHealth> =>
     channel.health(),
@@ -17,10 +16,10 @@ export const lifecycle = {
     
   // Auto-reconnection with exponential backoff
   startWithRecovery: (channel: Channel): Effect.Effect<void> =>
-    Effect.retry(
-      channel.start(),
-      Schedule.exponential("100 millis").whileInput(() => true)
-    ).tapErrorCause(cause =>
-      Effect.logError(`Channel ${channel.type} failed to start: ${cause}`)
+    channel.start().pipe(
+      Effect.retry(Schedule.exponential(100)),
+      Effect.catchCause(cause =>
+        Effect.logError(`Channel ${channel.type} failed to start: ${cause}`)
+      )
     )
 }
