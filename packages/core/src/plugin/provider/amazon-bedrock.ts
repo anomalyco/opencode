@@ -78,7 +78,7 @@ export const AmazonBedrockPlugin = PluginV2.define({
         }
       }),
       "aisdk.sdk": Effect.fn(function* (evt) {
-        if (!evt.package.includes("@ai-sdk/amazon-bedrock")) return
+        if (!["@ai-sdk/amazon-bedrock", "@ai-sdk/amazon-bedrock/mantle"].includes(evt.package)) return
         const options = { ...evt.options }
         const profile = typeof options.profile === "string" ? options.profile : process.env.AWS_PROFILE
         const region = typeof options.region === "string" ? options.region : (process.env.AWS_REGION ?? "us-east-1")

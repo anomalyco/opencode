@@ -310,6 +310,25 @@ describe("AmazonBedrockPlugin", () => {
     }),
   )
 
+  it.effect("ignores other Bedrock provider subpaths", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      yield* plugin.add(AmazonBedrockPlugin)
+      const result = yield* plugin.trigger(
+        "aisdk.sdk",
+        {
+          model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5", {
+            endpoint: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/anthropic" },
+          }),
+          package: "@ai-sdk/amazon-bedrock/anthropic",
+          options: { name: "amazon-bedrock" },
+        },
+        {},
+      )
+      expect(result.sdk).toBeUndefined()
+    }),
+  )
+
   it.effect("uses SigV4 credential env when bearer token is absent", () =>
     withEnv(
       {

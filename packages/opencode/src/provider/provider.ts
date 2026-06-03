@@ -1628,7 +1628,9 @@ export const layer = Layer.effect(
 
           // Strip openai itemId metadata following what codex does
           if (
-            (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
+            (model.api.npm === "@ai-sdk/openai" ||
+              model.api.npm === "@ai-sdk/azure" ||
+              model.api.npm === "@ai-sdk/amazon-bedrock/mantle") &&
             opts.body &&
             opts.method === "POST"
           ) {
