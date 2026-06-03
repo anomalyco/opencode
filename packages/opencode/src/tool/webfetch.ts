@@ -5,8 +5,9 @@ import * as Tool from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
+const DEFAULT_MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 
@@ -25,6 +26,7 @@ export const WebFetchTool = Tool.define(
   "webfetch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
+    const flags = yield* RuntimeFlags.Service
     const httpOk = HttpClient.filterStatusOk(http)
 
     return {
@@ -48,6 +50,7 @@ export const WebFetchTool = Tool.define(
           })
 
           const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
+          const maxResponseSize = flags.webfetchMaxResponseSizeBytes ?? DEFAULT_MAX_RESPONSE_SIZE
 
           // Build Accept header based on requested format with q parameters for fallbacks
           let acceptHeader = "*/*"
@@ -94,13 +97,13 @@ export const WebFetchTool = Tool.define(
 
           // Check content length
           const contentLength = response.headers["content-length"]
-          if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
-            throw new Error("Response too large (exceeds 5MB limit)")
+          if (contentLength && parseInt(contentLength) > maxResponseSize) {
+            throw new Error(`Response too large (exceeds ${maxResponseSize} bytes limit)`)
           }
 
           const arrayBuffer = yield* response.arrayBuffer
-          if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
-            throw new Error("Response too large (exceeds 5MB limit)")
+          if (arrayBuffer.byteLength > maxResponseSize) {
+            throw new Error(`Response too large (exceeds ${maxResponseSize} bytes limit)`)
           }
 
           const contentType = response.headers["content-type"] || ""
