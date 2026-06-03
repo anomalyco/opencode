@@ -599,11 +599,34 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("publishes accepted replay with its durable sequence and suppresses stale replay", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<EventV2.Payload>()
+      const aggregateID = EventV2.ID.create()
+      yield* events.listen((event) => Effect.sync(() => received.push(event)))
+      const replayed = {
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "replayed" },
+      }
+
+      yield* events.replay(replayed, { publish: true })
+      yield* events.replay(replayed, { publish: true })
+
+      expect(received).toMatchObject([{ id: replayed.id, seq: 0, data: replayed.data }])
+    }),
+  )
+
   it.effect("replay from a different owner leaves claimed sequence unchanged", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
       const aggregateID = EventV2.ID.create()
+      const received = new Array<EventV2.Payload>()
+      yield* events.listen((event) => Effect.sync(() => received.push(event)))
 
       yield* events.replay(
         {
@@ -623,7 +646,7 @@ describe("EventV2", () => {
           aggregateID,
           data: { id: aggregateID, text: "ignored" },
         },
-        { ownerID: "owner-2" },
+        { ownerID: "owner-2", publish: true },
       )
       const rows = yield* db
         .select()
@@ -640,6 +663,7 @@ describe("EventV2", () => {
 
       expect(rows).toHaveLength(1)
       expect(sequence).toEqual({ seq: 0, ownerID: "owner-1" })
+      expect(received).toHaveLength(0)
     }),
   )
 
