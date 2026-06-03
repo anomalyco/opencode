@@ -61,6 +61,9 @@ export function toToolKind(toolName: string): ToolKind {
     case "read":
       return "read"
 
+    case "task":
+      return "think"
+
     default:
       return "other"
   }
