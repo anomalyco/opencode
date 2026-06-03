@@ -2833,7 +2833,19 @@ export type ToolTextContent = {
 
 export type ToolFileContent = {
   type: "file"
-  uri: string
+  source:
+    | {
+        type: "data"
+        data: string
+      }
+    | {
+        type: "url"
+        url: string
+      }
+    | {
+        type: "file"
+        uri: string
+      }
   mime: string
   name?: string
 }

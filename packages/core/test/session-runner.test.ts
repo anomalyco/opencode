@@ -12,6 +12,7 @@ import {
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -75,7 +76,18 @@ const client = Layer.succeed(
 const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
 const authorizations: ToolRegistry.AuthorizeInput[] = []
 const executions: string[] = []
-const registry = ToolRegistry.layer
+const permission = Layer.succeed(
+  PermissionV2.Service,
+  PermissionV2.Service.of({
+    assert: () => Effect.die("unused"),
+    ask: () => Effect.die("unused"),
+    reply: () => Effect.die("unused"),
+    get: () => Effect.die("unused"),
+    forSession: () => Effect.die("unused"),
+    list: () => Effect.die("unused"),
+  }),
+)
+const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
     registry.contribute((editor) => {
@@ -88,6 +100,7 @@ const echo = Layer.effectDiscard(
           description: "Echo text",
           parameters: Schema.Struct({ text: Schema.String }),
           success: Schema.Struct({ text: Schema.String }),
+          toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
           execute: ({ text }) =>
             Effect.gen(function* () {
               executions.push(text)
@@ -142,6 +155,7 @@ const it = testEffect(
     projector,
     store,
     client,
+    permission,
     registry,
     echo,
     models,
@@ -510,7 +524,7 @@ describe("SessionRunnerLLM", () => {
                 structured: {},
                 content: [
                   { type: "text", text: "Hello" },
-                  { type: "file", mime: "image/png", uri: "data:image/png;base64,aGVsbG8=", name: "hello.png" },
+                  { type: "file", mime: "image/png", source: { type: "data", data: "aGVsbG8=" }, name: "hello.png" },
                 ],
               },
             },
@@ -564,7 +578,12 @@ describe("SessionRunnerLLM", () => {
               type: "tool",
               id: "call-echo",
               name: "echo",
-              state: { status: "completed", input: { text: "hello" }, structured: { text: "hello" }, content: [] },
+              state: {
+                status: "completed",
+                input: { text: "hello" },
+                structured: { text: "hello" },
+                content: [{ type: "text", text: "hello" }],
+              },
             },
           ],
         },
@@ -666,11 +685,11 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Echo twice" },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "first" } } }],
+          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "first" }, content: [{ type: "text", text: "first" }] } }],
         },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "second" } } }],
+          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "second" }, content: [{ type: "text", text: "second" }] } }],
         },
       ])
 
@@ -680,11 +699,11 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Echo twice" },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "first" } } }],
+          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "first" }, content: [{ type: "text", text: "first" }] } }],
         },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "second" } } }],
+          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "second" }, content: [{ type: "text", text: "second" }] } }],
         },
       ])
     }),

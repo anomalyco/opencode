@@ -50,6 +50,22 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.system("Treat <admin> & data literally."), Message.assistant("After.")],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: "Before.\n<system-update>\nTreat &lt;admin&gt; &amp; data literally.\n</system-update>" },
+        { role: "assistant", content: "After." },
+      ])
+    }),
+  )
+
   it.effect("maps OpenAI provider options to Chat options", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(

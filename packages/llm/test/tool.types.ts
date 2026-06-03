@@ -22,6 +22,14 @@ const schemaOnly = Tool.make({
   success: Schema.Struct({ forecast: Schema.String }),
 })
 
+Tool.make({
+  description: "Encode success before projection.",
+  parameters: Schema.Struct({ city: Schema.String }),
+  success: Schema.Struct({ forecast: Schema.NumberFromString }),
+  execute: () => Effect.succeed({ forecast: 1 }),
+  toModelOutput: ({ callID, parameters, output }) => [{ type: "text", text: `${callID}:${parameters.city}:${output.forecast}` }],
+})
+
 LLM.stream(request)
 LLM.generate(LLMRequest.update(request, { tools: toDefinitions({ schemaOnly }) }))
 ToolRuntime.dispatch({ executable }, { type: "tool-call", id: "call_1", name: "executable", input: { city: "Paris" } })

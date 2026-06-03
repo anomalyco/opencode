@@ -1,4 +1,4 @@
-import { Message, ToolCallPart, type ContentPart, type ToolResultContentPart } from "@opencode-ai/llm"
+import { Message, ToolCallPart, ToolOutput, type ContentPart } from "@opencode-ai/llm"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
@@ -9,12 +9,6 @@ const media = (file: FileAttachment): ContentPart => ({
   filename: file.name,
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
-
-const toolOutput = (content: SessionMessage.ToolStateCompleted["content"]): ToolResultContentPart[] =>
-  content.map((item) =>
-    item.type === "text"
-      ? { type: "text", text: item.text }
-      : { type: "media", mediaType: item.mime, data: item.uri, filename: item.name })
 
 const toolInput = (tool: SessionMessage.AssistantTool) => {
   if (tool.state.status !== "pending") return tool.state.input
@@ -36,12 +30,13 @@ const toolCall = (tool: SessionMessage.AssistantTool): ContentPart =>
 
 const toolResult = (tool: SessionMessage.AssistantTool) => {
   if (tool.state.status === "completed") {
-    const content = toolOutput(tool.state.content)
+    // TODO: Materialize remote URL and managed file sources before provider-history lowering.
+    // ToolOutput.toResultValue intentionally rejects unmaterialized sources rather than
+    // guessing whether a provider can fetch them or leaking host-local resource paths.
     return Message.tool({
       id: tool.id,
       name: tool.name,
-      result: content.length > 0 ? content : tool.state.structured,
-      resultType: content.length > 0 ? "content" : "json",
+      result: ToolOutput.toResultValue({ structured: tool.state.structured, content: tool.state.content }),
       providerExecuted: tool.provider?.executed,
       providerMetadata: tool.provider?.metadata,
     })

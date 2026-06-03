@@ -189,6 +189,14 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
   const contents: GeminiContent[] = []
 
   for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)
+      const previous = contents.at(-1)
+      if (previous?.role === "user") contents[contents.length - 1] = { role: "user", parts: [...previous.parts, { text: part.text }] }
+      else contents.push({ role: "user", parts: [{ text: part.text }] })
+      continue
+    }
+
     if (message.role === "user") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {

@@ -302,6 +302,10 @@ export namespace Tool {
   })
   export type Called = typeof Called.Type
 
+  /**
+   * Replayable bounded running-tool state. Tools should checkpoint semantic
+   * transitions or at a bounded cadence, not persist every stdout/stderr chunk.
+   */
   export const Progress = EventV2.define({
     type: "session.next.tool.progress",
     ...options,
@@ -312,6 +316,20 @@ export namespace Tool {
     },
   })
   export type Progress = typeof Progress.Type
+
+  /**
+   * Connected-client-only running-tool state. Like Text.Delta, this never
+   * advances the durable aggregate cursor and is never replayed.
+   */
+  export const ProgressLive = EventV2.define({
+    type: "session.next.tool.progress.live",
+    schema: {
+      ...ToolBase,
+      structured: ToolOutput.Structured,
+      content: Schema.Array(ToolOutput.Content),
+    },
+  })
+  export type ProgressLive = typeof ProgressLive.Type
 
   export const Success = EventV2.define({
     type: "session.next.tool.success",
@@ -426,7 +444,7 @@ const DurableDefinitions = [
   Compaction.Delta,
   Compaction.Ended,
 ] as const
-const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta] as const
+const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Tool.ProgressLive, Reasoning.Delta] as const
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
 export type DurableEvent = typeof Durable.Type

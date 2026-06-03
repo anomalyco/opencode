@@ -1,9 +1,13 @@
 import { Effect } from "effect"
-import { LLMEvent, type ToolCallPart, ToolFailure, ToolResultValue, type ToolResultValue as ToolResultValueType } from "./schema"
+import { LLMEvent, type ToolCallPart, ToolFailure, ToolOutput, ToolResultValue, type ToolOutput as ToolOutputType, type ToolResultValue as ToolResultValueType } from "./schema"
 import { type AnyTool, type Tools } from "./tool"
 
-export interface DispatchResult {
+export interface ToolSettlement {
   readonly result: ToolResultValueType
+  readonly output?: ToolOutputType
+}
+
+export interface DispatchResult extends ToolSettlement {
   readonly events: ReadonlyArray<LLMEvent>
 }
 
@@ -22,34 +26,49 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
   )
 }
 
-const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolResultValueType, ToolFailure> =>
+const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
-    Effect.flatMap((decoded) => tool.execute!(decoded, { id: call.id, name: call.name })),
-    Effect.flatMap((value) =>
-      tool._encode(value).pipe(
-        Effect.mapError(
-          (error) =>
-            new ToolFailure({
-              message: `Tool returned an invalid value for its success schema: ${error.message}`,
-            }),
+    Effect.flatMap((decoded) =>
+      tool.execute!(decoded, { id: call.id, name: call.name }).pipe(
+        Effect.flatMap((value) =>
+          tool._encode(value).pipe(
+            Effect.mapError(
+              (error) =>
+                new ToolFailure({
+                  message: `Tool returned an invalid value for its success schema: ${error.message}`,
+                }),
+            ),
+          ),
         ),
+        Effect.map((encoded) => {
+          if (tool._legacyResult && ToolResultValue.is(encoded))
+            return { result: encoded, output: ToolOutput.fromResultValue(encoded) }
+          const output = tool._project(decoded, call.id, encoded)
+          const result = ToolOutput.toResultValue(output)
+          return result.type === "error" ? { result } : { result, output }
+        }),
       ),
-    ),
-    Effect.map(
-      (encoded): ToolResultValueType => (ToolResultValue.is(encoded) ? encoded : { type: "json", value: encoded }),
     ),
   )
 
-const result = (call: ToolCallPart, value: ToolResultValueType, error?: unknown): DispatchResult => ({
-  result: value,
-  events:
-    value.type === "error"
-      ? [
-          LLMEvent.toolError({ id: call.id, name: call.name, message: String(value.value), error }),
-          LLMEvent.toolResult({ id: call.id, name: call.name, result: value }),
-        ]
-      : [LLMEvent.toolResult({ id: call.id, name: call.name, result: value })],
-})
+const result = (
+  call: ToolCallPart,
+  value: ToolResultValueType | ToolSettlement,
+  error?: unknown,
+): DispatchResult => {
+  const settlement = ToolResultValue.is(value) ? { result: value } : value
+  return {
+    result: settlement.result,
+    output: settlement.output,
+    events:
+      settlement.result.type === "error"
+        ? [
+            LLMEvent.toolError({ id: call.id, name: call.name, message: String(settlement.result.value), error }),
+            LLMEvent.toolResult({ id: call.id, name: call.name, result: settlement.result }),
+          ]
+        : [LLMEvent.toolResult({ id: call.id, name: call.name, result: settlement.result, output: settlement.output })],
+  }
+}
 
 export const ToolRuntime = { dispatch } as const

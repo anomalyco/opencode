@@ -63,6 +63,17 @@ export class ListTarget extends Schema.Class<ListTarget>("LocationFileSystem.Lis
   resource: Schema.String,
 }) {}
 
+/** Canonical read authority for Location-scoped search and metadata leaves. */
+export class RootTarget extends Schema.Class<RootTarget>("LocationFileSystem.RootTarget")({
+  absolute: Schema.String,
+  real: Schema.String,
+  directory: Schema.String,
+  root: Schema.String,
+  resource: Schema.String,
+  reference: Schema.NonEmptyString.pipe(Schema.optional),
+  type: Schema.Literals(["file", "directory"]),
+}) {}
+
 export type ReadPathTarget =
   | { readonly type: "file"; readonly target: ReadTarget }
   | { readonly type: "directory"; readonly target: ListTarget }
@@ -123,6 +134,8 @@ export interface Interface {
   readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
   readonly readResolved: (target: ReadTarget, maximumBytes?: number) => Effect.Effect<Content>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
+  /** Select a contained canonical read root without asserting leaf policy. */
+  readonly resolveRoot: (input?: ListInput) => Effect.Effect<RootTarget>
   readonly resolveList: (input?: ListInput) => Effect.Effect<ListTarget>
   readonly listResolved: (target: ListTarget) => Effect.Effect<Entry[]>
   readonly listPage: (input?: ListPageInput) => Effect.Effect<ListPage>
@@ -282,6 +295,19 @@ export const layer = Layer.effect(
         resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
       })
     })
+    const resolveRoot = Effect.fn("FileSystem.resolveRoot")(function* (input: ListInput = {}) {
+      const target = yield* resolve(input.path, input.reference)
+      const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+      const type = info.type === "File" ? "file" : info.type === "Directory" ? "directory" : undefined
+      if (!type) return yield* Effect.die(new Error("Path is not a file or directory"))
+      const relative = path.relative(target.root, target.real).replaceAll("\\", "/") || "."
+      return new RootTarget({
+        ...target,
+        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
+        reference: input.reference,
+        type,
+      })
+    })
     const listResolved = Effect.fn("FileSystem.listResolved")(function* (directory: ListTarget) {
       return yield* fs.readDirectoryEntries(directory.real).pipe(
         Effect.orDie,
@@ -336,6 +362,7 @@ export const layer = Layer.effect(
       list: Effect.fn("FileSystem.list")(function* (input) {
         return yield* listResolved(yield* resolveList(input))
       }),
+      resolveRoot,
       resolveList,
       listResolved,
       listPage: Effect.fn("FileSystem.listPage")(function* (input) {

@@ -281,6 +281,15 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   const messages: BedrockMessage[] = []
 
   for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)
+      const content = textWithCache(breakpoints, part.text, part.cache)
+      const previous = messages.at(-1)
+      if (previous?.role === "user") messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+      else messages.push({ role: "user", content })
+      continue
+    }
+
     if (message.role === "user") {
       const content: BedrockUserBlock[] = []
       for (const part of message.content) {

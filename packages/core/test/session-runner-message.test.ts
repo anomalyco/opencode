@@ -118,7 +118,7 @@ describe("toLLMMessages", () => {
                 new ToolOutput.TextContent({ type: "text", text: "Hello" }),
                 new ToolOutput.FileContent({
                   type: "file",
-                  uri: "data:image/png;base64,aGVsbG8=",
+                  source: { type: "data", data: "aGVsbG8=" },
                   mime: "image/png",
                   name: "hello.png",
                 }),
@@ -180,7 +180,7 @@ describe("toLLMMessages", () => {
           type: "content",
           value: [
             { type: "text", text: "Hello" },
-            { type: "media", mediaType: "image/png", data: "data:image/png;base64,aGVsbG8=", filename: "hello.png" },
+            { type: "media", mediaType: "image/png", data: "aGVsbG8=", filename: "hello.png" },
           ],
         },
       },

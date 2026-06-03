@@ -29,7 +29,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { toolFileSourceFromUri, Usage, type LLMEvent } from "@opencode-ai/llm"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
 import type { EventV2 } from "@opencode-ai/core/event"
 
@@ -528,7 +528,7 @@ export const layer = Layer.effect(
                   ToolOutput.text({ type: "text", text: output.output }),
                   ...(output.attachments?.map(
                     (item: SessionV1.FilePart) =>
-                      ToolOutput.file({ type: "file", uri: item.url, mime: item.mime, name: item.filename }),
+                      ToolOutput.file({ type: "file", source: toolFileSourceFromUri(item.url), mime: item.mime, name: item.filename }),
                   ) ?? []),
                 ],
                 provider: {
@@ -807,7 +807,7 @@ export const layer = Layer.effect(
           if (flags.experimentalEventSystem) {
             yield* events.publish(SessionEvent.Step.Failed, {
               sessionID: ctx.sessionID,
-              assistantMessageID: yield* currentV2AssistantMessage(),
+              assistantMessageID: yield* ensureV2AssistantMessage(),
               error: {
                 type: "unknown",
                 message: errorMessage(e),

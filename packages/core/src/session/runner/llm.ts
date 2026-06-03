@@ -136,11 +136,13 @@ export const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
-            yield* tools.execute({ sessionID: session.id, call: event }).pipe(
+            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
               Effect.catchCause((cause) =>
-                Effect.succeed({ type: "error" as const, value: String(Cause.squash(cause)) }),
+                Effect.succeed({ result: { type: "error" as const, value: String(Cause.squash(cause)) }, output: undefined }),
               ),
-              Effect.flatMap((result) => publish(LLMEvent.toolResult({ id: event.id, name: event.name, result }))),
+              Effect.flatMap((settlement) =>
+                publish(LLMEvent.toolResult({ id: event.id, name: event.name, result: settlement.result, output: settlement.output })),
+              ),
               FiberSet.run(toolFibers),
             )
           }),

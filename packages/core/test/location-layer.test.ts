@@ -17,6 +17,7 @@ import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
 import { ProjectReference } from "../src/project-reference"
+import { LocationSearch } from "../src/location-search"
 import { ToolRegistry } from "../src/tool-registry"
 
 const it = testEffect(
@@ -56,6 +57,7 @@ describe("LocationServiceMap", () => {
             Effect.gen(function* () {
               yield* PluginBoot.Service.use((boot) => boot.wait())
               yield* ProjectReference.Service
+              yield* LocationSearch.Service
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
@@ -65,12 +67,28 @@ describe("LocationServiceMap", () => {
               }
             }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
 
-          expect(
-            (yield* update(blocked.path)).providers.some((provider) => provider.id === ProviderV2.ID.make("test")),
-          ).toBe(false)
+          const blockedState = yield* update(blocked.path)
+          expect(blockedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(false)
+          expect(blockedState.tools.map((tool) => tool.name).sort()).toEqual([
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "read",
+            "websearch",
+            "write",
+          ])
           const allowedState = yield* update(allowed.path)
           expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(true)
-          expect(allowedState.tools.map((tool) => tool.name)).toEqual(["read"])
+          expect(allowedState.tools.map((tool) => tool.name).sort()).toEqual([
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "read",
+            "websearch",
+            "write",
+          ])
         }),
       ),
     ),

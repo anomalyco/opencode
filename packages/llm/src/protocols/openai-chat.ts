@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
@@ -242,7 +242,19 @@ const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: Op
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
-  return [...system, ...Arr.flatten(yield* Effect.forEach(request.messages, lowerMessage))]
+  const messages = [...system]
+  for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
+      const previous = messages.at(-1)
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: `${previous.content}\n${part.text}` }
+      else messages.push({ role: "user", content: part.text })
+      continue
+    }
+    messages.push(...(yield* lowerMessage(message)))
+  }
+  return messages
 })
 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {

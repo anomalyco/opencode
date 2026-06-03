@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice, toDefinitions } from "../src"
+import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice, ToolContent, ToolOutput, toolFileSourceFromUri, toDefinitions } from "../src"
 import { Auth, LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
@@ -140,6 +140,158 @@ describe("LLMClient tools", () => {
     }),
   )
 
+  it.effect("projects encoded typed tool success into canonical model content", () =>
+    Effect.gen(function* () {
+      const calls: unknown[] = []
+      const projected = Tool.make({
+        description: "Project an encoded success.",
+        parameters: Schema.Struct({ prefix: Schema.String }),
+        success: Schema.Struct({ count: Schema.NumberFromString }),
+        execute: () => Effect.succeed({ count: 2 }),
+        toModelOutput: (input) => {
+          calls.push(input)
+          return [{ type: "text", text: `${input.parameters.prefix}:${input.output.count}` }]
+        },
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { projected },
+        LLMEvent.toolCall({ id: "call_projected", name: "projected", input: { prefix: "count" } }),
+      )
+
+      expect(calls).toEqual([{ callID: "call_projected", parameters: { prefix: "count" }, output: { count: "2" } }])
+      expect(dispatched.result).toEqual({ type: "text", value: "count:2" })
+      expect(dispatched.output).toEqual({ structured: { count: "2" }, content: [{ type: "text", text: "count:2" }] })
+      expect(dispatched.events).toEqual([
+        LLMEvent.toolResult({
+          id: "call_projected",
+          name: "projected",
+          result: { type: "text", value: "count:2" },
+          output: { structured: { count: "2" }, content: [{ type: "text", text: "count:2" }] },
+        }),
+      ])
+    }),
+  )
+
+  it.effect("uses the narrow default projection for encoded typed success", () =>
+    Effect.gen(function* () {
+      const text = Tool.make({
+        description: "Return text.",
+        parameters: Schema.Struct({}),
+        success: Schema.String,
+        execute: () => Effect.succeed("hello"),
+      })
+      const json = Tool.make({
+        description: "Return JSON.",
+        parameters: Schema.Struct({}),
+        success: Schema.Struct({ ok: Schema.Boolean }),
+        execute: () => Effect.succeed({ ok: true }),
+      })
+
+      expect((yield* ToolRuntime.dispatch({ text }, LLMEvent.toolCall({ id: "call_text", name: "text", input: {} }))).output)
+        .toEqual({ structured: "hello", content: [{ type: "text", text: "hello" }] })
+      expect((yield* ToolRuntime.dispatch({ json }, LLMEvent.toolCall({ id: "call_json", name: "json", input: {} }))).output)
+        .toEqual({ structured: { ok: true }, content: [] })
+    }),
+  )
+
+  it.effect("models canonical tool files with explicit data, url, and file sources", () =>
+    Effect.sync(() => {
+      const decode = Schema.decodeUnknownSync(ToolContent)
+
+      expect(decode({ type: "file", source: { type: "data", data: "AAAA" }, mime: "image/png" })).toEqual({
+        type: "file",
+        source: { type: "data", data: "AAAA" },
+        mime: "image/png",
+      })
+      expect(decode({ type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" })).toEqual({
+        type: "file",
+        source: { type: "url", url: "https://example.test/image.png" },
+        mime: "image/png",
+      })
+      expect(decode({ type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" })).toEqual({
+        type: "file",
+        source: { type: "file", uri: "file:///tmp/image.png" },
+        mime: "image/png",
+      })
+    }),
+  )
+
+  it.effect("converts canonical data files deliberately and rejects unmaterialized sources", () =>
+    Effect.sync(() => {
+      expect(
+        ToolOutput.toResultValue(
+          ToolOutput.make({}, [{ type: "file", source: { type: "data", data: "AAAA" }, mime: "image/png" }]),
+        ),
+      ).toEqual({ type: "content", value: [{ type: "media", mediaType: "image/png", data: "AAAA" }] })
+      expect(
+        ToolOutput.toResultValue(
+          ToolOutput.make({}, [{ type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" }]),
+        ),
+      ).toEqual({ type: "error", value: 'Tool file source "url" must be materialized to inline data before provider conversion' })
+      expect(
+        ToolOutput.toResultValue(
+          ToolOutput.make({}, [{ type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" }]),
+        ),
+      ).toEqual({ type: "error", value: 'Tool file source "file" must be materialized to inline data before provider conversion' })
+      expect(toolFileSourceFromUri("data:image/png;base64,AAAA")).toEqual({ type: "data", data: "AAAA" })
+      expect(toolFileSourceFromUri("https://example.test/image.png")).toEqual({ type: "url", url: "https://example.test/image.png" })
+      expect(toolFileSourceFromUri("file:///tmp/image.png")).toEqual({ type: "file", uri: "file:///tmp/image.png" })
+      expect(() => toolFileSourceFromUri("opaque-value")).toThrow("Unsupported tool file URI")
+      expect(() =>
+        ToolOutput.fromResultValue({
+          type: "content",
+          value: [{ type: "media", mediaType: "image/png", data: "https://example.test/image.png" }],
+        }),
+      ).toThrow("Legacy tool-result media must contain raw base64 bytes or a base64 data URI")
+    }),
+  )
+
+  it.effect("settles projected url files as materialization errors", () =>
+    Effect.gen(function* () {
+      const remote = Tool.make({
+        description: "Return a remote file.",
+        parameters: Schema.Struct({}),
+        success: Schema.Struct({ ok: Schema.Boolean }),
+        execute: () => Effect.succeed({ ok: true }),
+        toModelOutput: () => [
+          { type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" },
+        ],
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { remote },
+        LLMEvent.toolCall({ id: "call_remote", name: "remote", input: {} }),
+      )
+
+      expect(dispatched.output).toBeUndefined()
+      expect(dispatched.result).toEqual({
+        type: "error",
+        value: 'Tool file source "url" must be materialized to inline data before provider conversion',
+      })
+      expect(dispatched.events.map((event) => event.type)).toEqual(["tool-error", "tool-result"])
+    }),
+  )
+
+  it.effect("derives typed output schemas and preserves dynamic output schemas", () =>
+    Effect.sync(() => {
+      const [typed] = toDefinitions({ get_weather })
+      const schema = { type: "object", properties: { result: { type: "string" } } } as const
+      const [dynamic] = toDefinitions({
+        dynamic: Tool.make({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
+      })
+
+      expect(typed?.outputSchema).toMatchObject({
+        type: "object",
+        properties: { condition: { type: "string" } },
+        required: ["temperature", "condition"],
+        additionalProperties: false,
+      })
+      expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
+      expect(dynamic?.outputSchema).toEqual(schema)
+    }),
+  )
+
   it.effect("preserves content tool results from dynamic tools", () =>
     Effect.gen(function* () {
       const screenshot = Tool.make({
@@ -198,6 +350,7 @@ describe("LLMClient tools", () => {
           id: "call_1",
           name: "eventful",
           result: { type: "json", value: { ok: true }, events: ["caller-owned"] },
+          output: { structured: { ok: true }, content: [] },
         }),
       ])
     }),

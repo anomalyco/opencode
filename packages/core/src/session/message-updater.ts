@@ -315,6 +315,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
+      // Live progress reaches connected subscribers only; durable checkpoints update the read model.
+      "session.next.tool.progress.live": () => Effect.void,
       "session.next.tool.success": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)

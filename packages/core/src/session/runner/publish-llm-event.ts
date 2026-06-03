@@ -1,8 +1,7 @@
-import { type LLMEvent, type ToolResultValue, type Usage } from "@opencode-ai/llm"
+import { ToolOutput as LLMToolOutput, type LLMEvent, type ToolOutput as LLMToolOutputType, type ToolResultValue, type Usage } from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
-import { ToolOutput } from "../../tool-output"
 import { SessionEvent } from "../event"
 import { SessionSchema } from "../schema"
 
@@ -39,27 +38,14 @@ const message = (value: unknown) => {
 }
 
 type ToolOutput =
-  | { readonly structured: Record<string, unknown>; readonly content: ReadonlyArray<{ readonly type: "text"; readonly text: string } | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string }> }
+  | { readonly structured: Record<string, unknown>; readonly content: LLMToolOutputType["content"] }
   | { readonly error: { readonly type: "unknown"; readonly message: string } }
 
-const output = (result: ToolResultValue): ToolOutput => {
-  switch (result.type) {
-    case "json":
-      return { structured: record(result.value), content: [] }
-    case "text":
-      return { structured: {}, content: [ToolOutput.text({ type: "text", text: message(result.value) })] }
-    case "content":
-      return {
-        structured: {},
-        content: result.value.map((item: (typeof result.value)[number]) =>
-          item.type === "text"
-            ? ToolOutput.text({ type: "text", text: item.text })
-            : ToolOutput.file({ type: "file", uri: item.data, mime: item.mediaType, name: item.filename })),
-      }
-    case "error":
-      return { error: { type: "unknown" as const, message: message(result.value) } }
-  }
-  throw new Error(`Unsupported tool result: ${message(result)}`)
+const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultValue): ToolOutput => {
+  if (result.type === "error") return { error: { type: "unknown", message: message(result.value) } }
+  const settled = value ?? LLMToolOutput.fromResultValue(result)
+  if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
+  return { structured: record(settled.structured), content: settled.content }
 }
 
 /** Persist one provider turn without executing tools or starting a continuation turn. */
@@ -267,7 +253,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           return yield* Effect.die(`Duplicate tool result: ${event.id}`)
         }
         tool.settled = true
-        const result = output(event.result)
+        const result = settledOutput(event.output, event.result)
         const provider = {
           executed: event.providerExecuted === true || tool.providerExecuted,
           ...(event.providerMetadata === undefined ? {} : { metadata: event.providerMetadata }),

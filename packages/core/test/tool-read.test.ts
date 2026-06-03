@@ -5,6 +5,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { ReadTool } from "@opencode-ai/core/tool/read"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { testEffect } from "./lib/effect"
 
@@ -19,6 +20,7 @@ let listReal = "/project/src"
 let size = 5
 let real = "/project/README.md"
 let afterApproval = () => {}
+const resourceReads: ToolOutputStore.ReadInput[] = []
 const filesystem = Layer.succeed(
   FileSystem.Service,
   FileSystem.Service.of({
@@ -66,6 +68,7 @@ const filesystem = Layer.succeed(
         reads.push({ path: RelativePath.make("README.md") })
         return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
       }),
+    resolveRoot: () => Effect.die("unused"),
     list: () => Effect.die("unused"),
     resolveList: (input = {}) =>
       listResolveFailure === undefined
@@ -108,9 +111,33 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer
-const read = ReadTool.layer.pipe(Layer.provide(registry), Layer.provide(filesystem), Layer.provide(permission))
-const it = testEffect(Layer.mergeAll(registry, filesystem, permission, read))
+const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const resources = Layer.succeed(
+  ToolOutputStore.Service,
+  ToolOutputStore.Service.of({
+    limits: () => Effect.die("unused"),
+    write: () => Effect.die("unused"),
+    truncate: () => Effect.die("unused"),
+    cleanup: () => Effect.die("unused"),
+    read: (input) =>
+      Effect.sync(() => {
+        resourceReads.push(input)
+        return new ToolOutputStore.Page({
+          resource: new ToolOutputStore.Resource({ uri: input.uri, mime: "text/plain", size: 5 }),
+          content: "hello",
+          offset: input.offset ?? 0,
+          truncated: false,
+        })
+      }),
+  }),
+)
+const read = ReadTool.layer.pipe(
+  Layer.provide(registry),
+  Layer.provide(filesystem),
+  Layer.provide(permission),
+  Layer.provide(resources),
+)
+const it = testEffect(Layer.mergeAll(registry, filesystem, permission, resources, read))
 const sessionID = SessionV2.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
@@ -159,6 +186,36 @@ describe("ReadTool", () => {
         }),
       ).toEqual({ type: "error", value: "Unable to read README.md" })
       expect(reads).toEqual([])
+    }),
+  )
+
+  it.effect("reads an opaque managed resource without treating it as a path", () =>
+    Effect.gen(function* () {
+      resourceReads.length = 0
+      assertions.length = 0
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: {
+            type: "tool-call",
+            id: "call-read-resource",
+            name: "read",
+            input: { resource: "tool-output://opaque", offset: 2, limit: 10 },
+          },
+        }),
+      ).toEqual({
+        type: "json",
+        value: {
+          resource: { uri: "tool-output://opaque", mime: "text/plain", size: 5 },
+          content: "hello",
+          offset: 2,
+          truncated: false,
+        },
+      })
+      expect(resourceReads).toEqual([{ sessionID, uri: "tool-output://opaque", offset: 2, limit: 10 }])
+      expect(assertions).toEqual([])
     }),
   )
 
