@@ -1,5 +1,5 @@
 import path from "path"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Config } from "@/config/config"
@@ -12,7 +12,7 @@ import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
-function extract(messages: SessionLegacy.WithParts[]) {
+function extract(messages: SessionV1.WithParts[]) {
   const paths = new Set<string>()
   for (const msg of messages) {
     for (const part of msg.parts) {
@@ -35,7 +35,7 @@ export interface Interface {
   readonly system: () => Effect.Effect<string[], FSUtil.Error>
   readonly find: (dir: string) => Effect.Effect<string | undefined, FSUtil.Error>
   readonly resolve: (
-    messages: SessionLegacy.WithParts[],
+    messages: SessionV1.WithParts[],
     filepath: string,
     messageID: MessageID,
   ) => Effect.Effect<{ filepath: string; content: string }[], FSUtil.Error>
@@ -175,7 +175,7 @@ export const layer: Layer.Layer<
     })
 
     const resolve = Effect.fn("Instruction.resolve")(function* (
-      messages: SessionLegacy.WithParts[],
+      messages: SessionV1.WithParts[],
       filepath: string,
       messageID: MessageID,
     ) {
@@ -230,7 +230,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 
-export function loaded(messages: SessionLegacy.WithParts[]) {
+export function loaded(messages: SessionV1.WithParts[]) {
   return extract(messages)
 }
 

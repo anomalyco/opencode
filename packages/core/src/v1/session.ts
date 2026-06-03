@@ -1,15 +1,15 @@
-export * as SessionLegacy from "./legacy"
+export * as SessionV1 from "./session"
 
 import { Effect, Schema, Types } from "effect"
 import { EventV2 } from "../event"
-import { PermissionLegacy } from "../permission/legacy"
+import { PermissionV1 } from "./permission"
 import { ProjectV2 } from "../project"
 import { ProviderV2 } from "../provider"
 import { optionalOmitUndefined, withStatics } from "../schema"
 import { Identifier } from "../util/identifier"
 import { NonNegativeInt } from "../schema"
 import { NamedError } from "../util/error"
-import { SessionSchema } from "./schema"
+import { SessionSchema } from "../session/schema"
 import { WorkspaceV2 } from "../workspace"
 
 export const MessageID = Schema.String.check(Schema.isStartsWith("msg")).pipe(
@@ -558,7 +558,7 @@ export const SessionInfo = Schema.Struct({
     compacting: optionalOmitUndefined(NonNegativeInt),
     archived: optionalOmitUndefined(Schema.Finite),
   }),
-  permission: optionalOmitUndefined(PermissionLegacy.Ruleset),
+  permission: optionalOmitUndefined(PermissionV1.Ruleset),
   revert: optionalOmitUndefined(SessionRevert),
 }).annotate({ identifier: "Session" })
 export type SessionInfo = typeof SessionInfo.Type
