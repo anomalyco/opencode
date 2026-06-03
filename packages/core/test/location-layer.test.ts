@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
@@ -9,8 +9,29 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { AppFileSystem } from "../src/filesystem"
+import { Auth } from "../src/auth"
+import { EventV2 } from "../src/event"
+import { Global } from "../src/global"
+import { ModelsDev } from "../src/models-dev"
+import { Npm } from "../src/npm"
+import { Project } from "../src/project"
 
-const it = testEffect(LocationServiceMap.layer)
+const it = testEffect(
+  LocationServiceMap.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Project.defaultLayer,
+        EventV2.defaultLayer,
+        Auth.defaultLayer,
+        Npm.defaultLayer,
+        ModelsDev.defaultLayer,
+        AppFileSystem.defaultLayer,
+        Global.defaultLayer,
+      ),
+    ),
+  ),
+)
 
 describe("LocationServiceMap", () => {
   it.live("isolates location state while sharing location policy with catalog", () =>

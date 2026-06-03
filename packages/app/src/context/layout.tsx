@@ -12,6 +12,9 @@ import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
+import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
+
+export type { ProjectAvatarVariant }
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_SIDEBAR_WIDTH = 344
@@ -31,6 +34,16 @@ export function getAvatarColors(key?: string) {
     background: "var(--surface-info-base)",
     foreground: "var(--text-base)",
   }
+}
+
+export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
+  if (key === "orange") return "orange"
+  if (key === "pink") return "pink"
+  if (key === "cyan") return "cyan"
+  if (key === "purple") return "purple"
+  if (key === "mint") return "cyan"
+  if (key === "lime") return "green"
+  return "gray"
 }
 
 type SessionTabs = {

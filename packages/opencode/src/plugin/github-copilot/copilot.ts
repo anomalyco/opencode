@@ -10,6 +10,8 @@ import { MessageV2 } from "@/session/message-v2"
 const log = Log.create({ service: "plugin.copilot" })
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
+const API_VERSION = "2026-06-01"
+const UTILITY_MODELS = ["gpt-5.4-nano", "gpt-4.1", "gpt-4o", "gpt-4o-mini"]
 // Add a small safety buffer when polling to avoid hitting the server
 // slightly too early due to clock skew / timer drift.
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
@@ -56,11 +58,13 @@ function fix(model: Model, url: string): Model {
 
 export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
   const sdk = input.client
+  let models: Record<string, Model> = {}
   return {
     provider: {
       id: "github-copilot",
       async models(provider, ctx) {
         if (ctx.auth?.type !== "oauth") {
+          models = {}
           return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model, base())]))
         }
 
@@ -71,14 +75,23 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           {
             Authorization: `Bearer ${auth.refresh}`,
             "User-Agent": `opencode/${InstallationVersion}`,
+            "X-GitHub-Api-Version": API_VERSION,
           },
           provider.models,
-        ).catch((error) => {
-          log.error("failed to fetch copilot models", { error })
-          return Object.fromEntries(
-            Object.entries(provider.models).map(([id, model]) => [id, fix(model, base(auth.enterpriseUrl))]),
-          )
-        })
+        )
+          .then((result) => {
+            models = result.models
+            return Object.fromEntries(
+              Object.entries(result.models).filter(([, model]) => result.pickerEnabled.has(model.api.id)),
+            )
+          })
+          .catch((error) => {
+            models = {}
+            log.error("failed to fetch copilot models", { error })
+            return Object.fromEntries(
+              Object.entries(provider.models).map(([id, model]) => [id, fix(model, base(auth.enterpriseUrl))]),
+            )
+          })
       },
     },
     auth: {
@@ -342,8 +355,18 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         output.options.toolStreaming = false
       }
     },
+    "experimental.provider.small_model": async (incoming, output) => {
+      if (incoming.provider.id !== "github-copilot") return
+      // GitHub exposes utility models for title generation without including them in the picker.
+      output.model = UTILITY_MODELS.map((id) => models[id]).find((model) => model !== undefined)
+    },
     "chat.headers": async (incoming, output) => {
       if (!incoming.model.providerID.includes("github-copilot")) return
+
+      output.headers["X-GitHub-Api-Version"] = API_VERSION
+      if (incoming.agent === "title") {
+        output.headers["X-Interaction-Type"] = "agent-session-name-generation"
+      }
 
       if (incoming.model.api.npm === "@ai-sdk/anthropic") {
         output.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"

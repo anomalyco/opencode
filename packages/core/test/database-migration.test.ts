@@ -7,6 +7,7 @@ import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
+import sessionMetadataMigration from "@opencode-ai/core/database/migration/20260511173437_session-metadata"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
@@ -85,6 +86,44 @@ describe("DatabaseMigration", () => {
         yield* DatabaseMigration.applyOnly(db, [])
 
         expect(yield* db.get(sql`SELECT id FROM migration`)).toEqual({ id: "20260127222353_familiar_lady_ursula" })
+      }),
+    )
+  })
+
+  test("does not replay a migrated session metadata column", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, metadata text)`)
+        yield* db.run(
+          sql`CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric, name text, applied_at TEXT)`,
+        )
+        yield* db.run(sql`
+          INSERT INTO __drizzle_migrations (hash, created_at, name, applied_at)
+          VALUES ('hash', 1, '20260511173437_session-metadata', ${new Date().toISOString()})
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [sessionMetadataMigration])
+
+        expect(yield* db.all(sql`SELECT id FROM migration`)).toEqual([{ id: "20260511173437_session-metadata" }])
+      }),
+    )
+  })
+
+  test("accepts the temporary replacement session metadata migration id", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, metadata text)`)
+        yield* db.run(sql`CREATE TABLE migration (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`)
+        yield* db.run(sql`INSERT INTO migration (id, time_completed) VALUES ('20260530232709_lovely_romulus', 1)`)
+
+        yield* DatabaseMigration.applyOnly(db, [sessionMetadataMigration])
+
+        expect(yield* db.all(sql`SELECT id FROM migration ORDER BY id`)).toEqual([
+          { id: "20260511173437_session-metadata" },
+          { id: "20260530232709_lovely_romulus" },
+        ])
       }),
     )
   })

@@ -1,4 +1,3 @@
-export const MODEL_AUTHOR_OVERRIDES = [{ model: "big-pickle", author: "opencode" }] as const
 export const MODEL_AUTHOR_RULES = [
   { match: "claude", author: "anthropic" },
   { match: "gemini", author: "google" },
@@ -23,8 +22,26 @@ export function modelAuthor(value: string | undefined) {
   const model = normalizeInferenceModel(value).toLowerCase()
   if (EXCLUDED_MODELS.has(model)) return undefined
 
-  const override = MODEL_AUTHOR_OVERRIDES.find((item) => item.model === model)
-  if (override) return override.author
-
   return MODEL_AUTHOR_RULES.find((item) => model.includes(item.match))?.author ?? "unknown"
+}
+
+export function statModel(model: string | undefined, providerModel: string | undefined) {
+  const normalized = normalizeInferenceModel(model)
+  if (normalized.toLowerCase() === "big-pickle") return normalizeInferenceModel(providerModel)
+  return normalized
+}
+
+export function statProvider(
+  model: string | undefined,
+  providerModel: string | undefined,
+  provider: string | undefined,
+) {
+  const modelAuthorValue = modelAuthor(statModel(model, providerModel))
+  if (!modelAuthorValue) return undefined
+
+  const providerModelAuthor = modelAuthor(providerModel)
+  if (providerModelAuthor && providerModelAuthor !== "unknown") return providerModelAuthor
+  if (modelAuthorValue !== "unknown") return modelAuthorValue
+  if (provider && provider.toLowerCase() !== "opencode") return provider
+  return modelAuthorValue
 }

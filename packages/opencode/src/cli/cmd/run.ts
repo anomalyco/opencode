@@ -221,7 +221,7 @@ export const RunCommand = effectCmd({
       .option("replay", {
         type: "boolean",
         default: false,
-        describe: "replay visible session history on interactive resume",
+        describe: "replay interactive session history on resume and after resize",
       })
       .option("replay-limit", {
         type: "number",

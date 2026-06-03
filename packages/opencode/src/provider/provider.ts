@@ -3,13 +3,13 @@ import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import * as Log from "@opencode-ai/core/util/log"
+import { Log } from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
-import * as ModelsDev from "@opencode-ai/core/models-dev"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -24,7 +24,7 @@ import { EffectPromise } from "@/effect/promise"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
-import * as ProviderTransform from "./transform"
+import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -32,11 +32,6 @@ import { ProviderError } from "./error"
 
 const log = Log.create({ service: "provider" })
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
-function shouldUseCopilotResponsesApi(modelID: string): boolean {
-  const match = /^gpt-(\d+)/.exec(modelID)
-  if (!match) return false
-  return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
-}
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -152,10 +147,6 @@ type CustomDep = {
   get: (key: string) => Effect.Effect<string | undefined>
 }
 
-function useLanguageModel(sdk: any) {
-  return sdk.responses === undefined && sdk.chat === undefined
-}
-
 function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)
   if (sdk.responses) return sdk.responses(modelID)
@@ -218,8 +209,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       Effect.succeed({
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
+          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
+          const match = /^gpt-(\d+)/.exec(modelID)
+          if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return sdk.responses(modelID)
+          return sdk.chat(modelID)
         },
         options: {},
       }),
@@ -582,11 +575,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const instanceUrl = (yield* dep.get("GITLAB_INSTANCE_URL")) || "https://gitlab.com"
 
       const auth = yield* dep.auth(input.id)
-      const apiKey = yield* Effect.sync(() => {
-        if (auth?.type === "oauth") return auth.access
-        if (auth?.type === "api") return auth.key
-        return undefined
-      })
+      const apiKey = auth?.type === "oauth" ? auth.access : auth?.type === "api" ? auth.key : undefined
       const token = apiKey ?? (yield* dep.get("GITLAB_TOKEN"))
 
       const providerConfig = (yield* dep.config()).provider?.["gitlab"]
@@ -734,12 +723,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         }
 
-      const apiKey = yield* Effect.gen(function* () {
-        const envToken = env["CLOUDFLARE_API_KEY"]
-        if (envToken) return envToken
-        if (auth?.type === "api") return auth.key
-        return undefined
-      })
+      const apiKey = env["CLOUDFLARE_API_KEY"] || (auth?.type === "api" ? auth.key : undefined)
 
       return {
         autoload: !!apiKey,
@@ -785,12 +769,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }
 
       // Get API token from env or auth - required for authenticated gateways
-      const apiToken = yield* Effect.gen(function* () {
-        const envToken = env["CLOUDFLARE_API_TOKEN"] || env["CF_AIG_TOKEN"]
-        if (envToken) return envToken
-        if (auth?.type === "api") return auth.key
-        return undefined
-      })
+      const apiToken =
+        env["CLOUDFLARE_API_TOKEN"] || env["CF_AIG_TOKEN"] || (auth?.type === "api" ? auth.key : undefined)
 
       if (!apiToken) {
         throw new Error(
@@ -1171,18 +1151,15 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
-function suggestionModelIDs(provider: Info | undefined, enableExperimentalModels: boolean) {
-  if (!provider) return []
-  return Object.keys(provider.models).filter((id) => {
-    const model = provider.models[id]
-    if (model.status === "deprecated") return false
-    if (model.status === "alpha" && !enableExperimentalModels) return false
-    return true
-  })
-}
-
 function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelID, enableExperimentalModels: boolean) {
-  const available = suggestionModelIDs(provider, enableExperimentalModels)
+  const available = provider
+    ? Object.keys(provider.models).filter((id) => {
+        const model = provider.models[id]
+        if (model.status === "deprecated") return false
+        if (model.status === "alpha" && !enableExperimentalModels) return false
+        return true
+      })
+    : []
   const fuzzy = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 }).map((m) => m.target)
   if (fuzzy.length) return fuzzy
   const query = modelID
@@ -1681,15 +1658,15 @@ export const layer = Layer.effect(
           return loaded as SDK
         }
 
-        let installedPath: string
-        if (!model.api.npm.startsWith("file://")) {
+        const installedPath = await (async () => {
+          if (model.api.npm.startsWith("file://")) {
+            log.info("loading local provider", { pkg: model.api.npm })
+            return model.api.npm
+          }
           const item = await Npm.add(model.api.npm)
           if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
-          installedPath = item.entrypoint
-        } else {
-          log.info("loading local provider", { pkg: model.api.npm })
-          installedPath = model.api.npm
-        }
+          return item.entrypoint
+        })()
 
         // `installedPath` is a local entry path or an existing `file://` URL. Normalize
         // only path inputs so Node on Windows accepts the dynamic import.
@@ -1788,7 +1765,20 @@ export const layer = Layer.effect(
       const provider = s.providers[providerID]
       if (!provider) return undefined
 
-      let priority = [
+      const experimental = yield* plugin.trigger<"experimental.provider.small_model">(
+        "experimental.provider.small_model",
+        { provider: toPublicInfo(provider) },
+        { model: undefined },
+      )
+      if (experimental.model) {
+        return {
+          ...experimental.model,
+          id: ProviderV2.ModelID.make(experimental.model.id),
+          providerID: ProviderV2.ID.make(experimental.model.providerID),
+        }
+      }
+
+      const defaultPriority = [
         "claude-haiku-4-5",
         "claude-haiku-4.5",
         "3-5-haiku",
@@ -1797,12 +1787,11 @@ export const layer = Layer.effect(
         "gemini-2.5-flash",
         "gpt-5-nano",
       ]
-      if (providerID.startsWith("opencode")) {
-        priority = ["gpt-5-nano"]
-      }
-      if (providerID.startsWith("github-copilot")) {
-        priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
-      }
+      const priority = providerID.startsWith("opencode")
+        ? ["gpt-5-nano"]
+        : providerID.startsWith("github-copilot")
+          ? ["gpt-5-mini", "claude-haiku-4.5", ...defaultPriority]
+          : defaultPriority
       for (const item of priority) {
         if (providerID === ProviderV2.ID.amazonBedrock) {
           const crossRegionPrefixes = ["global.", "us.", "eu."]

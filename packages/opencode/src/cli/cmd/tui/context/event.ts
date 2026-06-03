@@ -1,4 +1,5 @@
 import type { Event } from "@opencode-ai/sdk/v2"
+import * as Log from "@opencode-ai/core/util/log"
 import { useProject } from "./project"
 import { useSDK } from "./sdk"
 
@@ -16,9 +17,7 @@ export function useEvent() {
         return
       }
 
-      if (event.directory === "global" || event.project === project.project()) {
-        handler(event.payload, { workspace: event.workspace })
-      }
+      handler(event.payload, { workspace: event.workspace })
     })
   }
 

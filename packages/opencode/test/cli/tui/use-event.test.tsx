@@ -113,19 +113,6 @@ describe("useEvent", () => {
     }
   })
 
-  test("ignores events for other projects", async () => {
-    const { app, emit, seen } = await mount()
-
-    try {
-      emit(event(vcs("other"), { directory, project: "proj_other" }))
-      await Bun.sleep(30)
-
-      expect(seen).toHaveLength(0)
-    } finally {
-      app.renderer.destroy()
-    }
-  })
-
   test("delivers current project events regardless of active workspace", async () => {
     const { app, emit, project, seen } = await mount()
 

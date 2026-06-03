@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { geoStat, modelStat, providerStat } from "./database/schema"
-import { modelAuthor, normalizeInferenceModel } from "./domain/model-normalization"
+import { statModel, statProvider } from "./domain/model-normalization"
 import {
   chunks,
   collapseRows,
@@ -190,28 +190,36 @@ function buildQueries(limit: number, tiers: string[]): QuerySpec[] {
     querySpec(
       "model-day",
       tier,
-      metricQuery(["date", "tier", "stat_provider", "stat_model"], limit, tierFilters(tier)),
+      metricQuery(["date", "tier", "stat_provider_2", "stat_model_2"], limit, tierFilters(tier)),
     ),
-    querySpec("provider-day", tier, metricQuery(["date", "tier", "stat_provider"], limit, tierFilters(tier))),
+    querySpec("provider-day", tier, metricQuery(["date", "tier", "stat_provider_2"], limit, tierFilters(tier))),
     querySpec("geo-day", tier, metricQuery(["date", "tier", "country", "continent"], limit, tierFilters(tier))),
     querySpec(
       "geo-model-day",
       tier,
-      metricQuery(["date", "tier", "stat_provider", "stat_model", "country", "continent"], limit, tierFilters(tier)),
+      metricQuery(
+        ["date", "tier", "stat_provider_2", "stat_model_2", "country", "continent"],
+        limit,
+        tierFilters(tier),
+      ),
     ),
   ])
   const weekly = tiers.flatMap((tier) => [
     querySpec(
       "model-week",
       tier,
-      metricQuery(["week", "tier", "stat_provider", "stat_model"], limit, tierFilters(tier)),
+      metricQuery(["week", "tier", "stat_provider_2", "stat_model_2"], limit, tierFilters(tier)),
     ),
-    querySpec("provider-week", tier, metricQuery(["week", "tier", "stat_provider"], limit, tierFilters(tier))),
+    querySpec("provider-week", tier, metricQuery(["week", "tier", "stat_provider_2"], limit, tierFilters(tier))),
     querySpec("geo-week", tier, metricQuery(["week", "tier", "country", "continent"], limit, tierFilters(tier))),
     querySpec(
       "geo-model-week",
       tier,
-      metricQuery(["week", "tier", "stat_provider", "stat_model", "country", "continent"], limit, tierFilters(tier)),
+      metricQuery(
+        ["week", "tier", "stat_provider_2", "stat_model_2", "country", "continent"],
+        limit,
+        tierFilters(tier),
+      ),
     ),
   ])
 
@@ -345,12 +353,23 @@ function classifyRows(file: string, rows: RawRow[]): ImportKey {
   const headers = new Set(rows.flatMap((row) => Object.keys(row).map(normalizeHeader)))
   const grain: Grain = headers.has("date") ? "day" : "week"
   if (hasHeader(headers, ["country", "cf.country"])) {
-    if (hasHeader(headers, ["model", "stat_model"]) && hasMetricHeaders(headers)) return `geo-model-${grain}`
+    if (hasHeader(headers, ["model", "stat_model", "stat_model_2"]) && hasMetricHeaders(headers))
+      return `geo-model-${grain}`
     return hasMetricHeaders(headers) ? `geo-${grain}` : `geo-continent-${grain}`
   }
-  if (hasHeader(headers, ["model", "stat_model"]))
+  if (hasHeader(headers, ["model", "stat_model", "stat_model_2"]))
     return hasMetricHeaders(headers) ? `model-${grain}` : `model-provider-model-${grain}`
-  if (hasHeader(headers, ["provider", "provider.normalized", "stat_provider"])) return `provider-${grain}`
+  if (
+    hasHeader(headers, [
+      "provider",
+      "provider.normalized",
+      "stat_provider",
+      "stat_provider_2",
+      "provider.model",
+      "provider_model",
+    ])
+  )
+    return `provider-${grain}`
   fail(`Cannot classify export from columns in ${file}`)
 }
 
@@ -588,11 +607,11 @@ function deriveTier(row: RawRow) {
 }
 
 function provider(row: RawRow) {
-  return cell(row, ["stat_provider"]) || modelAuthor(model(row))
+  return statProvider(model(row), providerModel(row), cell(row, ["stat_provider_2", "stat_provider"]))
 }
 
 function model(row: RawRow) {
-  return normalizeInferenceModel(cell(row, ["stat_model"]) || rawModel(row))
+  return statModel(cell(row, ["stat_model_2", "stat_model"]) || rawModel(row), providerModel(row))
 }
 
 function rawModel(row: RawRow) {
