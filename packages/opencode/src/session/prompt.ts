@@ -4,6 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import os from "os"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
+import { ToolCallLeak } from "./tool-call-leak"
 import { Log } from "@opencode-ai/core/util/log"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
@@ -1288,6 +1289,58 @@ export const layer = Layer.effect(
                 tool: orphan.tool,
                 callID: orphan.callID,
               })
+            }
+            // A model behind an OpenAI-compatible server sometimes emits its
+            // tool call as plain text (server-side parser miss, issue #24316).
+            // The turn looks finished ("stop", no tool parts) even though the
+            // model meant to act. Nudge it to re-issue the call through the
+            // tool-calling mechanism instead of halting; after MAX_ATTEMPTS,
+            // surface an error so the stop is explained. Compaction replays
+            // the prompt as a fresh user message, so the cap applies per
+            // compaction segment.
+            const leakedText = lastAssistantMsg?.parts.findLast((part) => part.type === "text")
+            if (
+              lastAssistant.finish === "stop" &&
+              leakedText?.type === "text" &&
+              ToolCallLeak.detect(leakedText.text)
+            ) {
+              const attempts = ToolCallLeak.countAttempts(msgs)
+              if (attempts < ToolCallLeak.MAX_ATTEMPTS) {
+                yield* slog.info("tool call leaked as text, nudging model", {
+                  messageID: lastAssistant.id,
+                  attempts,
+                })
+                const nudge: SessionV1.User = {
+                  id: MessageID.ascending(),
+                  sessionID,
+                  time: { created: Date.now() },
+                  role: "user",
+                  agent: lastUser.agent,
+                  model: lastUser.model,
+                  format: lastUser.format,
+                }
+                yield* sessions.updateMessage(nudge)
+                yield* sessions.updatePart({
+                  id: PartID.ascending(),
+                  messageID: nudge.id,
+                  sessionID,
+                  type: "text",
+                  text: ToolCallLeak.NUDGE,
+                  synthetic: true,
+                  metadata: { [ToolCallLeak.MARKER]: true },
+                } satisfies SessionV1.Part)
+                continue
+              }
+              yield* slog.warn("tool call leak recovery exhausted", { messageID: lastAssistant.id, attempts })
+              // Persist the error on the leaked assistant message so the
+              // failure survives reloads; the bus event alone is transient.
+              const leakError = new NamedError.Unknown({
+                message:
+                  "The model repeatedly wrote tool calls as plain text instead of using the tool-calling mechanism, so they were not executed. Check your inference server's tool-call parser configuration.",
+              }).toObject()
+              lastAssistant.error = leakError
+              yield* sessions.updateMessage(lastAssistant)
+              yield* events.publish(Session.Event.Error, { sessionID, error: leakError })
             }
             yield* slog.info("exiting loop")
             break
