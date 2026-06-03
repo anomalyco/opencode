@@ -6,7 +6,6 @@ import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
 import { Provider } from "@/provider/provider"
-import type { ConfigProvider } from "../../src/config/provider"
 
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -37,13 +36,16 @@ const list = Provider.use.list()
 const mantleModelConfig = {
   provider: { npm: "@ai-sdk/amazon-bedrock/mantle" },
   limit: { context: 272_000, output: 32_000 },
-  modalities: { input: ["text", "image", "pdf"], output: ["text"] },
-} satisfies NonNullable<ConfigProvider.Info["models"]>[string]
+  modalities: {
+    input: ["text", "image", "pdf"] as Array<"text" | "image" | "pdf">,
+    output: ["text"] as Array<"text">,
+  },
+}
 
 const mantleOpenAIModelConfig = {
   ...mantleModelConfig,
   provider: { npm: "@ai-sdk/amazon-bedrock/mantle", api: "https://bedrock-mantle.us-east-2.api.aws/openai/v1" },
-} satisfies NonNullable<ConfigProvider.Info["models"]>[string]
+}
 
 const withAuthJson = (contents: string) =>
   Effect.acquireRelease(
