@@ -38,15 +38,110 @@ export function mapLegacyMessages(
   options: { sessionID: SessionSchema.ID | string },
 ): Result {
   const stats = makeStats()
-  const messages: SessionMessage.Message[] = input
+  const entries = input
     .slice()
     .sort((left, right) => left.info.time.created - right.info.time.created || compareID(left.info.id, right.info.id))
-    .flatMap((entry, messageOrdinal): SessionMessage.Message[] => {
-      if (entry.info.role === "user") return [mapUser(entry, options.sessionID, messageOrdinal, stats)]
-      return [mapAssistant({ info: entry.info, parts: entry.parts }, options.sessionID, messageOrdinal, stats)]
-    })
+  const compactions = compactionPairs(entries, stats)
+  const folded = new Set([...compactions.keys(), ...Array.from(compactions.values(), (pair) => pair.summaryOrdinal)])
+  const compactionMarkers = new Set(
+    entries.flatMap((entry, messageOrdinal) => (entry.info.role === "user" && compactionPart(entry) ? [messageOrdinal] : [])),
+  )
+  const emittedIDs = new Map(
+    entries.flatMap((entry, messageOrdinal): [string, SessionMessage.ID][] => {
+      if (folded.has(messageOrdinal) || compactionMarkers.has(messageOrdinal)) return []
+      return [[entry.info.id, messageID(options.sessionID, entry.info.id, messageOrdinal)]]
+    }),
+  )
+  const messages: SessionMessage.Message[] = entries.flatMap((entry, messageOrdinal): SessionMessage.Message[] => {
+    const compaction = compactions.get(messageOrdinal)
+    if (compaction) {
+      if (!compaction.summary) return []
+      return [mapCompaction({ ...compaction, summary: compaction.summary }, options.sessionID, messageOrdinal, emittedIDs, stats)]
+    }
+    if (folded.has(messageOrdinal)) return []
+    if (compactionMarkers.has(messageOrdinal)) {
+      addStat(stats.skipped, "compaction", "compaction_marker_incomplete")
+      return []
+    }
+    if (entry.info.role === "user") return [mapUser(entry, options.sessionID, messageOrdinal, stats)]
+    return [mapAssistant({ info: entry.info, parts: entry.parts }, options.sessionID, messageOrdinal, stats)]
+  })
 
   return { messages, stats }
+}
+
+type CompactionPair = {
+  marker: SessionLegacy.WithParts & { info: SessionLegacy.User }
+  summaryOrdinal: number
+  part: SessionLegacy.CompactionPart
+  summary: string | undefined
+}
+
+function compactionPairs(entries: readonly SessionLegacy.WithParts[], stats: Stats) {
+  const markers = new Map(
+    entries.flatMap((entry, ordinal): [string, { entry: SessionLegacy.WithParts & { info: SessionLegacy.User }; ordinal: number; part: SessionLegacy.CompactionPart }][] => {
+      if (entry.info.role !== "user") return []
+      const part = compactionPart(entry)
+      if (!part) return []
+      return [[entry.info.id, { entry: entry as SessionLegacy.WithParts & { info: SessionLegacy.User }, ordinal, part }]]
+    }),
+  )
+
+  return new Map(
+    entries.flatMap((entry, summaryOrdinal): [number, CompactionPair][] => {
+      if (entry.info.role !== "assistant") return []
+      if (entry.info.summary !== true || entry.info.error !== undefined || !entry.info.finish) return []
+      const marker = markers.get(entry.info.parentID)
+      if (!marker) return []
+      const summary = summaryText(entry)
+      if (!summary) addStat(stats.degraded, "compaction", "compaction_summary_empty")
+      return [
+        [
+          marker.ordinal,
+          {
+            marker: marker.entry,
+            summaryOrdinal,
+            part: marker.part,
+            summary,
+          },
+        ],
+      ]
+    }),
+  )
+}
+
+function mapCompaction(
+  pair: CompactionPair & { summary: string },
+  sessionID: SessionSchema.ID | string,
+  messageOrdinal: number,
+  emittedIDs: Map<string, SessionMessage.ID>,
+  stats: Stats,
+) {
+  const include = pair.part.tail_start_id ? emittedIDs.get(pair.part.tail_start_id) : undefined
+  if (pair.part.tail_start_id && include === undefined) addStat(stats.degraded, "compaction", "compaction_include_missing")
+  addStat(stats.mapped, "compaction", "compaction_message")
+  return new SessionMessage.Compaction({
+    id: messageID(sessionID, pair.marker.info.id, messageOrdinal),
+    type: "compaction",
+    reason: pair.part.auto ? "auto" : "manual",
+    summary: pair.summary,
+    include,
+    time: { created: DateTime.makeUnsafe(pair.marker.info.time.created) },
+  })
+}
+
+function compactionPart(entry: SessionLegacy.WithParts) {
+  return sortedParts(entry.parts).find((part): part is SessionLegacy.CompactionPart => part.type === "compaction")
+}
+
+function summaryText(message: SessionLegacy.WithParts) {
+  const text = sortedParts(message.parts)
+    .filter((part): part is SessionLegacy.TextPart => part.type === "text")
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim()
+  return text || undefined
 }
 
 function mapUser(

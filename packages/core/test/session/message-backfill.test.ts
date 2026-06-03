@@ -197,13 +197,14 @@ function retry(messageID: string, id: string, attempt = 1, created = 1): Session
   }
 }
 
-function compaction(messageID: string, id: string): SessionLegacy.CompactionPart {
+function compaction(messageID: string, id: string, input?: { auto?: boolean; tail_start_id?: string }): SessionLegacy.CompactionPart {
   return {
     id: SessionLegacy.PartID.make(id),
     sessionID,
     messageID: SessionLegacy.MessageID.make(messageID),
     type: "compaction",
-    auto: true,
+    auto: input?.auto ?? true,
+    tail_start_id: input?.tail_start_id ? SessionLegacy.MessageID.make(input.tail_start_id) : undefined,
   }
 }
 
@@ -342,6 +343,132 @@ describe("SessionMessageBackfill", () => {
     expect(statCount(result.stats.skipped, "subtask", "subtask_schema_missing")).toBe(1)
     expect(statCount(result.stats.degraded, "step-finish", "assistant_finish_conflict")).toBe(1)
     expect(statCount(result.stats.degraded, "assistant", "assistant_mode_schema_missing")).toBe(1)
+  })
+
+  test("folds completed auto compaction marker and summary assistant into one compaction row", () => {
+    const marker = user("msg_compact_marker", 2, [compaction("msg_compact_marker", "prt_compact")])
+    const summary = assistant("msg_compact_summary", 3, [text("msg_compact_summary", "prt_b", "  second  "), text("msg_compact_summary", "prt_a", " first "), text("msg_compact_summary", "prt_c", "   ")])
+    if (summary.info.role !== "assistant") return
+    summary.info.parentID = marker.info.id
+    summary.info.summary = true
+    summary.info.finish = "stop"
+
+    const result = SessionMessageBackfill.mapLegacyMessages([marker, summary], { sessionID })
+
+    expect(result.messages).toHaveLength(1)
+    expect(result.messages[0]).toMatchObject({ type: "compaction", reason: "auto", summary: "first\n\nsecond" })
+    expect(result.messages[0]?.id).toMatch(/^evt_legacy_backfill_m_00000000_[0-9a-f]{24}$/)
+    expect(statCount(result.stats.mapped, "compaction", "compaction_message")).toBe(1)
+    assertNoLegacyIDs(encodeMessage(result.messages[0]!))
+  })
+
+  test("folds completed manual compaction and translates include to retained deterministic v2 ID", () => {
+    const retained = user("msg_retained", 1, [text("msg_retained", "prt_text", "keep")])
+    const marker = user("msg_manual_marker", 2, [compaction("msg_manual_marker", "prt_compact", { auto: false, tail_start_id: "msg_retained" })])
+    const summary = assistant("msg_manual_summary", 3, [text("msg_manual_summary", "prt_summary", "summary")])
+    if (summary.info.role !== "assistant") return
+    summary.info.parentID = marker.info.id
+    summary.info.summary = true
+    summary.info.finish = "stop"
+
+    const result = SessionMessageBackfill.mapLegacyMessages([retained, marker, summary], { sessionID })
+    const compactionMessage = result.messages.find((message): message is SessionMessage.Compaction => message.type === "compaction")
+
+    expect(result.messages.map((message) => message.type)).toEqual(["user", "compaction"])
+    expect(compactionMessage).toMatchObject({ reason: "manual", include: result.messages[0]?.id })
+    expect(compactionMessage?.include).toMatch(/^evt_legacy_backfill_m_00000000_[0-9a-f]{24}$/)
+    result.messages.forEach((message) => assertNoLegacyIDs(encodeMessage(message)))
+  })
+
+  test("omits compaction include and records degraded stat when tail target is folded or missing", () => {
+    const marker = user("msg_include_marker", 1, [compaction("msg_include_marker", "prt_compact", { tail_start_id: "msg_include_summary" })])
+    const summary = assistant("msg_include_summary", 2, [text("msg_include_summary", "prt_summary", "summary")])
+    if (summary.info.role !== "assistant") return
+    summary.info.parentID = marker.info.id
+    summary.info.summary = true
+    summary.info.finish = "stop"
+
+    const result = SessionMessageBackfill.mapLegacyMessages([marker, summary], { sessionID })
+
+    expect(result.messages[0]).toMatchObject({ type: "compaction" })
+    expect(result.messages[0]).toHaveProperty("include", undefined)
+    expect(statCount(result.stats.degraded, "compaction", "compaction_include_missing")).toBe(1)
+  })
+
+  test("folds completed compaction with empty summary without emitting an anchor", () => {
+    const marker = user("msg_empty_summary_marker", 1, [compaction("msg_empty_summary_marker", "prt_compact", { tail_start_id: "msg_missing_tail" })])
+    const summary = assistant("msg_empty_summary", 2, [text("msg_empty_summary", "prt_summary", "   ")])
+    if (summary.info.role !== "assistant") return
+    summary.info.parentID = marker.info.id
+    summary.info.summary = true
+    summary.info.finish = "stop"
+
+    const result = SessionMessageBackfill.mapLegacyMessages([marker, summary], { sessionID })
+
+    expect(result.messages).toEqual([])
+    expect(statCount(result.stats.degraded, "compaction", "compaction_summary_empty")).toBe(1)
+    expect(statCount(result.stats.degraded, "compaction", "compaction_include_missing")).toBe(0)
+  })
+
+  test("skips incomplete compaction markers without leaking empty user anchors", () => {
+    const cases = [
+      [user("msg_unpaired_marker", 1, [compaction("msg_unpaired_marker", "prt_compact")])],
+      (() => {
+        const marker = user("msg_non_summary_marker", 1, [compaction("msg_non_summary_marker", "prt_compact")])
+        const summary = assistant("msg_non_summary_assistant", 2, [text("msg_non_summary_assistant", "prt_summary", "summary")])
+        if (summary.info.role === "assistant") {
+          summary.info.parentID = marker.info.id
+          summary.info.finish = "stop"
+        }
+        return [marker, summary]
+      })(),
+      (() => {
+        const marker = user("msg_error_marker", 1, [compaction("msg_error_marker", "prt_compact")])
+        const summary = assistant("msg_error_summary", 2, [text("msg_error_summary", "prt_summary", "summary")])
+        if (summary.info.role === "assistant") {
+          summary.info.parentID = marker.info.id
+          summary.info.summary = true
+          summary.info.finish = "stop"
+          summary.info.error = { name: "UnknownError", data: { message: "failed" } }
+        }
+        return [marker, summary]
+      })(),
+      (() => {
+        const marker = user("msg_missing_finish_marker", 1, [compaction("msg_missing_finish_marker", "prt_compact")])
+        const summary = assistant("msg_missing_finish_summary", 2, [text("msg_missing_finish_summary", "prt_summary", "summary")])
+        if (summary.info.role === "assistant") {
+          summary.info.parentID = marker.info.id
+          summary.info.summary = true
+        }
+        return [marker, summary]
+      })(),
+    ]
+
+    cases.forEach((entries) => {
+      const result = SessionMessageBackfill.mapLegacyMessages(entries, { sessionID })
+
+      expect(result.messages.some((message) => message.type === "compaction")).toBe(false)
+      expect(result.messages.some((message) => message.type === "user" && message.text === "")).toBe(false)
+      expect(statCount(result.stats.skipped, "compaction", "compaction_marker_incomplete")).toBe(1)
+    })
+  })
+
+  test("keeps non-compaction message IDs stable when a nearby compaction pair is folded", () => {
+    const before = user("msg_before_compaction", 1, [text("msg_before_compaction", "prt_before", "before")])
+    const after = assistant("msg_after_compaction", 4, [text("msg_after_compaction", "prt_after", "after")])
+    const withoutCompaction = SessionMessageBackfill.mapLegacyMessages([before, after], { sessionID })
+    const marker = user("msg_stable_marker", 2, [compaction("msg_stable_marker", "prt_compact")])
+    const summary = assistant("msg_stable_summary", 3, [text("msg_stable_summary", "prt_summary", "summary")])
+    if (summary.info.role !== "assistant") return
+    summary.info.parentID = marker.info.id
+    summary.info.summary = true
+    summary.info.finish = "stop"
+
+    const withCompaction = SessionMessageBackfill.mapLegacyMessages([before, marker, summary, after], { sessionID })
+
+    expect(withCompaction.messages[0]?.id).toBe(withoutCompaction.messages[0]?.id)
+    expect(withCompaction.messages.at(-1)?.id).not.toBe(withoutCompaction.messages.at(-1)?.id)
+    expect(withCompaction.messages.at(-1)?.id).toMatch(/^evt_legacy_backfill_m_00000003_[0-9a-f]{24}$/)
   })
 
   test("maps assistant retry parts to assistant retries with API error details and created time", () => {
