@@ -320,6 +320,24 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("coalesces durable aggregate wakes while draining every committed event", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const count = 64
+      const fiber = yield* events.aggregateEvents({ aggregateID }).pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      for (let index = 0; index < count; index++) {
+        yield* events.publish(SyncMessage, { id: aggregateID, text: String(index) })
+      }
+
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual(
+        Array.from({ length: count }, (_, index) => [index, { id: aggregateID, text: String(index) }]),
+      )
+    }),
+  )
+
   it.effect("omits live-only events from durable aggregate streams", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

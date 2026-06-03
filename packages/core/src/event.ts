@@ -160,7 +160,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const all = yield* PubSub.unbounded<Payload>()
-    const synchronized = yield* PubSub.unbounded<string>()
+    const synchronized = new Map<string, Set<PubSub.PubSub<void>>>()
     const typed = new Map<string, PubSub.PubSub<Payload>>()
     const projectors = new Map<string, AnyProjector[]>()
     const listeners = new Array<Listener>()
@@ -179,7 +179,9 @@ export const layer = Layer.effect(
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
         yield* PubSub.shutdown(all)
-        yield* PubSub.shutdown(synchronized)
+        yield* Effect.forEach(synchronized.values(), (pubsubs) =>
+          Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
+        { discard: true })
         yield* Effect.forEach(typed.values(), PubSub.shutdown, { discard: true })
       }),
     )
@@ -265,7 +267,13 @@ export const layer = Layer.effect(
                     { behavior: "immediate" },
                   )
                   .pipe(Effect.orDie)
-                if (committed) yield* PubSub.publish(synchronized, committed.aggregateID)
+                if (committed) {
+                  yield* Effect.forEach(
+                    synchronized.get(committed.aggregateID) ?? [],
+                    (pubsub) => PubSub.publish(pubsub, undefined),
+                    { discard: true },
+                  )
+                }
                 return committed
               }),
             )
@@ -438,10 +446,29 @@ export const layer = Layer.effect(
           ),
         )
 
+    const subscribeSynchronized = (aggregateID: string) =>
+      Effect.gen(function* () {
+        const pubsub = yield* PubSub.sliding<void>(1)
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const pubsubs = synchronized.get(aggregateID) ?? new Set()
+            pubsubs.add(pubsub)
+            synchronized.set(aggregateID, pubsubs)
+          }),
+          () =>
+            Effect.sync(() => {
+              const pubsubs = synchronized.get(aggregateID)
+              pubsubs?.delete(pubsub)
+              if (pubsubs?.size === 0) synchronized.delete(aggregateID)
+            }).pipe(Effect.andThen(PubSub.shutdown(pubsub))),
+        )
+        return pubsub
+      })
+
     const streamEvents = (input: { readonly aggregateID: string; readonly after?: number }): Stream.Stream<CursorEvent> =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const subscription = yield* PubSub.subscribe(synchronized)
+          const synchronized = yield* subscribeSynchronized(input.aggregateID)
           let cursor = input.after ?? -1
           const read = Effect.suspend(() => readAfter(input.aggregateID, cursor)).pipe(
             Effect.tap((events) =>
@@ -451,8 +478,7 @@ export const layer = Layer.effect(
             ),
           )
           const historical = yield* read
-          const live = Stream.fromSubscription(subscription).pipe(
-            Stream.filter((aggregateID) => aggregateID === input.aggregateID),
+          const live = Stream.fromPubSub(synchronized).pipe(
             Stream.mapEffect(() => read),
             Stream.flattenIterable,
           )

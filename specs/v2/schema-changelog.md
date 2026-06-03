@@ -532,3 +532,27 @@ Compatibility:
 
 - No migration or generated artifact regeneration is required.
 - Embedded runner callers may now receive `SessionRunner.ProviderStreamTimeoutError` when a provider exceeds runtime policy.
+
+## 2026-06-03: Keyed Coalescing Durable Tail Signals
+
+Affected schema:
+
+- No database, durable-event, HTTP, or generated SDK schema changes.
+- Internal durable aggregate-tail wake delivery only.
+
+Change:
+
+- Replace the process-global unbounded aggregate-ID PubSub with one sliding-capacity-1 dirty signal per active tail and aggregate.
+- Register the signal before historical SQLite replay and remove it when the tail closes.
+- Re-query durable rows after each dirty edge and advance only by persisted aggregate sequence.
+
+Reason:
+
+- Wake notifications are advisory edges, not durable event payloads.
+- Slow consumers should not retain an unbounded number of redundant wake IDs when one SQLite query can recover every committed row after their cursor.
+- Per-tail signaling preserves independent cursors for multiple consumers of the same aggregate.
+
+Compatibility:
+
+- No migration, synchronized event version, OpenAPI, or SDK regeneration is required.
+- `sessions.events({ sessionID, after? })` remains a replay-and-tail stream of every durable event in aggregate sequence order.
