@@ -14,17 +14,17 @@ export const CloudflareWorkersAIPlugin = PluginV2.define({
         const item = evt.provider.get(providerID)
         if (!item) return
         evt.provider.update(item.provider.id, (provider) => {
-          if (provider.endpoint.type !== "aisdk") return
-          if (provider.endpoint.url) return
-          const accountId = resolveAccountId(provider.options.aisdk.provider)
-          if (accountId) provider.endpoint.url = workersEndpoint(accountId)
+          if (provider.api.type !== "aisdk") return
+          if (provider.api.url) return
+          const accountId = resolveAccountId(provider.request.body)
+          if (accountId) provider.api.url = workersEndpoint(accountId)
         })
       }),
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return
         if (evt.package !== "@ai-sdk/openai-compatible") return
 
-        if (!hasWorkersEndpoint(evt.model.endpoint)) return
+        if (!hasWorkersEndpoint(evt.model.api)) return
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))
         evt.sdk = mod.createOpenAICompatible(sdkOptions(evt.options) as any)
       }),
@@ -44,8 +44,8 @@ function workersEndpoint(accountId: string) {
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`
 }
 
-function hasWorkersEndpoint(endpoint: ProviderV2.Endpoint) {
-  return endpoint.type === "aisdk" && Boolean(endpoint.url)
+function hasWorkersEndpoint(api: ProviderV2.Api) {
+  return api.type === "aisdk" && Boolean(api.url)
 }
 
 function sdkOptions(options: Record<string, any>) {

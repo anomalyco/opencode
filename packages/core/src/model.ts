@@ -46,15 +46,15 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
   providerID: ProviderV2.ID,
   family: Family.pipe(Schema.optional),
   name: Schema.String,
-  endpoint: ProviderV2.Endpoint,
+  api: ProviderV2.Api,
   capabilities: Capabilities,
-  options: Schema.Struct({
-    ...ProviderV2.Options.fields,
+  request: Schema.Struct({
+    ...ProviderV2.Request.fields,
     variant: Schema.String.pipe(Schema.optional),
   }),
   variants: Schema.Struct({
     id: VariantID,
-    ...ProviderV2.Options.fields,
+    ...ProviderV2.Request.fields,
   }).pipe(Schema.Array),
   time: Schema.Struct({
     released: DateTimeUtcFromMillis,
@@ -69,26 +69,23 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
   }),
 }) {
   static empty(providerID: ProviderV2.ID, modelID: ID): Info {
-    return {
+    return new Info({
       id: modelID,
       apiID: modelID,
       providerID,
       name: modelID,
-      endpoint: {
-        type: "unknown",
+      api: {
+        type: "native",
+        settings: {},
       },
       capabilities: {
         tools: false,
         input: [],
         output: [],
       },
-      options: {
+      request: {
         headers: {},
         body: {},
-        aisdk: {
-          provider: {},
-          request: {},
-        },
       },
       variants: [],
       time: {
@@ -101,7 +98,7 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
         context: 0,
         output: 0,
       },
-    }
+    })
   }
 }
 
