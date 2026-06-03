@@ -256,10 +256,13 @@ export const layer = Layer.effect(
 
     function publishEvent<D extends Definition>(event: Payload<D>) {
       return Effect.gen(function* () {
-        for (const sync of syncHandlers) {
-          yield* sync(event as Payload)
+        const durable = registry.get(event.type)?.sync !== undefined
+        if (durable) {
+          for (const sync of syncHandlers) {
+            yield* sync(event as Payload)
+          }
+          yield* commitSyncEvent(event as Payload)
         }
-        yield* commitSyncEvent(event as Payload)
         for (const listener of listeners) {
           yield* listener(event as Payload)
         }

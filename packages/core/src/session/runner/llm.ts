@@ -100,7 +100,7 @@ export const layer = Layer.effect(
             let settledLocalTool = false
             const context = yield* getContext(session.id)
             const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
-            const publishLLMEvent = createLLMEventPublisher(events, {
+            const publisher = createLLMEventPublisher(events, {
               sessionID: session.id,
               agent: session.agent ?? "build",
               model: {
@@ -110,10 +110,10 @@ export const layer = Layer.effect(
               },
             })
             const publication = Semaphore.makeUnsafe(1)
-            const publish = (event: LLMEvent) => publication.withPermit(publishLLMEvent(event))
+            const publish = (event: LLMEvent) => publication.withPermit(publisher.publish(event))
 
-            yield* llm.stream(request).pipe(
-              Stream.runForEach((event) =>
+             yield* llm.stream(request).pipe(
+               Stream.runForEach((event) =>
                 Effect.gen(function* () {
                    yield* publish(event)
                    if (event.type !== "tool-call" || event.providerExecuted) return
@@ -127,6 +127,7 @@ export const layer = Layer.effect(
                      )
                  }),
                ),
+               Effect.ensuring(publication.withPermit(publisher.flushText())),
              )
              yield* FiberSet.awaitEmpty(settlements)
              return settledLocalTool

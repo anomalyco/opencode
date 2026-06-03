@@ -159,9 +159,9 @@ export namespace Text {
   })
   export type Started = typeof Started.Type
 
+  // Stream fragments are live-only; Text.Ended is the replayable full-value boundary.
   export const Delta = EventV2.define({
     type: "session.next.text.delta",
-    ...options,
     schema: {
       ...Base,
       textID: Schema.String,

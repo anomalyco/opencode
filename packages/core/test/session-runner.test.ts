@@ -8,6 +8,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -746,6 +747,153 @@ describe("SessionRunnerLLM", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("broadcasts provider text deltas without storing projection rewrites", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Stream many chunks" }), resume: false })
+      const live: SessionEvent.Text.Delta[] = []
+      const unsubscribe = yield* EventV2.Service.pipe(
+        Effect.flatMap((events) => events.listen((event) => Effect.sync(() => {
+          if (event.type === SessionEvent.Text.Delta.type) live.push(event as SessionEvent.Text.Delta)
+        }))),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-many" }),
+        ...Array.from({ length: 32 }, (_, index) => LLMEvent.textDelta({ id: "text-many", text: `${index},` })),
+        LLMEvent.textEnd({ id: "text-many" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const deltas = yield* db
+        .select({ type: EventTable.type })
+        .from(EventTable)
+        .where(eq(EventTable.type, EventV2.versionedType(SessionEvent.Text.Delta.type, 1)))
+        .all()
+        .pipe(Effect.orDie)
+      expect(live).toHaveLength(32)
+      expect(deltas).toHaveLength(0)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Stream many chunks" },
+        {
+          type: "assistant",
+          finish: "stop",
+          content: [{ type: "text", id: "text-many", text: Array.from({ length: 32 }, (_, index) => `${index},`).join("") }],
+        },
+      ])
+      const recorded = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      yield* events.remove(sessionID)
+      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, sessionID)).run().pipe(Effect.orDie)
+      yield* events.replayAll(
+        recorded.map((event) => ({
+          id: event.id,
+          aggregateID: event.aggregate_id,
+          seq: event.seq,
+          type: event.type,
+          data: event.data,
+        })),
+      )
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Stream many chunks" },
+        {
+          type: "assistant",
+          finish: "stop",
+          content: [{ type: "text", id: "text-many", text: Array.from({ length: 32 }, (_, index) => `${index},`).join("") }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("durably closes partial text when the provider stream fails", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail after text" }), resume: false })
+      const failure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new TransportReason({ message: "Provider unavailable" }),
+      })
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-partial" }),
+          LLMEvent.textDelta({ id: "text-partial", text: "Partial" }),
+        ]),
+        Stream.fail(failure),
+      )
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail after text" },
+        { type: "assistant", content: [{ type: "text", id: "text-partial", text: "Partial" }] },
+      ])
+    }),
+  )
+
+  it.effect("durably closes partial text when the provider stream is interrupted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt after text" }), resume: false })
+      const streamed = yield* Deferred.make<void>()
+
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-interrupted" }),
+          LLMEvent.textDelta({ id: "text-interrupted", text: "Partial" }),
+        ]),
+        Stream.fromEffect(Deferred.succeed(streamed, undefined)).pipe(Stream.flatMap(() => Stream.never)),
+      )
+
+      const fiber = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamed)
+      yield* Fiber.interrupt(fiber)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Interrupt after text" },
+        { type: "assistant", content: [{ type: "text", id: "text-interrupted", text: "Partial" }] },
+      ])
+    }),
+  )
+
+  it.effect("rejects duplicate streamed text starts", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      response = [LLMEvent.textStart({ id: "text-1" }), LLMEvent.textStart({ id: "text-1" })]
+
+      expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe("Duplicate text start: text-1")
     }),
   )
 

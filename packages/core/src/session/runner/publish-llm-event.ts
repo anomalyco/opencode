@@ -64,7 +64,7 @@ const output = (result: ToolResultValue): ToolOutput => {
 
 /** Persist one provider turn without executing tools or starting a continuation turn. */
 export const createLLMEventPublisher = (events: EventV2.Interface, input: Input) => {
-  const text = new Map<string, string>()
+  const text = new Map<string, string[]>()
   const reasoning = new Map<string, string>()
   const tools = new Map<
     string,
@@ -77,6 +77,22 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     assistantMessageID === undefined
       ? Effect.die("Tool event before assistant step start")
       : Effect.succeed(assistantMessageID)
+
+  const endText = Effect.fnUntraced(function* (textID: string) {
+    const chunks = text.get(textID)
+    if (!chunks) return yield* Effect.die(`Text end before start: ${textID}`)
+    yield* events.publish(SessionEvent.Text.Ended, {
+      sessionID: input.sessionID,
+      timestamp: yield* timestamp,
+      textID,
+      text: chunks.join(""),
+    })
+    text.delete(textID)
+  })
+
+  const flushText = Effect.fn("SessionRunner.flushText")(function* () {
+    for (const textID of text.keys()) yield* endText(textID)
+  })
 
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     if (tools.has(event.id)) return yield* Effect.die(`Duplicate tool input start: ${event.id}`)
@@ -106,18 +122,22 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     })
   })
 
-  return Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
         assistantMessageID = (yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp })).id
         return
       case "text-start":
-        text.set(event.id, "")
+        if (text.has(event.id)) return yield* Effect.die(`Duplicate text start: ${event.id}`)
+        text.set(event.id, [])
         yield* events.publish(SessionEvent.Text.Started, { sessionID: input.sessionID, timestamp: yield* timestamp, textID: event.id })
         return
       case "text-delta":
-        if (!text.has(event.id)) return yield* Effect.die(`Text delta before start: ${event.id}`)
-        text.set(event.id, `${text.get(event.id)}${event.text}`)
+        {
+          const chunks = text.get(event.id)
+          if (!chunks) return yield* Effect.die(`Text delta before start: ${event.id}`)
+          chunks.push(event.text)
+        }
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
@@ -125,18 +145,9 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           delta: event.text,
         })
         return
-      case "text-end": {
-        const value = text.get(event.id)
-        if (value === undefined) return yield* Effect.die(`Text end before start: ${event.id}`)
-        text.delete(event.id)
-        yield* events.publish(SessionEvent.Text.Ended, {
-          sessionID: input.sessionID,
-          timestamp: yield* timestamp,
-          textID: event.id,
-          text: value,
-        })
+      case "text-end":
+        yield* endText(event.id)
         return
-      }
       case "reasoning-start":
         if (reasoning.has(event.id)) return yield* Effect.die(`Duplicate reasoning start: ${event.id}`)
         reasoning.set(event.id, "")
@@ -266,6 +277,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       }
       case "step-finish":
+        yield* flushText()
         yield* events.publish(SessionEvent.Step.Ended, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
@@ -277,6 +289,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "finish":
         return
       case "provider-error":
+        yield* flushText()
         yield* events.publish(SessionEvent.Step.Failed, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
@@ -285,4 +298,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
     }
   })
+
+  return { publish, flushText }
 }

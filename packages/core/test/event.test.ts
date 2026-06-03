@@ -218,6 +218,24 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("does not synchronize live-only events", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const synchronized = new Array<string>()
+      const unsubscribe = yield* events.sync((event) =>
+        Effect.sync(() => {
+          synchronized.push(event.type)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      yield* events.publish(Message, { text: "live only" })
+      yield* events.publish(SyncMessage, { id: "one", text: "durable" })
+
+      expect(synchronized).toEqual([SyncMessage.type])
+    }),
+  )
+
   it.effect("inserts sync event rows on publish", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
