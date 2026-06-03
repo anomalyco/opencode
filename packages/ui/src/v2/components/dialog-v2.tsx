@@ -7,6 +7,7 @@ export interface DialogProps extends ParentProps {
   description?: JSXElement
   action?: JSXElement
   size?: "normal" | "large" | "x-large"
+  variant?: "default" | "settings"
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
@@ -17,14 +18,19 @@ export function DialogFooter(props: ParentProps) {
 }
 
 export function Dialog(props: DialogProps) {
-  const [local] = splitProps(props, ["title", "description", "action", "size", "class", "classList", "fit", "children"])
+  const [local] = splitProps(props, ["title", "description", "action", "size", "variant", "class", "classList", "fit", "children"])
   const title = children(() => local.title)
   const description = children(() => local.description)
   const action = children(() => local.action)
   const hasHeader = () => title() || action()
 
   return (
-    <div data-component="dialog" data-fit={local.fit ? true : undefined} data-size={local.size || "normal"}>
+    <div
+      data-component="dialog-v2"
+      data-variant={local.variant === "settings" ? "settings" : undefined}
+      data-fit={local.fit ? true : undefined}
+      data-size={local.size || "normal"}
+    >
       <div data-slot="dialog-container">
         <Kobalte.Content
           data-slot="dialog-content"
