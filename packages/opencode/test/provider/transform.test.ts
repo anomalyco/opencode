@@ -3668,16 +3668,19 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
-    test("gemini 3 flash-lite picks up thinkingLevel tiers from googleThinkingLevelEfforts", () => {
+    test("gemini 3 flash-lite falls through to harmonized reasoning_effort", () => {
       const result = ProviderTransform.variants(sapModel("gemini-3.1-flash-lite"))
-      expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
-      expect(result.minimal).toEqual({
-        modelParams: { thinkingConfig: { includeThoughts: true, thinkingLevel: "minimal" } },
-      })
-      expect(result.high).toEqual({
-        modelParams: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
-      })
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
     })
+
+    for (const apiId of ["cohere--command-a-reasoning", "sonar-deep-research"]) {
+      test(`${apiId} falls through to harmonized reasoning_effort`, () => {
+        const result = ProviderTransform.variants(sapModel(apiId))
+        expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+        expect(result.medium).toEqual({ modelParams: { reasoning_effort: "medium" } })
+      })
+    }
 
     for (const apiId of ["gpt-5", "gpt-5-mini", "gpt-5-nano"]) {
       test(`${apiId} returns reasoning_effort variants under modelParams with minimal tier`, () => {
@@ -3700,14 +3703,10 @@ describe("ProviderTransform.variants", () => {
       expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
     })
 
-    for (const apiId of ["perplexity--sonar-pro", "mistral--mistral-large"]) {
-      test(`${apiId} returns empty object`, () => {
-        expect(ProviderTransform.variants(sapModel(apiId))).toEqual({})
-      })
-    }
-
-    test("non-anthropic models with opus-like substrings do not get adaptive thinking", () => {
-      expect(ProviderTransform.variants(sapModel("aws--llama-opus-4.7-fake"))).toEqual({})
+    test("non-anthropic models with opus-like substrings fall through to harmonized fallback", () => {
+      const result = ProviderTransform.variants(sapModel("aws--llama-opus-4.7-fake"))
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
     })
   })
 
