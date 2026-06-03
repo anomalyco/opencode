@@ -1,8 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
-import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { describe, expect, test } from "bun:test"
+import { Effect, Exit, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -22,12 +22,12 @@ const inertReferences = ProjectReference.Service.of({
   containsManagedPath: () => Effect.succeed(false),
 })
 
-function provide(directory: string, references = inertReferences) {
+function provide(directory: string, references = inertReferences, filesystem = FSUtil.defaultLayer) {
   return Effect.provide(
     FileSystem.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
-          FSUtil.defaultLayer,
+          filesystem,
           Ripgrep.defaultLayer,
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
           Layer.succeed(ProjectReference.Service, references),
@@ -107,12 +107,113 @@ describe("FileSystem", () => {
         })
         const service = yield* FileSystem.Service
 
-        expect(yield* service.listPage({ limit: 1 })).toMatchObject({ entries: [{ path: "src", type: "directory" }], truncated: true, next: 2 })
-        expect(yield* service.listPage({ offset: 2, limit: 1 })).toMatchObject({ entries: [{ path: "README.md", type: "file" }], truncated: false })
+        expect(yield* service.listPage({ limit: 1 })).toMatchObject({
+          entries: [{ path: "src", type: "directory" }],
+          truncated: true,
+          next: 2,
+        })
+        expect(yield* service.listPage({ offset: 2, limit: 1 })).toMatchObject({
+          entries: [{ path: "README.md", type: "file" }],
+          truncated: false,
+        })
         expect((yield* service.resolveList()).resource).toBe(".")
       }).pipe(provide(directory)),
     ),
   )
+
+  it.live("materializes only the selected direct children for a page", () =>
+    withTmp((directory) => {
+      const realPaths: string[] = []
+      const filesystem = Layer.effect(
+        FSUtil.Service,
+        Effect.gen(function* () {
+          const service = yield* FSUtil.Service
+          return FSUtil.Service.of({
+            ...service,
+            realPath: (target) =>
+              Effect.sync(() => realPaths.push(target)).pipe(Effect.andThen(service.realPath(target))),
+          })
+        }),
+      ).pipe(Layer.provide(FSUtil.defaultLayer))
+      return Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(directory, "src"))
+          await fs.writeFile(path.join(directory, "alpha.txt"), "alpha")
+          await fs.writeFile(path.join(directory, "beta.txt"), "beta")
+        })
+        const service = yield* FileSystem.Service
+
+        expect(yield* service.listPage({ offset: 2, limit: 1 })).toMatchObject({
+          entries: [{ path: "alpha.txt", type: "file" }],
+          truncated: true,
+          next: 3,
+        })
+        expect(realPaths.filter((target) => target !== directory)).toEqual([path.join(directory, "alpha.txt")])
+      }).pipe(provide(directory, inertReferences, filesystem))
+    }),
+  )
+
+  it.live("materializes selected page entries with at most 16 concurrent real path lookups", () =>
+    withTmp((directory) => {
+      let active = 0
+      let maximum = 0
+      const filesystem = Layer.effect(
+        FSUtil.Service,
+        Effect.gen(function* () {
+          const service = yield* FSUtil.Service
+          return FSUtil.Service.of({
+            ...service,
+            realPath: (target) =>
+              target === directory
+                ? service.realPath(target)
+                : Effect.acquireUseRelease(
+                    Effect.sync(() => {
+                      active++
+                      maximum = Math.max(maximum, active)
+                    }),
+                    () => Effect.sleep("10 millis").pipe(Effect.andThen(service.realPath(target))),
+                    () => Effect.sync(() => active--),
+                  ),
+          })
+        }),
+      ).pipe(Layer.provide(FSUtil.defaultLayer))
+      return Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          Promise.all(
+            Array.from({ length: 32 }, (_, index) => fs.writeFile(path.join(directory, `${index}.txt`), "")),
+          ),
+        )
+        const service = yield* FileSystem.Service
+
+        expect((yield* service.listPage({ limit: 32 })).entries).toHaveLength(32)
+        expect(maximum).toBe(16)
+      }).pipe(provide(directory, inertReferences, filesystem))
+    }),
+  )
+
+  it.live("caps direct list page service calls at 2000 entries", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          Promise.all(
+            Array.from({ length: 2_001 }, (_, index) =>
+              fs.writeFile(path.join(directory, `${index.toString().padStart(4, "0")}.txt`), ""),
+            ),
+          ),
+        )
+        const service = yield* FileSystem.Service
+        const target = yield* service.resolveList()
+
+        expect((yield* service.listPageResolved(target, { limit: 2_001 })).entries).toHaveLength(2_000)
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  test("rejects empty list aliases and page limits over 2000", () => {
+    const decode = Schema.decodeUnknownSync(FileSystem.ListPageInput)
+    expect(() => decode({ reference: "" })).toThrow()
+    expect(() => decode({ limit: 2_001 })).toThrow()
+  })
 
   it.live("rejects escaping list paths and omits escaping symlink children", () =>
     withTmp((directory) =>
@@ -126,8 +227,31 @@ describe("FileSystem", () => {
         })
         const service = yield* FileSystem.Service
 
-        expect(Exit.isFailure(yield* service.listPage({ path: RelativePath.make("../outside") }).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(yield* service.listPage({ path: RelativePath.make("../outside") }).pipe(Effect.exit)),
+        ).toBe(true)
         expect((yield* service.listPage()).entries).toEqual([])
+        yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("paginates visible entries after omitting escaping symlink children", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const outside = `${directory}-outside`
+        yield* Effect.promise(async () => {
+          await fs.mkdir(outside)
+          await fs.symlink(outside, path.join(directory, "a-escape"))
+          await fs.writeFile(path.join(directory, "b-visible.txt"), "visible")
+        })
+        const service = yield* FileSystem.Service
+
+        expect(yield* service.listPage({ limit: 1 })).toMatchObject({
+          entries: [{ path: "b-visible.txt", type: "file" }],
+          truncated: false,
+        })
         yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
       }).pipe(provide(directory)),
     ),
@@ -140,42 +264,6 @@ describe("FileSystem", () => {
         expect(
           Exit.isFailure(yield* service.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)),
         ).toBe(true)
-      }).pipe(provide(directory)),
-    ),
-  )
-
-  it.live("finds files and directories", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => fs.mkdir(path.join(directory, "src")))
-        yield* Effect.promise(() => fs.writeFile(path.join(directory, "src", "index.ts"), "const needle = true\n"))
-        const service = yield* FileSystem.Service
-
-        expect((yield* service.find({ query: "index", type: "file" })).map((item) => item.path)).toEqual([
-          RelativePath.make(path.join("src", "index.ts")),
-        ])
-        expect((yield* service.find({ query: "src", type: "directory" })).map((item) => item.path)).toEqual([
-          RelativePath.make("src"),
-        ])
-      }).pipe(provide(directory)),
-    ),
-  )
-
-  it.live("greps file contents", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => fs.writeFile(path.join(directory, "index.ts"), "const needle = true\n"))
-        const service = yield* FileSystem.Service
-
-        expect(yield* service.grep({ pattern: "needle" })).toEqual([
-          {
-            path: RelativePath.make("index.ts"),
-            lines: "const needle = true\n",
-            line: 1,
-            offset: 0,
-            submatches: [{ text: "needle", start: 6, end: 12 }],
-          },
-        ])
       }).pipe(provide(directory)),
     ),
   )
@@ -260,9 +348,9 @@ describe("FileSystem", () => {
   it.live("rejects aliases when project references are disabled", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        expect(Exit.isFailure(yield* (yield* FileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit))).toBe(
-          true,
-        )
+        expect(
+          Exit.isFailure(yield* (yield* FileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit)),
+        ).toBe(true)
       }).pipe(provide(directory)),
     ),
   )

@@ -23,13 +23,22 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
-        execute: ({ parameters, sessionID }) => Effect.gen(function* () {
-          const target = yield* filesystem.resolveList(parameters)
-          yield* permission.assert({ sessionID, action: name, resources: [target.resource], save: ["*"] })
-          return yield* filesystem.listPageResolved(target, { offset: parameters.offset, limit: parameters.limit })
-        }).pipe(
-          Effect.catchCause((cause) => Effect.fail(new ToolFailure({ message: `Unable to list ${parameters.path ?? "."}`, error: Cause.squash(cause) }))),
-        ),
+        execute: ({ parameters, sessionID }) =>
+          Effect.gen(function* () {
+            const { offset, limit, ...input } = parameters
+            const target = yield* filesystem.resolveList(input)
+            yield* permission.assert({ sessionID, action: name, resources: [target.resource], save: ["*"] })
+            const final = yield* filesystem.resolveList(input)
+            if (final.resource !== target.resource || final.real !== target.real)
+              return yield* Effect.die(new Error("Directory changed after permission approval"))
+            return yield* filesystem.listPageResolved(final, { offset, limit })
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.fail(
+                new ToolFailure({ message: `Unable to list ${parameters.path ?? "."}`, error: Cause.squash(cause) }),
+              ),
+            ),
+          ),
       }),
     )
   }),

@@ -28,14 +28,19 @@ export const layer = Layer.effectDiscard(
           const input = parameters
           return Effect.gen(function* () {
             const target = yield* filesystem.resolveRead(input)
-            if (target.size > MAX_BYTES) return yield* Effect.die(new Error(`File exceeds ${MAX_BYTES} byte read limit`))
+            if (target.size > MAX_BYTES)
+              return yield* Effect.die(new Error(`File exceeds ${MAX_BYTES} byte read limit`))
             yield* permission.assert({
               sessionID,
               action: name,
               resources: [target.resource],
               save: ["*"],
             })
-            return yield* filesystem.readResolved(target)
+            const final = yield* filesystem.resolveRead(input)
+            if (final.resource !== target.resource || final.real !== target.real)
+              return yield* Effect.die(new Error("File changed after permission approval"))
+            if (final.size > MAX_BYTES) return yield* Effect.die(new Error(`File exceeds ${MAX_BYTES} byte read limit`))
+            return yield* filesystem.readResolved(final, MAX_BYTES)
           }).pipe(
             Effect.catchCause((cause) =>
               Effect.fail(new ToolFailure({ message: `Unable to read ${input.path}`, error: Cause.squash(cause) })),
@@ -47,7 +52,7 @@ export const layer = Layer.effectDiscard(
   }),
 )
 export const locationLayer = layer.pipe(
-  Layer.provideMerge(ToolRegistry.layer()),
+  Layer.provideMerge(ToolRegistry.layer),
   Layer.provideMerge(FileSystem.locationLayer),
   Layer.provideMerge(PermissionV2.locationLayer),
 )

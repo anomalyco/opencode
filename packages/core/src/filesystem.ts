@@ -16,7 +16,7 @@ import { Ripgrep } from "./filesystem/ripgrep"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
-  reference: Schema.String.pipe(Schema.optional),
+  reference: Schema.NonEmptyString.pipe(Schema.optional),
 })
 export type ReadInput = typeof ReadInput.Type
 
@@ -44,7 +44,7 @@ export class ReadTarget extends Schema.Class<ReadTarget>("LocationFileSystem.Rea
 
 export const ListInput = Schema.Struct({
   path: RelativePath.pipe(Schema.optional),
-  reference: Schema.String.pipe(Schema.optional),
+  reference: Schema.NonEmptyString.pipe(Schema.optional),
 })
 export type ListInput = typeof ListInput.Type
 
@@ -116,7 +116,7 @@ export const Event = {
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<Content>
   readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
-  readonly readResolved: (target: ReadTarget) => Effect.Effect<Content>
+  readonly readResolved: (target: ReadTarget, maximumBytes?: number) => Effect.Effect<Content>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly resolveList: (input?: ListInput) => Effect.Effect<ListTarget>
   readonly listResolved: (target: ListTarget) => Effect.Effect<Entry[]>
@@ -227,8 +227,7 @@ export const layer = Layer.effect(
         size: Number(info.size),
       })
     })
-    const readResolved = Effect.fn("FileSystem.readResolved")(function* (target: ReadTarget) {
-      const bytes = yield* fs.readFile(target.real).pipe(Effect.orDie)
+    const content = (target: ReadTarget, bytes: Uint8Array) => Effect.gen(function* () {
       const mime = FSUtil.mimeType(target.real)
       if (!bytes.includes(0)) {
         const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
@@ -242,6 +241,24 @@ export const layer = Layer.effect(
         encoding: "base64",
         mime,
       })
+    })
+    const readResolved = Effect.fn("FileSystem.readResolved")(function* (
+      target: ReadTarget,
+      maximumBytes?: number,
+    ) {
+      if (maximumBytes === undefined) return yield* content(target, yield* fs.readFile(target.real).pipe(Effect.orDie))
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
+          const info = yield* file.stat.pipe(Effect.orDie)
+          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+          if (info.size > maximumBytes) return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
+          const bytes = yield* file.readAlloc(maximumBytes + 1).pipe(Effect.orDie)
+          if (bytes._tag === "Some" && bytes.value.length > maximumBytes)
+            return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
+          return yield* content(target, bytes._tag === "Some" ? bytes.value : new Uint8Array())
+        }),
+      )
     })
     const resolveList = Effect.fn("FileSystem.resolveList")(function* (input: ListInput = {}) {
       const directory = yield* resolve(input.path, input.reference)
@@ -272,12 +289,29 @@ export const layer = Layer.effect(
       target: ListTarget,
       page: Pick<ListPageInput, "offset" | "limit"> = {},
     ) {
-      const entries = yield* listResolved(target)
+      type Candidate = Entry | { readonly name: string; readonly type: "file" | "directory" }
       const offset = page.offset ?? 1
-      const limit = page.limit ?? 2_000
-      const selected = entries.slice(offset - 1, offset - 1 + limit)
-      const truncated = offset - 1 + selected.length < entries.length
-      return new ListPage({ entries: selected, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
+      const limit = Math.min(page.limit ?? 2_000, 2_000)
+      const items = yield* fs.readDirectoryEntries(target.real).pipe(Effect.orDie)
+      const candidates = yield* Effect.forEach(items, (item): Effect.Effect<Candidate | undefined> => {
+        if (item.type === "other") return Effect.succeed(undefined)
+        if (item.type === "symlink") return entry(path.join(target.absolute, item.name), target)
+        return Effect.succeed({ name: item.name, type: item.type } as const)
+      }, { concurrency: 16 }).pipe(
+        Effect.map((items) => items.filter((item): item is Candidate => item !== undefined)),
+      )
+      candidates.sort((a, b) => {
+        return a.type === b.type
+          ? (a instanceof Entry ? a.path : a.name).localeCompare(b instanceof Entry ? b.path : b.name)
+          : a.type === "directory" ? -1 : 1
+      })
+      const selected = candidates.slice(offset - 1, offset - 1 + limit)
+      const entries = yield* Effect.forEach(selected, (item) =>
+        item instanceof Entry ? Effect.succeed(item) : entry(path.join(target.absolute, item.name), target), {
+        concurrency: 16,
+      }).pipe(Effect.map((items) => items.filter((item): item is Entry => item !== undefined)))
+      const truncated = offset - 1 + selected.length < candidates.length
+      return new ListPage({ entries, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
     })
 
     return Service.of({

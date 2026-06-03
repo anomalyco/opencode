@@ -13,48 +13,59 @@ const reads: FileSystem.ReadInput[] = []
 let resolvedInput: FileSystem.ReadInput | undefined
 let resolveFailure: unknown
 let size = 5
-const filesystem = Layer.succeed(FileSystem.Service, FileSystem.Service.of({
-  read: () => Effect.die("unused"),
-  resolveRead: (input) =>
-    Effect.sync(() => {
-      resolvedInput = input
-    }).pipe(
-      Effect.andThen(resolveFailure === undefined
-      ? Effect.succeed(
-          new FileSystem.ReadTarget({
-            real: "/project/README.md",
-            resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
-            size,
-          }),
-        )
-      : Effect.die(resolveFailure)),
-    ),
-  readResolved: () =>
-    Effect.sync(() => {
-      if (resolvedInput) reads.push(resolvedInput)
-      return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
-    }),
-  list: () => Effect.die("unused"),
-  resolveList: () => Effect.die("unused"),
-  listResolved: () => Effect.die("unused"),
-  listPage: () => Effect.die("unused"),
-  listPageResolved: () => Effect.die("unused"),
-  find: () => Effect.die("unused"),
-  grep: () => Effect.die("unused"),
-  isIgnored: () => false,
-}))
+let real = "/project/README.md"
+let afterApproval = () => {}
+const filesystem = Layer.succeed(
+  FileSystem.Service,
+  FileSystem.Service.of({
+    read: () => Effect.die("unused"),
+    resolveRead: (input) =>
+      Effect.sync(() => {
+        resolvedInput = input
+      }).pipe(
+        Effect.andThen(
+          resolveFailure === undefined
+            ? Effect.succeed(
+                new FileSystem.ReadTarget({
+                  real,
+                  resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
+                  size,
+                }),
+              )
+            : Effect.die(resolveFailure),
+        ),
+      ),
+    readResolved: () =>
+      Effect.sync(() => {
+        if (resolvedInput) reads.push(resolvedInput)
+        return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
+      }),
+    list: () => Effect.die("unused"),
+    resolveList: () => Effect.die("unused"),
+    listResolved: () => Effect.die("unused"),
+    listPage: () => Effect.die("unused"),
+    listPageResolved: () => Effect.die("unused"),
+    find: () => Effect.die("unused"),
+    grep: () => Effect.die("unused"),
+    isIgnored: () => false,
+  }),
+)
 let allow = true
-const permission = Layer.succeed(PermissionV2.Service, PermissionV2.Service.of({
-  assert: (input) =>
-    Effect.sync(() => {
-      assertions.push(input)
-    }).pipe(Effect.andThen(allow ? Effect.void : Effect.fail(new PermissionV2.DeniedError({ rules: [] })))),
-  ask: () => Effect.die("unused"),
-  reply: () => Effect.die("unused"),
-  get: () => Effect.die("unused"),
-  forSession: () => Effect.die("unused"),
-  list: () => Effect.die("unused"),
-}))
+const permission = Layer.succeed(
+  PermissionV2.Service,
+  PermissionV2.Service.of({
+    assert: (input) =>
+      Effect.sync(() => {
+        assertions.push(input)
+        if (allow) afterApproval()
+      }).pipe(Effect.andThen(allow ? Effect.void : Effect.fail(new PermissionV2.DeniedError({ rules: [] })))),
+    ask: () => Effect.die("unused"),
+    reply: () => Effect.die("unused"),
+    get: () => Effect.die("unused"),
+    forSession: () => Effect.die("unused"),
+    list: () => Effect.die("unused"),
+  }),
+)
 const registry = ToolRegistry.layer
 const read = ReadTool.layer.pipe(Layer.provide(registry), Layer.provide(filesystem), Layer.provide(permission))
 const it = testEffect(Layer.mergeAll(registry, filesystem, permission, read))
@@ -68,6 +79,8 @@ describe("ReadTool", () => {
       allow = true
       resolveFailure = undefined
       size = 5
+      real = "/project/README.md"
+      afterApproval = () => {}
       resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
@@ -90,6 +103,8 @@ describe("ReadTool", () => {
       allow = false
       resolveFailure = undefined
       size = 5
+      real = "/project/README.md"
+      afterApproval = () => {}
       resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
@@ -110,6 +125,8 @@ describe("ReadTool", () => {
       allow = true
       resolveFailure = undefined
       size = 5
+      real = "/project/README.md"
+      afterApproval = () => {}
       resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
@@ -126,6 +143,8 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       allow = true
       reads.length = 0
+      real = "/project/README.md"
+      afterApproval = () => {}
       const registry = yield* ToolRegistry.Service
 
       resolveFailure = new Error("missing")
@@ -144,6 +163,41 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-large", name: "read", input: { path: "large.txt" } },
         }),
       ).toEqual({ type: "error", value: "Unable to read large.txt" })
+      expect(reads).toEqual([])
+    }),
+  )
+
+  it.effect("does not read when the file changes after permission approval", () =>
+    Effect.gen(function* () {
+      assertions.length = 0
+      reads.length = 0
+      allow = true
+      resolveFailure = undefined
+      size = 5
+      real = "/project/README.md"
+      afterApproval = () => {
+        size = 50 * 1024 + 1
+      }
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-grown", name: "read", input: { path: "README.md" } },
+        }),
+      ).toEqual({ type: "error", value: "Unable to read README.md" })
+      expect(reads).toEqual([])
+
+      size = 5
+      afterApproval = () => {
+        real = "/outside/README.md"
+      }
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-swapped", name: "read", input: { path: "README.md" } },
+        }),
+      ).toEqual({ type: "error", value: "Unable to read README.md" })
       expect(reads).toEqual([])
     }),
   )
