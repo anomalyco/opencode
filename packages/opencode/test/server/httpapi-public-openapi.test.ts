@@ -6,9 +6,14 @@ type Method = "get" | "post" | "put" | "delete" | "patch"
 type OpenApiSchema = {
   readonly $ref?: string
   readonly type?: string
+  readonly const?: unknown
+  readonly enum?: ReadonlyArray<unknown>
   readonly properties?: Record<string, OpenApiSchema>
   readonly required?: ReadonlyArray<string>
   readonly items?: OpenApiSchema
+  readonly oneOf?: ReadonlyArray<OpenApiSchema>
+  readonly anyOf?: ReadonlyArray<OpenApiSchema>
+  readonly allOf?: ReadonlyArray<OpenApiSchema>
 }
 type OpenApiResponse = {
   readonly description?: string
@@ -56,6 +61,28 @@ function schema(spec: OpenApiSpec, name: string) {
   const result = spec.components?.schemas?.[name]
   if (!result) throw new Error(`Missing OpenAPI schema ${name}`)
   return result
+}
+
+function resolveSchema(spec: OpenApiSpec, value: OpenApiSchema | undefined): OpenApiSchema | undefined {
+  if (!value?.$ref) return value
+  return schema(spec, componentName(value.$ref))
+}
+
+function collectTypeDiscriminators(spec: OpenApiSpec, value: OpenApiSchema | undefined, seen = new Set<string>()): string[] {
+  const current = resolveSchema(spec, value)
+  if (!current) return []
+  if (current.$ref) {
+    if (seen.has(current.$ref)) return []
+    seen.add(current.$ref)
+  }
+  const type = resolveSchema(spec, current.properties?.type)
+  return [
+    typeof type?.const === "string" ? type.const : undefined,
+    ...(type?.enum ?? []).filter((item): item is string => typeof item === "string"),
+    ...(current.oneOf ?? []).flatMap((item) => collectTypeDiscriminators(spec, item, seen)),
+    ...(current.anyOf ?? []).flatMap((item) => collectTypeDiscriminators(spec, item, seen)),
+    ...(current.allOf ?? []).flatMap((item) => collectTypeDiscriminators(spec, item, seen)),
+  ].filter((item): item is string => item !== undefined)
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
@@ -174,6 +201,16 @@ describe("PublicApi OpenAPI v2 errors", () => {
     expect(retry.properties?.error?.$ref).toBe("#/components/schemas/SessionNextRetry_error")
     expect(retry.properties?.time?.properties?.created?.type).toBe("number")
     expect(retry.properties?.time?.required).toEqual(["created"])
+  })
+
+  test("documents rich assistant error variants on session messages", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const assistant = schema(spec, "SessionMessageAssistant")
+
+    expect(assistant.required ?? []).not.toContain("error")
+    expect(new Set(collectTypeDiscriminators(spec, assistant.properties?.error))).toEqual(
+      new Set(["aborted", "api", "auth", "context_overflow", "output_length", "structured_output", "unknown"]),
+    )
   })
 
   test("documents session busy errors", () => {

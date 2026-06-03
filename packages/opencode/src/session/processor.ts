@@ -83,6 +83,44 @@ interface ProcessorContext extends Input {
 
 type StreamEvent = LLMEvent
 
+type LegacyAssistantError = NonNullable<SessionLegacy.Assistant["error"]>
+
+function legacyErrorMessage(error: LegacyAssistantError) {
+  return typeof error.data === "object" && error.data !== null && "message" in error.data && typeof error.data.message === "string"
+    ? error.data.message
+    : "Unknown error"
+}
+
+export function toAssistantError(error: LegacyAssistantError): SessionEvent.AssistantError {
+  if (SessionLegacy.AbortedError.isInstance(error)) return { type: "aborted", message: error.data.message }
+  if (SessionLegacy.APIError.isInstance(error)) {
+    return {
+      type: "api",
+      message: error.data.message,
+      isRetryable: error.data.isRetryable,
+      ...(error.data.statusCode === undefined ? {} : { statusCode: error.data.statusCode }),
+      ...(error.data.responseHeaders === undefined ? {} : { responseHeaders: error.data.responseHeaders }),
+      ...(error.data.responseBody === undefined ? {} : { responseBody: error.data.responseBody }),
+      ...(error.data.metadata === undefined ? {} : { metadata: error.data.metadata }),
+    }
+  }
+  if (SessionLegacy.AuthError.isInstance(error)) {
+    return { type: "auth", providerID: error.data.providerID, message: error.data.message }
+  }
+  if (SessionLegacy.ContextOverflowError.isInstance(error)) {
+    return {
+      type: "context_overflow",
+      message: error.data.message,
+      ...(error.data.responseBody === undefined ? {} : { responseBody: error.data.responseBody }),
+    }
+  }
+  if (SessionLegacy.OutputLengthError.isInstance(error)) return { type: "output_length" }
+  if (SessionLegacy.StructuredOutputError.isInstance(error)) {
+    return { type: "structured_output", message: error.data.message, retries: error.data.retries }
+  }
+  return { type: "unknown", message: legacyErrorMessage(error) }
+}
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
 export const layer = Layer.effect(
@@ -723,10 +761,7 @@ export const layer = Layer.effect(
         if (!ctx.assistantMessage.summary) {
           yield* events.publish(SessionEvent.Step.Failed, {
             sessionID: ctx.sessionID,
-            error: {
-              type: "unknown",
-              message: errorMessage(e),
-            },
+            error: toAssistantError(error),
             timestamp: DateTime.makeUnsafe(Date.now()),
           })
         }

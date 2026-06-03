@@ -401,6 +401,47 @@ describe("SessionProjector", () => {
     )
   })
 
+  test("projects rich failed step errors onto the active assistant", async () => {
+    const dbPath = await makeDbPath()
+    await run(
+      dbPath,
+      Effect.gen(function* () {
+        yield* seedSession()
+        const error = {
+          type: "api",
+          message: "provider returned 429",
+          statusCode: 429,
+          isRetryable: true,
+          responseHeaders: { "retry-after": "1" },
+          responseBody: "rate limited",
+          metadata: { provider: "test" },
+        } satisfies SessionEvent.AssistantError
+        const events = yield* EventV2.Service
+        yield* events.publish(
+          SessionEvent.Step.Started,
+          { sessionID, timestamp: at(10), agent: "build", model, snapshot: "before-error" },
+          { id: eventID("failed_assistant") },
+        )
+        yield* events.publish(
+          SessionEvent.Step.Failed,
+          { sessionID, timestamp: at(20), error },
+          { id: eventID("step_failed") },
+        )
+
+        const messages = yield* readMessages()
+        expect(messages.map((message) => message.type)).toEqual(["assistant"])
+
+        const assistant = messages[0]
+        expect(assistant?.type).toBe("assistant")
+        if (assistant?.type !== "assistant") return
+
+        expect(assistant.finish).toBe("error")
+        expect(assistant.time.completed).toEqual(at(20))
+        expect(assistant.error).toEqual(error)
+      }),
+    )
+  })
+
   test("drops retry metadata before any active assistant and leaves the transcript empty", async () => {
     const dbPath = await makeDbPath()
     await run(

@@ -949,7 +949,14 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          error: SessionErrorUnknown
+          error:
+            | SessionErrorAssistantAborted
+            | SessionErrorAssistantApi
+            | SessionErrorAssistantAuth
+            | SessionErrorAssistantContextOverflow
+            | SessionErrorAssistantOutputLength
+            | SessionErrorAssistantStructuredOutput
+            | SessionErrorUnknown
         }
       }
     | {
@@ -2919,6 +2926,47 @@ export type PromptReferenceAttachment = {
   source?: PromptSource
 }
 
+export type SessionErrorAssistantAborted = {
+  type: "aborted"
+  message: string
+}
+
+export type SessionErrorAssistantApi = {
+  type: "api"
+  message: string
+  statusCode?: number
+  isRetryable: boolean
+  responseHeaders?: {
+    [key: string]: string
+  }
+  responseBody?: string
+  metadata?: {
+    [key: string]: string
+  }
+}
+
+export type SessionErrorAssistantAuth = {
+  type: "auth"
+  providerID: string
+  message: string
+}
+
+export type SessionErrorAssistantContextOverflow = {
+  type: "context_overflow"
+  message: string
+  responseBody?: string
+}
+
+export type SessionErrorAssistantOutputLength = {
+  type: "output_length"
+}
+
+export type SessionErrorAssistantStructuredOutput = {
+  type: "structured_output"
+  message: string
+  retries: number
+}
+
 export type SessionErrorUnknown = {
   type: "unknown"
   message: string
@@ -3269,7 +3317,14 @@ export type SyncEventSessionNextStepFailed = {
   data: {
     timestamp: number
     sessionID: string
-    error: SessionErrorUnknown
+    error:
+      | SessionErrorAssistantAborted
+      | SessionErrorAssistantApi
+      | SessionErrorAssistantAuth
+      | SessionErrorAssistantContextOverflow
+      | SessionErrorAssistantOutputLength
+      | SessionErrorAssistantStructuredOutput
+      | SessionErrorUnknown
   }
 }
 
@@ -3846,7 +3901,14 @@ export type SessionMessageAssistant = {
       write: number
     }
   }
-  error?: SessionErrorUnknown
+  error?:
+    | SessionErrorAssistantAborted
+    | SessionErrorAssistantApi
+    | SessionErrorAssistantAuth
+    | SessionErrorAssistantContextOverflow
+    | SessionErrorAssistantOutputLength
+    | SessionErrorAssistantStructuredOutput
+    | SessionErrorUnknown
 }
 
 export type SessionMessageCompaction = {
@@ -4303,7 +4365,14 @@ export type EventSessionNextStepFailed = {
   properties: {
     timestamp: number
     sessionID: string
-    error: SessionErrorUnknown
+    error:
+      | SessionErrorAssistantAborted
+      | SessionErrorAssistantApi
+      | SessionErrorAssistantAuth
+      | SessionErrorAssistantContextOverflow
+      | SessionErrorAssistantOutputLength
+      | SessionErrorAssistantStructuredOutput
+      | SessionErrorUnknown
   }
 }
 

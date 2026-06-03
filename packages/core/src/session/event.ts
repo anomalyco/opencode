@@ -174,6 +174,66 @@ export const UnknownError = Schema.Struct({
 })
 export type UnknownError = typeof UnknownError.Type
 
+export const AssistantErrorAborted = Schema.Struct({
+  type: Schema.Literal("aborted"),
+  message: Schema.String,
+}).annotate({
+  identifier: "Session.Error.Assistant.Aborted",
+})
+
+export const AssistantErrorApi = Schema.Struct({
+  type: Schema.Literal("api"),
+  message: Schema.String,
+  statusCode: NonNegativeInt.pipe(Schema.optional),
+  isRetryable: Schema.Boolean,
+  responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+  responseBody: Schema.String.pipe(Schema.optional),
+  metadata: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+}).annotate({
+  identifier: "Session.Error.Assistant.Api",
+})
+
+export const AssistantErrorAuth = Schema.Struct({
+  type: Schema.Literal("auth"),
+  providerID: Schema.String,
+  message: Schema.String,
+}).annotate({
+  identifier: "Session.Error.Assistant.Auth",
+})
+
+export const AssistantErrorContextOverflow = Schema.Struct({
+  type: Schema.Literal("context_overflow"),
+  message: Schema.String,
+  responseBody: Schema.String.pipe(Schema.optional),
+}).annotate({
+  identifier: "Session.Error.Assistant.ContextOverflow",
+})
+
+export const AssistantErrorOutputLength = Schema.Struct({
+  type: Schema.Literal("output_length"),
+}).annotate({
+  identifier: "Session.Error.Assistant.OutputLength",
+})
+
+export const AssistantErrorStructuredOutput = Schema.Struct({
+  type: Schema.Literal("structured_output"),
+  message: Schema.String,
+  retries: NonNegativeInt,
+}).annotate({
+  identifier: "Session.Error.Assistant.StructuredOutput",
+})
+
+export const AssistantError = Schema.Union([
+  AssistantErrorAborted,
+  AssistantErrorApi,
+  AssistantErrorAuth,
+  AssistantErrorContextOverflow,
+  AssistantErrorOutputLength,
+  AssistantErrorStructuredOutput,
+  UnknownError,
+]).pipe(Schema.toTaggedUnion("type"))
+export type AssistantError = typeof AssistantError.Type
+
 export const AgentSwitched = EventV2.define({
   type: "session.next.agent.switched",
   ...options,
@@ -277,7 +337,7 @@ export namespace Step {
     ...options,
     schema: {
       ...Base,
-      error: UnknownError,
+      error: AssistantError,
     },
   })
   export type Failed = typeof Failed.Type

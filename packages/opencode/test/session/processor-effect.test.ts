@@ -4,7 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { tool } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
@@ -199,6 +199,37 @@ const env = Layer.mergeAll(
 )
 
 const it = testEffect(env)
+
+test("session.processor maps legacy assistant errors to rich failed-step errors", () => {
+  expect(SessionProcessor.toAssistantError(new SessionLegacy.AbortedError({ message: "stopped" }))).toEqual({
+    type: "aborted",
+    message: "stopped",
+  })
+  expect(
+    SessionProcessor.toAssistantError(new SessionLegacy.AuthError({ providerID: "test", message: "missing API key" })),
+  ).toEqual({
+    type: "auth",
+    providerID: "test",
+    message: "missing API key",
+  })
+  expect(
+    SessionProcessor.toAssistantError(
+      new SessionLegacy.ContextOverflowError({ message: "too many tokens", responseBody: "limit" }),
+    ),
+  ).toEqual({
+    type: "context_overflow",
+    message: "too many tokens",
+    responseBody: "limit",
+  })
+  expect(SessionProcessor.toAssistantError(new SessionLegacy.OutputLengthError({}))).toEqual({ type: "output_length" })
+  expect(
+    SessionProcessor.toAssistantError(new SessionLegacy.StructuredOutputError({ message: "invalid json", retries: 2 })),
+  ).toEqual({
+    type: "structured_output",
+    message: "invalid json",
+    retries: 2,
+  })
+})
 
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
@@ -527,6 +558,62 @@ it.live("session.processor effect tests do not retry unknown json errors", () =>
         expect(value).toBe("stop")
         expect(yield* llm.calls).toBe(1)
         expect(handle.message.error?.name).toBe("APIError")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests publish rich api errors on failed step events", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+        const failed = defer<unknown>()
+
+        yield* llm.error(400, { error: { message: "no_kv_space" } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "json")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== SessionEvent.Step.Failed.type) return Effect.void
+          const data = evt.data as typeof SessionEvent.Step.Failed.data.Type
+          if (data.sessionID !== chat.id) return Effect.void
+          failed.resolve(data.error)
+          return Effect.void
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionLegacy.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "json" }],
+          tools: {},
+        })
+
+        const error = (yield* Effect.promise(() => failed.promise)) as Record<string, unknown>
+        yield* off
+
+        expect(value).toBe("stop")
+        expect(handle.message.error?.name).toBe("APIError")
+        expect(error).toMatchObject({ type: "api", statusCode: 400 })
+        expect(error.type).not.toBe("unknown")
       }),
     { config: (url) => providerCfg(url) },
   ),
