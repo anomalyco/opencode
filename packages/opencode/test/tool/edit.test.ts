@@ -5,7 +5,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { EditTool } from "../../src/tool/edit"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { LSP } from "@/lsp/lsp"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -13,7 +13,7 @@ import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as Tool from "../../src/tool/tool"
 import { testEffect } from "../lib/effect"
-import { FileWatcher } from "../../src/file/watcher"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-edit-session"),
@@ -32,7 +32,7 @@ afterEach(async () => {
 
 const layer = Layer.mergeAll(
   LSP.defaultLayer,
-  AppFileSystem.defaultLayer,
+  FSUtil.defaultLayer,
   Format.defaultLayer,
   EventV2Bridge.defaultLayer,
   Truncate.defaultLayer,
@@ -64,12 +64,12 @@ const fail = Effect.fn("EditToolTest.fail")(function* (args: Tool.InferParameter
 })
 
 const put = Effect.fn("EditToolTest.put")(function* (p: string, content: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(p, content)
 })
 
 const load = Effect.fn("EditToolTest.load")(function* (p: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   return yield* fs.readFileString(p)
 })
 
@@ -78,11 +78,11 @@ const loadRaw = Effect.fn("EditToolTest.loadRaw")(function* (p: string) {
 })
 
 const makeDirectory = Effect.fn("EditToolTest.makeDirectory")(function* (p: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.makeDirectory(p)
 })
 
-const onceBus = Effect.fn("EditToolTest.onceBus")(function* (def: typeof FileWatcher.Event.Updated) {
+const onceBus = Effect.fn("EditToolTest.onceBus")(function* (def: typeof Watcher.Event.Updated) {
   const events = yield* EventV2Bridge.Service
   const deferred = yield* Deferred.make<void>()
   const unsub = yield* events.listen((event) => {
@@ -138,7 +138,7 @@ describe("tool.edit", () => {
     it.instance("emits add event for new files", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        const updated = yield* onceBus(FileWatcher.Event.Updated)
+        const updated = yield* onceBus(Watcher.Event.Updated)
 
         yield* run({ filePath: path.join(test.directory, "new.txt"), oldString: "", newString: "content" })
         yield* Deferred.await(updated)
@@ -230,7 +230,7 @@ describe("tool.edit", () => {
         const test = yield* TestInstance
         const filepath = path.join(test.directory, "file.txt")
         yield* put(filepath, "original")
-        const updated = yield* onceBus(FileWatcher.Event.Updated)
+        const updated = yield* onceBus(Watcher.Event.Updated)
 
         yield* run({ filePath: filepath, oldString: "original", newString: "modified" })
         yield* Deferred.await(updated)

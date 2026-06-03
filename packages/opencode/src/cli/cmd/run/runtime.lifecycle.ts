@@ -335,7 +335,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
             }
 
             footer.resetForReplay(true)
-            // @ts-expect-error resetSplitFooterForReplay is restored with the native OpenTUI update.
             renderer.resetSplitFooterForReplay({ clearSavedLines: true })
             const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history)
             renderer.writeToScrollback(
