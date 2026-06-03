@@ -25,8 +25,7 @@ const withStore = <A, E, R>(
         ? Layer.succeed(
             Config.Service,
             Config.Service.of({
-              directories: () => Effect.succeed([]),
-              get: () => Effect.succeed([new Config.Loaded({ source: { type: "memory" }, info: config })]),
+              entries: () => Effect.succeed([new Config.Document({ type: "document", info: config })]),
             }),
           )
         : Layer.empty

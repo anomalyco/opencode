@@ -582,3 +582,43 @@ Compatibility:
 - This is an additive model-facing V2 tool contract.
 - Moves and atomic rollback are deliberately unsupported in the first slice and remain visible follow-ups.
 - No database migration, durable-event version, public HTTP, OpenAPI, or generated SDK change is required.
+
+## 2026-06-03: Embedded Local-Tool Recovery Alignment
+
+Affected schema:
+
+- No database, durable-event, HTTP, or generated SDK schema changes.
+- Internal runner recovery and permission evaluation behavior only.
+
+Change:
+
+- Evaluate permissions through the default `build` agent when a Session omits an explicit agent, matching provider-turn execution.
+- Before assembling a provider request, durably fail local tools still projected as `running` from a previous process with the existing `session.next.tool.failed` shape and `Tool execution interrupted` message.
+
+Reason:
+
+- Agent-less embedded Sessions previously executed as `build` while evaluating an empty permission ruleset, so the first local tool could wait forever for an approval surface the local Discord proof did not expose.
+- A process lost while a local tool was running previously left a dangling tool call that made later provider continuation invalid. Recovery must settle the durable projection without replaying an abandoned side effect.
+
+Compatibility:
+
+- No migration, synchronized event version, OpenAPI, or SDK regeneration is required.
+- Existing experimental Session databases recover dangling local-tool projections on the next provider attempt.
+
+## 2026-06-03: V2 Skill Tool
+
+Affected schema:
+
+- New Core-owned `skill` model-facing tool parameters and success payload.
+- Existing upstream `SkillV2` service remains the single Location-scoped skill registry.
+
+Change:
+
+- Accept `{ name: string }` for one skill selected from the upstream-discovered Location skill list.
+- Assert `skill` permission for the selected name.
+- Return V1-shaped `<skill_content name="...">` model output with the skill base directory and a bounded sampled supporting-file list.
+
+Compatibility:
+
+- This is an additive model-facing V2 tool contract.
+- No database migration, durable-event version, public HTTP, OpenAPI, or generated SDK change is required.

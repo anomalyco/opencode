@@ -74,8 +74,7 @@ const resources = Layer.succeed(
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
-    directories: () => Effect.succeed([]),
-    get: () => Effect.succeed([]),
+    entries: () => Effect.succeed([]),
   }),
 )
 

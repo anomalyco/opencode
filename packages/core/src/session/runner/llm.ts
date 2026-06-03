@@ -98,6 +98,25 @@ export const layer = Layer.effect(
       return yield* store.context(sessionID)
     })
 
+    const failInterruptedLocalTools = Effect.fn("SessionRunner.failInterruptedLocalTools")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      for (const message of yield* getContext(sessionID)) {
+        if (message.type !== "assistant") continue
+        for (const tool of message.content) {
+          if (tool.type !== "tool" || tool.state.status !== "running" || tool.provider?.executed === true) continue
+          yield* events.publish(SessionEvent.Tool.Failed, {
+            sessionID,
+            timestamp: yield* DateTime.now,
+            assistantMessageID: message.id,
+            callID: tool.id,
+            error: { type: "unknown", message: "Tool execution interrupted" },
+            provider: { executed: false },
+          })
+        }
+      }
+    })
+
     const awaitToolFibers = (fibers: FiberSet.FiberSet<void, never>) =>
       Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
 
@@ -117,6 +136,7 @@ export const layer = Layer.effect(
         yield* SessionInput.promoteNextQueued(db, events, session.id)
         yield* SessionInput.promoteSteers(db, events, session.id)
       }
+      yield* failInterruptedLocalTools(session.id)
       const context = yield* getContext(session.id)
       const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
       const publisher = createLLMEventPublisher(events, {

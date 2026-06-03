@@ -132,6 +132,33 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("uses build permissions when the Session agent is omitted", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ agent: null })
+        .where(eq(SessionTable.id, SessionV2.ID.make("ses_test")))
+        .run()
+        .pipe(Effect.orDie)
+      const agents = yield* AgentV2.Service
+      const update = yield* agents.transform()
+      yield* update((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.permissions = [{ action: "todowrite", resource: "*", effect: "allow" }]
+        }),
+      )
+
+      const service = yield* PermissionV2.Service
+      expect(yield* service.ask(assertion({ action: "todowrite", resources: ["*"] }))).toEqual({
+        id: PermissionV2.ID.create("per_test"),
+        effect: "allow",
+      })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("denies bash by default until an exact-action configured rule opts in", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "*", resource: "*", effect: "allow" }])

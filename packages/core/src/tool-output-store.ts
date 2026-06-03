@@ -186,8 +186,11 @@ export const layer = Layer.effect(
 
     const limits = Effect.fn("ToolOutputStore.limits")(function* () {
       if (Option.isNone(config)) return { maxLines: MAX_LINES, maxBytes: MAX_BYTES }
-      const loaded = yield* config.value.get().pipe(Effect.catch(() => Effect.succeed([])))
-      const configured = Object.assign({}, ...loaded.map((item) => item.info.tool_output ?? {}))
+      const entries = yield* config.value.entries().pipe(Effect.catch(() => Effect.succeed([] as Config.Entry[])))
+      const configured = Object.assign(
+        {},
+        ...entries.flatMap((entry) => entry.type === "document" ? [entry.info.tool_output ?? {}] : []),
+      )
       return { maxLines: configured.max_lines ?? MAX_LINES, maxBytes: configured.max_bytes ?? MAX_BYTES }
     })
 

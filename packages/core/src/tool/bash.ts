@@ -133,8 +133,11 @@ export const layer = Layer.effectDiscard(
             const target = yield* mutation.revalidate(plan)
             if (!target.exists || target.type !== "Directory") throw new Error(`Working directory is not a directory: ${target.canonical}`)
 
-            const configs = yield* config.get()
-            const shell = Object.assign({}, ...configs.map((item) => item.info)).shell ?? defaultShell()
+            const entries = yield* config.entries()
+            const shell = Object.assign(
+              {},
+              ...entries.flatMap((entry) => entry.type === "document" ? [entry.info] : []),
+            ).shell ?? defaultShell()
             const command = ChildProcess.make(parameters.command, [], {
               cwd: target.canonical,
               shell,
