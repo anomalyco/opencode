@@ -15,8 +15,9 @@ import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
@@ -28,10 +29,16 @@ const created = DateTime.makeUnsafe(0)
 const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
-const assistantRow = (id: SessionMessage.ID, seq: number, time: { created: DateTime.Utc; completed?: DateTime.Utc } = { created }) => {
-  const { id: _, type, ...data } = encodeMessage(
-    new SessionMessage.Assistant({ id, type: "assistant", agent: "build", model, content: [], time }),
-  )
+const assistantRow = (
+  id: SessionMessage.ID,
+  seq: number,
+  time: { created: DateTime.Utc; completed?: DateTime.Utc } = { created },
+) => {
+  const {
+    id: _,
+    type,
+    ...data
+  } = encodeMessage(new SessionMessage.Assistant({ id, type: "assistant", agent: "build", model, content: [], time }))
   return { id, session_id: sessionID, type, seq, time_created: DateTime.toEpochMillis(time.created), data }
 }
 
@@ -46,16 +53,81 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       yield* db
         .insert(SessionTable)
-        .values({ id: sessionID, project_id: Project.ID.global, slug: "test", directory: "/project", title: "test", version: "test" })
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
         .run()
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
 
-      yield* events.publish(SessionEvent.Prompted, { sessionID, timestamp: created, prompt: new Prompt({ text: "first" }) }, { id: SessionMessage.ID.make("evt_z") })
-      yield* events.publish(SessionEvent.Prompted, { sessionID, timestamp: created, prompt: new Prompt({ text: "second" }) }, { id: SessionMessage.ID.make("evt_a") })
+      yield* events.publish(
+        SessionEvent.Prompted,
+        { sessionID, timestamp: created, prompt: new Prompt({ text: "first" }) },
+        { id: SessionMessage.ID.make("evt_z") },
+      )
+      yield* events.publish(
+        SessionEvent.Prompted,
+        { sessionID, timestamp: created, prompt: new Prompt({ text: "second" }) },
+        { id: SessionMessage.ID.make("evt_a") },
+      )
 
-      expect((yield* SessionV2.Service.pipe(Effect.flatMap((sessions) => sessions.context(sessionID)))).map((message) => message.type === "user" ? message.text : message.type)).toEqual(["first", "second"])
-    }).pipe(Effect.provide(SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(Project.defaultLayer), Layer.provide(SessionStore.layer.pipe(Layer.provide(database))), Layer.provide(SessionExecution.noopLayer))))
+      expect(
+        (yield* SessionV2.Service.pipe(Effect.flatMap((sessions) => sessions.context(sessionID)))).map((message) =>
+          message.type === "user" ? message.text : message.type,
+        ),
+      ).toEqual(["first", "second"])
+    }).pipe(
+      Effect.provide(
+        SessionV2.layer.pipe(
+          Layer.provide(events),
+          Layer.provide(database),
+          Layer.provide(Project.defaultLayer),
+          Layer.provide(SessionStore.layer.pipe(Layer.provide(database))),
+          Layer.provide(SessionExecution.noopLayer),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("marks an admitted inbox row promoted with the Prompted event sequence", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const id = SessionMessage.ID.make("evt_admitted")
+      yield* SessionInput.admit(db, { id, sessionID, prompt: new Prompt({ text: "promote me" }), delivery: "steer" })
+
+      const event = yield* events.publish(
+        SessionEvent.Prompted,
+        { sessionID, timestamp: created, prompt: new Prompt({ text: "promote me" }) },
+        { id },
+      )
+
+      expect(
+        yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie),
+      ).toMatchObject({ promoted_seq: event.seq })
+    }),
   )
 
   it.effect("does not revive a stale incomplete in-memory assistant projection", () =>
@@ -77,7 +149,9 @@ describe("SessionProjector", () => {
         time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
       })
 
-      expect(yield* SessionMessageUpdater.memory({ messages: [stale, completed] }).getCurrentAssistant()).toBeUndefined()
+      expect(
+        yield* SessionMessageUpdater.memory({ messages: [stale, completed] }).getCurrentAssistant(),
+      ).toBeUndefined()
     }),
   )
 
@@ -91,12 +165,22 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       yield* db
         .insert(SessionTable)
-        .values({ id: sessionID, project_id: Project.ID.global, slug: "test", directory: "/project", title: "test", version: "test" })
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
         .run()
         .pipe(Effect.orDie)
       yield* db
         .insert(SessionMessageTable)
-        .values([assistantRow(SessionMessage.ID.make("evt_assistant_1"), 0), assistantRow(SessionMessage.ID.make("evt_assistant_2"), 1)])
+        .values([
+          assistantRow(SessionMessage.ID.make("evt_assistant_1"), 0),
+          assistantRow(SessionMessage.ID.make("evt_assistant_2"), 1),
+        ])
         .run()
         .pipe(Effect.orDie)
 
@@ -117,9 +201,15 @@ describe("SessionProjector", () => {
         .orderBy(asc(SessionMessageTable.id))
         .all()
         .pipe(Effect.orDie)
-      const messages = rows.map((row) => Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }))
+      const messages = rows.map((row) =>
+        Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }),
+      )
       expect(messages[0]).not.toHaveProperty("time.completed")
-      expect(messages[1]).toMatchObject({ type: "assistant", finish: "stop", time: { completed: DateTime.makeUnsafe(1) } })
+      expect(messages[1]).toMatchObject({
+        type: "assistant",
+        finish: "stop",
+        time: { completed: DateTime.makeUnsafe(1) },
+      })
     }),
   )
 
@@ -133,7 +223,14 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       yield* db
         .insert(SessionTable)
-        .values({ id: sessionID, project_id: Project.ID.global, slug: "test", directory: "/project", title: "test", version: "test" })
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
         .run()
         .pipe(Effect.orDie)
       yield* db
@@ -162,7 +259,9 @@ describe("SessionProjector", () => {
         .orderBy(asc(SessionMessageTable.id))
         .all()
         .pipe(Effect.orDie)
-      const messages = rows.map((row) => Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }))
+      const messages = rows.map((row) =>
+        Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }),
+      )
       expect(messages).toEqual([
         new SessionMessage.Assistant({
           id: SessionMessage.ID.make("evt_assistant_completed"),

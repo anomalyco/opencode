@@ -1,5 +1,6 @@
 import { SessionID } from "@/session/schema"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionInput } from "@opencode-ai/core/session/input"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -113,6 +114,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       payload: Schema.Struct({
         id: SessionMessage.ID.pipe(Schema.optional),
         prompt: Prompt,
+        delivery: SessionInput.Delivery.pipe(Schema.optional),
         resume: Schema.Boolean.pipe(Schema.optional),
       }),
       success: SessionMessage.Message,

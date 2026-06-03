@@ -12,15 +12,15 @@ sessions.create({ id?, location, ... })
 
 sessions.prompt({ id?, sessionID, prompt, resume? })
   -> omitted ID generates one internal message ID
-  -> supplied ID records one user-message projection when absent
-  -> exact reuse returns that existing user message
-  -> reusing one message ID for another Session, prompt, or non-user projection fails
-  -> exact retry reuses the existing durable message and schedules another wake unless resume is false
+  -> supplied ID admits one durable Session input when absent
+  -> exact reuse returns the same user-shaped admission receipt
+  -> reusing one message ID for another Session, prompt, or delivery mode fails
+  -> exact retry schedules another wake unless resume is false
   -> resume omitted or true schedules execution after recording
-  -> resume false records only
+  -> resume false admits only
 ```
 
-Retry behavior uses ordinary Session and user-message projections. Do not add separate retry tables unless a concrete recovery workflow requires independent durable state.
+`session_input` is the durable admission inbox. Admitted inputs remain outside model-visible Session history until the serialized runner promotes them by publishing ordinary `Prompted` events. The existing projector atomically writes the visible user message and marks its inbox row promoted in the same event transaction.
 
 Execution routing starts from only the Session ID:
 
@@ -33,7 +33,9 @@ SessionExecution.resume(sessionID)
 
 `SessionExecution` and the read-side `SessionStore` are process-global. `SessionRunner`, catalog, model resolver, tool registry, permission state, and filesystem are cached per Location. No layer takes a Session ID. An omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.
 
-The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started settlement after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant-message ID because provider-local call IDs may repeat across turns. Default steering uses durable watermarks: `Prompted` aggregate cursors record input arrival order, outer `Turn.Started({ promptCursor })` facts record the latest prompt visible before one provider request is assembled, and `Turn.Settled({ turnID, outcome })` records that the provider attempt plus every started local-tool settlement reached a terminal boundary. A location-scoped `SessionRunCoordinator` joins explicit resumes, coalesces prompt wakeups, and reruns a drain only when a wake raced with settlement. A prompt accepted during an active provider turn is therefore consumed by the next safe bounded turn; stale wakeups become no-ops after checking durable state, while an unsettled outer turn remains recoverable by a later wake or explicit resume. Different Sessions remain concurrent. Automatic startup discovery remains a future slice. Add explicit `queue` delivery later when callers need work held until the current activity settles. Durable multi-node ownership, stale-owner fencing, interruption controls, retry policy, and queued delivery remain future work.
+The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started settlement after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant-message ID because provider-local call IDs may repeat across turns. Inbox delivery is explicit: `steer` inputs promote at the next safe provider-turn boundary; `queue` inputs admitted during an active drain wait for the next fresh drain. `Turn.Started` and `Turn.Settled({ turnID, outcome })` remain durable provider-attempt facts. A location-scoped `SessionRunCoordinator` joins explicit resumes and coalesces inbox wakeups around settlement races. Different Sessions remain concurrent. Automatic startup discovery, durable multi-node ownership, stale-owner fencing, interruption controls, and retry policy remain future work.
+
+Inbox promotion currently coalesces eligible rows in durable admission order. Add explicit inbox backlog and promotion-batch limits before exposing broad multi-caller admission or untrusted queue growth.
 
 Eager local-tool execution is intentionally unbounded in the current local slice. This minimizes tool latency but does not increase SQLite settlement throughput: Session-event publication remains serialized per provider turn. Before broadening exposure, revisit per-turn call limits, output truncation, and operational backpressure using observed workloads. The `session.next.*` event schemas remain experimental and unshipped; databases created by earlier experimental builds are disposable rather than compatibility targets.
 

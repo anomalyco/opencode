@@ -30,12 +30,11 @@ through legacy `SessionPrompt.loop(...)`:
 - concurrent resumes for one Session join one process-local run while different
   Sessions remain concurrent
 
-Default steering now uses durable Session control facts rather than in-memory
-prompt queues: `Prompted` cursors establish input order, `Turn.Started` records
-the consumed-through prompt watermark for one outer provider attempt, and a
-location-scoped `SessionRunCoordinator` coalesces process-local wakeups around
-settlement races. Add explicit `queue` delivery later when a caller needs to
-wait for the current activity to settle before starting fresh work.
+Prompt admission now uses a durable `session_input` inbox rather than immediate
+transcript projection. `steer` inputs promote at the next safe provider-turn
+boundary; `queue` inputs admitted during an active drain wait for the next fresh
+drain. A location-scoped `SessionRunCoordinator` coalesces process-local wakeups
+around settlement races.
 
 Next reviewed slices:
 

@@ -44,11 +44,20 @@ const model = OpenAIChat.route
   })
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
-const runner = SessionRunnerLLM.layer.pipe(Layer.provide(store), Layer.provide(events), Layer.provide(client), Layer.provide(registry), Layer.provide(models))
+const runner = SessionRunnerLLM.layer.pipe(
+  Layer.provide(database),
+  Layer.provide(store),
+  Layer.provide(events),
+  Layer.provide(client),
+  Layer.provide(registry),
+  Layer.provide(models),
+)
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
   SessionExecution.Service,
-  SessionRunCoordinator.Service.pipe(Effect.map((coordinator) => SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake }))),
+  SessionRunCoordinator.Service.pipe(
+    Effect.map((coordinator) => SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake })),
+  ),
 ).pipe(Layer.provide(coordinator))
 const sessions = SessionV2.layer.pipe(
   Layer.provide(events),
@@ -57,7 +66,22 @@ const sessions = SessionV2.layer.pipe(
   Layer.provide(Project.defaultLayer),
   Layer.provide(execution),
 )
-const it = testEffect(Layer.mergeAll(database, events, projector, store, executor, client, registry, models, runner, coordinator, execution, sessions))
+const it = testEffect(
+  Layer.mergeAll(
+    database,
+    events,
+    projector,
+    store,
+    executor,
+    client,
+    registry,
+    models,
+    runner,
+    coordinator,
+    execution,
+    sessions,
+  ),
+)
 const sessionID = SessionV2.ID.make("ses_runner_recorded")
 
 describe("SessionRunnerLLM recorded", () => {
@@ -72,12 +96,23 @@ describe("SessionRunnerLLM recorded", () => {
         .pipe(Effect.orDie)
       yield* db
         .insert(SessionTable)
-        .values({ id: sessionID, project_id: Project.ID.global, slug: "test", directory: "/project", title: "test", version: "test" })
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
         .onConflictDoNothing()
         .run()
         .pipe(Effect.orDie)
       const session = yield* SessionV2.Service
-      const prompt = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Say hello in one short sentence." }), resume: false })
+      const prompt = yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Say hello in one short sentence." }),
+        resume: false,
+      })
 
       yield* session.resume(sessionID)
 
@@ -85,10 +120,15 @@ describe("SessionRunnerLLM recorded", () => {
       expect(messages).toHaveLength(2)
       expect(messages[0]).toEqual(prompt)
       expect(messages[1]).toMatchObject({ type: "assistant", agent: "build", finish: "stop" })
-      expect(messages[1]?.type === "assistant" ? messages[1].content : []).toMatchObject([{ type: "text", text: "Hello!" }])
+      expect(messages[1]?.type === "assistant" ? messages[1].content : []).toMatchObject([
+        { type: "text", text: "Hello!" },
+      ])
       expect(
-        (yield* db.select({ type: EventTable.type }).from(EventTable).where(eq(EventTable.aggregate_id, sessionID)).all())
-          .map((event) => event.type),
+        (yield* db
+          .select({ type: EventTable.type })
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, sessionID))
+          .all()).map((event) => event.type),
       ).toEqual([
         "session.next.prompted.1",
         "session.next.turn.started.1",

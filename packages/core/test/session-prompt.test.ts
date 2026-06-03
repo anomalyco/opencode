@@ -10,7 +10,8 @@ import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInput } from "@opencode-ai/core/session/input"
+import { SessionInputTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { testEffect } from "./lib/effect"
 
@@ -33,7 +34,13 @@ const execution = Layer.succeed(
       }),
   }),
 )
-const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(store), Layer.provide(Project.defaultLayer), Layer.provide(execution))
+const sessions = SessionV2.layer.pipe(
+  Layer.provide(events),
+  Layer.provide(database),
+  Layer.provide(store),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(execution),
+)
 const it = testEffect(Layer.mergeAll(database, events, projector, store, execution, sessions))
 const sessionID = SessionV2.ID.make("ses_prompt_test")
 const messageID = SessionMessage.ID.create()
@@ -61,6 +68,18 @@ const setup = Effect.gen(function* () {
     .pipe(Effect.orDie)
 })
 
+const admitted = (id: SessionMessage.ID) => Database.Service.use(({ db }) => SessionInput.find(db, id))
+const admittedCount = Database.Service.use(({ db }) =>
+  db
+    .select()
+    .from(SessionInputTable)
+    .all()
+    .pipe(
+      Effect.orDie,
+      Effect.map((rows) => rows.length),
+    ),
+)
+
 describe("SessionV2.prompt", () => {
   it.effect("delegates execution continuation through SessionExecution", () =>
     Effect.gen(function* () {
@@ -74,7 +93,7 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("durably records one projected user message", () =>
+  it.effect("durably admits one user message before transcript promotion", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -87,7 +106,13 @@ describe("SessionV2.prompt", () => {
 
       expect(message.type).toBe("user")
       expect(message.text).toBe("Fix the failing tests")
-      expect(yield* session.messages({ sessionID })).toContainEqual(message)
+      expect(yield* session.messages({ sessionID })).toEqual([])
+      expect(yield* admitted(message.id)).toMatchObject({
+        id: message.id,
+        sessionID,
+        prompt: { text: "Fix the failing tests" },
+        delivery: "steer",
+      })
     }),
   )
 
@@ -95,20 +120,29 @@ describe("SessionV2.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
       const fiber = yield* session.events({ sessionID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+      yield* SessionInput.promote(db, events, sessionID, {
+        steer: true,
+        queueThrough: yield* SessionInput.latestPendingQueueSeq(db, sessionID),
+      })
       const streamed = Array.from(yield* Fiber.join(fiber))
 
-      expect(streamed.map((event) => [event.cursor, event.event.type, (event.event.data as { prompt: Prompt }).prompt.text])).toEqual([
+      expect(
+        streamed.map((event) => [event.cursor, event.event.type, (event.event.data as { prompt: Prompt }).prompt.text]),
+      ).toEqual([
         [0, "session.next.prompted", "First"],
         [1, "session.next.prompted", "Second"],
       ])
       expect(
-        Array.from(yield* session.events({ sessionID, after: streamed[0]!.cursor }).pipe(Stream.take(1), Stream.runCollect))
-          .map((event) => [event.cursor, (event.event.data as { prompt: Prompt }).prompt.text]),
+        Array.from(
+          yield* session.events({ sessionID, after: streamed[0]!.cursor }).pipe(Stream.take(1), Stream.runCollect),
+        ).map((event) => [event.cursor, (event.event.data as { prompt: Prompt }).prompt.text]),
       ).toEqual([[1, "Second"]])
     }),
   )
@@ -117,13 +151,18 @@ describe("SessionV2.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fix the failing tests" }), resume: false })
+      const message = yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Fix the failing tests" }),
+        resume: false,
+      })
 
       executionCalls.length = 0
       wakeCalls.length = 0
       yield* session.resume(sessionID)
 
-      expect(yield* session.messages({ sessionID })).toEqual([message])
+      expect(yield* session.messages({ sessionID })).toEqual([])
+      expect(yield* admitted(message.id)).not.toHaveProperty("promotedSeq")
       expect(executionCalls).toEqual([sessionID])
       expect(wakeCalls).toEqual([])
     }),
@@ -139,7 +178,8 @@ describe("SessionV2.prompt", () => {
       const second = yield* session.prompt(input)
 
       expect(second.id).not.toBe(first.id)
-      expect(yield* session.messages({ sessionID })).toEqual([second, first])
+      expect(yield* session.messages({ sessionID })).toEqual([])
+      expect(yield* admittedCount).toBe(2)
     }),
   )
 
@@ -158,7 +198,8 @@ describe("SessionV2.prompt", () => {
       const retried = yield* session.prompt(input)
 
       expect(retried).toEqual(first)
-      expect(yield* session.messages({ sessionID })).toEqual([first])
+      expect(yield* session.messages({ sessionID })).toEqual([])
+      expect(yield* admittedCount).toBe(1)
     }),
   )
 
@@ -202,7 +243,44 @@ describe("SessionV2.prompt", () => {
         .pipe(Effect.flip)
 
       expect(failure._tag).toBe("Session.PromptConflictError")
-      expect(yield* session.messages({ sessionID })).toHaveLength(1)
+      expect(yield* session.messages({ sessionID })).toHaveLength(0)
+      expect(yield* admittedCount).toBe(1)
+    }),
+  )
+
+  it.effect("rejects reuse of one ID with a different delivery mode", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+
+      yield* session.prompt({
+        id: messageID,
+        sessionID,
+        prompt: new Prompt({ text: "Fix the failing tests" }),
+        resume: false,
+      })
+      const failure = yield* session
+        .prompt({
+          id: messageID,
+          sessionID,
+          prompt: new Prompt({ text: "Fix the failing tests" }),
+          delivery: "queue",
+          resume: false,
+        })
+        .pipe(Effect.flip)
+
+      expect(failure._tag).toBe("Session.PromptConflictError")
+    }),
+  )
+
+  it.effect("does not match pending inputs when no delivery modes are eligible", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Wait" }), resume: false })
+
+      expect(yield* SessionInput.hasPending(db, sessionID, [])).toBe(false)
     }),
   )
 
@@ -220,7 +298,8 @@ describe("SessionV2.prompt", () => {
       const messages = yield* Effect.all([session.prompt(input), session.prompt(input)], { concurrency: "unbounded" })
 
       expect(messages[1]).toEqual(messages[0])
-      expect(yield* session.messages({ sessionID })).toEqual([messages[0]])
+      expect(yield* session.messages({ sessionID })).toEqual([])
+      expect(yield* admittedCount).toBe(1)
     }),
   )
 
@@ -232,14 +311,23 @@ describe("SessionV2.prompt", () => {
       const other = SessionV2.ID.make("ses_prompt_other")
       yield* db
         .insert(SessionTable)
-        .values({ id: other, project_id: Project.ID.global, slug: "other", directory: "/project", title: "other", version: "test" })
+        .values({
+          id: other,
+          project_id: Project.ID.global,
+          slug: "other",
+          directory: "/project",
+          title: "other",
+          version: "test",
+        })
         .onConflictDoNothing()
         .run()
         .pipe(Effect.orDie)
       const prompt = new Prompt({ text: "Fix the failing tests" })
 
       yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
-      const failure = yield* session.prompt({ id: messageID, sessionID: other, prompt, resume: false }).pipe(Effect.flip)
+      const failure = yield* session
+        .prompt({ id: messageID, sessionID: other, prompt, resume: false })
+        .pipe(Effect.flip)
 
       expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID: other, messageID })
     }),

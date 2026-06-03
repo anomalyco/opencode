@@ -3,7 +3,13 @@ import { DateTime, Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
 import { SessionsCursor } from "../../groups/v2/session"
-import { ConflictError, InvalidCursorError, ServiceUnavailableError, SessionNotFoundError, UnknownError } from "../../errors"
+import {
+  ConflictError,
+  InvalidCursorError,
+  ServiceUnavailableError,
+  SessionNotFoundError,
+  UnknownError,
+} from "../../errors"
 
 const DefaultSessionsLimit = 50
 
@@ -63,6 +69,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
               sessionID: ctx.params.sessionID,
               id: ctx.payload.id,
               prompt: ctx.payload.prompt,
+              delivery: ctx.payload.delivery,
               resume: ctx.payload.resume,
             })
             .pipe(

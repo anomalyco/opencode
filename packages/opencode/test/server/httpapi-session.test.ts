@@ -24,7 +24,7 @@ import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@opencode-ai/core/database/database"
-import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -553,11 +553,12 @@ describe("session HttpApi", () => {
         const headers = { "x-opencode-directory": test.directory }
         const session = yield* createSession({ title: "v2 prompt recording" })
 
-        const recordPrompt = () => request(`/api/session/${session.id}/prompt`, {
-          method: "POST",
-          headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "hello" } }),
-        })
+        const recordPrompt = () =>
+          request(`/api/session/${session.id}/prompt`, {
+            method: "POST",
+            headers: { ...headers, "content-type": "application/json" },
+            body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "hello" } }),
+          })
         const first = yield* recordPrompt()
         const retried = yield* recordPrompt()
         type PromptBody = { id: string; type: string; text: string }
@@ -571,8 +572,21 @@ describe("session HttpApi", () => {
         const messages = yield* requestJson<{ items: PromptBody[] }>(`/api/session/${session.id}/message`, {
           headers,
         })
-        expect(messages.items).toHaveLength(1)
-        expect(messages.items[0]).toEqual(firstBody)
+        expect(messages.items).toHaveLength(0)
+        const admitted = yield* Database.Service.use(({ db }) =>
+          db
+            .select()
+            .from(SessionInputTable)
+            .where(eq(SessionInputTable.id, SessionMessage.ID.make("evt_http_prompt")))
+            .get()
+            .pipe(Effect.orDie),
+        )
+        expect(admitted).toMatchObject({
+          id: "evt_http_prompt",
+          session_id: session.id,
+          delivery: "steer",
+          promoted_seq: null,
+        })
 
         const conflict = yield* request(`/api/session/${session.id}/prompt`, {
           method: "POST",

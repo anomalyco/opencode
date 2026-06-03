@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, isNull, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -9,12 +9,7 @@ import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
-import {
-  MessageTable,
-  PartTable,
-  SessionMessageTable,
-  SessionTable,
-} from "./sql"
+import { MessageTable, PartTable, SessionMessageTable, SessionInputTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -113,15 +108,28 @@ function applyUsage(
 
 function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
-    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) => decodeMessage({ ...row.data, id: row.id, type: row.type })
+    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
+      decodeMessage({ ...row.data, id: row.id, type: row.type })
     const writeMessage = (message: SessionMessage.Message) => {
       if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
       const encoded = encodeMessage(message)
       const { id, type, ...data } = encoded
       return db
         .insert(SessionMessageTable)
-        .values([{ id: SessionMessage.ID.make(id), session_id: event.data.sessionID, type, seq: event.seq, time_created: DateTime.toEpochMillis(message.time.created), data }])
-        .onConflictDoUpdate({ target: SessionMessageTable.id, set: { type, time_created: DateTime.toEpochMillis(message.time.created), data } })
+        .values([
+          {
+            id: SessionMessage.ID.make(id),
+            session_id: event.data.sessionID,
+            type,
+            seq: event.seq,
+            time_created: DateTime.toEpochMillis(message.time.created),
+            data,
+          },
+        ])
+        .onConflictDoUpdate({
+          target: SessionMessageTable.id,
+          set: { type, time_created: DateTime.toEpochMillis(message.time.created), data },
+        })
         .run()
         .pipe(Effect.orDie)
     }
@@ -324,6 +332,14 @@ export const layer = Layer.effectDiscard(
         if (!row) return yield* Effect.die("Prompt projection was not stored")
         const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
         if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
+        if (event.seq === undefined)
+          return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
+        yield* db
+          .update(SessionInputTable)
+          .set({ promoted_seq: event.seq })
+          .where(and(eq(SessionInputTable.id, event.id), isNull(SessionInputTable.promoted_seq)))
+          .run()
+          .pipe(Effect.orDie)
       }),
     )
     // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))

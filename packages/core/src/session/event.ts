@@ -163,7 +163,6 @@ export namespace Turn {
     ...options,
     schema: {
       ...Base,
-      promptCursor: NonNegativeInt.pipe(Schema.optional),
     },
   })
   export type Started = typeof Started.Type
@@ -178,7 +177,6 @@ export namespace Turn {
     },
   })
   export type Settled = typeof Settled.Type
-
 }
 
 export namespace Text {
@@ -432,7 +430,9 @@ const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta] as 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
 export type DurableEvent = typeof Durable.Type
 
-export const All = Schema.Union([...DurableDefinitions, ...EphemeralDefinitions], { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
+export const All = Schema.Union([...DurableDefinitions, ...EphemeralDefinitions], { mode: "oneOf" }).pipe(
+  Schema.toTaggedUnion("type"),
+)
 export type Event = typeof All.Type
 export type Type = Event["type"]
 

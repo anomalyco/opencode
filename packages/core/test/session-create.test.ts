@@ -15,6 +15,7 @@ import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -31,8 +32,16 @@ const projects = Layer.succeed(
 )
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
-const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(store), Layer.provide(projects), Layer.provide(SessionExecution.noopLayer))
-const it = testEffect(Layer.mergeAll(database, events, projects, projector, store, SessionExecution.noopLayer, sessions))
+const sessions = SessionV2.layer.pipe(
+  Layer.provide(events),
+  Layer.provide(database),
+  Layer.provide(store),
+  Layer.provide(projects),
+  Layer.provide(SessionExecution.noopLayer),
+)
+const it = testEffect(
+  Layer.mergeAll(database, events, projects, projector, store, SessionExecution.noopLayer, sessions),
+)
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
 
@@ -43,8 +52,12 @@ describe("SessionV2.create", () => {
 
       expect(SessionV2.ID.fromExternal(input)).toBe(SessionV2.ID.fromExternal(input))
       expect(SessionV2.ID.fromExternal(input)).toMatch(/^ses_[a-f0-9]{64}$/)
-      expect(SessionV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(SessionV2.ID.fromExternal(input))
-      expect(SessionV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(SessionV2.ID.fromExternal({ namespace: "a", key: "b:c" }))
+      expect(SessionV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(
+        SessionV2.ID.fromExternal(input),
+      )
+      expect(SessionV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(
+        SessionV2.ID.fromExternal({ namespace: "a", key: "b:c" }),
+      )
     }),
   )
 
@@ -193,12 +206,15 @@ describe("SessionV2.create", () => {
   it.effect("omits legacy creation rows from the V2 Session event stream", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
       const created = yield* session.create({ location })
       yield* session.prompt({ sessionID: created.id, prompt: new Prompt({ text: "Hello" }), resume: false })
+      yield* SessionInput.promote(db, events, created.id, { steer: true })
 
-      expect(Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect))).toMatchObject([
-        { cursor: 1, event: { type: "session.next.prompted", data: { prompt: { text: "Hello" } } } },
-      ])
+      expect(
+        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
+      ).toMatchObject([{ cursor: 1, event: { type: "session.next.prompted", data: { prompt: { text: "Hello" } } } }])
     }),
   )
 

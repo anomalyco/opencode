@@ -28,7 +28,7 @@ import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
-
+import { SessionInput } from "./session/input"
 
 // get project -> project.locations
 //
@@ -122,7 +122,10 @@ export interface Interface {
       direction: "previous" | "next"
     }
   }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly message: (input: { sessionID: SessionSchema.ID; messageID: SessionMessage.ID }) => Effect.Effect<SessionMessage.Message | undefined>
+  readonly message: (input: {
+    sessionID: SessionSchema.ID
+    messageID: SessionMessage.ID
+  }) => Effect.Effect<SessionMessage.Message | undefined>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
@@ -136,6 +139,7 @@ export interface Interface {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     prompt: Prompt
+    delivery?: SessionInput.Delivery
     resume?: boolean
   }) => Effect.Effect<SessionMessage.User, NotFoundError | PromptConflictError>
   readonly shell: (input: {
@@ -193,28 +197,18 @@ export const layer = Layer.effect(
         ),
       )
 
-    const getProjectedUserMessage = Effect.fnUntraced(function* (messageID: SessionMessage.ID) {
-      const stored = yield* store.message(messageID)
-      if (!stored) return yield* Effect.die("Prompt projection was not stored")
-      const message = stored.message
-      if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
-      return message
-    })
-
     const findExistingPrompt = Effect.fnUntraced(function* (input: {
       sessionID: SessionSchema.ID
       messageID: SessionMessage.ID
       prompt: Prompt
+      delivery: SessionInput.Delivery
     }) {
-      const stored = yield* store.message(input.messageID)
+      const stored = yield* SessionInput.find(db, input.messageID)
       if (!stored) return undefined
-      const message = stored.message
-      if (message.type !== "user") return yield* new PromptConflictError({ sessionID: input.sessionID, messageID: input.messageID })
-      const prompt = Prompt.fromUserMessage(message)
-      if (stored.sessionID !== input.sessionID || !Prompt.equivalence(prompt, input.prompt)) {
+      if (!SessionInput.equivalent(stored, input)) {
         return yield* new PromptConflictError({ sessionID: input.sessionID, messageID: input.messageID })
       }
-      return message
+      return SessionInput.toMessage(stored)
     })
 
     const result = Service.of({
@@ -252,11 +246,7 @@ export const layer = Layer.effect(
           time: { created: now, updated: now },
         })
         const projected = yield* events
-          .publish(
-            SessionLegacy.Event.Created,
-            { sessionID, info },
-            { location: input.location },
-          )
+          .publish(SessionLegacy.Event.Created, { sessionID, info }, { location: input.location })
           .pipe(
             Effect.as({ type: "created" } as const),
             Effect.catchDefect((defect) => {
@@ -264,11 +254,13 @@ export const layer = Layer.effect(
                 return Effect.die(defect)
               }
               // Concurrent creation lost the projection race. The existing Session identity wins.
-              return store.get(sessionID).pipe(
-                Effect.flatMap((session) =>
-                  session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
-                ),
-              )
+              return store
+                .get(sessionID)
+                .pipe(
+                  Effect.flatMap((session) =>
+                    session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
+                  ),
+                )
             }),
           )
         if (projected.type === "existing") return projected.session
@@ -364,43 +356,40 @@ export const layer = Layer.effect(
       }),
       events: (input) =>
         Stream.unwrap(
-          result.get(input.sessionID).pipe(
-            Effect.as(events.aggregateEvents({ aggregateID: input.sessionID, after: input.after })),
-          ),
+          result
+            .get(input.sessionID)
+            .pipe(Effect.as(events.aggregateEvents({ aggregateID: input.sessionID, after: input.after }))),
         ).pipe(
-          Stream.filter((event): event is EventV2.CursorEvent<SessionEvent.DurableEvent> => isDurableSessionEvent(event.event)),
+          Stream.filter((event): event is EventV2.CursorEvent<SessionEvent.DurableEvent> =>
+            isDurableSessionEvent(event.event),
+          ),
         ),
-      prompt: Effect.fn("V2Session.prompt")((input) => Effect.uninterruptible(Effect.gen(function* () {
-        yield* result.get(input.sessionID)
-        const returnPrompt = Effect.fnUntraced(function* (message: SessionMessage.User) {
-          if (input.resume !== false) yield* enqueueWake(input.sessionID)
-          return message
-        }, Effect.uninterruptible)
-        const messageID = input.id ?? SessionMessage.ID.create()
-        const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt }
-        const existing = yield* findExistingPrompt(expected)
-        if (existing) return yield* returnPrompt(existing)
-        const projected = yield* events
-          .publish(
-            SessionEvent.Prompted,
-            { sessionID: input.sessionID, timestamp: yield* DateTime.now, prompt: input.prompt },
-            { id: messageID },
-          )
-          .pipe(
-            Effect.as({ type: "created" } as const),
-            Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.PromptAlreadyProjected)) return Effect.die(defect)
-              // Another caller projected this ID first. Re-read at the Session boundary so
-              // an exact retry returns the existing message while conflicting reuse still fails.
-              return findExistingPrompt(expected).pipe(
-                Effect.flatMap((message) =>
-                  message ? Effect.succeed({ type: "existing", message } as const) : Effect.die(defect),
-                ),
-              )
-            }),
-          )
-        return yield* returnPrompt(projected.type === "existing" ? projected.message : yield* getProjectedUserMessage(messageID))
-      }))),
+      prompt: Effect.fn("V2Session.prompt")((input) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            yield* result.get(input.sessionID)
+            const returnPrompt = Effect.fnUntraced(function* (message: SessionMessage.User) {
+              if (input.resume !== false) yield* enqueueWake(input.sessionID)
+              return message
+            }, Effect.uninterruptible)
+            const messageID = input.id ?? SessionMessage.ID.create()
+            const delivery = input.delivery ?? "steer"
+            const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
+            const existing = yield* findExistingPrompt(expected)
+            if (existing) return yield* returnPrompt(existing)
+            const admitted = yield* SessionInput.admit(db, {
+              id: messageID,
+              sessionID: input.sessionID,
+              prompt: input.prompt,
+              delivery,
+            })
+            if (!admitted) return yield* Effect.die("Prompt admission was not stored")
+            if (!SessionInput.equivalent(admitted, expected))
+              return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
+            return yield* returnPrompt(SessionInput.toMessage(admitted))
+          }),
+        ),
+      ),
       shell: Effect.fn("V2Session.shell")(function* () {}),
       skill: Effect.fn("V2Session.skill")(function* () {}),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* () {}),
@@ -429,6 +418,15 @@ const DefaultEvents = EventV2.layer.pipe(Layer.provide(DefaultDatabase))
 const DefaultProjector = SessionProjector.layer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
 const DefaultStore = SessionStore.layer.pipe(Layer.provide(DefaultDatabase))
 export const defaultLayer = layer.pipe(
-  Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector, DefaultStore, SessionExecution.noopLayer, ProjectV2.defaultLayer)),
+  Layer.provide(
+    Layer.mergeAll(
+      DefaultDatabase,
+      DefaultEvents,
+      DefaultProjector,
+      DefaultStore,
+      SessionExecution.noopLayer,
+      ProjectV2.defaultLayer,
+    ),
+  ),
   Layer.orDie,
 )
