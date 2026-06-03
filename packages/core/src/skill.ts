@@ -44,6 +44,13 @@ export class Info extends Schema.Class<Info>("SkillV2.Info")({
   content: Schema.String,
 }) {}
 
+const Frontmatter = Schema.Struct({
+  name: Schema.String.pipe(Schema.optional),
+  description: Schema.String.pipe(Schema.optional),
+  slash: Schema.Boolean.pipe(Schema.optional),
+})
+const decodeFrontmatter = Schema.decodeUnknownOption(Frontmatter)
+
 export type Data = {
   sources: Source[]
 }
@@ -92,19 +99,19 @@ export const layer = Layer.effect(
           if (!content) continue
           const markdown = ConfigMarkdown.parseOption(content)
           if (!markdown) continue
+          const frontmatter = decodeFrontmatter(markdown.data).valueOrUndefined
+          if (!frontmatter) continue
           const name =
-            typeof markdown.data.name === "string"
-              ? markdown.data.name
+            frontmatter.name !== undefined
+              ? frontmatter.name
               : path.dirname(filepath) === directory
                 ? path.basename(filepath, ".md")
                 : undefined
           if (!name) continue
-          if (markdown.data.description !== undefined && typeof markdown.data.description !== "string") continue
-          if (markdown.data.slash !== undefined && typeof markdown.data.slash !== "boolean") continue
           skills.push(new Info({
             name,
-            description: markdown.data.description,
-            slash: markdown.data.slash,
+            description: frontmatter.description,
+            slash: frontmatter.slash,
             location: AbsolutePath.make(filepath),
             content: markdown.content,
           }))
