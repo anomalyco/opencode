@@ -837,6 +837,7 @@ export const RunCommand = effectCmd({
           return await runInteractiveLocalMode({
             directory: directory ?? root,
             fetch: fetchFn,
+            headers: ServerAuth.headers({ password: args.password, username: args.username }),
             resolveAgent: localAgent,
             session,
             share,
@@ -870,6 +871,7 @@ export const RunCommand = effectCmd({
         baseUrl: "http://opencode.internal",
         fetch: fetchFn,
         directory,
+        headers: ServerAuth.headers({ password: args.password, username: args.username }),
       })
       await execute(sdk)
     })

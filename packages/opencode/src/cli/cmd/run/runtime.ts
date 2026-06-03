@@ -60,6 +60,7 @@ type RunRuntimeInput = {
 type RunLocalInput = {
   directory: string
   fetch: typeof globalThis.fetch
+  headers?: Record<string, string>
   resolveAgent: () => Promise<string | undefined>
   session: (sdk: RunInput["sdk"]) => Promise<{ id: string; title?: string } | undefined>
   share: (sdk: RunInput["sdk"], sessionID: string) => Promise<void>
@@ -787,6 +788,7 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
         baseUrl: "http://opencode.internal",
         fetch: input.fetch,
         directory: input.directory,
+        headers: input.headers,
       })
       let session: Promise<ResolvedSession> | undefined
 
