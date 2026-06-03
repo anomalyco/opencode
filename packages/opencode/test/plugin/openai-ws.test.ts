@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
-import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http"
+import { createServer, type IncomingMessage, type Server as HttpServer } from "node:http"
 import net, { type AddressInfo, type Socket } from "node:net"
 import WebSocket, { WebSocketServer } from "ws"
 import { APICallError } from "ai"
@@ -211,7 +211,7 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
-  test("prunes HTTP fallback after its idle timeout", async () => {
+  test("keeps HTTP fallback active after its idle timeout", async () => {
     let websocketAttempts = 0
     await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
@@ -227,136 +227,8 @@ describe("plugin.openai.ws-pool", () => {
     const second = await fetch(server.url, streamRequest())
 
     expect(await second.text()).toBe("http")
-    expect(websocketAttempts).toBe(2)
+    expect(websocketAttempts).toBe(1)
     expect(server.httpRequests).toHaveLength(2)
-    fetch.close()
-  })
-
-  test("keeps HTTP fallback active while requests continue", async () => {
-    let websocketAttempts = 0
-    await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
-      url: server.url,
-      connectTimeout: 100,
-      idleTimeout: 200,
-      streamRetries: 0,
-    })
-
-    const first = await fetch(server.url, streamRequest())
-    expect(await first.text()).toBe("http")
-    await new Promise((resolve) => setTimeout(resolve, 130))
-    const second = await fetch(server.url, streamRequest())
-    expect(await second.text()).toBe("http")
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    const third = await fetch(server.url, streamRequest())
-
-    expect(await third.text()).toBe("http")
-    expect(websocketAttempts).toBe(1)
-    expect(server.httpRequests).toHaveLength(3)
-    fetch.close()
-  })
-
-  test("keeps HTTP fallback active while a response body streams", async () => {
-    let websocketAttempts = 0
-    let httpRequests = 0
-    const http = await createHttpServer((_request, response) => {
-      httpRequests += 1
-      if (httpRequests > 1) {
-        response.writeHead(200, { "content-type": "text/plain" })
-        response.end("http")
-        return
-      }
-      response.writeHead(200, { "content-type": "text/plain" })
-      response.write("started")
-    })
-    const sockets = new WebSocketServer({
-      server: http.server,
-      verifyClient(_info, callback) {
-        websocketAttempts += 1
-        callback(false, 401, "denied")
-      },
-    })
-    await using server = websocketServerHandle(sockets, http)
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
-      url: server.url,
-      connectTimeout: 100,
-      idleTimeout: 20,
-      streamRetries: 0,
-    })
-
-    const first = await fetch(server.url, streamRequest())
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    const second = await fetch(server.url, streamRequest())
-
-    expect(await second.text()).toBe("http")
-    expect(websocketAttempts).toBe(1)
-    await first.body!.cancel()
-    await new Promise((resolve) => setTimeout(resolve, 50))
-
-    const third = await fetch(server.url, streamRequest())
-
-    expect(await third.text()).toBe("http")
-    expect(websocketAttempts).toBe(2)
-    fetch.close()
-  })
-
-  test("keeps HTTP fallback active while a busy-lane response body streams", async () => {
-    let connections = 0
-    let httpRequests = 0
-    let failWebSocket = () => {}
-    const http = await createHttpServer((_request, response) => {
-      httpRequests += 1
-      if (httpRequests > 1) {
-        response.writeHead(200, { "content-type": "text/plain" })
-        response.end("http")
-        return
-      }
-      response.writeHead(200, { "content-type": "text/plain" })
-      response.write("started")
-    })
-    const sockets = new WebSocketServer({ server: http.server })
-    sockets.on("connection", (socket) => {
-      connections += 1
-      socket.once("message", () => {
-        socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
-        failWebSocket = () => socket.terminate()
-      })
-    })
-    await using server = websocketServerHandle(sockets, http)
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
-      url: server.url,
-      idleTimeout: 20,
-      streamRetries: 0,
-    })
-
-    const first = await fetch(server.url, streamRequest())
-    const firstText = first.text()
-    const second = await fetch(server.url, streamRequest())
-    failWebSocket()
-    expect((await readTextError(firstText)).message).toContain("WebSocket closed before response.completed")
-    await new Promise((resolve) => setTimeout(resolve, 50))
-
-    const third = await fetch(server.url, streamRequest())
-
-    expect(await third.text()).toBe("http")
-    expect(connections).toBe(1)
-    await second.body!.cancel()
-    fetch.close()
-  })
-
-  test("preserves HTTP fallback response metadata", async () => {
-    await using server = await createRejectingWebSocketServer(() => {})
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
-      url: server.url,
-      streamRetries: 0,
-    })
-
-    const response = await fetch(server.url, streamRequest())
-
-    expect(response.url).toBe(server.url)
-    expect(response.redirected).toBe(false)
-    expect(response.type).toBe("default")
-    expect(await response.text()).toBe("http")
     fetch.close()
   })
 
@@ -912,16 +784,12 @@ async function createRejectingWebSocketServer(onAttempt: () => void) {
   return websocketServerHandle(server, http)
 }
 
-async function createHttpServer(
-  respond: (request: IncomingMessage, response: ServerResponse) => void = (_request, response) => {
-    response.writeHead(200, { "content-type": "text/plain" })
-    response.end("http")
-  },
-) {
+async function createHttpServer() {
   const httpRequests: IncomingMessage[] = []
   const server = createServer((request, response) => {
     httpRequests.push(request)
-    respond(request, response)
+    response.writeHead(200, { "content-type": "text/plain" })
+    response.end("http")
   })
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address() as AddressInfo
