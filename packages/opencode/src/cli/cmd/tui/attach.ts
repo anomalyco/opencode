@@ -1,7 +1,6 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
 import { validateSession } from "./validate-session"
 import { ServerAuth } from "@/server/auth"
@@ -45,6 +44,7 @@ export const AttachCommand = cmd({
         describe: "basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')",
       }),
   handler: async (args) => {
+    const { TuiConfig } = await import("@/cli/cmd/tui/config/tui")
     const unguard = win32InstallCtrlCGuard()
     try {
       win32DisableProcessedInput()

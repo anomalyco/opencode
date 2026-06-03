@@ -72,7 +72,7 @@ P6  OA
 - `PROC` AppProcess migration — prefer `AppProcess.Service` over raw
   process wrappers.
   Shrinks: direct spawn callsites and legacy process helpers.
-- `FS` AppFileSystem migration — prefer `AppFileSystem.Service` over raw
+- `FS` FSUtil migration — prefer `FSUtil.Service` over raw
   filesystem APIs.
   Shrinks: direct `fs` / `Bun.file` service callsites where inappropriate.
 - `RT` Runtime/facade cleanup — remove service-local `makeRuntime`
@@ -229,7 +229,7 @@ Current rules:
 
 ## Lower Priority Tracks
 
-- `PROC` / `FS` — continue AppProcess and AppFileSystem migrations as
+- `PROC` / `FS` — continue AppProcess and FSUtil migrations as
   focused PRs when touching relevant files.
 - `RT` — remove service-local runtime facades only when they are not an
   intentional boundary.

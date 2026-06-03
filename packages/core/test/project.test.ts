@@ -2,14 +2,28 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
+import { Database } from "@opencode-ai/core/database/database"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(ProjectV2.defaultLayer)
+const databaseLayer = Database.layerFromPath(":memory:")
+const it = testEffect(
+  Layer.mergeAll(
+    ProjectV2.layer.pipe(
+      Layer.provide(databaseLayer),
+      Layer.provide(FSUtil.defaultLayer),
+      Layer.provide(Git.defaultLayer),
+    ),
+    databaseLayer,
+  ),
+)
 
 function remoteID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
@@ -36,6 +50,52 @@ async function initRepo(dir: string, opts?: { commit?: boolean; remote?: string 
 async function rootCommit(dir: string) {
   return (await $`git rev-list --max-parents=0 HEAD`.cwd(dir).text()).trim()
 }
+
+describe("Project directories schemas", () => {
+  it.effect("decodes project directory input and inline directory results", () =>
+    Effect.sync(() => {
+      expect(Schema.decodeUnknownSync(ProjectV2.DirectoriesInput)({ projectID: ProjectV2.ID.make("project") })).toEqual(
+        {
+          projectID: ProjectV2.ID.make("project"),
+        },
+      )
+      expect(Schema.decodeUnknownSync(ProjectV2.Directories)([AbsolutePath.make("/tmp/project")])).toEqual([
+        AbsolutePath.make("/tmp/project"),
+      ])
+    }),
+  )
+
+  it.effect("lists stored project directories only for the requested project", () =>
+    Effect.gen(function* () {
+      const project = yield* ProjectV2.Service
+      const { db } = yield* Database.Service
+      const projectID = ProjectV2.ID.make("directories-project")
+      const otherID = ProjectV2.ID.make("directories-other")
+      yield* db
+        .insert(ProjectTable)
+        .values([
+          { id: projectID, worktree: AbsolutePath.make("/repo"), sandboxes: [], time_created: 1, time_updated: 1 },
+          { id: otherID, worktree: AbsolutePath.make("/other"), sandboxes: [], time_created: 1, time_updated: 1 },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(ProjectDirectoryTable)
+        .values([
+          { project_id: projectID, directory: AbsolutePath.make("/repo/z"), type: "root" },
+          { project_id: projectID, directory: AbsolutePath.make("/repo/a"), type: "main" },
+          { project_id: otherID, directory: AbsolutePath.make("/other"), type: "main" },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      expect(yield* project.directories({ projectID })).toEqual([
+        AbsolutePath.make("/repo/a"),
+        AbsolutePath.make("/repo/z"),
+      ])
+    }),
+  )
+})
 
 describe("ProjectV2.resolve", () => {
   it.live("returns global for non-git directory", () =>

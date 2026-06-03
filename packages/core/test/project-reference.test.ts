@@ -4,7 +4,7 @@ import path from "path"
 import { Deferred, Effect, Layer, Schema } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigReference } from "@opencode-ai/core/config/reference"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
@@ -243,7 +243,7 @@ function testLayer(input: {
   return ProjectReference.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
-        AppFileSystem.defaultLayer,
+        FSUtil.defaultLayer,
         Global.layerWith({ home: path.join(input.directory, "home"), repos: input.repos }),
         Layer.succeed(
           Location.Service,
