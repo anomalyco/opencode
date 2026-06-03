@@ -3013,20 +3013,25 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
     })
 
-    for (const id of ["gpt-5-4", "gpt-5-5"]) {
-      test(`${id} does not add minimal effort`, () => {
+    for (const testCase of [
+      { id: "gpt-5-1", efforts: ["none", "low", "medium", "high"] },
+      { id: "gpt-5-4", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { id: "gpt-5.4", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { id: "gpt-5-5", efforts: ["none", "low", "medium", "high", "xhigh"] },
+    ]) {
+      test(`${testCase.id} returns supported Azure reasoning efforts`, () => {
         const result = ProviderTransform.variants(
           createMockModel({
-            id,
+            id: testCase.id,
             providerID: "azure",
             api: {
-              id,
+              id: testCase.id,
               url: "https://azure.com",
               npm: "@ai-sdk/azure",
             },
           }),
         )
-        expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+        expect(Object.keys(result)).toEqual(testCase.efforts)
       })
     }
   })
