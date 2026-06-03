@@ -11,8 +11,5 @@ export interface Interface {
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionExecution") {}
 
-/** Test or embedding seam for supplying execution routing directly. */
-export const layerWith = (resume: Interface["resume"]) => Layer.succeed(Service, Service.of({ resume }))
-
 /** Low-level compatibility layer for callers that only need durable Session recording. */
-export const noopLayer = layerWith(() => Effect.void)
+export const noopLayer = Layer.succeed(Service, Service.of({ resume: () => Effect.void }))

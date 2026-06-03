@@ -19,9 +19,13 @@ const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
 const executionCalls: SessionV2.ID[] = []
-const execution = SessionExecution.layerWith((sessionID) =>
-  Effect.sync(() => {
-    executionCalls.push(sessionID)
+const execution = Layer.succeed(
+  SessionExecution.Service,
+  SessionExecution.Service.of({
+    resume: (sessionID) =>
+      Effect.sync(() => {
+        executionCalls.push(sessionID)
+      }),
   }),
 )
 const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(store), Layer.provide(Project.defaultLayer), Layer.provide(execution))
