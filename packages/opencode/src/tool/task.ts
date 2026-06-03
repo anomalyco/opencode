@@ -201,6 +201,7 @@ export const TaskTool = Tool.define(
             modelID: model.modelID,
             providerID: model.providerID,
           },
+          variant: next.model ? undefined : msg.info.variant,
           agent: next.name,
           tools: {
             ...(next.permission.some((rule) => rule.permission === "todowrite") ? {} : { todowrite: false }),
@@ -221,6 +222,7 @@ export const TaskTool = Tool.define(
           .prompt({
             sessionID: ctx.sessionID,
             agent: currentParent.agent ?? ctx.agent,
+            variant: msg.info.variant,
             parts: [
               {
                 type: "text",

@@ -81,6 +81,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     modelID: ref.modelID,
     providerID: ref.providerID,
+    variant: "xhigh",
     time: { created: Date.now() },
   }
   yield* session.updateMessage(assistant)
@@ -242,6 +243,7 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).toBe(child.id)
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
+      expect(seen?.variant).toBe("xhigh")
     }),
   )
 
@@ -586,6 +588,7 @@ describe("tool.task", () => {
       expect(waited.info?.status).toBe("completed")
       expect(waited.info?.output).toBe("second done")
       const notification = yield* Effect.promise(() => injected.promise)
+      expect(notification.variant).toBe("xhigh")
       expect(notification.parts[0]?.type).toBe("text")
       if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
     }),
