@@ -3,7 +3,7 @@ export * as AgentV2 from "./agent"
 import { Array, Context, Effect, Layer, Schema, Scope } from "effect"
 import { castDraft, enableMapSet, type Draft } from "immer"
 import { ModelV2 } from "./model"
-import { PermissionV2 } from "./permission"
+import { PermissionSchema } from "./permission/schema"
 import { ProviderV2 } from "./provider"
 import { PositiveInt } from "./schema"
 import { State } from "./state"
@@ -19,25 +19,21 @@ export const Color = Schema.Union([
 export class Info extends Schema.Class<Info>("AgentV2.Info")({
   id: ID,
   model: ModelV2.Ref.pipe(Schema.optional),
-  options: ProviderV2.Options,
+  request: ProviderV2.Request,
   system: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
   mode: Schema.Literals(["subagent", "primary", "all"]),
   hidden: Schema.Boolean,
   color: Color.pipe(Schema.optional),
   steps: PositiveInt.pipe(Schema.optional),
-  permissions: PermissionV2.Ruleset,
+  permissions: PermissionSchema.Ruleset,
 }) {
   static empty(id: ID) {
     return new Info({
       id,
-      options: {
+      request: {
         headers: {},
         body: {},
-        aisdk: {
-          provider: {},
-          request: {},
-        },
       },
       mode: "all",
       hidden: false,

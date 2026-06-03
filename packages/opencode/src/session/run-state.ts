@@ -1,5 +1,5 @@
 import { InstanceState } from "@/effect/instance-state"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Runner } from "@/effect/runner"
 import { BackgroundJob } from "@/background/job"
 import { Effect, Latch, Layer, Scope, Context } from "effect"
@@ -13,15 +13,15 @@ export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly ensureRunning: (
     sessionID: SessionID,
-    onInterrupt: Effect.Effect<SessionLegacy.WithParts>,
-    work: Effect.Effect<SessionLegacy.WithParts>,
-  ) => Effect.Effect<SessionLegacy.WithParts>
+    onInterrupt: Effect.Effect<SessionV1.WithParts>,
+    work: Effect.Effect<SessionV1.WithParts>,
+  ) => Effect.Effect<SessionV1.WithParts>
   readonly startShell: (
     sessionID: SessionID,
-    onInterrupt: Effect.Effect<SessionLegacy.WithParts>,
-    work: Effect.Effect<SessionLegacy.WithParts>,
+    onInterrupt: Effect.Effect<SessionV1.WithParts>,
+    work: Effect.Effect<SessionV1.WithParts>,
     ready?: Latch.Latch,
-  ) => Effect.Effect<SessionLegacy.WithParts, Session.BusyError>
+  ) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
@@ -35,7 +35,7 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
-        const runners = new Map<SessionID, Runner.Runner<SessionLegacy.WithParts>>()
+        const runners = new Map<SessionID, Runner.Runner<SessionV1.WithParts>>()
         yield* Effect.addFinalizer(
           Effect.fnUntraced(function* () {
             yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {
@@ -51,12 +51,12 @@ export const layer = Layer.effect(
 
     const runner = Effect.fn("SessionRunState.runner")(function* (
       sessionID: SessionID,
-      onInterrupt: Effect.Effect<SessionLegacy.WithParts>,
+      onInterrupt: Effect.Effect<SessionV1.WithParts>,
     ) {
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
       if (existing) return existing
-      const next = Runner.make<SessionLegacy.WithParts>(data.scope, {
+      const next = Runner.make<SessionV1.WithParts>(data.scope, {
         onIdle: Effect.gen(function* () {
           data.runners.delete(sessionID)
           yield* status.set(sessionID, { type: "idle" })
@@ -87,16 +87,16 @@ export const layer = Layer.effect(
 
     const ensureRunning = Effect.fn("SessionRunState.ensureRunning")(function* (
       sessionID: SessionID,
-      onInterrupt: Effect.Effect<SessionLegacy.WithParts>,
-      work: Effect.Effect<SessionLegacy.WithParts>,
+      onInterrupt: Effect.Effect<SessionV1.WithParts>,
+      work: Effect.Effect<SessionV1.WithParts>,
     ) {
       return yield* (yield* runner(sessionID, onInterrupt)).ensureRunning(work)
     })
 
     const startShell = Effect.fn("SessionRunState.startShell")(function* (
       sessionID: SessionID,
-      onInterrupt: Effect.Effect<SessionLegacy.WithParts>,
-      work: Effect.Effect<SessionLegacy.WithParts>,
+      onInterrupt: Effect.Effect<SessionV1.WithParts>,
+      work: Effect.Effect<SessionV1.WithParts>,
       ready?: Latch.Latch,
     ) {
       return yield* (yield* runner(sessionID, onInterrupt))

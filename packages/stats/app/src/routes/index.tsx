@@ -1,14 +1,20 @@
 import "./index.css"
 import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { geoEquirectangular, geoPath } from "d3-geo"
+import { scaleSqrt } from "d3-scale"
+import countryCodesSource from "i18n-iso-countries/codes.json?raw"
+import { feature, mesh } from "topojson-client"
+import countriesTopologySource from "world-atlas/countries-110m.json?raw"
 import ibmPlexMonoRegularLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2?url"
 import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2?url"
 import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
 import ibmPlexMonoBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Bold-Latin1.woff2?url"
 import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
-import statsUnfurlRankings from "../asset/unfurl-rankings.png?url"
 import {
   getStatsHomeData,
+  type CacheRatioEntry,
+  type CountryEntry,
   type LeaderboardEntry,
   type MarketDay,
   type StatsHomeData,
@@ -20,6 +26,8 @@ import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
+import type { GeometryCollection, Topology } from "topojson-specification"
 
 const products = ["All Users", "Zen", "Go"] as const
 const tokenProducts = ["Zen", "Go"] as const
@@ -33,14 +41,16 @@ const rangeLabels: Record<UsageRange, string> = {
 }
 const statsHomeTitle = "OpenCode Stats"
 const statsHomeDescription = "OpenCode usage, market share, token cost, and session cost stats."
-const statsHomeFallbackUrl = "https://stats.opencode.ai"
+const statsHomeFallbackUrl = "https://opencode.ai/stats/"
+const statsUnfurlPath = "banner.png"
 const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
 const headerLinks = [
   { href: "#top-models", label: "Top Models" },
-  { href: "#leaderboard", label: "Leaderboard" },
-  { href: "#token-cost", label: "Token Cost" },
   { href: "#session-cost", label: "Session Cost" },
+  { href: "#token-cost", label: "Token Cost" },
+  { href: "#cache-ratio", label: "Cache Ratio" },
   { href: "#market-share", label: "Market Share" },
+  { href: "#geo-breakdown", label: "Geo Breakdown" },
 ] as const
 const githubLink = {
   href: "https://github.com/anomalyco/opencode",
@@ -74,11 +84,43 @@ const themePreferenceLabels = {
   system: "System",
 } as const
 const themeStorageKey = "opencode:stats-theme"
+const geoMapWidth = 960
+const geoMapHeight = 430
+const countryDisplayNames = new Intl.DisplayNames(["en"], { type: "region" })
 
 type UsageProduct = (typeof products)[number]
 type TokenProduct = (typeof tokenProducts)[number]
 type UsageRange = (typeof ranges)[number]
 type ThemePreference = (typeof themePreferences)[number]
+type IsoCountryCode = readonly [string, string, string]
+type WorldCountryProperties = GeoJsonProperties & { name?: string }
+type WorldTopology = Topology<{ countries: GeometryCollection<WorldCountryProperties> }>
+
+const countryNumericIds = new Map(
+  (JSON.parse(countryCodesSource) as IsoCountryCode[]).map((country) => [country[0], country[2]] as const),
+)
+const worldTopology = JSON.parse(countriesTopologySource) as WorldTopology
+const worldCountryGeometries: GeometryCollection<WorldCountryProperties> = {
+  ...worldTopology.objects.countries,
+  geometries: worldTopology.objects.countries.geometries.filter((country) => String(country.id ?? "") !== "010"),
+}
+const worldCountries = feature<WorldCountryProperties>(worldTopology, worldCountryGeometries) as FeatureCollection<
+  GeometryObject,
+  WorldCountryProperties
+>
+const worldProjection = geoEquirectangular().fitExtent(
+  [
+    [10, 12],
+    [geoMapWidth - 10, geoMapHeight - 12],
+  ],
+  worldCountries,
+)
+const worldPath = geoPath(worldProjection)
+const worldCountryPaths = worldCountries.features.map((country) => ({
+  id: String(country.id ?? "").padStart(3, "0"),
+  path: worldPath(country) ?? "",
+}))
+const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
 const getData = query(async () => {
   "use server"
@@ -105,11 +147,11 @@ const getGitHubStars = query(async () => {
 export default function StatsHome() {
   const event = getRequestEvent()
   event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
-  const statsHomeUrl = new URL(
+  const statsHomeUrl = getStatsHomeUrl(
     import.meta.env.BASE_URL,
     event?.request.url ?? (typeof window === "undefined" ? statsHomeFallbackUrl : window.location.href),
-  ).toString()
-  const statsUnfurlUrl = new URL(statsUnfurlRankings, statsHomeUrl).toString()
+  )
+  const statsUnfurlUrl = new URL(statsUnfurlPath, statsHomeUrl).toString()
   const data = createAsync(() => getData())
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
@@ -160,9 +202,11 @@ export default function StatsHome() {
               <>
                 <Hero updatedAt={stats().updatedAt} />
                 <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
-                <TokenCostSection data={stats().tokenCost} />
                 <SessionCostSection data={stats().sessionCost} />
+                <TokenCostSection data={stats().tokenCost} />
+                <CacheRatioSection data={stats().cacheRatio} />
                 <MarketShareSection data={stats().market} />
+                <GeoBreakdownSection data={stats().country} />
               </>
             )}
           </Show>
@@ -171,6 +215,13 @@ export default function StatsHome() {
       </div>
     </main>
   )
+}
+
+function getStatsHomeUrl(base: string, requestUrl: string) {
+  const url = new URL(base, requestUrl)
+  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/stats/"
+  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/stats/"
+  return url.toString()
 }
 
 function isThemePreference(value: string | null): value is ThemePreference {
@@ -396,7 +447,7 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
   return (
     <section id="top-models" data-section="top-models">
       <h2 data-slot="top-models-title">
-        <strong>Top models.</strong> <span>Usage of models across OpenCode.</span>
+        <strong>Top models.</strong> <span>Usage of models across OpenCode Go.</span>
       </h2>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
@@ -1000,7 +1051,7 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
         setInspecting(false)
       }}
     >
-      <SectionBridge label="SESSION COST" href="#session-cost" />
+      <SectionBridge label="CACHE RATIO" href="#cache-ratio" />
       <SectionTitle title="Market Share" description="Compare token share by model author." />
       <Show
         when={activeDay()}
@@ -1192,6 +1243,181 @@ function MarketShareList(props: {
   )
 }
 
+function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
+  const [activeCountry, setActiveCountry] = createSignal<string>()
+  const data = createMemo(() => props.data["2M"])
+  const countryById = createMemo(
+    () =>
+      new Map(
+        data().flatMap((country) => {
+          const id = countryNumericId(country.country)
+          return id ? [[id, country] as const] : []
+        }),
+      ),
+  )
+  const maxTokens = createMemo(() => Math.max(0, ...data().map((country) => country.tokens)) || 1)
+  const topCountries = createMemo(() => data().slice(0, 15))
+  const active = createMemo(() => data().find((country) => country.country === activeCountry()) ?? data()[0])
+
+  return (
+    <section
+      id="geo-breakdown"
+      data-section="geo-breakdown"
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        setActiveCountry(undefined)
+      }}
+    >
+      <SectionBridge label="MARKET SHARE" href="#market-share" />
+      <SectionTitle title="Geo Breakdown" description="Tokens used by country." />
+      <Show
+        when={data().length > 0}
+        fallback={<EmptyState title="No geo data" description="No geo_stat rows matched this range." />}
+      >
+        <div data-component="geo-breakdown">
+          <div data-slot="geo-map-panel">
+            <GeoWorldMap
+              countryById={countryById()}
+              activeCountry={activeCountry()}
+              maxTokens={maxTokens()}
+              onActiveCountryChange={setActiveCountry}
+            />
+            <Show when={active()}>
+              {(country) => (
+                <div data-slot="geo-active-country">
+                  <span>#{String(country().rank).padStart(2, "0")}</span>
+                  <strong>{formatCountryName(country().country)}</strong>
+                  <p>
+                    <b>{formatGeoTokens(country().tokens)}</b>
+                    <em>{formatGeoShare(country().share)}</em>
+                  </p>
+                </div>
+              )}
+            </Show>
+          </div>
+          <GeoCountryList
+            data={topCountries()}
+            activeCountry={activeCountry()}
+            maxTokens={maxTokens()}
+            onActiveCountryChange={setActiveCountry}
+          />
+        </div>
+      </Show>
+    </section>
+  )
+}
+
+function GeoWorldMap(props: {
+  countryById: Map<string, CountryEntry>
+  activeCountry: string | undefined
+  maxTokens: number
+  onActiveCountryChange: (country: string | undefined) => void
+}) {
+  const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
+  const countryOpacity = (country: CountryEntry | undefined) => {
+    if (!country) return 0
+    const opacity = opacityScale()(country.tokens)
+    if (!props.activeCountry || props.activeCountry === country.country) return opacity
+    return Math.max(0.18, opacity * 0.36)
+  }
+
+  return (
+    <svg
+      data-component="geo-world-map"
+      viewBox={`0 0 ${geoMapWidth} ${geoMapHeight}`}
+      role="img"
+      aria-label="World map of token usage by country"
+    >
+      <title>Geo Breakdown map</title>
+      <g data-slot="geo-countries">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <path
+                d={country.path}
+                data-has-data={entry() ? "true" : undefined}
+                data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                aria-hidden="true"
+                onPointerEnter={() => {
+                  const item = entry()
+                  if (!item) return
+                  props.onActiveCountryChange(item.country)
+                }}
+                onClick={() => {
+                  const item = entry()
+                  if (!item) return
+                  props.onActiveCountryChange(item.country)
+                }}
+              />
+            )
+          }}
+        </For>
+      </g>
+      <path data-slot="geo-borders" d={worldBorderPath} aria-hidden="true" />
+    </svg>
+  )
+}
+
+function GeoCountryList(props: {
+  data: CountryEntry[]
+  activeCountry: string | undefined
+  maxTokens: number
+  onActiveCountryChange: (country: string | undefined) => void
+}) {
+  const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
+
+  return (
+    <ol data-component="geo-country-list">
+      <For each={props.data}>
+        {(country) => (
+          <li>
+            <button
+              type="button"
+              data-active={props.activeCountry === country.country ? "true" : undefined}
+              style={{ "--geo-row-opacity": String(opacityScale()(country.tokens)) } as JSX.CSSProperties}
+              aria-label={`${formatCountryName(country.country)} ${formatGeoTokens(country.tokens)} ${formatGeoShare(
+                country.share,
+              )}`}
+              onClick={() => props.onActiveCountryChange(country.country)}
+              onPointerEnter={() => props.onActiveCountryChange(country.country)}
+              onFocus={() => props.onActiveCountryChange(country.country)}
+            >
+              <span>{String(country.rank).padStart(2, "0")}</span>
+              <i />
+              <strong>{formatCountryName(country.country)}</strong>
+              <em>{formatGeoTokens(country.tokens)}</em>
+              <b>{formatGeoShare(country.share)}</b>
+            </button>
+          </li>
+        )}
+      </For>
+    </ol>
+  )
+}
+
+function countryNumericId(country: string) {
+  return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
+}
+
+function formatCountryName(country: string) {
+  const code = country.toUpperCase()
+  if (code === "ZZ") return "Unknown"
+  if (!countryNumericId(code)) return code
+  return countryDisplayNames.of(code) ?? code
+}
+
+function formatGeoTokens(value: number) {
+  if (value >= 1) return formatTrillions(value)
+  if (value >= 0.001) return `${Number((value * 1000).toFixed(value >= 0.01 ? 0 : 1))}B`
+  return `${Math.round(value * 1_000_000)}M`
+}
+
+function formatGeoShare(value: number) {
+  return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`
+}
+
 function getMarketSegmentColor(author: string, color: string, activeAuthor: string | undefined) {
   if (!activeAuthor) return color
   if (activeAuthor === author) return color
@@ -1280,7 +1506,7 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
 
   return (
     <section id="token-cost" data-section="token-cost">
-      <SectionBridge label="LEADERBOARD" href="#leaderboard" />
+      <SectionBridge label="SESSION COST" href="#session-cost" />
       <SectionTitle title="Token Cost" description="Price per 1M tokens." />
       <Show
         when={visible().length > 0}
@@ -1351,6 +1577,113 @@ function TokenCostChart(props: {
   )
 }
 
+function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
+  const [product, setProduct] = createSignal<TokenProduct>("Go")
+  const [activeIndex, setActiveIndex] = createSignal(2)
+  const data = createMemo(() => props.data[product()])
+  const visible = createMemo(() => data().slice(0, 16))
+  const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
+
+  return (
+    <section id="cache-ratio" data-section="cache-ratio">
+      <SectionBridge label="TOKEN COST" href="#token-cost" />
+      <SectionTitle title="Cache Ratio" description="Share of input tokens served from cache." />
+      <Show
+        when={visible().length > 0}
+        fallback={
+          <EmptyState title="No cache ratio data" description="No input-token model_stat rows matched this product." />
+        }
+      >
+        <CacheRatioChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
+      </Show>
+      <div data-slot="token-footer" hidden>
+        <FilterPills
+          items={tokenProducts}
+          selected={product()}
+          label="Product filter"
+          variant="product"
+          onSelect={setProduct}
+        />
+        <LiveIndicator />
+      </div>
+    </section>
+  )
+}
+
+function CacheRatioChart(props: {
+  data: CacheRatioEntry[]
+  activeIndex: number
+  onActiveIndexChange: (index: number) => void
+}) {
+  const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
+
+  return (
+    <div data-component="cache-ratio" data-variant="marker">
+      <div data-slot="cache-ratio-heading" aria-hidden="true">
+        <strong>Ratio</strong>
+        <span>Model</span>
+        <b>0-100%</b>
+      </div>
+      <div data-slot="cache-ratio-rows">
+        <For each={props.data}>
+          {(item, index) => (
+            <button
+              type="button"
+              data-component="cache-ratio-row"
+              data-active={props.activeIndex === index() ? "true" : undefined}
+              onClick={() => props.onActiveIndexChange(index())}
+              onPointerEnter={() => props.onActiveIndexChange(index())}
+            >
+              <strong>{formatRatio(item.ratio)}</strong>
+              <span>{item.model}</span>
+              <CacheRatioMarker ratio={item.ratio} active={props.activeIndex === index()} />
+            </button>
+          )}
+        </For>
+      </div>
+      <Show when={active()}>
+        {(item) => (
+          <div
+            data-component="token-tooltip"
+            data-variant="cache-ratio"
+            style={{ top: `${props.activeIndex * 36 + 28}px` }}
+          >
+            <p>
+              <span>Cache Ratio</span>
+              <strong>{formatRatio(item().ratio)}</strong>
+            </p>
+            <p>
+              <span>Cached</span>
+              <strong>{formatBillions(item().cached)}</strong>
+            </p>
+            <p>
+              <span>Uncached</span>
+              <strong>{formatBillions(item().uncached)}</strong>
+            </p>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+function CacheRatioMarker(props: { ratio: number; active: boolean }) {
+  const fill = createMemo(() => Math.min(100, Math.max(0, props.ratio)))
+  return (
+    <i
+      data-component="cache-ratio-marker"
+      data-active={props.active ? "true" : undefined}
+      style={{ "--cache-ratio-fill": `${fill()}%` } as JSX.CSSProperties}
+    >
+      <em />
+    </i>
+  )
+}
+
+function formatRatio(value: number) {
+  return `${value.toFixed(value > 0 && value < 10 ? 1 : 0)}%`
+}
+
 function formatDollars(value: number) {
   return `$${value.toFixed(2)}`
 }
@@ -1378,7 +1711,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
 
   return (
     <section id="session-cost" data-section="session-cost">
-      <SectionBridge label="TOKEN COST" href="#token-cost" />
+      <SectionBridge label="TOP MODELS" href="#top-models" />
       <SectionTitle title="Session Cost" description="Average cost per session." />
       <Show
         when={visible().length > 0}
@@ -1634,10 +1967,11 @@ function Footer(props: {
   const [subscribeOpen, setSubscribeOpen] = createSignal(false)
   const modelStats = [
     { href: "#top-models", label: "Top Models" },
-    { href: "#leaderboard", label: "Leaderboard" },
-    { href: "#token-cost", label: "Token Cost" },
     { href: "#session-cost", label: "Session Cost" },
+    { href: "#token-cost", label: "Token Cost" },
+    { href: "#cache-ratio", label: "Cache Ratio" },
     { href: "#market-share", label: "Market Share" },
+    { href: "#geo-breakdown", label: "Geo Breakdown" },
   ]
   const legal = [
     { href: "https://opencode.ai/legal/terms-of-service", label: "Terms of service" },
@@ -1653,7 +1987,7 @@ function Footer(props: {
 
   return (
     <footer data-component="footer">
-      <SectionBridge label="MARKET SHARE" href="#market-share" />
+      <SectionBridge label="GEO BREAKDOWN" href="#geo-breakdown" />
       <div data-slot="footer-grid">
         <a data-slot="footer-mark" href="https://opencode.ai" aria-label="OpenCode home">
           <OpenCodeMark />

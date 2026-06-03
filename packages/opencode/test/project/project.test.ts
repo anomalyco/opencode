@@ -8,7 +8,7 @@ import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { PermissionTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
@@ -17,9 +17,10 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -75,8 +76,9 @@ function projectLayerWithFailure(failArg: string) {
     Layer.provide(AppProcess.layer.pipe(Layer.provide(mockGitFailure(failArg)))),
     Layer.provide(mockGitFailure(failArg)),
     Layer.provide(ProjectV2.defaultLayer),
+    Layer.provide(ProjectCopy.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
@@ -87,8 +89,9 @@ function projectLayerWithRuntimeFlags(flags: Parameters<typeof RuntimeFlags.laye
   return Project.layer.pipe(
     Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(ProjectV2.defaultLayer),
+    Layer.provide(ProjectCopy.defaultLayer),
     Layer.provide(AppProcess.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),
@@ -219,16 +222,6 @@ describe("Project.fromDirectory", () => {
         .run()
         .pipe(Effect.orDie)
       yield* db
-        .insert(PermissionTable)
-        .values({
-          project_id: rootProject.id,
-          data: [{ permission: "edit", pattern: "*", action: "allow" }],
-          time_created: Date.now(),
-          time_updated: Date.now(),
-        })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
         .insert(WorkspaceTable)
         .values({ id: workspaceID, type: "local", name: "test", project_id: rootProject.id })
         .run()
@@ -245,14 +238,6 @@ describe("Project.fromDirectory", () => {
         (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
           ?.project_id,
       ).toBe(remoteID)
-      expect(
-        yield* db
-          .select()
-          .from(PermissionTable)
-          .where(eq(PermissionTable.project_id, remoteID))
-          .get()
-          .pipe(Effect.orDie),
-      ).toBeDefined()
       expect(
         (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
           ?.project_id,

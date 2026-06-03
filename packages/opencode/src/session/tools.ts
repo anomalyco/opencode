@@ -1,5 +1,5 @@
 import { Agent } from "@/agent/agent"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
@@ -29,7 +29,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   session: Session.Info
   processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
   bypassAgentCheck: boolean
-  messages: SessionLegacy.WithParts[]
+  messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
 }) {
   using _ = log.time("resolveTools")
@@ -153,7 +153,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           )
 
           const textParts: string[] = []
-          const attachments: Omit<SessionLegacy.FilePart, "id" | "sessionID" | "messageID">[] = []
+          const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
           for (const contentItem of result.content) {
             if (contentItem.type === "text") textParts.push(contentItem.text)
             else if (contentItem.type === "image") {

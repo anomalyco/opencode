@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
 import { Effect, FileSystem, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { NodeFileSystem } from "@effect/platform-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 
 import { Instruction } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
@@ -24,7 +24,7 @@ const configLayer = TestConfig.layer()
 const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
   Instruction.layer.pipe(
     Layer.provide(configLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(Global.layerWith(global)),
     Layer.provide(RuntimeFlags.layer(flags)),
@@ -63,7 +63,7 @@ const tmpWithFiles = (files: Record<string, string>) =>
     return dir
   })
 
-function loaded(filepath: string): SessionLegacy.WithParts[] {
+function loaded(filepath: string): SessionV1.WithParts[] {
   const sessionID = SessionID.make("session-loaded-1")
   const messageID = MessageID.make("msg_message-loaded-1")
 
