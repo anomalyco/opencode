@@ -162,10 +162,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const env = yield* dep.env()
       const apiKey = input.env.map((item) => env[item]).find(Boolean)
       return {
-        autoload: false,
+        autoload: true,
         discoverModels: async () => {
           if (!apiKey) return {}
-          const res = await fetch("https://api.gab.ai/v1/models", {
+          const res = await fetch("https://gab.ai/v1/models", {
             headers: { Authorization: `Bearer ${apiKey}` },
           })
           if (!res.ok) return {}
@@ -179,7 +179,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               family: m.owned_by ?? "",
               api: {
                 id: m.id,
-                url: "https://api.gab.ai/v1",
+                url: "https://gab.ai/v1",
                 npm: "@ai-sdk/openai-compatible",
               },
               status: "active",
