@@ -23,6 +23,7 @@ import { WorkspaceApi } from "./groups/workspace"
 import { V2Api } from "./groups/v2"
 // GlobalEventSchema snapshots the registry after event-producing groups register their variants.
 import { GlobalApi } from "./groups/global"
+import { GatewayApi } from "./groups/gateway"
 import { Authorization } from "./middleware/authorization"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
 
@@ -68,6 +69,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
 export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(RootHttpApi)
   .addHttpApi(EventApi)
+  .addHttpApi(GatewayApi)
   .addHttpApi(InstanceHttpApi)
   .addHttpApi(PtyConnectApi)
   .annotate(HttpApi.AdditionalSchemas, [EventSchema, Question.Replied, Question.Rejected])
