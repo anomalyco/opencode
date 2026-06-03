@@ -232,6 +232,26 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("removes HTTP fallback when its session is deleted", async () => {
+    let websocketAttempts = 0
+    await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      connectTimeout: 100,
+      streamRetries: 0,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    expect(await first.text()).toBe("http")
+    fetch.remove("session-1")
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toBe("http")
+    expect(websocketAttempts).toBe(2)
+    expect(server.httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
   test("prunes idle websocket connections after completed responses", async () => {
     let connections = 0
     let closed = 0

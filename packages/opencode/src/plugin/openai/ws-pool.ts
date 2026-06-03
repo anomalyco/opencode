@@ -202,7 +202,16 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     pool.clear()
   }
 
-  return Object.assign(websocketFetch, { close })
+  function remove(sessionID: string) {
+    const key = `${sessionID}:conversation`
+    const entry = pool.get(key)
+    if (!entry) return
+    log.debug("websocket pool remove", { key })
+    invalidate(entry)
+    pool.delete(key)
+  }
+
+  return Object.assign(websocketFetch, { close, remove })
 }
 
 function connectionLimitError(event: Record<string, unknown>) {
