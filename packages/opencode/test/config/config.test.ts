@@ -868,6 +868,103 @@ Nested command template`,
   }),
 )
 
+it.instance("loads commands from .agents/commands", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".agents", "commands", "external.md"),
+      `---
+description: External command
+---
+Hello from .agents/commands`,
+    )
+
+    const config = yield* Config.use.get()
+
+    expect(config.command?.["external"]).toEqual({
+      description: "External command",
+      template: "Hello from .agents/commands",
+    })
+  }),
+)
+
+it.instance("loads commands from .claude/commands", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".claude", "commands", "claude-cmd.md"),
+      `---
+description: Claude command
+---
+Hello from .claude/commands`,
+    )
+
+    const config = yield* Config.use.get()
+
+    expect(config.command?.["claude-cmd"]).toEqual({
+      description: "Claude command",
+      template: "Hello from .claude/commands",
+    })
+  }),
+)
+
+it.instance(".opencode/command overrides .agents/commands", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".agents", "commands", "override.md"),
+      `---
+description: External version
+---
+External template`,
+    )
+
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "command", "override.md"),
+      `---
+description: Local version
+---
+Local template`,
+    )
+
+    const config = yield* Config.use.get()
+
+    expect(config.command?.["override"]).toEqual({
+      description: "Local version",
+      template: "Local template",
+    })
+  }),
+)
+
+it.instance("loads commands from config.commands.paths", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const customDir = path.join(test.directory, "custom-commands")
+    yield* FSUtil.use.writeWithDirs(
+      path.join(customDir, "custom.md"),
+      `---
+description: Custom path command
+---
+Custom path template`,
+    )
+
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        commands: { paths: ["custom-commands"] },
+      }),
+    )
+
+    const config = yield* Config.use.get()
+
+    expect(config.command?.["custom"]).toEqual({
+      description: "Custom path command",
+      template: "Custom path template",
+    })
+  }),
+)
+
 it.instance("updates config and writes to file", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance

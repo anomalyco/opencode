@@ -458,6 +458,10 @@ export const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
+        const extraCommandPaths = result.commands?.paths ?? []
+        const external = yield* ConfigCommand.loadExternal(fs, ctx.directory, ctx.worktree, extraCommandPaths)
+        result.command = mergeDeep(external, result.command ?? {})
+
         if (process.env.OPENCODE_CONFIG_CONTENT) {
           const source = "OPENCODE_CONFIG_CONTENT"
           const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {

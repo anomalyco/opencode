@@ -16,6 +16,7 @@ import { ConfigProviderV1 } from "./provider"
 import { ConfigReferenceV1 } from "./reference"
 import { ConfigServerV1 } from "./server"
 import { ConfigSkillsV1 } from "./skills"
+import { ConfigCommandsV1 } from "./commands"
 
 export type Layout = ConfigLayoutV1.Layout
 
@@ -42,6 +43,7 @@ export const Info = Schema.Struct({
     description: "Command configuration, see https://opencode.ai/docs/commands",
   }),
   skills: Schema.optional(ConfigSkillsV1.Info).annotate({ description: "Additional skill folder paths" }),
+  commands: Schema.optional(ConfigCommandsV1.Info).annotate({ description: "Additional command folder paths" }),
   reference: Schema.optional(ConfigReferenceV1.Info).annotate({
     description: "Named git or local directory references that can be mentioned as @alias or @alias/path",
   }),
