@@ -110,7 +110,9 @@ describe("Config", () => {
           const config = yield* Config.Service
           const entries = yield* config.entries()
 
-          expect(entries).toEqual([new Config.Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) })])
+          expect(entries).toEqual([
+            new Config.Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }),
+          ])
         }).pipe(Effect.provide(testLayer(tmp.path))),
       ),
     ),
@@ -157,11 +159,11 @@ describe("Config", () => {
             yield* Effect.promise(() =>
               fs.writeFile(path.join(tmp.path, "opencode.jsonc"), JSON.stringify({ $schema: "changed" })),
             )
-            expect((yield* config.entries()).filter((entry) => entry.type === "document").map((document) => document.info.$schema)).toEqual([
-              "base",
-              "middle",
-              "last",
-            ])
+            expect(
+              (yield* config.entries())
+                .filter((entry) => entry.type === "document")
+                .map((document) => document.info.$schema),
+            ).toEqual(["base", "middle", "last"])
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),

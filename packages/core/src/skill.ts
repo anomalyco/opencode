@@ -108,13 +108,15 @@ export const layer = Layer.effect(
                 ? path.basename(filepath, ".md")
                 : undefined
           if (!name) continue
-          skills.push(new Info({
-            name,
-            description: frontmatter.description,
-            slash: frontmatter.slash,
-            location: AbsolutePath.make(filepath),
-            content: markdown.content,
-          }))
+          skills.push(
+            new Info({
+              name,
+              description: frontmatter.description,
+              slash: frontmatter.slash,
+              location: AbsolutePath.make(filepath),
+              content: markdown.content,
+            }),
+          )
         }
       }
       return skills

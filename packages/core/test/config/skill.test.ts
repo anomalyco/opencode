@@ -57,11 +57,13 @@ describe("ConfigSkillPlugin.Plugin", () => {
 
       expect(sources).toEqual([
         new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }),
-        new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join("/home/test", "shared-skills")) }),
+        new SkillV2.DirectorySource({
+          type: "directory",
+          path: AbsolutePath.make(path.join("/home/test", "shared-skills")),
+        }),
         new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make("/opt/skills") }),
         new SkillV2.UrlSource({ type: "url", url: "https://example.test/skills/" }),
       ])
     }),
   )
-
 })

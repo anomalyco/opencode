@@ -254,10 +254,7 @@ function testLayer(input: {
             ),
           ),
         ),
-        Layer.succeed(
-          Config.Service,
-          Config.Service.of({ entries: () => Effect.succeed(input.documents) }),
-        ),
+        Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(input.documents) })),
         Layer.succeed(RepositoryCache.Service, RepositoryCache.Service.of({ ensure: input.ensure })),
       ),
     ),

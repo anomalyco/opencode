@@ -171,7 +171,11 @@ export const layer = Layer.effect(
     const discovered = locationIsGlobal
       ? []
       : yield* fs
-          .up({ targets: [".opencode", ...names.toReversed()], start: location.directory, stop: location.project.directory })
+          .up({
+            targets: [".opencode", ...names.toReversed()],
+            start: location.directory,
+            stop: location.project.directory,
+          })
           .pipe(Effect.orDie)
     const directories = [
       globalDirectory,

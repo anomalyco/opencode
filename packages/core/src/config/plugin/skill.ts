@@ -18,7 +18,7 @@ export const Plugin = PluginV2.define({
     const skill = yield* SkillV2.Service
     const transform = yield* skill.transform()
     const entries = yield* config.entries()
-    const items = entries.flatMap((entry) => (entry.type === "document" ? entry.info.skills ?? [] : []))
+    const items = entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
 
     yield* transform((editor) => {
       for (const item of items) {

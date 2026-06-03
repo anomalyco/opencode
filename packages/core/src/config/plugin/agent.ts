@@ -19,7 +19,19 @@ const legacySources = [
 const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
 const decodeConfig = Schema.decodeUnknownOption(Config.Info)
-const agentKeys = new Set(["model", "variant", "request", "system", "description", "mode", "hidden", "color", "steps", "disabled", "permissions"])
+const agentKeys = new Set([
+  "model",
+  "variant",
+  "request",
+  "system",
+  "description",
+  "mode",
+  "hidden",
+  "color",
+  "steps",
+  "disabled",
+  "permissions",
+])
 
 export const Plugin = PluginV2.define({
   id: PluginV2.ID.make("config-agent"),
@@ -37,7 +49,9 @@ export const Plugin = PluginV2.define({
             Effect.catch(() => Effect.succeed(undefined)),
           ),
         ).pipe(
-          Effect.map((documents) => documents.filter((document): document is Config.Document => document !== undefined)),
+          Effect.map((documents) =>
+            documents.filter((document): document is Config.Document => document !== undefined),
+          ),
         )
       })
     }).pipe(Effect.map((documents) => documents.flat()))
@@ -88,7 +102,9 @@ function discover(fs: FSUtil.Interface, directory: string) {
   return Effect.forEach(legacySources, (source) =>
     fs
       .glob(source.pattern, { cwd: directory, absolute: true, dot: true, symlink: true })
-      .pipe(Effect.map((files) => files.toSorted().map((filepath) => ({ directory, filepath, primary: source.primary })))),
+      .pipe(
+        Effect.map((files) => files.toSorted().map((filepath) => ({ directory, filepath, primary: source.primary }))),
+      ),
   ).pipe(
     Effect.map((files) => files.flat()),
     Effect.catch(() => Effect.succeed([])),
