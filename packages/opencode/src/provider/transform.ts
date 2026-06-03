@@ -643,29 +643,6 @@ function wrapInSapModelParams(
   return Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, { modelParams: v }]))
 }
 
-function sapAnthropicReasoningParams(
-  adaptiveEfforts: string[] | null,
-  adaptiveOpus: boolean,
-): Record<string, Record<string, any>> {
-  if (adaptiveEfforts) {
-    // Bedrock adaptive splits `effort` out into `output_config` (vs Anthropic
-    // native which inlines it). Opus 4.7+ flipped `display` default to "omitted".
-    return Object.fromEntries(
-      adaptiveEfforts.map((effort) => [
-        effort,
-        {
-          thinking: { type: "adaptive", ...(adaptiveOpus ? { display: "summarized" } : {}) },
-          output_config: { effort },
-        },
-      ]),
-    )
-  }
-  return {
-    high: { thinking: { type: "enabled", budget_tokens: 16000 } },
-    max: { thinking: { type: "enabled", budget_tokens: 31999 } },
-  }
-}
-
 function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
   const id = model.api.id.toLowerCase()
   if (id.includes("2.5")) {
@@ -1020,7 +997,25 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
     case "@jerome-benoit/sap-ai-provider-v2": {
       if (model.api.id.includes("anthropic")) {
-        return wrapInSapModelParams(sapAnthropicReasoningParams(adaptiveEfforts, adaptiveOpus))
+        if (adaptiveEfforts) {
+          // Bedrock adaptive splits `effort` out into `output_config` (vs Anthropic
+          // native which inlines it). Opus 4.7+ flipped `display` default to "omitted".
+          return wrapInSapModelParams(
+            Object.fromEntries(
+              adaptiveEfforts.map((effort) => [
+                effort,
+                {
+                  thinking: { type: "adaptive", ...(adaptiveOpus ? { display: "summarized" } : {}) },
+                  output_config: { effort },
+                },
+              ]),
+            ),
+          )
+        }
+        return wrapInSapModelParams({
+          high: { thinking: { type: "enabled", budget_tokens: 16000 } },
+          max: { thinking: { type: "enabled", budget_tokens: 31999 } },
+        })
       }
       if (model.api.id.includes("gemini")) {
         return wrapInSapModelParams(googleThinkingVariants(model))
