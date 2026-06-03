@@ -29,7 +29,8 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { and, asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -126,6 +127,11 @@ const echo = Layer.effectDiscard(
   ),
 ).pipe(Layer.provide(registry))
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
+const timeoutConfig = {
+  inactivity: Duration.minutes(60),
+  absolute: Duration.minutes(60),
+}
+const timeout = Layer.succeed(SessionRunner.TimeoutService, SessionRunner.TimeoutService.of(timeoutConfig))
 const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -133,6 +139,7 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
+  Layer.provide(timeout),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -198,6 +205,8 @@ const setup = Effect.gen(function* () {
   toolExecutionsStarted = undefined
   activeToolExecutions = 0
   maxActiveToolExecutions = 0
+  timeoutConfig.inactivity = Duration.minutes(60)
+  timeoutConfig.absolute = Duration.minutes(60)
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
@@ -1530,6 +1539,109 @@ describe("SessionRunnerLLM", () => {
           content: [
             { type: "tool", id: "call-before-failure", state: { status: "completed", structured: { text: "settle" } } },
           ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("fails a silent provider stream after the inactivity timeout", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Timeout silent provider" }), resume: false })
+      timeoutConfig.inactivity = Duration.seconds(1)
+      timeoutConfig.absolute = Duration.minutes(1)
+      responseStream = Stream.never
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestClock.adjust(Duration.seconds(1))
+
+      expect(yield* Fiber.join(run).pipe(Effect.flip)).toMatchObject({
+        _tag: "SessionRunner.ProviderStreamTimeoutError",
+        kind: "inactivity",
+      })
+      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Timeout silent provider" },
+        { type: "assistant", error: { type: "unknown", message: "Provider stream inactivity timeout after 1s" } },
+      ])
+    }),
+  )
+
+  it.effect("flushes partial output before failing the absolute provider stream deadline", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Timeout partial provider" }), resume: false })
+      timeoutConfig.inactivity = Duration.seconds(2)
+      timeoutConfig.absolute = Duration.seconds(1)
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-before-timeout" }),
+          LLMEvent.textDelta({ id: "text-before-timeout", text: "Partial" }),
+        ]),
+        Stream.never,
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestClock.adjust(Duration.seconds(1))
+
+      expect(yield* Fiber.join(run).pipe(Effect.flip)).toMatchObject({
+        _tag: "SessionRunner.ProviderStreamTimeoutError",
+        kind: "absolute",
+      })
+      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Timeout partial provider" },
+        {
+          type: "assistant",
+          content: [{ type: "text", id: "text-before-timeout", text: "Partial" }],
+          error: { type: "unknown", message: "Provider stream absolute timeout after 1s" },
+        },
+      ])
+    }),
+  )
+
+  it.effect("durably fails blocked local tools when a provider stream times out", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Timeout blocked tool" }), resume: false })
+      executions.length = 0
+      timeoutConfig.inactivity = Duration.seconds(1)
+      timeoutConfig.absolute = Duration.minutes(1)
+      toolExecutionGate = yield* Deferred.make<void>()
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-before-timeout", name: "echo", input: { text: "blocked" } }),
+        ]),
+        Stream.never,
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      while (executions.length === 0) yield* Effect.yieldNow
+      yield* TestClock.adjust(Duration.seconds(1))
+      toolExecutionGate = undefined
+
+      expect(yield* Fiber.join(run).pipe(Effect.flip)).toMatchObject({
+        _tag: "SessionRunner.ProviderStreamTimeoutError",
+        kind: "inactivity",
+      })
+      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Timeout blocked tool" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-before-timeout",
+              state: { status: "error", error: { type: "unknown", message: "Tool execution interrupted" } },
+            },
+          ],
+          error: { type: "unknown", message: "Provider stream inactivity timeout after 1s" },
         },
       ])
     }),

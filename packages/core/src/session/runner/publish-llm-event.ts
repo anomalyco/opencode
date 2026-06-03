@@ -344,5 +344,5 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  return { publish, flush, failUnsettledLocalTools, hasProviderError: () => providerFailed }
+  return { publish, flush, failUnsettledLocalTools, hasProviderError: () => providerFailed, startAssistant }
 }

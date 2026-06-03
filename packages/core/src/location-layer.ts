@@ -74,7 +74,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(questions),
     )
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
-    const runner = SessionRunnerLLM.layer.pipe(Layer.provide(services), Layer.provide(model))
+    const runner = SessionRunnerLLM.defaultLayer.pipe(Layer.provide(services), Layer.provide(model))
     const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
     return Layer.mergeAll(
       services,

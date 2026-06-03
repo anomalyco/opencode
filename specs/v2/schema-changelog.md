@@ -126,13 +126,16 @@ Affected schema:
 
 - Core-owned typed tool registry contract.
 - Canonical tool output content and structured settlement schemas.
+- Canonical tagged tool file sources in `@opencode-ai/llm`.
 - Durable tool called, progress, success, and failure events and projected assistant-tool states.
 
 Change:
 
 - Validate model input against each registered tool's parameter schema.
 - Validate handler success against each tool's success schema before optional pure model-output lowering.
+- Generate optional tool-definition output JSON Schema from typed success schemas.
 - Persist canonical structured output and content for running, completed, and failed tools.
+- Represent tool files explicitly as inline data, remote URL, or managed file URI sources rather than one ambiguous URI string.
 
 Reason:
 
@@ -142,6 +145,7 @@ Compatibility:
 
 - These are additive experimental V2 runtime contracts.
 - Tool results are durably settled before provider continuation.
+- Legacy text, JSON, and inline-media results remain convertible; unresolved URL and file sources must be materialized or explicitly rejected before provider lowering.
 
 ### Managed Tool-Output Resources
 
@@ -191,6 +195,27 @@ Compatibility:
 - These are additive V2 tool contracts.
 - Hidden-file discovery is intentionally narrower than an unconditional ripgrep `--hidden` traversal.
 
+### Location Workspace Identity
+
+Affected schema:
+
+- `Location.Ref.workspaceID`.
+- V2 Location HTTP middleware routing.
+
+Change:
+
+- Brand optional Location workspace identity as `WorkspaceV2.ID` instead of an untyped string.
+- Preserve nested `location[workspace]` and workspace-header routing inputs while decoding them into the branded identity.
+
+Reason:
+
+- Location-scoped services and embedded routing need one typed workspace identity boundary.
+
+Compatibility:
+
+- Existing workspace strings remain accepted when they satisfy the workspace ID schema.
+- Generated OpenAPI reflects the workspace prefix constraint.
+
 ### Structured Mutation Authority And File Leaves
 
 Affected schema:
@@ -227,6 +252,7 @@ Change:
 - Add Location-scoped pending permission requests with `once`, `always`, and `reject` replies.
 - Attach optional originating tool message and call IDs.
 - Preserve authored ordered rules and saved approvals as separate inputs to evaluation.
+- Establish action and resource conventions for `read`, `glob`, `grep`, `edit`, `external_directory`, `bash`, `todowrite`, and `webfetch` approvals.
 
 Reason:
 
@@ -236,27 +262,7 @@ Compatibility:
 
 - These are additive experimental V2 contracts.
 - V2 `bash` now requires an explicit exact-action authored `ask` or `allow` rule; catch-all and remembered approvals do not opt into shell authority.
-
-### Prompt Attachment And Reference Shapes
-
-Affected schema:
-
-- `Prompt.FileAttachment`, `Prompt.AgentAttachment`, and `Prompt.ReferenceAttachment`.
-
-Change:
-
-- Represent prompt files with URI, MIME, optional display metadata, and optional source range.
-- Represent named agent attachments and named local, Git, or invalid project references explicitly.
-
-Reason:
-
-- Durable prompt replay must preserve structured attachment intent rather than flatten everything into text.
-- Named project references need read-oriented identity before provider materialization is implemented.
-
-Compatibility:
-
-- These are additive experimental V2 prompt fields.
-- Provider lowering still needs a separate materialization or explicit-rejection slice for unresolved URL and file sources.
+- Policy authors should account for canonical resource forms; originating tool source metadata remains optional until every registry call carries its durable assistant owner.
 
 ### Initial Core V2 Built-In Tool Schemas
 
@@ -277,6 +283,28 @@ Compatibility:
 
 - These are additive V2 built-ins.
 - Richer launch-follow-up leaves such as `apply_patch`, skill loading, task dispatch, and LSP remain separate slices.
+
+### Bash Explicit Opt-In And Advisory Warnings
+
+Affected schema:
+
+- V2 bash enablement policy.
+- Optional `warnings` in the `bash` tool success payload.
+
+Change:
+
+- Deny bash unless configured agent rules contain an exact-action matching `bash` rule with `ask` or `allow`.
+- Prevent catch-all authored allows and remembered approvals from opting into shell authority.
+- Return advisory warning strings when best-effort command-argument scanning detects external absolute paths; keep structured external `workdir` approval enforced.
+
+Reason:
+
+- A shell subprocess has host-user filesystem, process, and network authority. Token scanning cannot honestly provide containment.
+
+Compatibility:
+
+- Agents relying only on catch-all allows no longer execute bash.
+- Consumers rendering bash success should tolerate optional warning strings.
 
 ### V2 Session HTTP And Generated SDK Contracts
 
@@ -371,6 +399,30 @@ Compatibility:
 - Added durable-event fields are optional so previously recorded experimental events remain decodable.
 - Projected settled tool state gains model-facing result data when available.
 
+## 2026-06-03: Projected Assistant Ownership And Full-Value Parts
+
+Affected schema:
+
+- Projected assistant text parts.
+- Durable text and tool lifecycle boundaries.
+- Projected assistant tool ownership.
+
+Change:
+
+- Preserve stable IDs on projected assistant text parts.
+- Route durable tool projection updates through explicit owning `assistantMessageID` values rather than provider-local call IDs alone.
+- Replay full-value text and tool-input end checkpoints while keeping fragment deltas ephemeral.
+
+Reason:
+
+- Provider-local tool call IDs may repeat across turns.
+- Durable projection reconstruction must not depend on ephemeral fragments that disappear after reconnect.
+
+Compatibility:
+
+- Earlier experimental projected assistant rows without stable text IDs are not assumed replay-compatible.
+- Current V2 histories reconstruct from durable full-value checkpoints.
+
 ## 2026-06-03: Location-Scoped V2 Questions
 
 Affected schema:
@@ -457,3 +509,26 @@ Compatibility:
 
 - This is an additive internal error contract.
 - No database, HTTP, or generated SDK schema changes are required.
+
+## 2026-06-03: Provider Stream Runtime Deadlines
+
+Affected schema:
+
+- No database, durable-event, HTTP, or generated SDK schema changes.
+- New internal `SessionRunner.ProviderStreamTimeoutError` tagged error.
+
+Change:
+
+- Add a 60-second per-event inactivity timeout and a 10-minute absolute provider-stream deadline.
+- Flush durable full-value fragment checkpoints before surfacing either timeout.
+- Durably fail recorded unsettled local tools, publish the existing failed assistant-step payload, and settle the outer turn as `failed`.
+
+Reason:
+
+- A silent provider or a provider that dribbles fragments forever must not hold one Session drain chain indefinitely.
+- Existing durable failure boundaries already express timeout settlement without changing synchronized event payloads.
+
+Compatibility:
+
+- No migration or generated artifact regeneration is required.
+- Embedded runner callers may now receive `SessionRunner.ProviderStreamTimeoutError` when a provider exceeds runtime policy.

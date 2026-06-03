@@ -1,12 +1,12 @@
 import { LLM, LLMClient, LLMEvent } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Duration, Effect, FiberSet, Layer, Semaphore, Stream } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
 import { SessionEvent } from "../event"
 import { SessionStore } from "../store"
-import { Service, StepLimitExceededError } from "./index"
+import { ProviderStreamTimeoutError, Service, StepLimitExceededError, TimeoutService, timeoutDefaultLayer } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { ToolRegistry } from "../../tool-registry"
@@ -85,6 +85,7 @@ export const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const tools = yield* ToolRegistry.Service
     const models = yield* SessionRunnerModel.Service
+    const timeouts = yield* TimeoutService
     const store = yield* SessionStore.Service
     const db = (yield* Database.Service).db
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -129,30 +130,59 @@ export const layer = Layer.effect(
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent) => withPublication(publisher.publish(event))
+      const timeout = (kind: "inactivity" | "absolute", duration: Duration.Duration) =>
+        new ProviderStreamTimeoutError({ kind, duration: Duration.format(duration) })
+      const providerStream = llm.stream(request).pipe(
+        Stream.timeoutOrElse({
+          duration: timeouts.inactivity,
+          orElse: () => Stream.fail(timeout("inactivity", timeouts.inactivity)),
+        }),
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            yield* publish(event)
+            if (event.type !== "tool-call" || event.providerExecuted) return
+            needsContinuation = true
+            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
+              Effect.catchCause((cause) =>
+                Effect.succeed({ result: { type: "error" as const, value: String(Cause.squash(cause)) }, output: undefined }),
+              ),
+              Effect.flatMap((settlement) =>
+                publish(LLMEvent.toolResult({ id: event.id, name: event.name, result: settlement.result, output: settlement.output })),
+              ),
+              FiberSet.run(toolFibers),
+            )
+          }),
+        ),
+        Effect.timeoutOrElse({
+          duration: timeouts.absolute,
+          orElse: () => timeout("absolute", timeouts.absolute),
+        }),
+        Effect.ensuring(withPublication(publisher.flush())),
+      )
 
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const stream = yield* restore(
-            llm.stream(request).pipe(
-              Stream.runForEach((event) =>
-                Effect.gen(function* () {
-                  yield* publish(event)
-                  if (event.type !== "tool-call" || event.providerExecuted) return
-                  needsContinuation = true
-                  yield* tools.settle({ sessionID: session.id, call: event }).pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.succeed({ result: { type: "error" as const, value: String(Cause.squash(cause)) }, output: undefined }),
-                    ),
-                    Effect.flatMap((settlement) =>
-                      publish(LLMEvent.toolResult({ id: event.id, name: event.name, result: settlement.result, output: settlement.output })),
-                    ),
-                    FiberSet.run(toolFibers),
-                  )
-                }),
-              ),
-              Effect.ensuring(withPublication(publisher.flush())),
-            ),
-          ).pipe(Effect.exit)
+          const stream = yield* restore(providerStream).pipe(Effect.exit)
+          let timeoutFailure: ProviderStreamTimeoutError | undefined
+          if (stream._tag === "Failure") {
+            for (const reason of stream.cause.reasons) {
+              if (!Cause.isFailReason(reason) || !(reason.error instanceof ProviderStreamTimeoutError)) continue
+              timeoutFailure = reason.error
+              break
+            }
+          }
+          if (timeoutFailure) {
+            yield* FiberSet.clear(toolFibers)
+            yield* withPublication(publisher.failUnsettledLocalTools("Tool execution interrupted"))
+            yield* withPublication(
+              events.publish(SessionEvent.Step.Failed, {
+                sessionID: session.id,
+                timestamp: yield* DateTime.now,
+                assistantMessageID: yield* publisher.startAssistant(),
+                error: { type: "unknown", message: timeoutFailure.message },
+              }),
+            )
+          }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
           const attempt = stream._tag === "Failure" ? stream : settled
@@ -219,3 +249,5 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+export const defaultLayer = layer.pipe(Layer.provide(timeoutDefaultLayer))

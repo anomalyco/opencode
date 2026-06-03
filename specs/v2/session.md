@@ -35,6 +35,8 @@ SessionExecution.resume(sessionID)
 
 The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started tool fiber after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant-message ID because provider-local call IDs may repeat across turns.
 
+Each provider turn has two runtime deadlines: a 60-second inactivity timeout reset by each provider event and a 10-minute absolute deadline for the full stream. Either deadline flushes complete durable text, reasoning, and tool-input checkpoints, durably fails any recorded unsettled local tools, publishes the existing failed assistant-step shape, settles the outer turn as `failed`, and releases the local drain chain. These deadlines are runtime policy rather than new durable-event fields.
+
 Inbox delivery is explicit:
 
 - `steer` inputs promote at the next safe provider-turn boundary, including continuation inside the current drain.
