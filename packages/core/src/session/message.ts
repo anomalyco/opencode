@@ -77,7 +77,6 @@ export class ToolStateRunning extends Schema.Class<ToolStateRunning>("Session.Me
 export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Session.Message.ToolState.Completed")({
   status: Schema.Literal("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
   content: ToolOutput.Content.pipe(Schema.Array),
   structured: ToolOutput.Structured,
 }) {}

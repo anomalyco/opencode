@@ -3817,7 +3817,6 @@ export type SessionMessageToolStateCompleted = {
   input: {
     [key: string]: unknown
   }
-  attachments?: Array<PromptFileAttachment>
   content: Array<ToolTextContent | ToolFileContent>
   structured: {
     [key: string]: unknown

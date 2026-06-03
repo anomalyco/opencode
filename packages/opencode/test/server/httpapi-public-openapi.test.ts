@@ -68,7 +68,11 @@ function resolveSchema(spec: OpenApiSpec, value: OpenApiSchema | undefined): Ope
   return schema(spec, componentName(value.$ref))
 }
 
-function collectTypeDiscriminators(spec: OpenApiSpec, value: OpenApiSchema | undefined, seen = new Set<string>()): string[] {
+function collectTypeDiscriminators(
+  spec: OpenApiSpec,
+  value: OpenApiSchema | undefined,
+  seen = new Set<string>(),
+): string[] {
   const current = resolveSchema(spec, value)
   if (!current) return []
   if (current.$ref) {
@@ -82,6 +86,18 @@ function collectTypeDiscriminators(spec: OpenApiSpec, value: OpenApiSchema | und
     ...(current.oneOf ?? []).flatMap((item) => collectTypeDiscriminators(spec, item, seen)),
     ...(current.anyOf ?? []).flatMap((item) => collectTypeDiscriminators(spec, item, seen)),
     ...(current.allOf ?? []).flatMap((item) => collectTypeDiscriminators(spec, item, seen)),
+  ].filter((item): item is string => item !== undefined)
+}
+
+function collectRefs(value: OpenApiSchema | undefined): string[] {
+  if (!value) return []
+  return [
+    value.$ref,
+    ...Object.values(value.properties ?? {}).flatMap(collectRefs),
+    ...(value.oneOf ?? []).flatMap(collectRefs),
+    ...(value.anyOf ?? []).flatMap(collectRefs),
+    ...(value.allOf ?? []).flatMap(collectRefs),
+    ...collectRefs(value.items),
   ].filter((item): item is string => item !== undefined)
 }
 
@@ -211,6 +227,15 @@ describe("PublicApi OpenAPI v2 errors", () => {
     expect(new Set(collectTypeDiscriminators(spec, assistant.properties?.error))).toEqual(
       new Set(["aborted", "api", "auth", "context_overflow", "output_length", "structured_output", "unknown"]),
     )
+  })
+
+  test("documents completed tool file content without state attachments", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const completed = schema(spec, "SessionMessageToolStateCompleted")
+
+    expect(completed.properties?.attachments).toBeUndefined()
+    expect(completed.required ?? []).not.toContain("attachments")
+    expect(new Set(collectRefs(completed.properties?.content))).toContain("#/components/schemas/ToolFileContent")
   })
 
   test("documents session busy errors", () => {

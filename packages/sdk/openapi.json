@@ -20918,12 +20918,6 @@
           "input": {
             "type": "object"
           },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromptFileAttachment"
-            }
-          },
           "content": {
             "type": "array",
             "items": {

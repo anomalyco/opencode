@@ -2,11 +2,14 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventTable } from "@opencode-ai/core/event/sql"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { expect, test } from "bun:test"
 import { tool } from "ai"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Schema } from "effect"
+import { eq } from "drizzle-orm"
 import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
@@ -811,6 +814,17 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
                 title: "Weather lookup",
                 output: `result:${input.query}`,
                 metadata: { source: "test" },
+                attachments: [
+                  {
+                    id: PartID.ascending("prt_processor_attachment"),
+                    sessionID: chat.id,
+                    messageID: msg.id,
+                    type: "file" as const,
+                    mime: "text/plain",
+                    filename: "weather.txt",
+                    url: "data:text/plain;base64,cmFpbg==",
+                  },
+                ],
               }),
             }),
           },
@@ -839,8 +853,37 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
         expect(call.state.output).toBe("result:weather")
         expect(call.state.title).toBe("Weather lookup")
         expect(call.state.metadata).toEqual({ source: "test" })
+        expect(call.state.attachments).toEqual([
+          {
+            id: PartID.ascending("prt_processor_attachment"),
+            sessionID: chat.id,
+            messageID: msg.id,
+            type: "file",
+            mime: "text/plain",
+            filename: "weather.txt",
+            url: "data:text/plain;base64,cmFpbg==",
+          },
+        ])
         expect(call.state.time.start).toBeDefined()
         expect(call.state.time.end).toBeDefined()
+
+        const rows = yield* database.db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, chat.id))
+          .all()
+          .pipe(Effect.orDie)
+        const v2Assistant = rows
+          .map((row) => Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }))
+          .find((message): message is SessionMessage.Assistant => message.type === "assistant")
+        const v2Tool = v2Assistant?.content.find((item): item is SessionMessage.AssistantTool => item.type === "tool")
+        expect(v2Tool?.state.status).toBe("completed")
+        if (v2Tool?.state.status !== "completed") return
+        expect(v2Tool.state.content).toEqual([
+          { type: "text", text: "result:weather" },
+          { type: "file", mime: "text/plain", name: "weather.txt", uri: "data:text/plain;base64,cmFpbg==" },
+        ])
+        expect(v2Tool.state).not.toHaveProperty("attachments")
       }),
     { config: (url) => providerCfg(url) },
   ),

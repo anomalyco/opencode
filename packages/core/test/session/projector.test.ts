@@ -80,11 +80,7 @@ function seedSession() {
 function readMessages() {
   return Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const rows = yield* db
-      .select()
-      .from(SessionMessageTable)
-      .all()
-      .pipe(Effect.orDie)
+    const rows = yield* db.select().from(SessionMessageTable).all().pipe(Effect.orDie)
     return rows
       .sort((left, right) => left.time_created - right.time_created)
       .map((row) => Schema.decodeUnknownSync(SessionMessage.Message)({ ...row.data, id: row.id, type: row.type }))
@@ -151,7 +147,15 @@ function publishTranscript() {
         timestamp: at(70),
         callID: "call_1",
         structured: {},
-        content: [new ToolOutput.TextContent({ type: "text", text: "/tmp" })],
+        content: [
+          new ToolOutput.TextContent({ type: "text", text: "/tmp" }),
+          new ToolOutput.FileContent({
+            type: "file",
+            uri: "data:image/png;base64,AAAA",
+            mime: "image/png",
+            name: "image.png",
+          }),
+        ],
         provider: { executed: true, metadata: { status: "done" } },
       },
       { id: eventID("tool_success") },
@@ -271,6 +275,16 @@ describe("SessionProjector", () => {
           { type: "text", id: eventID("text_started"), text: "hello assistant" },
           { type: "tool", id: eventID("tool_started"), callID: "call_1", state: { status: "completed" } },
         ])
+        const tool = assistant.content[1]
+        expect(tool?.type).toBe("tool")
+        if (tool?.type !== "tool") return
+        expect(tool.state.status).toBe("completed")
+        if (tool.state.status !== "completed") return
+        expect(tool.state.content).toEqual([
+          { type: "text", text: "/tmp" },
+          { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "image.png" },
+        ])
+        expect(tool.state).not.toHaveProperty("attachments")
       }),
     )
   })
