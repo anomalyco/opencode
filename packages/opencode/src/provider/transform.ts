@@ -620,8 +620,7 @@ function wrapInSapModelParams(
 }
 
 function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
-  const id = model.api.id.toLowerCase()
-  if (id.includes("2.5")) {
+  if (model.api.id.includes("2.5")) {
     return {
       high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
       max: {
