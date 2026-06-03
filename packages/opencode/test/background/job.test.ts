@@ -78,6 +78,38 @@ describe("background.job", () => {
     }),
   )
 
+  it.instance("waits for extensions before completing a running job", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const first = yield* Deferred.make<void>()
+      const second = yield* Deferred.make<void>()
+      const job = yield* jobs.start({
+        type: "test",
+        run: Deferred.await(first).pipe(Effect.as("first")),
+      })
+
+      expect(yield* jobs.extend({ id: job.id, run: Deferred.await(second).pipe(Effect.as("second")) })).toBe(true)
+      yield* Deferred.succeed(first, undefined)
+      expect((yield* jobs.get(job.id))?.status).toBe("running")
+
+      yield* Deferred.succeed(second, undefined)
+      const done = yield* jobs.wait({ id: job.id })
+      expect(done.info?.status).toBe("completed")
+      expect(done.info?.output).toBe("second")
+    }),
+  )
+
+  it.instance("rejects extensions after a job completes", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const job = yield* jobs.start({ type: "test", run: Effect.succeed("done") })
+      yield* jobs.wait({ id: job.id })
+
+      expect(yield* jobs.extend({ id: job.id, run: Effect.succeed("late") })).toBe(false)
+      expect((yield* jobs.get(job.id))?.output).toBe("done")
+    }),
+  )
+
   it.instance("records failed jobs", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
