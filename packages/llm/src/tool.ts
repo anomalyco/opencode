@@ -28,7 +28,7 @@ export type ToolExecute<Parameters extends ToolSchema<any>, Success extends Tool
  * the stream.
  *
  * Internally each tool also carries memoized codecs and a precomputed
- * `ToolDefinition` so the runtime doesn't rebuild them per invocation.
+ * `ToolDefinition` so callers do not rebuild them per invocation.
  */
 export interface Tool<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> {
   readonly description: string
@@ -97,8 +97,8 @@ type DynamicToolConfig = {
  *    })
  *    ```
  *
- * In both modes the produced tool flows through `toDefinitions(...)` and the
- * runtime identically.
+ * In both modes the produced tool flows through `toDefinitions(...)`
+ * identically.
  */
 export function make<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
   readonly description: string
@@ -160,8 +160,7 @@ export type Tools = Record<string, AnyTool>
 
 /**
  * Convert a tools record into the `ToolDefinition[]` shape that
- * `LLMRequest.tools` expects. The runtime calls this internally; consumers
- * that build `LLMRequest` themselves can use it too.
+ * `LLMRequest.tools` expects.
  *
  * Tool names come from the record keys, so the per-tool cached
  * `_definition` is rebuilt with the correct name here. The JSON Schema body

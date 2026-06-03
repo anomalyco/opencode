@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { LLM } from "../src"
+import { LLM, LLMRequest, ToolRuntime, toDefinitions } from "../src"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { Auth } from "../src/route"
 import { Tool } from "../src/tool"
@@ -22,9 +22,9 @@ const schemaOnly = Tool.make({
   success: Schema.Struct({ forecast: Schema.String }),
 })
 
-LLM.stream({ request, tools: { executable } })
-LLM.generate({ request, tools: { executable }, stopWhen: LLM.stepCountIs(2) })
-LLM.stream({ request, tools: { schemaOnly }, toolExecution: "none" })
+LLM.stream(request)
+LLM.generate(LLMRequest.update(request, { tools: toDefinitions({ schemaOnly }) }))
+ToolRuntime.dispatch({ executable }, { type: "tool-call", id: "call_1", name: "executable", input: { city: "Paris" } })
 
-// @ts-expect-error Handler-less tools can only be passed with toolExecution: "none".
+// @ts-expect-error High-level tool orchestration overloads are intentionally not supported.
 LLM.stream({ request, tools: { schemaOnly } })

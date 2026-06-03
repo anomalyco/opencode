@@ -62,9 +62,8 @@ import { SessionRunnerModel } from "./model"
  *   - [ ] Coalesce streamed deltas and add covering projected-history indexes.
  *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
  *
- * Use `llm.stream(request)` for each provider turn. Do not delegate orchestration to the
- * `llm.stream({ request, tools, stopWhen })` convenience overload: that executes tools and
- * loops in memory, skipping the durable Session boundaries needed for recovery and routing.
+ * Use `llm.stream(request)` for each provider turn. Keep tool execution and continuation here
+ * so every Session boundary remains durable for recovery and routing.
  *
  * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
  * provider turn. Registry definitions are advertised, local tool calls are settled durably, and a

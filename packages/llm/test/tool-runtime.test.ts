@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice } from "../src"
+import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice, toDefinitions } from "../src"
 import { Auth, LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
@@ -156,7 +156,7 @@ describe("LLMClient tools", () => {
       })
 
       const events = Array.from(
-        yield* LLMClient.stream({ request: baseRequest, tools: { screenshot } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { screenshot }, maxSteps: 1 }).pipe(
           Stream.runCollect,
           Effect.provide(
             scriptedResponses([sseEvents(toolCallChunk("call_1", "screenshot", "{}"), finishChunk("tool_calls"))]),
@@ -179,6 +179,30 @@ describe("LLMClient tools", () => {
     }),
   )
 
+  it.effect("does not mistake dynamic tool output fields for dispatcher state", () =>
+    Effect.gen(function* () {
+      const eventful = Tool.make({
+        description: "Return an events field.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () => Effect.succeed({ type: "json" as const, value: { ok: true }, events: ["caller-owned"] }),
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { eventful },
+        LLMEvent.toolCall({ id: "call_1", name: "eventful", input: {} }),
+      )
+
+      expect(dispatched.result).toEqual({ type: "json", value: { ok: true }, events: ["caller-owned"] })
+      expect(dispatched.events).toEqual([
+        LLMEvent.toolResult({
+          id: "call_1",
+          name: "eventful",
+          result: { type: "json", value: { ok: true }, events: ["caller-owned"] },
+        }),
+      ])
+    }),
+  )
+
   it.effect("executes tool calls for one step without looping by default", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
@@ -187,7 +211,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* LLMClient.stream({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather }, maxSteps: 1 }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -234,11 +258,9 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* LLMClient.stream({
-          request: baseRequest,
-          tools: { get_weather: schema_only_weather },
-          toolExecution: "none",
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* LLMClient.stream(
+          LLMRequest.update(baseRequest, { tools: toDefinitions({ get_weather: schema_only_weather }) }),
+        ).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
       expect(events.find(LLMEvent.is.toolCall)).toMatchObject({ type: "tool-call", id: "call_1" })
@@ -497,74 +519,6 @@ describe("LLMClient tools", () => {
       expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
       expect(events.filter(LLMEvent.is.stepStart).map((event) => event.index)).toEqual([0, 1])
       expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.index)).toEqual([0, 1])
-    }),
-  )
-
-  it.effect("emits one final finish with aggregate usage", () =>
-    Effect.gen(function* () {
-      let calls = 0
-      const events = Array.from(
-        yield* ToolRuntime.stream({
-          request: baseRequest,
-          tools: { get_weather },
-          stopWhen: ToolRuntime.stepCountIs(2),
-          stream: () =>
-            Stream.fromIterable<LLMEvent>(
-              calls++ === 0
-                ? [
-                    LLMEvent.stepStart({ index: 0 }),
-                    LLMEvent.toolCall({ id: "call_1", name: "get_weather", input: { city: "Paris" } }),
-                    LLMEvent.stepFinish({
-                      index: 0,
-                      reason: "tool-calls",
-                      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
-                    }),
-                    LLMEvent.finish({
-                      reason: "tool-calls",
-                      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
-                    }),
-                  ]
-                : [
-                    LLMEvent.stepStart({ index: 0 }),
-                    LLMEvent.textDelta({ id: "text_1", text: "Done." }),
-                    LLMEvent.stepFinish({
-                      index: 0,
-                      reason: "stop",
-                      usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 },
-                    }),
-                    LLMEvent.finish({ reason: "stop", usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 } }),
-                  ],
-            ),
-        }).pipe(Stream.runCollect),
-      )
-
-      expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.index)).toEqual([0, 1])
-      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
-      expect(events.find(LLMEvent.is.finish)?.usage).toMatchObject({
-        inputTokens: 5,
-        outputTokens: 7,
-        totalTokens: 12,
-      })
-    }),
-  )
-
-  it.effect("stops follow-up when stopWhen returns true after the first step", () =>
-    Effect.gen(function* () {
-      const layer = scriptedResponses([
-        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
-        sseEvents(deltaChunk({ role: "assistant", content: "Should not run." }), finishChunk("stop")),
-      ])
-
-      const events = Array.from(
-        yield* TestToolRuntime.runTools({
-          request: baseRequest,
-          tools: { get_weather },
-          stopWhen: (state) => state.step >= 0,
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
-      )
-
-      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
-      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
     }),
   )
 

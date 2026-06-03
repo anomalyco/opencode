@@ -9,6 +9,8 @@ export type {
 } from "./route/client"
 export * from "./schema"
 export { Tool, ToolFailure, toDefinitions } from "./tool"
+export { ToolRuntime } from "./tool-runtime"
+export type { DispatchResult as ToolDispatchResult } from "./tool-runtime"
 export type {
   AnyExecutableTool,
   AnyTool,
@@ -20,13 +22,6 @@ export type {
   Tools,
   ToolSchema,
 } from "./tool"
-export type {
-  RunOptions as ToolRunOptions,
-  RuntimeState as ToolRuntimeState,
-  StopCondition as ToolStopCondition,
-  ToolExecution,
-} from "./tool-runtime"
-
 export * as LLM from "./llm"
 export type {
   Definition as ProviderDefinition,
