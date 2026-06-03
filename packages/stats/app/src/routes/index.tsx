@@ -11,7 +11,6 @@ import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/I
 import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
 import ibmPlexMonoBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Bold-Latin1.woff2?url"
 import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
-import statsUnfurlRankings from "../asset/unfurl-rankings.png?url"
 import {
   getStatsHomeData,
   type CacheRatioEntry,
@@ -42,7 +41,8 @@ const rangeLabels: Record<UsageRange, string> = {
 }
 const statsHomeTitle = "OpenCode Stats"
 const statsHomeDescription = "OpenCode usage, market share, token cost, and session cost stats."
-const statsHomeFallbackUrl = "https://stats.opencode.ai"
+const statsHomeFallbackUrl = "https://opencode.ai/stats/"
+const statsUnfurlPath = "banner.png"
 const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
 const headerLinks = [
   { href: "#top-models", label: "Top Models" },
@@ -147,11 +147,11 @@ const getGitHubStars = query(async () => {
 export default function StatsHome() {
   const event = getRequestEvent()
   event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
-  const statsHomeUrl = new URL(
+  const statsHomeUrl = getStatsHomeUrl(
     import.meta.env.BASE_URL,
     event?.request.url ?? (typeof window === "undefined" ? statsHomeFallbackUrl : window.location.href),
-  ).toString()
-  const statsUnfurlUrl = new URL(statsUnfurlRankings, statsHomeUrl).toString()
+  )
+  const statsUnfurlUrl = new URL(statsUnfurlPath, statsHomeUrl).toString()
   const data = createAsync(() => getData())
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
@@ -215,6 +215,13 @@ export default function StatsHome() {
       </div>
     </main>
   )
+}
+
+function getStatsHomeUrl(base: string, requestUrl: string) {
+  const url = new URL(base, requestUrl)
+  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/stats/"
+  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/stats/"
+  return url.toString()
 }
 
 function isThemePreference(value: string | null): value is ThemePreference {
