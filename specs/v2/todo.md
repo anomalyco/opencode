@@ -101,6 +101,24 @@ Remaining slices:
 - keep replay-owner claims distinct from future clustered Session execution
   ownership and stale-runtime fencing
 
+## Deferred hardening cleanup
+
+Keep these visible, but do not block functionality slices on them unless a concrete
+failure appears during canary work:
+
+- serialize database migration claiming across processes; current migration
+  application is protected only by an in-process semaphore, so two processes
+  starting against one SQLite database can still race
+- stream-cap websearch body collection before parsing
+- add ripgrep execution timeout and bounded line framing
+- validate managed tool-output payload size during reads and cleanup
+- materialize or consistently reject unresolved URL and file attachment sources
+- decide whether to preserve deprecated `@opencode-ai/llm` orchestration exports
+- preserve or alias renamed filesystem SDK generated type names if compatibility
+  consumers require them
+- revisit syscall-level mutation confinement for hostile external processes
+  (`openat`, `O_NOFOLLOW`, and descriptor-relative mutation where supported)
+
 ## Everything is hotreloadable - ???
 
 Instead of needing to tear down things when something changes every service should emit granular events so services can react to them and reconfigure themselves. Allows frontend to receive these too, eg model.added. also prevents startup from blocking
