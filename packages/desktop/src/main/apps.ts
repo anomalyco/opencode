@@ -58,7 +58,7 @@ async function checkMacosApp(appName: string) {
 async function resolveWindowsAppPath(appName: string): Promise<string | null> {
   let output: string
   try {
-    output = execFilePromise("where", [appName]).toString()
+    output = await execFilePromise("where", [appName]).then((r) => r.stdout.toString())
   } catch {
     return null
   }

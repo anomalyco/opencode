@@ -7,10 +7,10 @@ import { TextAttributes } from "@opentui/core"
 import { Schema } from "effect"
 import { TuiEvent } from "../event"
 
-type ToastInput = Schema.Codec.Encoded<typeof TuiEvent.ToastShow.properties>
-export type ToastOptions = Schema.Schema.Type<typeof TuiEvent.ToastShow.properties>
+type ToastInput = Schema.Codec.Encoded<typeof TuiEvent.ToastShow.data>
+export type ToastOptions = Schema.Schema.Type<typeof TuiEvent.ToastShow.data>
 
-const decodeToastOptions = Schema.decodeUnknownSync(TuiEvent.ToastShow.properties)
+const decodeToastOptions = Schema.decodeUnknownSync(TuiEvent.ToastShow.data)
 
 export function Toast() {
   const toast = useToast()

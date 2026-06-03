@@ -1,12 +1,12 @@
 import { Effect, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Tool from "./tool"
 import * as McpWebSearch from "./mcp-websearch"
 import * as McpPerplexity from "./mcp-perplexity"
 import DESCRIPTION from "./websearch.txt"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 export const Parameters = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
@@ -38,11 +38,7 @@ export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchem
 //      This keeps Exa as the default when multiple backends are available.
 export function selectWebSearchProvider(
   sessionID: string,
-  flags: { exa?: boolean; parallel?: boolean; perplexity?: boolean } = {
-    exa: Flag.OPENCODE_ENABLE_EXA,
-    parallel: Flag.OPENCODE_ENABLE_PARALLEL,
-    perplexity: Flag.OPENCODE_ENABLE_PERPLEXITY && !!(process.env.PERPLEXITY_API_KEY ?? process.env.PPLX_API_KEY),
-  },
+  flags: { exa?: boolean; parallel?: boolean; perplexity?: boolean } = { exa: false, parallel: false, perplexity: false },
 ): WebSearchProvider {
   const override = process.env.OPENCODE_WEBSEARCH_PROVIDER
   if (override === "exa" || override === "parallel" || override === "perplexity") return override
@@ -140,6 +136,7 @@ export const WebSearchTool = Tool.define(
   "websearch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
+    const flags = yield* RuntimeFlags.Service
 
     return {
       get description() {
@@ -148,7 +145,11 @@ export const WebSearchTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const provider = selectWebSearchProvider(ctx.sessionID)
+          const provider = selectWebSearchProvider(ctx.sessionID, {
+            exa: flags.enableExa,
+            parallel: flags.enableParallel,
+            perplexity: flags.enablePerplexity && !!(process.env.PERPLEXITY_API_KEY ?? process.env.PPLX_API_KEY),
+          })
           const title = webSearchProviderLabel(provider)
           yield* ctx.metadata({ title: `${title} "${params.query}"`, metadata: { provider } })
 

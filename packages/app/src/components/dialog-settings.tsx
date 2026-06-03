@@ -8,6 +8,7 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsServers } from "./settings-servers"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -17,7 +18,7 @@ export const DialogSettings: Component = () => {
     <Dialog size="x-large" transition>
       <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
         <Tabs.List>
-          <div class="flex flex-col justify-between h-full w-full">
+          <div class="flex flex-col justify-between h-full w-full gap-4">
             <div class="flex flex-col gap-3 w-full pt-3">
               <div class="flex flex-col gap-3">
                 <div class="flex flex-col gap-1.5">
@@ -30,6 +31,10 @@ export const DialogSettings: Component = () => {
                     <Tabs.Trigger value="shortcuts">
                       <Icon name="keyboard" />
                       {language.t("settings.tab.shortcuts")}
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="servers">
+                      <Icon name="server" />
+                      {language.t("status.popover.tab.servers")}
                     </Tabs.Trigger>
                   </div>
                 </div>
@@ -60,6 +65,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="no-scrollbar">
           <SettingsKeybinds />
+        </Tabs.Content>
+        <Tabs.Content value="servers" class="no-scrollbar">
+          <SettingsServers />
         </Tabs.Content>
         <Tabs.Content value="providers" class="no-scrollbar">
           <SettingsProviders />

@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
@@ -13,10 +13,9 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Locale } from "@/util/locale"
 import { ShellID } from "@/tool/shell/id"
 import { webSearchProviderLabel } from "@/tool/websearch"
-import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
-import { useBindings, useCommandShortcut } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 
 type PermissionStage = "permission" | "always" | "reject"
@@ -448,9 +447,8 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   const tuiConfig = useTuiConfig()
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
-  const dialog = useDialog()
   useBindings(() => ({
-    enabled: dialog.stack.length === 0,
+    mode: OPENCODE_BASE_MODE,
     commands: [
       {
         name: "app.exit",
@@ -542,11 +540,10 @@ function Prompt<const T extends Record<string, string>>(props: {
     expanded: false,
   })
   const narrow = createMemo(() => dimensions().width < 80)
-  const dialog = useDialog()
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
 
   useBindings(() => ({
-    enabled: dialog.stack.length === 0,
+    mode: OPENCODE_BASE_MODE,
     commands: [
       {
         name: "app.exit",

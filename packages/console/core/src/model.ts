@@ -36,6 +36,7 @@ export namespace ZenData {
         model: z.string(),
         priority: z.number().optional(),
         tpmLimit: z.number().optional(),
+        tpsGoal: z.number().optional(),
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),

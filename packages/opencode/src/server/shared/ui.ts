@@ -1,14 +1,10 @@
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
 import { ProxyUtil } from "../proxy-util"
 
-const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
-  ? Promise.resolve(null)
-  : // @ts-expect-error - generated file at build time
-    import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
+let embeddedUIPromise: Promise<Record<string, string> | null> | undefined
 
 export const UI_UPSTREAM = new URL("https://app.opencode.ai")
 
@@ -45,9 +41,11 @@ export function upstreamURL(path: string) {
   return new URL(path, UI_UPSTREAM).toString()
 }
 
-export function embeddedUI() {
-  if (Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI) return Promise.resolve(null)
-  return embeddedUIPromise
+export function embeddedUI(disableEmbeddedWebUi: boolean) {
+  if (disableEmbeddedWebUi) return Promise.resolve(null)
+  return (embeddedUIPromise ??=
+    // @ts-expect-error - generated file at build time
+    import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null))
 }
 
 function notFound() {
@@ -55,7 +53,7 @@ function notFound() {
 }
 
 function embeddedUIResponse(file: string, body: Uint8Array) {
-  const mime = AppFileSystem.mimeType(file)
+  const mime = FSUtil.mimeType(file)
   const headers = new Headers({ "content-type": mime })
   if (mime.startsWith("text/html")) {
     headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
@@ -65,7 +63,7 @@ function embeddedUIResponse(file: string, body: Uint8Array) {
 
 export function serveEmbeddedUIEffect(
   requestPath: string,
-  fs: AppFileSystem.Interface,
+  fs: FSUtil.Interface,
   embeddedWebUI: Record<string, string>,
 ) {
   const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
@@ -79,10 +77,10 @@ export function serveEmbeddedUIEffect(
 
 export function serveUIEffect(
   request: HttpServerRequest.HttpServerRequest,
-  services: { fs: AppFileSystem.Interface; client: HttpClient.HttpClient },
+  services: { fs: FSUtil.Interface; client: HttpClient.HttpClient; disableEmbeddedWebUi: boolean },
 ) {
   return Effect.gen(function* () {
-    const embeddedWebUI = yield* Effect.promise(() => embeddedUI())
+    const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
     const path = new URL(request.url, "http://localhost").pathname
 
     if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)

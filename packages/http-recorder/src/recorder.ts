@@ -1,46 +1,21 @@
-import { Effect, Ref, Schema, Scope } from "effect"
+import { Effect, Ref, Scope } from "effect"
 import type * as CassetteService from "./cassette"
 import type { CassetteNotFoundError } from "./cassette"
-import { SecretFindingSchema } from "./redaction"
-import type { CassetteMetadata, Interaction } from "./schema"
-
-export class UnsafeCassetteError extends Schema.TaggedErrorClass<UnsafeCassetteError>()("UnsafeCassetteError", {
-  cassetteName: Schema.String,
-  findings: Schema.Array(SecretFindingSchema),
-}) {
-  override get message() {
-    return `Refusing to write cassette "${this.cassetteName}" because it contains possible secrets: ${this.findings
-      .map((finding) => `${finding.path} (${finding.reason})`)
-      .join(", ")}`
-  }
-}
-
-export type ResolvedMode = "record" | "replay" | "passthrough"
+import type { Interaction } from "./schema"
 
 const isCI = () => {
   const value = process.env.CI
   return value !== undefined && value !== "" && value !== "false" && value !== "0"
 }
 
-export const resolveAutoMode = (cassette: CassetteService.Interface, name: string): Effect.Effect<ResolvedMode> =>
+export const resolveAutoMode = (
+  cassette: CassetteService.Interface,
+  name: string,
+): Effect.Effect<"record" | "replay" | "passthrough"> =>
   Effect.gen(function* () {
     if (isCI()) return "replay"
     return (yield* cassette.exists(name)) ? "replay" : "record"
   })
-
-export const appendOrFail = (
-  cassette: CassetteService.Interface,
-  name: string,
-  interaction: Interaction,
-  metadata: CassetteMetadata | undefined,
-): Effect.Effect<void, UnsafeCassetteError> =>
-  cassette
-    .append(name, interaction, metadata)
-    .pipe(
-      Effect.flatMap(({ findings }) =>
-        findings.length === 0 ? Effect.void : Effect.fail(new UnsafeCassetteError({ cassetteName: name, findings })),
-      ),
-    )
 
 export interface ReplayState<T> {
   readonly load: Effect.Effect<ReadonlyArray<T>, CassetteNotFoundError>

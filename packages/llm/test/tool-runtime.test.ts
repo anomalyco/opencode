@@ -1,21 +1,21 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMRequest, LLMResponse } from "../src"
-import { LLMClient } from "../src/route"
+import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice } from "../src"
+import { Auth, LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
-import { tool, ToolFailure } from "../src/tool"
+import * as OpenAIResponses from "../src/protocols/openai-responses"
+import { tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
+import { ToolRuntime } from "../src/tool-runtime"
 import { it } from "./lib/effect"
 import * as TestToolRuntime from "./lib/tool-runtime"
 import { dynamicResponse, scriptedResponses } from "./lib/http"
 import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
 
-const model = OpenAIChat.model({
-  id: "gpt-4o-mini",
-  baseURL: "https://api.openai.test/v1/",
-  headers: { authorization: "Bearer test" },
-})
+const model = OpenAIChat.route
+  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+  .model({ id: "gpt-4o-mini" })
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
@@ -24,6 +24,7 @@ const baseRequest = LLM.request({
   model,
   prompt: "Use the tool.",
 })
+const weatherFailureCause = new Error("weather lookup denied")
 
 const get_weather = tool({
   description: "Get current weather for a city.",
@@ -31,7 +32,8 @@ const get_weather = tool({
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.gen(function* () {
-      if (city === "FAIL") return yield* new ToolFailure({ message: `Weather lookup failed for ${city}` })
+      if (city === "FAIL")
+        return yield* new ToolFailure({ message: `Weather lookup failed for ${city}`, error: weatherFailureCause })
       return { temperature: 22, condition: "sunny" }
     }),
 })
@@ -78,29 +80,33 @@ describe("LLMClient tools", () => {
 
       yield* TestToolRuntime.runTools({
         request: LLMRequest.update(baseRequest, {
-          generation: LLM.generation({ maxTokens: 50 }),
-          toolChoice: LLM.toolChoice("auto"),
+          generation: GenerationOptions.make({ maxTokens: 50 }),
+          toolChoice: ToolChoice.make("auto"),
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
-      const second = bodies[1] as {
-        readonly messages?: ReadonlyArray<Record<string, unknown>>
-        readonly tools?: ReadonlyArray<unknown>
-        readonly tool_choice?: unknown
-        readonly max_tokens?: unknown
-      }
+      const second = bodies[1]
+      if (!second || typeof second !== "object") throw new Error("Expected second request body")
+      const messages = Reflect.get(second, "messages")
+      const tools = Reflect.get(second, "tools")
 
-      expect(second.max_tokens).toBe(50)
-      expect(second.tool_choice).toBe("auto")
-      expect(second.tools).toHaveLength(1)
-      expect(second.messages?.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
-      expect(second.messages?.[1]).toMatchObject({
+      expect(Reflect.get(second, "max_tokens")).toBe(50)
+      expect(Reflect.get(second, "tool_choice")).toBe("auto")
+      expect(tools).toHaveLength(1)
+      expect(
+        Array.isArray(messages)
+          ? messages.map((message) =>
+              message && typeof message === "object" ? Reflect.get(message, "role") : undefined,
+            )
+          : undefined,
+      ).toEqual(["user", "assistant", "tool"])
+      expect(Array.isArray(messages) ? messages[1] : undefined).toMatchObject({
         role: "assistant",
         content: null,
         tool_calls: [{ id: "call_1", type: "function", function: { name: "get_weather" } }],
       })
-      expect(second.messages?.[2]).toMatchObject({
+      expect(Array.isArray(messages) ? messages[2] : undefined).toMatchObject({
         role: "tool",
         tool_call_id: "call_1",
         content: '{"temperature":22,"condition":"sunny"}',
@@ -129,8 +135,47 @@ describe("LLMClient tools", () => {
         name: "get_weather",
         result: { type: "json", value: { temperature: 22, condition: "sunny" } },
       })
-      expect(events.at(-1)?.type).toBe("request-finish")
+      expect(events.at(-1)?.type).toBe("finish")
       expect(LLMResponse.text({ events })).toBe("It's sunny in Paris.")
+    }),
+  )
+
+  it.effect("preserves content tool results from dynamic tools", () =>
+    Effect.gen(function* () {
+      const screenshot = tool({
+        description: "Capture a screenshot.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () =>
+          Effect.succeed({
+            type: "content" as const,
+            value: [
+              { type: "text" as const, text: "Screenshot captured." },
+              { type: "media" as const, mediaType: "image/png", data: "AAAA" },
+            ],
+          }),
+      })
+
+      const events = Array.from(
+        yield* LLMClient.stream({ request: baseRequest, tools: { screenshot } }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([sseEvents(toolCallChunk("call_1", "screenshot", "{}"), finishChunk("tool_calls"))]),
+          ),
+        ),
+      )
+
+      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
+        type: "tool-result",
+        id: "call_1",
+        name: "screenshot",
+        result: {
+          type: "content",
+          value: [
+            { type: "text", text: "Screenshot captured." },
+            { type: "media", mediaType: "image/png", data: "AAAA" },
+          ],
+        },
+      })
     }),
   )
 
@@ -148,8 +193,37 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
       expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
+    }),
+  )
+
+  it.effect("passes tool call context to execute", () =>
+    Effect.gen(function* () {
+      let context: ToolExecuteContext | undefined
+      const contextual = tool({
+        description: "Capture tool context.",
+        parameters: Schema.Struct({ value: Schema.String }),
+        success: Schema.Struct({ ok: Schema.Boolean }),
+        execute: (_params, ctx) =>
+          Effect.sync(() => {
+            context = ctx
+            return { ok: true }
+          }),
+      })
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { contextual } }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([
+              sseEvents(toolCallChunk("call_ctx", "contextual", '{"value":"x"}'), finishChunk("tool_calls")),
+            ]),
+          ),
+        ),
+      )
+
+      expect(events.some(LLMEvent.is.toolResult)).toBe(true)
+      expect(context).toEqual({ id: "call_ctx", name: "contextual" })
     }),
   )
 
@@ -213,7 +287,9 @@ describe("LLMClient tools", () => {
 
       yield* TestToolRuntime.runTools({
         request: LLM.updateRequest(baseRequest, {
-          model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+          model: AnthropicMessages.route
+            .with({ auth: Auth.header("x-api-key", "test") })
+            .model({ id: "claude-sonnet-4-5" }),
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
@@ -229,6 +305,80 @@ describe("LLMClient tools", () => {
             ],
           },
           { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1" }] },
+        ],
+      })
+    }),
+  )
+
+  it.effect("replays encrypted OpenAI reasoning items with tool outputs", () =>
+    Effect.gen(function* () {
+      const bodies: unknown[] = []
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() => {
+          bodies.push(decodeJson(input.text))
+          return input.respond(
+            bodies.length === 1
+              ? sseEvents(
+                  {
+                    type: "response.output_item.added",
+                    item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+                  },
+                  { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+                  { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+                  {
+                    type: "response.output_item.done",
+                    item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
+                  },
+                  {
+                    type: "response.output_item.added",
+                    item: {
+                      type: "function_call",
+                      id: "item_1",
+                      call_id: "call_1",
+                      name: "get_weather",
+                      arguments: "",
+                    },
+                  },
+                  { type: "response.function_call_arguments.delta", item_id: "item_1", delta: '{"city":"Paris"}' },
+                  {
+                    type: "response.output_item.done",
+                    item: {
+                      type: "function_call",
+                      id: "item_1",
+                      call_id: "call_1",
+                      name: "get_weather",
+                      arguments: '{"city":"Paris"}',
+                    },
+                  },
+                  { type: "response.completed", response: {} },
+                )
+              : sseEvents(
+                  { type: "response.output_text.delta", item_id: "msg_1", delta: "Done." },
+                  { type: "response.completed", response: {} },
+                ),
+            { headers: { "content-type": "text/event-stream" } },
+          )
+        }),
+      )
+
+      yield* TestToolRuntime.runTools({
+        request: LLM.request({
+          model: OpenAIResponses.route
+            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+            .model({ id: "gpt-5.5" }),
+          prompt: "Use the tool.",
+          providerOptions: { openai: { store: false, include: ["reasoning.encrypted_content"] } },
+        }),
+        tools: { get_weather },
+      }).pipe(Stream.runCollect, Effect.provide(layer))
+
+      expect(bodies[1]).toMatchObject({
+        include: ["reasoning.encrypted_content"],
+        input: [
+          { role: "user" },
+          { type: "reasoning", id: "rs_1", summary: [], encrypted_content: "encrypted-state" },
+          { type: "function_call", call_id: "call_1", name: "get_weather" },
+          { type: "function_call_output", call_id: "call_1" },
         ],
       })
     }),
@@ -297,6 +447,7 @@ describe("LLMClient tools", () => {
       const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
       expect(toolError?.message).toBe("Weather lookup failed for FAIL")
+      expect(toolError?.error).toBe(weatherFailureCause)
     }),
   )
 
@@ -313,7 +464,14 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
+      expect(events.map((event) => event.type)).toEqual([
+        "step-start",
+        "text-start",
+        "text-delta",
+        "text-end",
+        "step-finish",
+        "finish",
+      ])
       expect(LLMResponse.text({ events })).toBe("Done.")
     }),
   )
@@ -336,7 +494,57 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(2)
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.stepStart).map((event) => event.index)).toEqual([0, 1])
+      expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.index)).toEqual([0, 1])
+    }),
+  )
+
+  it.effect("emits one final finish with aggregate usage", () =>
+    Effect.gen(function* () {
+      let calls = 0
+      const events = Array.from(
+        yield* ToolRuntime.stream({
+          request: baseRequest,
+          tools: { get_weather },
+          stopWhen: ToolRuntime.stepCountIs(2),
+          stream: () =>
+            Stream.fromIterable<LLMEvent>(
+              calls++ === 0
+                ? [
+                    LLMEvent.stepStart({ index: 0 }),
+                    LLMEvent.toolCall({ id: "call_1", name: "get_weather", input: { city: "Paris" } }),
+                    LLMEvent.stepFinish({
+                      index: 0,
+                      reason: "tool-calls",
+                      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+                    }),
+                    LLMEvent.finish({
+                      reason: "tool-calls",
+                      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+                    }),
+                  ]
+                : [
+                    LLMEvent.stepStart({ index: 0 }),
+                    LLMEvent.textDelta({ id: "text_1", text: "Done." }),
+                    LLMEvent.stepFinish({
+                      index: 0,
+                      reason: "stop",
+                      usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 },
+                    }),
+                    LLMEvent.finish({ reason: "stop", usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 } }),
+                  ],
+            ),
+        }).pipe(Stream.runCollect),
+      )
+
+      expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.index)).toEqual([0, 1])
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
+      expect(events.find(LLMEvent.is.finish)?.usage).toMatchObject({
+        inputTokens: 5,
+        outputTokens: 7,
+        totalTokens: 12,
+      })
     }),
   )
 
@@ -355,7 +563,7 @@ describe("LLMClient tools", () => {
         }).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
       expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
     }),
   )
@@ -402,7 +610,9 @@ describe("LLMClient tools", () => {
       const events = Array.from(
         yield* TestToolRuntime.runTools({
           request: LLM.updateRequest(baseRequest, {
-            model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+            model: AnthropicMessages.route
+              .with({ auth: Auth.header("x-api-key", "test") })
+              .model({ id: "claude-sonnet-4-5" }),
           }),
           tools: {},
         }).pipe(Stream.runCollect, Effect.provide(layer)),

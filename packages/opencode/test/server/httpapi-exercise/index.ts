@@ -178,6 +178,15 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
+    .patch("/project/{projectID}", "project.update.missing")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/project/{projectID}", { projectID: "project_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: { name: "Missing Project" },
+    }))
+    .json(404, object, "status"),
+  http.protected
     .post("/project/git/init", "project.initGit")
     .mutating()
     .inProject({ git: false })
@@ -190,6 +199,41 @@ const scenarios: Scenario[] = [
       },
       "status",
     ),
+  http.protected
+    .get("/project/{projectID}/directories", "project.directories")
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/project/{projectID}/directories", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, array, "status"),
+  http.protected
+    .post("/experimental/project/{projectID}/copy", "experimental.projectCopy.create")
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/experimental/project/{projectID}/copy", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(400),
+  http.protected
+    .delete("/experimental/project/{projectID}/copy", "experimental.projectCopy.remove")
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/experimental/project/{projectID}/copy", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(400),
+  http.protected
+    .post("/experimental/project/{projectID}/copy/refresh", "experimental.projectCopy.refresh")
+    .mutating()
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/experimental/project/{projectID}/copy/refresh", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .status(204, undefined, "status"),
   http.protected.get("/provider", "provider.list").json(),
   http.protected.get("/provider/auth", "provider.auth").json(),
   http.protected
@@ -224,9 +268,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { reply: "once" },
     }))
-    .json(200, (body) => {
-      check(body === true, "permission reply should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected.get("/question", "question.list").json(200, array),
   http.protected
     .post("/question/{requestID}/reply", "question.reply.invalid")
@@ -243,18 +285,14 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { answers: [["Yes"]] },
     }))
-    .json(200, (body) => {
-      check(body === true, "question reply should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/question/{requestID}/reject", "question.reject")
     .at((ctx) => ({
       path: route("/question/{requestID}/reject", { requestID: "que_httpapi_reject" }),
       headers: ctx.headers(),
     }))
-    .json(200, (body) => {
-      check(body === true, "question reject should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected
     .get("/file", "file.list")
     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
@@ -335,58 +373,37 @@ const scenarios: Scenario[] = [
   http.protected
     .post("/mcp/{name}/auth", "mcp.auth.start")
     .at((ctx) => ({ path: route("/mcp/{name}/auth", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(
-      400,
-      (body) => {
-        object(body)
-        check(typeof body.error === "string", "unsupported MCP OAuth response should include error")
-      },
-      "status",
-    ),
+    .json(404, object, "status"),
   http.protected
     .delete("/mcp/{name}/auth", "mcp.auth.remove")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/auth", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      object(body)
-      check(body.success === true, "MCP auth removal should return success")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/auth/authenticate", "mcp.auth.authenticate")
     .at((ctx) => ({
       path: route("/mcp/{name}/auth/authenticate", { name: "httpapi-missing" }),
       headers: ctx.headers(),
     }))
-    .json(
-      400,
-      (body) => {
-        object(body)
-        check(typeof body.error === "string", "unsupported MCP OAuth authenticate response should include error")
-      },
-      "status",
-    ),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/auth/callback", "mcp.auth.callback")
     .at((ctx) => ({
       path: route("/mcp/{name}/auth/callback", { name: "httpapi-missing" }),
       headers: ctx.headers(),
-      body: { code: 1 },
+      body: { code: "code" },
     }))
-    .status(400),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/connect", "mcp.connect")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/connect", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "missing MCP connect should remain a no-op success")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/disconnect", "mcp.disconnect")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/disconnect", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "missing MCP disconnect should remain a no-op success")
-    }),
+    .json(404, object, "status"),
   http.protected.get("/pty/shells", "pty.shells").json(200, array),
   http.protected.get("/pty", "pty.list").json(200, array),
   http.protected
@@ -431,9 +448,7 @@ const scenarios: Scenario[] = [
     .delete("/pty/{ptyID}", "pty.remove")
     .mutating()
     .at((ctx) => ({ path: route("/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "PTY remove should return true")
-    }),
+    .json(404, object, "status"),
   http.protected
     .get("/pty/{ptyID}/connect", "pty.connect")
     .at((ctx) => ({ path: route("/pty/{ptyID}/connect", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
@@ -593,6 +608,44 @@ const scenarios: Scenario[] = [
         check(auth.test === undefined, "auth remove should delete provider from isolated auth file")
       }),
     ),
+  http.protected.get("/api/model", "v2.model.list").json(200, array),
+  http.protected.get("/api/provider", "v2.provider.list").json(200, array),
+  http.protected
+    .get("/api/fs/read", "v2.fs.read")
+    .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
+    .at((ctx) => ({ path: "/api/fs/read?path=hello.txt", headers: ctx.headers() }))
+    .json(200, object),
+  http.protected.get("/api/fs/list", "v2.fs.list").json(200, array),
+  http.protected
+    .get("/api/provider/{providerID}", "v2.provider.get")
+    .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
+    .json(404, object, "status"),
+  http.protected.get("/api/permission/request", "v2.permission.request.list").json(200, array),
+  http.protected
+    .get("/api/session/{sessionID}/permission/request", "v2.session.permission.list")
+    .seeded((ctx) => ctx.session({ title: "Permission list owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/permission/request", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, array),
+  http.protected
+    .post("/api/session/{sessionID}/permission/request/{requestID}/reply", "v2.session.permission.reply")
+    .seeded((ctx) => ctx.session({ title: "Permission owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/permission/request/{requestID}/reply", {
+        sessionID: ctx.state.id,
+        requestID: "per_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+      body: { reply: "once" },
+    }))
+    .json(404, object, "status"),
+  http.protected.get("/api/permission/saved", "v2.permission.saved.list").json(200, array),
+  http.protected
+    .delete("/api/permission/saved/{id}", "v2.permission.saved.remove")
+    .at((ctx) => ({ path: route("/api/permission/saved/{id}", { id: "psv_httpapi_missing" }), headers: ctx.headers() }))
+    .status(204, undefined, "status"),
   http.protected
     .get("/api/session", "v2.session.list")
     .at((ctx) => ({ path: "/api/session?roots=true", headers: ctx.headers() }))
@@ -633,13 +686,10 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({
       path: `/api/session?${new URLSearchParams({
         limit: "2",
-        directory: ctx.directory ?? "",
         cursor: cursor({
-          id: "ses_httpapi_missing",
-          time: 0,
           order: "desc",
-          direction: "next",
           directory: ctx.directory,
+          anchor: { id: "ses_httpapi_missing", time: 0, direction: "next" },
         }),
       })}`,
       headers: ctx.headers(),
@@ -657,8 +707,7 @@ const scenarios: Scenario[] = [
     .get("/api/session", "v2.session.list.cursor.invalid")
     .at((ctx) => ({
       path: `/api/session?${new URLSearchParams({
-        cursor: cursor({ id: "ses_httpapi_missing", time: 0, order: "desc", direction: "next" }),
-        search: "not-allowed-with-cursor",
+        cursor: "invalid",
       })}`,
       headers: ctx.headers(),
     }))
@@ -669,22 +718,14 @@ const scenarios: Scenario[] = [
       path: route("/api/session/{sessionID}/context", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .json(200, array, "none"),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        array(body.items)
-        object(body.cursor)
-      },
-      "none",
-    ),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.params")
     .at((ctx) => ({
@@ -694,15 +735,7 @@ const scenarios: Scenario[] = [
       })}`,
       headers: ctx.headers(),
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        array(body.items)
-        object(body.cursor)
-      },
-      "none",
-    ),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.cursor")
     .at((ctx) => ({
@@ -713,15 +746,7 @@ const scenarios: Scenario[] = [
       })}`,
       headers: ctx.headers(),
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        array(body.items)
-        object(body.cursor)
-      },
-      "none",
-    ),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.cursor.invalid")
     .at((ctx) => ({
@@ -746,14 +771,14 @@ const scenarios: Scenario[] = [
       path: route("/api/session/{sessionID}/compact", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .status(204, undefined, "none"),
+    .status(404, undefined, "status"),
   http.protected
     .post("/api/session/{sessionID}/wait", "v2.session.wait")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/wait", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .status(204, undefined, "none"),
+    .status(404, undefined, "status"),
   http.protected
     .get("/session", "session.list")
     .seeded((ctx) => ctx.session({ title: "List me" }))
@@ -1267,9 +1292,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { response: "once" },
     }))
-    .json(200, (body) => {
-      check(body === true, "deprecated permission response should return true")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/session/{sessionID}/share", "session.share")
     .mutating()

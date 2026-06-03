@@ -1,4 +1,4 @@
-export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" }
+import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
 export type ServerReadyData = {
   url: string
@@ -6,23 +6,28 @@ export type ServerReadyData = {
   password: string | null
 }
 
-export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" }
-
 export type WslConfig = { enabled: boolean }
 
 export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
   mode: "light" | "dark"
 }
-
 export type WindowConfig = {
   updaterEnabled: boolean
+}
+
+export type FatalRendererError = {
+  error: string
+  url: string
+  version?: string
+  platform: string
+  os?: string
 }
 
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
-  awaitInitialization: (onStep: (step: InitStep) => void) => Promise<ServerReadyData>
+  awaitInitialization: () => Promise<ServerReadyData>
   getWindowConfig: () => Promise<WindowConfig>
   consumeInitialDeepLinks: () => Promise<string[]>
   getDefaultServerUrl: () => Promise<string | null>
@@ -43,7 +48,6 @@ export type ElectronAPI = {
   storeLength: (name: string) => Promise<number>
 
   getWindowCount: () => Promise<number>
-  onSqliteMigrationProgress: (cb: (progress: SqliteMigrationProgress) => void) => () => void
   onMenuCommand: (cb: (id: string) => void) => () => void
   onDeepLink: (cb: (urls: string[]) => void) => () => void
 
@@ -70,10 +74,16 @@ export type ElectronAPI = {
   relaunch: () => void
   getZoomFactor: () => Promise<number>
   setZoomFactor: (factor: number) => Promise<void>
+  getPinchZoomEnabled: () => Promise<boolean>
+  setPinchZoomEnabled: (enabled: boolean) => Promise<void>
+  onPinchZoomEnabledChanged: (cb: (enabled: boolean) => void) => () => void
+  onZoomFactorChanged: (cb: (factor: number) => void) => () => void
   setTitlebar: (theme: TitlebarTheme) => Promise<void>
-  loadingWindowComplete: () => void
+  runDesktopMenuAction: (action: DesktopMenuAction) => Promise<void>
   runUpdater: (alertOnFail: boolean) => Promise<void>
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void>
   setBackgroundColor: (color: string) => Promise<void>
+  exportDebugLogs: () => Promise<string>
+  recordFatalRendererError: (error: FatalRendererError) => Promise<void>
 }

@@ -1,16 +1,25 @@
 import { afterEach, expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Queue } from "effect"
 import { Question } from "../../src/question"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
-import { InstanceRuntime } from "../../src/project/instance-runtime"
+import { InstanceRef } from "../../src/effect/instance-ref"
+import { InstanceStore } from "../../src/project/instance-store"
 import { QuestionID } from "../../src/question/schema"
-import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 
-const it = testEffect(Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(Question.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)), CrossSpawnSpawner.defaultLayer),
+)
+const lifecycle = testEffect(
+  Layer.mergeAll(
+    Question.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)),
+    CrossSpawnSpawner.defaultLayer,
+    testInstanceStoreLayer,
+  ),
+)
 
 const askEffect = Effect.fn("QuestionTest.ask")(function* (input: {
   sessionID: SessionID
@@ -45,15 +54,22 @@ const rejectAll = Effect.gen(function* () {
   yield* Effect.forEach(yield* listEffect, (req) => rejectEffect(req.id), { discard: true })
 })
 
-const waitForPending = (count: number) =>
-  Effect.gen(function* () {
-    for (let i = 0; i < 100; i++) {
-      const pending = yield* listEffect
-      if (pending.length === count) return pending
-      yield* Effect.sleep("10 millis")
-    }
-    return yield* Effect.fail(new Error(`timed out waiting for ${count} pending question request(s)`))
+const waitForPending = Effect.fn("QuestionTest.waitForPending")(function* (count: number) {
+  const question = yield* Question.Service
+  const events = yield* EventV2Bridge.Service
+  const asked = yield* Queue.unbounded<void>()
+  const off = yield* events.listen((event) => {
+    if (event.type === Question.Event.Asked.type) Queue.offerUnsafe(asked, undefined)
+    return Effect.void
   })
+  yield* Effect.addFinalizer(() => off)
+
+  for (;;) {
+    const pending = yield* question.list()
+    if (pending.length === count) return pending
+    yield* Queue.take(asked).pipe(Effect.timeout("2 seconds"))
+  }
+})
 
 it.instance(
   "ask - remains pending until answered",
@@ -178,11 +194,17 @@ it.instance(
 )
 
 it.instance(
-  "reply - does nothing for unknown requestID",
+  "reply - fails for unknown requestID",
   () =>
-    replyEffect({
-      requestID: QuestionID.make("que_unknown"),
-      answers: [["Option 1"]],
+    Effect.gen(function* () {
+      const exit = yield* replyEffect({
+        requestID: QuestionID.make("que_unknown"),
+        answers: [["Option 1"]],
+      }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Question.NotFoundError", requestID: "que_unknown" })
+      }
     }),
   { git: true },
 )
@@ -247,9 +269,18 @@ it.instance(
   { git: true },
 )
 
-it.instance("reject - does nothing for unknown requestID", () => rejectEffect(QuestionID.make("que_unknown")), {
-  git: true,
-})
+it.instance(
+  "reject - fails for unknown requestID",
+  () =>
+    Effect.gen(function* () {
+      const exit = yield* rejectEffect(QuestionID.make("que_unknown")).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Question.NotFoundError", requestID: "que_unknown" })
+      }
+    }),
+  { git: true },
+)
 
 // multiple questions tests
 
@@ -340,7 +371,7 @@ it.instance(
   { git: true },
 )
 
-it.live("questions stay isolated by directory", () =>
+lifecycle.live("questions stay isolated by directory", () =>
   Effect.gen(function* () {
     const one = yield* tmpdirScoped({ git: true })
     const two = yield* tmpdirScoped({ git: true })
@@ -383,7 +414,7 @@ it.live("questions stay isolated by directory", () =>
   }),
 )
 
-it.live("pending question rejects on instance dispose", () =>
+lifecycle.live("pending question rejects on instance dispose", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped({ git: true })
     const fiber = yield* askEffect({
@@ -398,9 +429,11 @@ it.live("pending question rejects on instance dispose", () =>
     }).pipe(provideInstance(dir), Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
-    yield* Effect.promise(() =>
-      WithInstance.provide({ directory: dir, fn: () => InstanceRuntime.disposeInstance(Instance.current) }),
-    )
+    const ctx = yield* Effect.gen(function* () {
+      return yield* InstanceRef
+    }).pipe(provideInstance(dir))
+    if (!ctx) return yield* Effect.die(new Error("missing test instance"))
+    yield* InstanceStore.Service.use((store) => store.dispose(ctx))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)
@@ -408,7 +441,7 @@ it.live("pending question rejects on instance dispose", () =>
   }),
 )
 
-it.live("pending question rejects on instance reload", () =>
+lifecycle.live("pending question rejects on instance reload", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped({ git: true })
     const fiber = yield* askEffect({
@@ -423,7 +456,7 @@ it.live("pending question rejects on instance reload", () =>
     }).pipe(provideInstance(dir), Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
-    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
+    yield* InstanceStore.Service.use((store) => store.reload({ directory: dir }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)

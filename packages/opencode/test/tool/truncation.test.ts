@@ -1,11 +1,12 @@
 import { describe, test, expect } from "bun:test"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { NodeFileSystem } from "@effect/platform-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, FileSystem, Layer } from "effect"
 import { Truncate } from "@/tool/truncate"
 import { Config } from "@/config/config"
 import { Identifier } from "../../src/id/id"
 import { Process } from "@/util/process"
-import { Filesystem } from "@/util/filesystem"
 import path from "path"
 import { testEffect } from "../lib/effect"
 import { writeFileStringScoped } from "../lib/filesystem"
@@ -14,18 +15,24 @@ import { TestConfig } from "../fixture/config"
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 const ROOT = path.resolve(import.meta.dir, "..", "..")
 
-const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, NodeFileSystem.layer))
+const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, NodeFileSystem.layer, FSUtil.defaultLayer))
 
-const configuredLayer = (cfg: Config.Info) =>
-  Layer.mergeAll(Truncate.defaultLayer, NodeFileSystem.layer, TestConfig.layer({ get: () => Effect.succeed(cfg) }))
-const configuredIt = (cfg: Config.Info) => testEffect(configuredLayer(cfg))
+const configuredLayer = (cfg: ConfigV1.Info) =>
+  Layer.mergeAll(
+    Truncate.defaultLayer,
+    NodeFileSystem.layer,
+    FSUtil.defaultLayer,
+    TestConfig.layer({ get: () => Effect.succeed(cfg) }),
+  )
+const configuredIt = (cfg: ConfigV1.Info) => testEffect(configuredLayer(cfg))
 
 describe("Truncate", () => {
   describe("output", () => {
     it.live("truncates large json file by bytes", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
-        const content = yield* Effect.promise(() => Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json")))
+        const fsys = yield* FSUtil.Service
+        const content = yield* fsys.readFileString(path.join(FIXTURES_DIR, "models-api.json"))
         const result = yield* svc.output(content)
 
         expect(result.truncated).toBe(true)
@@ -158,7 +165,8 @@ describe("Truncate", () => {
     it.live("large single-line file truncates with byte message", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
-        const content = yield* Effect.promise(() => Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json")))
+        const fsys = yield* FSUtil.Service
+        const content = yield* fsys.readFileString(path.join(FIXTURES_DIR, "models-api.json"))
         const result = yield* svc.output(content)
 
         expect(result.truncated).toBe(true)
@@ -180,7 +188,8 @@ describe("Truncate", () => {
         expect(result.outputPath).toBeDefined()
         expect(result.outputPath).toContain("tool_")
 
-        const written = yield* Effect.promise(() => Filesystem.readText(result.outputPath!))
+        const fsys = yield* FSUtil.Service
+        const written = yield* fsys.readFileString(result.outputPath!)
         expect(written).toBe(lines)
       }),
     )

@@ -1,52 +1,81 @@
-import { z } from "zod"
 import type { Model } from "@opencode-ai/sdk/v2"
+import { Option, Schema } from "effect"
 
-export const schema = z.object({
-  data: z.array(
-    z.object({
-      model_picker_enabled: z.boolean(),
-      id: z.string(),
-      name: z.string(),
-      // every version looks like: `{model.id}-YYYY-MM-DD`
-      version: z.string(),
-      supported_endpoints: z.array(z.string()).optional(),
-      policy: z
-        .object({
-          state: z.string().optional(),
-        })
-        .optional(),
-      capabilities: z.object({
-        family: z.string(),
-        limits: z.object({
-          max_context_window_tokens: z.number(),
-          max_output_tokens: z.number(),
-          max_prompt_tokens: z.number(),
-          vision: z
-            .object({
-              max_prompt_image_size: z.number(),
-              max_prompt_images: z.number(),
-              supported_media_types: z.array(z.string()),
-            })
-            .optional(),
-        }),
-        supports: z.object({
-          adaptive_thinking: z.boolean().optional(),
-          max_thinking_budget: z.number().optional(),
-          min_thinking_budget: z.number().optional(),
-          reasoning_effort: z.array(z.string()).optional(),
-          streaming: z.boolean(),
-          structured_outputs: z.boolean().optional(),
-          tool_calls: z.boolean(),
-          vision: z.boolean().optional(),
-        }),
-      }),
+const item = Schema.Struct({
+  model_picker_enabled: Schema.Boolean,
+  id: Schema.String,
+  name: Schema.String,
+  // every version looks like: `{model.id}-YYYY-MM-DD`
+  version: Schema.String,
+  supported_endpoints: Schema.optional(Schema.Array(Schema.String)),
+  policy: Schema.optional(
+    Schema.Struct({
+      state: Schema.optional(Schema.String),
     }),
   ),
+  billing: Schema.optional(
+    Schema.Struct({
+      token_prices: Schema.optional(
+        Schema.Struct({
+          batch_size: Schema.Number,
+          default: Schema.Struct({
+            cache_price: Schema.Number,
+            input_price: Schema.Number,
+            output_price: Schema.Number,
+          }),
+        }),
+      ),
+    }),
+  ),
+  capabilities: Schema.Struct({
+    family: Schema.String,
+    limits: Schema.optional(
+      Schema.Struct({
+        max_context_window_tokens: Schema.optional(Schema.Number),
+        max_output_tokens: Schema.optional(Schema.Number),
+        max_prompt_tokens: Schema.optional(Schema.Number),
+        vision: Schema.optional(
+          Schema.Struct({
+            max_prompt_image_size: Schema.Number,
+            max_prompt_images: Schema.Number,
+            supported_media_types: Schema.Array(Schema.String),
+          }),
+        ),
+      }),
+    ),
+    supports: Schema.Struct({
+      adaptive_thinking: Schema.optional(Schema.Boolean),
+      max_thinking_budget: Schema.optional(Schema.Number),
+      min_thinking_budget: Schema.optional(Schema.Number),
+      reasoning_effort: Schema.optional(Schema.Array(Schema.String)),
+      streaming: Schema.optional(Schema.Boolean),
+      structured_outputs: Schema.optional(Schema.Boolean),
+      tool_calls: Schema.optional(Schema.Boolean),
+      vision: Schema.optional(Schema.Boolean),
+    }),
+  }),
 })
 
-type Item = z.infer<typeof schema>["data"][number]
+export const schema = Schema.Struct({
+  data: Schema.Array(Schema.Unknown),
+})
 
-function build(key: string, remote: Item, url: string, prev?: Model): Model {
+type Item = Schema.Schema.Type<typeof item>
+type SelectableItem = Item & {
+  capabilities: Item["capabilities"] & {
+    limits: NonNullable<Item["capabilities"]["limits"]> & {
+      max_output_tokens: number
+      max_prompt_tokens: number
+    }
+    supports: Item["capabilities"]["supports"] & {
+      tool_calls: boolean
+    }
+  }
+}
+const decodeModels = Schema.decodeUnknownSync(schema)
+const decodeItem = Schema.decodeUnknownOption(item)
+
+function build(key: string, remote: SelectableItem, url: string, prev?: Model): Model {
   const reasoning =
     !!remote.capabilities.supports.adaptive_thinking ||
     !!remote.capabilities.supports.reasoning_effort?.length ||
@@ -57,6 +86,9 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     (remote.capabilities.limits.vision?.supported_media_types ?? []).some((item) => item.startsWith("image/"))
 
   const isMsgApi = remote.supported_endpoints?.includes("/v1/messages")
+  const prices = remote.billing?.token_prices
+  // Copilot prices are AIC per billing batch; OpenCode stores USD per million tokens.
+  const usdPerMillion = prices ? 10_000 / prices.batch_size : 0
 
   const model: Model = {
     id: key,
@@ -69,7 +101,7 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     // API response wins
     status: "active",
     limit: {
-      context: remote.capabilities.limits.max_context_window_tokens,
+      context: remote.capabilities.limits.max_context_window_tokens ?? remote.capabilities.limits.max_prompt_tokens,
       input: remote.capabilities.limits.max_prompt_tokens,
       output: remote.capabilities.limits.max_output_tokens,
     },
@@ -98,9 +130,13 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     family: prev?.family ?? remote.capabilities.family,
     name: prev?.name ?? remote.name,
     cost: {
-      input: 0,
-      output: 0,
-      cache: { read: 0, write: 0 },
+      input: (prices?.default.input_price ?? 0) * usdPerMillion,
+      output: (prices?.default.output_price ?? 0) * usdPerMillion,
+      cache: {
+        read: (prices?.default.cache_price ?? 0) * usdPerMillion,
+        // `/models` exposes cached-input reads only; per-request billing accounts for cache writes.
+        write: 0,
+      },
     },
     options: prev?.options ?? {},
     headers: prev?.headers ?? {},
@@ -153,11 +189,20 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
   return model
 }
 
+function usable(item: Item): item is SelectableItem {
+  return (
+    item.policy?.state !== "disabled" &&
+    item.capabilities.limits?.max_output_tokens !== undefined &&
+    item.capabilities.limits.max_prompt_tokens !== undefined &&
+    item.capabilities.supports.tool_calls !== undefined
+  )
+}
+
 export async function get(
   baseURL: string,
   headers: HeadersInit = {},
   existing: Record<string, Model> = {},
-): Promise<Record<string, Model>> {
+): Promise<{ models: Record<string, Model>; pickerEnabled: Set<string> }> {
   const data = await fetch(`${baseURL}/models`, {
     headers,
     signal: AbortSignal.timeout(5_000),
@@ -165,12 +210,15 @@ export async function get(
     if (!res.ok) {
       throw new Error(`Failed to fetch models: ${res.status}`)
     }
-    return schema.parse(await res.json())
+    return decodeModels(await res.json())
   })
 
   const result = { ...existing }
   const remote = new Map(
-    data.data.filter((m) => m.model_picker_enabled && m.policy?.state !== "disabled").map((m) => [m.id, m] as const),
+    data.data.flatMap((raw) => {
+      const item = Option.getOrUndefined(decodeItem(raw))
+      return item && usable(item) ? ([[item.id, item]] as const) : []
+    }),
   )
 
   // prune existing models whose api.id isn't in the endpoint response
@@ -189,7 +237,10 @@ export async function get(
     result[id] = build(id, m, baseURL)
   }
 
-  return result
+  return {
+    models: result,
+    pickerEnabled: new Set([...remote].filter(([, item]) => item.model_picker_enabled).map(([id]) => id)),
+  }
 }
 
 export * as CopilotModels from "./models"

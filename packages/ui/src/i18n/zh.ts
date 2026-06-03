@@ -50,6 +50,14 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "免费使用额度已用完",
   "ui.sessionTurn.error.addCredits": "添加积分",
 
+  "dialog.usageExceeded.freeTier.title": "免费额度已用完",
+  "dialog.usageExceeded.freeTier.description": "订阅 OpenCode Go，可靠地使用最佳开源模型，每月 $5 起。",
+  "dialog.usageExceeded.freeTier.actionLabel": "订阅",
+  "dialog.usageExceeded.accountRateLimit.title": "Go 额度已用完",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "使用额度已达上限。如需现在继续使用此模型，请从可用余额中启用使用",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "打开设置",
+
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在规划下一步",
   "ui.sessionTurn.status.gatheringContext": "正在探索",
