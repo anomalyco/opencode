@@ -54,20 +54,20 @@ describe("CloudflareWorkersAIPlugin", () => {
         const transform = yield* catalog.transform()
         yield* transform((catalog) =>
           catalog.provider.update(ProviderV2.ID.make("cloudflare-workers-ai"), (provider) => {
-            provider.endpoint = { type: "aisdk", package: "test-provider" }
+            provider.api = { type: "aisdk", package: "test-provider" }
           }),
         )
         const provider = yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))
         const sdk = yield* plugin.trigger(
           "aisdk.sdk",
           {
-            model: model("cloudflare-workers-ai", "@cf/model", { endpoint: provider.endpoint }),
+            model: model("cloudflare-workers-ai", "@cf/model", { api: provider.api }),
             package: "@ai-sdk/openai-compatible",
             options: { name: "cloudflare-workers-ai", headers: { custom: "header" } },
           },
           {},
         )
-        expect(provider.endpoint).toEqual({
+        expect(provider.api).toEqual({
           type: "aisdk",
           package: "test-provider",
           url: "https://api.cloudflare.com/client/v4/accounts/acct/ai/v1",
@@ -86,10 +86,10 @@ describe("CloudflareWorkersAIPlugin", () => {
         const transform = yield* catalog.transform()
         yield* transform((catalog) =>
           catalog.provider.update(ProviderV2.ID.make("cloudflare-workers-ai"), (provider) => {
-            provider.endpoint = { type: "aisdk", package: "test-provider", url: "https://proxy.example/v1" }
+            provider.api = { type: "aisdk", package: "test-provider", url: "https://proxy.example/v1" }
           }),
         )
-        expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).endpoint).toEqual({
+        expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).api).toEqual({
           type: "aisdk",
           package: "test-provider",
           url: "https://proxy.example/v1",
@@ -107,7 +107,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           "aisdk.sdk",
           {
             model: model("cloudflare-workers-ai", "@cf/model", {
-              endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://proxy.example/v1" },
+              api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://proxy.example/v1" },
             }),
             package: "@ai-sdk/openai-compatible",
             options: { name: "cloudflare-workers-ai", baseURL: "https://proxy.example/v1" },
@@ -152,10 +152,10 @@ describe("CloudflareWorkersAIPlugin", () => {
           const transform = yield* catalog.transform()
           yield* transform((catalog) =>
             catalog.provider.update(ProviderV2.ID.make("cloudflare-workers-ai"), (provider) => {
-              provider.endpoint = { type: "aisdk", package: "test-provider" }
+              provider.api = { type: "aisdk", package: "test-provider" }
             }),
           )
-          expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).endpoint).toEqual({
+          expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).api).toEqual({
             type: "aisdk",
             package: "test-provider",
             url: "https://api.cloudflare.com/client/v4/accounts/account-acct/ai/v1",
@@ -173,11 +173,11 @@ describe("CloudflareWorkersAIPlugin", () => {
         const transform = yield* catalog.transform()
         yield* transform((catalog) =>
           catalog.provider.update(ProviderV2.ID.make("cloudflare-workers-ai"), (provider) => {
-            provider.endpoint = { type: "aisdk", package: "test-provider" }
-            provider.options.aisdk.provider.accountId = "configured-acct"
+            provider.api = { type: "aisdk", package: "test-provider" }
+            provider.request.body.accountId = "configured-acct"
           }),
         )
-        expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).endpoint).toEqual({
+        expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).api).toEqual({
           type: "aisdk",
           package: "test-provider",
           url: "https://api.cloudflare.com/client/v4/accounts/env-acct/ai/v1",
@@ -195,7 +195,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           "aisdk.sdk",
           {
             model: model("cloudflare-workers-ai", "@cf/model", {
-              endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://proxy.example/v1" },
+              api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://proxy.example/v1" },
             }),
             package: "@ai-sdk/openai-compatible",
             options: {
@@ -224,7 +224,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           "aisdk.sdk",
           {
             model: model("cloudflare-workers-ai", "@cf/model", {
-              endpoint: {
+              api: {
                 type: "aisdk",
                 package: "@ai-sdk/openai-compatible",
                 url: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
@@ -273,7 +273,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           "aisdk.sdk",
           {
             model: model("cloudflare-workers-ai", "@cf/model", {
-              endpoint: { type: "aisdk", package: "@ai-sdk/anthropic", url: "https://proxy.example/v1" },
+              api: { type: "aisdk", package: "@ai-sdk/anthropic", url: "https://proxy.example/v1" },
             }),
             package: "@ai-sdk/anthropic",
             options: { name: "cloudflare-workers-ai" },

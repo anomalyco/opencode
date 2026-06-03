@@ -54,43 +54,45 @@ export const it = testEffect(
   ),
 )
 
-export function provider(providerID: string, options?: Partial<ProviderV2.Info>) {
+type ProviderInput = Partial<Omit<ProviderV2.Info, "api" | "request">> & {
+  api?: ProviderV2.Api
+  request?: ProviderV2.Request
+}
+
+type ModelInput = Partial<Omit<ModelV2.Info, "api" | "request">> & {
+  api?: ProviderV2.Api
+  request?: ModelV2.Info["request"]
+}
+
+export function provider(providerID: string, options?: ProviderInput) {
   return new ProviderV2.Info({
     ...ProviderV2.Info.empty(ProviderV2.ID.make(providerID)),
-    endpoint: {
+    api: options?.api ?? {
       type: "aisdk",
       package: "test-provider",
     },
     ...options,
-    options: {
+    request: {
       headers: {},
       body: {},
-      aisdk: {
-        provider: {},
-        request: {},
-      },
-      ...options?.options,
+      ...options?.request,
     },
   })
 }
 
-export function model(providerID: string, modelID: string, options?: Partial<ModelV2.Info>) {
+export function model(providerID: string, modelID: string, options?: ModelInput) {
   return new ModelV2.Info({
     ...ModelV2.Info.empty(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
     apiID: ModelV2.ID.make(modelID),
-    endpoint: {
+    api: options?.api ?? {
       type: "aisdk",
       package: "test-provider",
     },
     ...options,
-    options: {
+    request: {
       headers: {},
       body: {},
-      aisdk: {
-        provider: {},
-        request: {},
-      },
-      ...options?.options,
+      ...options?.request,
     },
   })
 }

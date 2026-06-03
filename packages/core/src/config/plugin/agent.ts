@@ -34,11 +34,9 @@ export const Plugin = PluginV2.define({
             if (item.variant !== undefined && agent.model !== undefined) {
               agent.model.variant = ModelV2.VariantID.make(item.variant)
             }
-            if (item.options !== undefined) {
-              Object.assign(agent.options.headers, item.options.headers ?? {})
-              Object.assign(agent.options.body, item.options.body ?? {})
-              Object.assign(agent.options.aisdk.provider, item.options.aisdk?.provider ?? {})
-              Object.assign(agent.options.aisdk.request, item.options.aisdk?.request ?? {})
+            if (item.request !== undefined) {
+              Object.assign(agent.request.headers, item.request.headers ?? {})
+              Object.assign(agent.request.body, item.request.body ?? {})
             }
             if (item.system !== undefined) agent.system = item.system
             if (item.description !== undefined) agent.description = item.description

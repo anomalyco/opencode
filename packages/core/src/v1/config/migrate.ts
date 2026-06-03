@@ -5,6 +5,7 @@ import { ConfigAgentV1 } from "./agent"
 import { ConfigMCPV1 } from "./mcp"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigProviderV1 } from "./provider"
+import { ConfigProviderOptionsV1 } from "./provider-options"
 
 const keys = new Set([
   "logLevel",
@@ -99,7 +100,7 @@ function agents(info: typeof ConfigV1.Info.Type) {
     ...Object.entries(info.mode ?? {}).map(([name, agent]) => [name, { ...agent, mode: "primary" as const }] as const),
   ]
   if (!entries.length) return undefined
-  return Object.fromEntries(entries.map(([name, agent]) => [name, migrateAgent(agent)]))
+  return Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
 }
 
 function migrateAgent(info: ConfigAgentV1.Info) {
@@ -111,7 +112,7 @@ function migrateAgent(info: ConfigAgentV1.Info) {
   return {
     model: info.model,
     variant: info.variant,
-    options: Object.keys(body).length ? { body } : undefined,
+    request: Object.keys(body).length ? { body } : undefined,
     system: info.prompt,
     description: info.description,
     mode: info.mode,
@@ -160,22 +161,27 @@ function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
 }
 
 function migrateProvider(info: ConfigProviderV1.Info) {
+  const lowerer = ConfigProviderOptionsV1.get(info.npm)
+  const options = lowerer.provider(info.options ?? {})
   return {
     name: info.name,
     env: info.env,
-    endpoint: info.npm && {
-      type: "aisdk" as const,
-      package: info.npm,
-      url: info.api ?? (typeof info.options?.baseURL === "string" ? info.options.baseURL : undefined),
-    },
-    options: info.options && { body: info.options },
+    api: info.npm
+      ? {
+          type: "aisdk" as const,
+          package: info.npm,
+          url: info.api ?? options.url,
+          settings: options.settings ?? {},
+        }
+      : undefined,
+    request: info.options && { headers: options.headers, body: options.body },
     models:
       info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
+      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)])),
   }
 }
 
-function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
+function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: string) {
   const costs = info.cost && [
     {
       input: info.cost.input,
@@ -197,16 +203,33 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     info.tool_call !== undefined || info.modalities?.input !== undefined || info.modalities?.output !== undefined
       ? { tools: info.tool_call ?? false, input: info.modalities?.input ?? [], output: info.modalities?.output ?? [] }
       : undefined
+  const lowerer = ConfigProviderOptionsV1.get(info.provider?.npm ?? packageName)
   return {
     api_id: info.id,
     family: info.family,
     name: info.name,
-    endpoint: info.provider?.npm && { type: "aisdk" as const, package: info.provider.npm, url: info.provider.api },
+    api: info.provider?.npm
+      ? { type: "aisdk" as const, package: info.provider.npm, url: info.provider.api, settings: {} }
+      : undefined,
     capabilities,
-    options: (info.headers || info.options) && { headers: info.headers, body: info.options },
-    variants: info.variants && Object.entries(info.variants).map(([id, options]) => ({ id, body: options })),
+    request: (info.headers || info.options) && {
+      headers: info.headers,
+      body: info.options && lowerer.request(info.options),
+    },
+    variants:
+      info.variants &&
+      Object.entries(info.variants).map(([id, options]) => ({ id, body: lowerer.request(options) })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
-    limit: info.limit,
+    limit:
+      info.limit && {
+        context: int(info.limit.context),
+        input: info.limit.input === undefined ? undefined : int(info.limit.input),
+        output: int(info.limit.output),
+      },
   }
+}
+
+function int(value: number) {
+  return Math.max(Number.MIN_SAFE_INTEGER, Math.min(Number.MAX_SAFE_INTEGER, Math.trunc(value)))
 }

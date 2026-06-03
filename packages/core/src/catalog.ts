@@ -97,34 +97,29 @@ export const layer = Layer.effect(
 
     const resolve = (model: ModelV2.Info) => {
       const provider = state.get().providers.get(model.providerID)!.provider
-      const endpoint =
-        model.endpoint.type === "unknown"
-          ? provider.endpoint
-          : model.endpoint.type === "aisdk" && provider.endpoint.type === "aisdk" && !model.endpoint.url
-            ? { ...model.endpoint, url: provider.endpoint.url }
-            : model.endpoint
-      const options = {
+      const api =
+        model.api.type === "native" && !model.api.url && Object.keys(model.api.settings).length === 0
+          ? provider.api
+          : model.api.type === "aisdk" && provider.api.type === "aisdk" && !model.api.url
+            ? { ...model.api, url: provider.api.url, settings: { ...provider.api.settings, ...model.api.settings } }
+            : model.api.type === "aisdk" && provider.api.type === "aisdk"
+              ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
+            : model.api
+      const request = {
         headers: {
-          ...provider.options.headers,
-          ...model.options.headers,
+          ...provider.request.headers,
+          ...model.request.headers,
         },
         body: {
-          ...provider.options.body,
-          ...model.options.body,
+          ...provider.request.body,
+          ...model.request.body,
         },
-        aisdk: {
-          provider: {
-            ...provider.options.aisdk.provider,
-            ...model.options.aisdk.provider,
-          },
-          request: model.options.aisdk.request,
-        },
-        variant: model.options.variant,
+        variant: model.request.variant,
       }
       return new ModelV2.Info({
         ...model,
-        endpoint,
-        options,
+        api,
+        request,
       })
     }
 
@@ -134,10 +129,10 @@ export const layer = Layer.effect(
       return match
     }
 
-    const normalizeEndpoint = (item: Draft<ProviderV2.Info> | Draft<ModelV2.Info>) => {
-      if (item.endpoint.type !== "aisdk" || typeof item.options.aisdk.provider.baseURL !== "string") return
-      item.endpoint.url = item.options.aisdk.provider.baseURL
-      delete item.options.aisdk.provider.baseURL
+    const normalizeApi = (item: Draft<ProviderV2.Info> | Draft<ModelV2.Info>) => {
+      if (typeof item.request.body.baseURL !== "string") return
+      item.api.url = item.request.body.baseURL
+      delete item.request.body.baseURL
     }
 
     const state = State.create<Data, Editor>({
@@ -157,7 +152,7 @@ export const layer = Layer.effect(
                 draft.providers.set(providerID, current)
               }
               fn(current.provider)
-              normalizeEndpoint(current.provider)
+              normalizeApi(current.provider)
             },
             remove: (providerID) => {
               draft.providers.delete(providerID)
@@ -179,7 +174,7 @@ export const layer = Layer.effect(
               fn(model)
               model.id = modelID
               model.providerID = providerID
-              normalizeEndpoint(model)
+              normalizeApi(model)
             },
             remove: (providerID, modelID) => {
               draft.providers.get(providerID)?.models.delete(modelID)

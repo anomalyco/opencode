@@ -13,7 +13,7 @@ const it = testEffect(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultL
 const model = new ModelV2.Info({
   ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
   apiID: ModelV2.ID.make("grok-4"),
-  endpoint: {
+  api: {
     type: "aisdk",
     package: "@ai-sdk/xai",
   },

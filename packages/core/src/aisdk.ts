@@ -58,8 +58,12 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 }
 
 function prepareOptions(model: ModelV2.Info, pkg: string) {
-  const options: Record<string, any> = { name: model.providerID, ...model.options.aisdk.provider }
-  if (model.endpoint.type === "aisdk" && model.endpoint.url) options.baseURL = model.endpoint.url
+  const options: Record<string, any> = {
+    name: model.providerID,
+    ...(model.api.type === "aisdk" ? (model.api.settings ?? {}) : {}),
+    ...model.request.body,
+  }
+  if (model.api.type === "aisdk" && model.api.url) options.baseURL = model.api.url
 
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
@@ -123,25 +127,25 @@ export const layer = Layer.effect(
 
     return Service.of({
       language: Effect.fn("AISDK.language")(function* (model) {
-        const key = `${model.providerID}/${model.id}/${model.options.variant ?? "default"}`
+        const key = `${model.providerID}/${model.id}/${model.request.variant ?? "default"}`
         const existing = languages.get(key)
         if (existing) return existing
-        if (model.endpoint.type !== "aisdk")
+        if (model.api.type !== "aisdk")
           return yield* new InitError({
             providerID: model.providerID,
-            cause: new Error(`Unsupported endpoint ${model.endpoint.type}`),
+            cause: new Error(`Unsupported api ${model.api.type}`),
           })
 
-        const options = prepareOptions(model, model.endpoint.package)
+        const options = prepareOptions(model, model.api.package)
         const sdkKey = JSON.stringify({
           providerID: model.providerID,
-          endpoint: model.endpoint,
+          api: model.api,
           options,
         })
         const sdk =
           sdks.get(sdkKey) ??
           (yield* plugin
-            .trigger("aisdk.sdk", { model, package: model.endpoint.package, options }, {})
+            .trigger("aisdk.sdk", { model, package: model.api.package, options }, {})
             .pipe(initError(model.providerID))).sdk
         if (!sdk)
           return yield* new InitError({

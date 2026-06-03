@@ -32,10 +32,7 @@ function context(
         updates.push({
           id: providerID,
           enabled: provider.enabled,
-          apiKey:
-            typeof provider.options.aisdk.provider.apiKey === "string"
-              ? provider.options.aisdk.provider.apiKey
-              : undefined,
+          apiKey: typeof provider.request.body.apiKey === "string" ? provider.request.body.apiKey : undefined,
         })
       },
       remove: (providerID) => {
