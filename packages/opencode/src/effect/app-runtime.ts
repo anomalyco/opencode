@@ -2,15 +2,13 @@ import { Layer, ManagedRuntime } from "effect"
 import { attach } from "./run-service"
 import * as Observability from "@opencode-ai/core/effect/observability"
 
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Bus } from "@/bus"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Database } from "@opencode-ai/core/database/database"
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
 import { Config } from "@/config/config"
 import { Git } from "@/git"
-import { Ripgrep } from "@/file/ripgrep"
-import { File } from "@/file"
-import { FileWatcher } from "@/file/watcher"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
@@ -51,25 +49,21 @@ import { PtyTicket } from "@/pty/ticket"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
-import { SyncEvent } from "@/sync"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
-import { DataMigration } from "@/data-migration"
 import { BackgroundJob } from "@/background/job"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
-  AppFileSystem.defaultLayer,
-  Bus.defaultLayer,
+  FSUtil.defaultLayer,
+  Database.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
   Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
-  File.defaultLayer,
-  FileWatcher.defaultLayer,
   Storage.defaultLayer,
   Snapshot.defaultLayer,
   Plugin.defaultLayer,
@@ -86,6 +80,7 @@ export const AppLayer = Layer.mergeAll(
   SessionStatus.defaultLayer,
   BackgroundJob.defaultLayer,
   RuntimeFlags.defaultLayer,
+  EventV2Bridge.defaultLayer,
   SessionRunState.defaultLayer,
   SessionProcessor.defaultLayer,
   SessionCompaction.defaultLayer,
@@ -111,9 +106,6 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
-  SyncEvent.defaultLayer,
-  EventV2Bridge.defaultLayer,
-  DataMigration.defaultLayer,
 ).pipe(Layer.provideMerge(InstanceLayer.layer), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

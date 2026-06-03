@@ -1,20 +1,13 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import { Bus } from "../../src/bus"
-import { AppRuntime } from "../../src/effect/app-runtime"
-import { InstanceRef } from "../../src/effect/instance-ref"
-import { Server } from "../../src/server/server"
-import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
-import { Event as ServerEvent } from "../../src/server/event"
+import { afterEach, describe, expect } from "bun:test"
+import { Effect, Layer, Queue, Schema, Stream } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
-import { Effect, Schema } from "effect"
+import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, reloadTestInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 void Log.init({ print: false })
-
-function app() {
-  return Server.Default().app
-}
 
 const EventData = Schema.Struct({
   id: Schema.optional(Schema.String),
@@ -22,100 +15,83 @@ const EventData = Schema.Struct({
   properties: Schema.Record(Schema.String, Schema.Any),
 })
 
-async function readChunk(reader: ReadableStreamDefaultReader<Uint8Array>) {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      reader.read(),
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error("timed out waiting for event")), 5_000)
+const readEvent = (reader: Queue.Dequeue<Uint8Array>) =>
+  Effect.gen(function* () {
+    const value = yield* Queue.take(reader).pipe(
+      Effect.timeoutOrElse({
+        duration: "5 seconds",
+        orElse: () => Effect.fail(new Error("timed out waiting for event")),
       }),
-    ])
-  } finally {
-    if (timeout) clearTimeout(timeout)
-  }
-}
+    )
+    return Schema.decodeUnknownSync(EventData)(JSON.parse(new TextDecoder().decode(value).replace(/^data: /, "")))
+  })
 
-async function readFirstEvent(response: Response) {
-  if (!response.body) throw new Error("missing response body")
-  const reader = response.body.getReader()
-  try {
-    return await readEvent(reader)
-  } finally {
-    await reader.cancel()
-  }
-}
-
-async function readEvent(reader: ReadableStreamDefaultReader<Uint8Array>) {
-  const result = await readChunk(reader)
-  if (result.done || !result.value) throw new Error("event stream closed")
-  return Schema.decodeUnknownSync(EventData)(JSON.parse(new TextDecoder().decode(result.value).replace(/^data: /, "")))
-}
-
-async function readStatusWithin(reader: ReadableStreamDefaultReader<Uint8Array>, delay: number) {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      reader.read().then((result) => (result.done ? "closed" : "event")),
-      new Promise<"open">((resolve) => {
-        timeout = setTimeout(() => resolve("open"), delay)
-      }),
-    ])
-  } finally {
-    if (timeout) clearTimeout(timeout)
-  }
-}
+const openEventStream = (directory: string) =>
+  Effect.gen(function* () {
+    const response = yield* requestInDirectory(EventPaths.event, directory)
+    const reader = yield* Queue.unbounded<Uint8Array>()
+    yield* response.stream.pipe(
+      Stream.runForEach((value) => Queue.offer(reader, value)),
+      Effect.forkScoped,
+    )
+    return { response, reader }
+  })
 
 afterEach(async () => {
   await disposeAllInstances()
   await resetDatabase()
 })
 
+const it = testEffect(httpApiLayer)
+
 describe("event HttpApi", () => {
-  test("serves event stream", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const response = await app().request(EventPaths.event, { headers: { "x-opencode-directory": tmp.path } })
+  it.instance(
+    "serves event stream",
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const { response, reader } = yield* openEventStream(directory)
 
-    expect(response.status).toBe(200)
-    expect(response.headers.get("content-type")).toContain("text/event-stream")
-    expect(response.headers.get("cache-control")).toBe("no-cache, no-transform")
-    expect(response.headers.get("x-accel-buffering")).toBe("no")
-    expect(response.headers.get("x-content-type-options")).toBe("nosniff")
-    expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
-  })
+        expect(response.status).toBe(200)
+        expect(response.headers["content-type"]).toContain("text/event-stream")
+        expect(response.headers["cache-control"]).toBe("no-cache, no-transform")
+        expect(response.headers["x-accel-buffering"]).toBe("no")
+        expect(response.headers["x-content-type-options"]).toBe("nosniff")
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
 
-  test("keeps the event stream open after the initial event", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const response = await app().request(EventPaths.event, { headers: { "x-opencode-directory": tmp.path } })
-    if (!response.body) throw new Error("missing response body")
+  it.instance(
+    "keeps the event stream open after the initial event",
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const { reader } = yield* openEventStream(directory)
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
 
-    const reader = response.body.getReader()
-    try {
-      expect(await readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
-      expect(await readStatusWithin(reader, 250)).toBe("open")
-    } finally {
-      await reader.cancel()
-    }
-  })
+        // If no second event arrives within 250ms, the stream is still open.
+        const status = yield* Queue.take(reader).pipe(
+          Effect.as("event" as const),
+          Effect.timeoutOrElse({ duration: "250 millis", orElse: () => Effect.succeed("open" as const) }),
+        )
+        expect(status).toBe("open")
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
 
-  test("delivers instance bus events after the initial event", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const response = await app().request(EventPaths.event, { headers: { "x-opencode-directory": tmp.path } })
-    if (!response.body) throw new Error("missing response body")
+  it.instance(
+    "delivers instance events after the initial event",
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const { reader } = yield* openEventStream(directory)
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
 
-    const reader = response.body.getReader()
-    try {
-      expect(await readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
-
-      const next = readEvent(reader)
-      const ctx = await reloadTestInstance({ directory: tmp.path })
-      await AppRuntime.runPromise(
-        Bus.Service.use((svc) => svc.publish(ServerEvent.Connected, {})).pipe(Effect.provideService(InstanceRef, ctx)),
-      )
-
-      expect(await next).toMatchObject({ type: "server.connected", properties: {} })
-    } finally {
-      await reader.cancel()
-    }
-  })
+        const created = yield* requestInDirectory("/session", directory, { method: "POST" })
+        expect(created.status).toBe(200)
+        expect(yield* readEvent(reader)).toMatchObject({ type: "session.created" })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
 })

@@ -6,20 +6,20 @@ import { useMutation } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { type LocalProject, getAvatarColors } from "@/context/layout"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { useLanguage } from "@/context/language"
-import { getProjectAvatarSource } from "@/pages/layout/sidebar-items"
+import { getProjectAvatarSource } from "@/pages/layout/helpers"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 
 export function DialogEditProject(props: { project: LocalProject }) {
   const dialog = useDialog()
-  const globalSDK = useGlobalSDK()
-  const globalSync = useGlobalSync()
+  const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
   const language = useLanguage()
 
   const folderName = createMemo(() => getFilename(props.project.worktree))
@@ -78,19 +78,19 @@ export function DialogEditProject(props: { project: LocalProject }) {
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        await globalSDK.client.project.update({
+        await serverSDK.client.project.update({
           projectID: props.project.id,
           directory: props.project.worktree,
           name,
           icon: { color: store.color || "", override: store.iconOverride || "" },
           commands: { start },
         })
-        globalSync.project.icon(props.project.worktree, store.iconOverride || undefined)
+        serverSync.project.icon(props.project.worktree, store.iconOverride || undefined)
         dialog.close()
         return
       }
 
-      globalSync.project.meta(props.project.worktree, {
+      serverSync.project.meta(props.project.worktree, {
         name,
         icon: { color: store.color || undefined, override: store.iconOverride || undefined },
         commands: { start: start || undefined },

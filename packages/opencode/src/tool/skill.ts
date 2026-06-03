@@ -2,7 +2,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Schema } from "effect"
 import * as Stream from "effect/Stream"
-import { Ripgrep } from "../file/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
@@ -22,12 +22,9 @@ export const SkillTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const info = yield* skill.get(params.name)
-          if (!info) {
-            const all = yield* skill.all()
-            const available = all.map((item) => item.name).join(", ")
-            throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
-          }
+          const info = yield* skill
+            .require(params.name)
+            .pipe(Effect.catchTag("Skill.NotFoundError", (error) => Effect.die(new Error(error.message))))
 
           yield* ctx.ask({
             permission: "skill",

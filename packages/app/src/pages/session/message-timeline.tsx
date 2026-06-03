@@ -4,13 +4,10 @@ import {
   createSignal,
   For,
   Index,
-  Match,
-  Switch,
   on,
   onCleanup,
   Show,
   mapArray,
-  untrack,
   type Accessor,
   type JSX,
 } from "solid-js"
@@ -51,7 +48,7 @@ import type {
   ToolPart,
   UserMessage,
 } from "@opencode-ai/sdk/v2"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
@@ -63,11 +60,12 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
-import { useGlobalSDK } from "@/context/global-sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { makeTimer } from "@solid-primitives/timer"
@@ -260,7 +258,7 @@ function TimelineDiffView(props: { diff: SummaryDiff }) {
 
   return (
     <div data-slot="session-turn-diff-view" data-scrollable>
-      <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
+      <Dynamic component={fileComponent} mode="diff" virtualize={false} fileDiff={view.fileDiff} />
     </div>
   )
 }
@@ -288,7 +286,7 @@ export function MessageTimeline(props: {
   let touchGesture: number | undefined
 
   const navigate = useNavigate()
-  const globalSDK = useGlobalSDK()
+  const serverSDK = useServerSDK()
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
@@ -430,8 +428,7 @@ export function MessageTimeline(props: {
     if (rows.length === 0) return rows
     return reuseTimelineRows(previous, [...rows, new TimelineRow.BottomSpacer()])
   })
-  const timelineRowByKey = createMemo(() => new Map(timelineRows().map((row) => [TimelineRow.key(row), row] as const)))
-  const timelineRowKeys = createMemo(() => [...timelineRowByKey().keys()], [] as string[], { equals: sameKeys })
+  const timelineRowKeys = createMemo(() => timelineRows().map(TimelineRow.key), [] as string[], { equals: sameKeys })
   const virtualCache = createMemo(() => readTimelineCache(sessionKey(), timelineRowKeys()))
   const messageRowIndex = createMemo(() => {
     const result = new Map<string, number>()
@@ -439,6 +436,14 @@ export function MessageTimeline(props: {
       if (!("userMessageID" in row)) return
       if (result.has(row.userMessageID)) return
       result.set(row.userMessageID, index)
+    })
+    return result
+  })
+  const lastAssistantGroupKey = createMemo(() => {
+    const result = new Map<string, string>()
+    timelineRows().forEach((row) => {
+      if (row._tag !== "AssistantPart") return
+      result.set(row.userMessageID, row.group.key)
     })
     return result
   })
@@ -555,6 +560,7 @@ export function MessageTimeline(props: {
   const [bar, setBar] = createStore({
     ms: pace(640),
   })
+  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})
 
   let more: HTMLButtonElement | undefined
   let head: HTMLDivElement | undefined
@@ -574,6 +580,11 @@ export function MessageTimeline(props: {
   createResizeObserver(() => head, updateTitleMetrics)
 
   const isMeasuredBottom = (root: HTMLDivElement) => root.scrollHeight - root.clientHeight - root.scrollTop <= 4
+
+  const measureTimeline = () => {
+    virtualizer?.measure()
+    anchorMeasuredBottom()
+  }
 
   function anchorMeasuredBottom() {
     if (!listRoot) return false
@@ -719,14 +730,14 @@ export function MessageTimeline(props: {
   }
 
   const shareMutation = useMutation(() => ({
-    mutationFn: (id: string) => globalSDK.client.session.share({ sessionID: id, directory: sdk.directory }),
+    mutationFn: (id: string) => serverSDK.client.session.share({ sessionID: id, directory: sdk.directory }),
     onError: (err) => {
       console.error("Failed to share session", err)
     },
   }))
 
   const unshareMutation = useMutation(() => ({
-    mutationFn: (id: string) => globalSDK.client.session.unshare({ sessionID: id, directory: sdk.directory }),
+    mutationFn: (id: string) => serverSDK.client.session.unshare({ sessionID: id, directory: sdk.directory }),
     onError: (err) => {
       console.error("Failed to unshare session", err)
     },
@@ -851,7 +862,9 @@ export function MessageTimeline(props: {
             if (index !== -1) draft.session.splice(index, 1)
           }),
         )
+        sync.session.evict(sessionID)
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+        notifySessionTabsRemoved({ directory: sdk.directory, sessionIDs: [sessionID] })
       })
       .catch((err) => {
         showToast({
@@ -882,42 +895,46 @@ export function MessageTimeline(props: {
 
     if (!result) return false
 
+    const removed = new Set<string>([sessionID])
+    const byParent = new Map<string, string[]>()
+    for (const item of sync.data.session) {
+      const parentID = item.parentID
+      if (!parentID) continue
+      const existing = byParent.get(parentID)
+      if (existing) {
+        existing.push(item.id)
+        continue
+      }
+      byParent.set(parentID, [item.id])
+    }
+
+    const stack = [sessionID]
+    while (stack.length) {
+      const parentID = stack.pop()
+      if (!parentID) continue
+
+      const children = byParent.get(parentID)
+      if (!children) continue
+
+      for (const child of children) {
+        if (removed.has(child)) continue
+        removed.add(child)
+        stack.push(child)
+      }
+    }
+
+    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+
     sync.set(
       produce((draft) => {
-        const removed = new Set<string>([sessionID])
-
-        const byParent = new Map<string, string[]>()
-        for (const item of draft.session) {
-          const parentID = item.parentID
-          if (!parentID) continue
-          const existing = byParent.get(parentID)
-          if (existing) {
-            existing.push(item.id)
-            continue
-          }
-          byParent.set(parentID, [item.id])
-        }
-
-        const stack = [sessionID]
-        while (stack.length) {
-          const parentID = stack.pop()
-          if (!parentID) continue
-
-          const children = byParent.get(parentID)
-          if (!children) continue
-
-          for (const child of children) {
-            if (removed.has(child)) continue
-            removed.add(child)
-            stack.push(child)
-          }
-        }
-
         draft.session = draft.session.filter((s) => !removed.has(s.id))
       }),
     )
 
-    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
+    for (const id of removed) {
+      sync.session.evict(id)
+    }
+    notifySessionTabsRemoved({ directory: sdk.directory, sessionIDs: [...removed] })
     return true
   }
 
@@ -996,7 +1013,7 @@ export function MessageTimeline(props: {
   const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
 
   const renderAssistantPartGroup = (row: Accessor<TimelineRowMap["AssistantPart"]>) => {
-    if (untrack(row).group.type === "context") {
+    if (row().group.type === "context") {
       const parts = createMemo(() => {
         const group = row().group
         if (group.type !== "context") return emptyTools
@@ -1005,7 +1022,15 @@ export function MessageTimeline(props: {
           .filter((part): part is ToolPart => part?.type === "tool")
       })
 
-      return <ContextToolGroup parts={parts()} busy={workingTurn(row().userMessageID) && row().lastAssistantPart} />
+      return (
+        <ContextToolGroup
+          parts={parts()}
+          busy={
+            workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key
+          }
+          onSizeChange={measureTimeline}
+        />
+      )
     }
 
     const message = createMemo(() => {
@@ -1018,6 +1043,11 @@ export function MessageTimeline(props: {
       if (group.type !== "part") return
       return getMsgPart(group.ref.messageID, group.ref.partID)
     })
+    const defaultOpen = createMemo(() => {
+      const item = part()
+      if (!item) return
+      return partDefaultOpen(item, settings.general.shellToolPartsExpanded(), settings.general.editToolPartsExpanded())
+    })
 
     return (
       <Show when={message()}>
@@ -1029,12 +1059,11 @@ export function MessageTimeline(props: {
                 message={message()}
                 showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
                 turnDurationMs={turnDurationMs(row().userMessageID)}
-                defaultOpen={partDefaultOpen(
-                  part(),
-                  settings.general.shellToolPartsExpanded(),
-                  settings.general.editToolPartsExpanded(),
-                )}
+                defaultOpen={defaultOpen()}
+                toolOpen={toolOpen[part().id] ?? defaultOpen()}
+                onToolOpenChange={(open) => setToolOpen(part().id, open)}
                 deferToolContent={false}
+                virtualizeDiff={false}
               />
             )}
           </Show>
@@ -1222,8 +1251,8 @@ export function MessageTimeline(props: {
     }
   }
 
-  function TimelineRowView(props: { rowKey: string }) {
-    return <Show when={timelineRowByKey().get(props.rowKey)}>{(item) => renderTimelineRow(item)}</Show>
+  function TimelineRowView(props: { row: TimelineRow.TimelineRow }) {
+    return renderTimelineRow(() => props.row)
   }
 
   return (
@@ -1262,7 +1291,6 @@ export function MessageTimeline(props: {
         onClick={props.onAutoScrollInteraction}
         class="relative min-w-0 w-full h-full"
         style={{
-          "--session-title-height": showHeader() ? "40px" : "0px",
           "--sticky-accordion-top": showHeader() ? "48px" : "0px",
         }}
       >
@@ -1282,16 +1310,14 @@ export function MessageTimeline(props: {
             }}
           >
             <Show when={workingStatus() !== "hidden" && settings.general.showSessionProgressBar()}>
-              <div
-                data-component="session-progress"
-                data-state={workingStatus()}
-                aria-hidden="true"
-                style={{
-                  "--session-progress-color": tint() ?? "var(--icon-interactive-base)",
-                  "--session-progress-ms": `${bar.ms}ms`,
-                }}
-              >
-                <div data-component="session-progress-bar" />
+              <div data-component="session-progress" data-state={workingStatus()} aria-hidden="true">
+                <div
+                  data-component="session-progress-bar"
+                  style={{
+                    background: tint() ?? "var(--icon-interactive-base)",
+                    animation: `session-progress-whip ${bar.ms}ms infinite`,
+                  }}
+                />
               </div>
             </Show>
             <div class="h-12 w-full flex items-center justify-between gap-2">
@@ -1558,7 +1584,7 @@ export function MessageTimeline(props: {
         <Show when={scrollRoot()}>
           {(root) => (
             <Virtualizer
-              data={timelineRowKeys()}
+              data={timelineRows()}
               cache={virtualCache()}
               itemSize={virtualCache() ? undefined : timelineFallbackItemSize}
               scrollRef={root()}
@@ -1578,7 +1604,7 @@ export function MessageTimeline(props: {
                 scheduleContentRoot(root())
               }}
             >
-              {(key) => <TimelineRowView rowKey={key} />}
+              {(row) => <TimelineRowView row={row} />}
             </Virtualizer>
           )}
         </Show>
