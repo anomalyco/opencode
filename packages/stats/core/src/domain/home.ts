@@ -95,6 +95,7 @@ export type StatsHomeData = {
 const DAY_MS = 86_400_000
 const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
+const METRIC_MODEL_LIMIT = 10
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
 type StatMetricRow = Omit<ModelStatMetric, "updatedAt"> & {
@@ -422,7 +423,7 @@ function buildCountryStats(rows: GeoMetricRow[], window: DateWindow) {
 }
 
 function buildTokenCost(rows: StatMetricRow[], product: TokenProduct, window: DateWindow) {
-  return aggregateByModel(rowsForProduct(rows, product, window.start, window.end))
+  return topModelsByUsage(rows, product, window)
     .flatMap((item) => {
       const total = costPerMillion(item.totalCostMicrocents, item.totalTokens)
       if (total === 0) return []
@@ -437,11 +438,10 @@ function buildTokenCost(rows: StatMetricRow[], product: TokenProduct, window: Da
       ]
     })
     .toSorted((a, b) => a.total - b.total)
-    .slice(0, 17)
 }
 
 function buildCacheRatio(rows: StatMetricRow[], product: TokenProduct, window: DateWindow) {
-  return aggregateByModel(rowsForProduct(rows, product, window.start, window.end))
+  return topModelsByUsage(rows, product, window)
     .flatMap((item) => {
       const total = item.inputTokens + item.cacheReadTokens
       if (total === 0) return []
@@ -456,11 +456,10 @@ function buildCacheRatio(rows: StatMetricRow[], product: TokenProduct, window: D
       ]
     })
     .toSorted((a, b) => b.ratio - a.ratio || b.cached - a.cached)
-    .slice(0, 17)
 }
 
 function buildSessionCost(rows: StatMetricRow[], product: TokenProduct, window: DateWindow) {
-  return aggregateByModel(rowsForProduct(rows, product, window.start, window.end))
+  return topModelsByUsage(rows, product, window)
     .flatMap((item) => {
       if (item.sessions === 0) return []
       const cost = round(microcentsToDollars(item.totalCostMicrocents) / item.sessions, 4)
@@ -468,7 +467,12 @@ function buildSessionCost(rows: StatMetricRow[], product: TokenProduct, window: 
       return [{ model: item.model, cost, tokens: Math.round(item.totalTokens / item.sessions) }]
     })
     .toSorted((a, b) => a.cost - b.cost)
-    .slice(0, 17)
+}
+
+function topModelsByUsage(rows: StatMetricRow[], product: TokenProduct, window: DateWindow) {
+  return aggregateByModel(rowsForProduct(rows, product, window.start, window.end))
+    .toSorted((a, b) => b.totalTokens - a.totalTokens)
+    .slice(0, METRIC_MODEL_LIMIT)
 }
 
 function buildModelUsage(rows: StatMetricRow[], window: DateWindow, range: UsageRange) {
