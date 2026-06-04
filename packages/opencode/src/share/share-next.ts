@@ -16,6 +16,7 @@ import { Config } from "@/config/config"
 import * as Log from "@opencode-ai/core/util/log"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
 
 const log = Log.create({ service: "share-next" })
@@ -284,7 +285,7 @@ export const layer = Layer.effect(
               .map((item) => [`${item.providerID}/${item.modelID}`, item] as const),
           ).values(),
         ),
-        (item) => provider.getModel(ProviderV2.ID.make(item.providerID), ProviderV2.ModelID.make(item.modelID)),
+        (item) => provider.getModel(ProviderV2.ID.make(item.providerID), ModelV2.ID.make(item.modelID)),
         { concurrency: 8 },
       )
 

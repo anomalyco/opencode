@@ -20,11 +20,14 @@ const SyncEventSchemas = EventV2.registry
     return [
       Schema.Struct({
         type: Schema.Literal("sync"),
-        name: Schema.Literal(EventV2.versionedType(definition.type, definition.sync.version)),
         id: Schema.String,
-        seq: Schema.Finite,
-        aggregateID: Schema.Literal(definition.sync.aggregate),
-        data: definition.data,
+        syncEvent: Schema.Struct({
+          type: Schema.Literal(EventV2.versionedType(definition.type, definition.sync.version)),
+          id: Schema.String,
+          seq: Schema.Finite,
+          aggregateID: Schema.String,
+          data: definition.data,
+        }),
       }).annotate({ identifier: `SyncEvent.${definition.type}` }),
     ]
   })

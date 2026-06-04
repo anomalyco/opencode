@@ -10,6 +10,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 void Log.init({ print: false })
@@ -18,7 +19,7 @@ const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, httpApiLayer))
 
 const model = {
   providerID: ProviderV2.ID.make("test"),
-  modelID: ProviderV2.ModelID.make("test"),
+  modelID: ModelV2.ID.make("test"),
 }
 
 afterEach(async () => {

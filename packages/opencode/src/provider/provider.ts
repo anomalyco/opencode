@@ -27,6 +27,7 @@ import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
@@ -664,7 +665,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             for (const m of result.models) {
               if (!input.models[m.id]) {
                 models[m.id] = {
-                  id: ProviderV2.ModelID.make(m.id),
+                  id: ModelV2.ID.make(m.id),
                   providerID: ProviderV2.ID.make("gitlab"),
                   name: `Agent Platform (${m.name})`,
                   family: "",
@@ -920,7 +921,7 @@ const ProviderLimit = Schema.Struct({
 })
 
 export const Model = Schema.Struct({
-  id: ProviderV2.ModelID,
+  id: ModelV2.ID,
   providerID: ProviderV2.ID,
   api: ProviderApiInfo,
   name: Schema.String,
@@ -978,7 +979,7 @@ export function defaultModelIDs<T extends { models: Record<string, { id: string 
 
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
   providerID: ProviderV2.ID,
-  modelID: ProviderV2.ModelID,
+  modelID: ModelV2.ID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
   cause: Schema.optional(Schema.Defect),
 }) {
@@ -1018,7 +1019,7 @@ export interface Interface {
   readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
   readonly getModel: (
     providerID: ProviderV2.ID,
-    modelID: ProviderV2.ModelID,
+    modelID: ModelV2.ID,
   ) => Effect.Effect<Model, ModelNotFoundError>
   readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
   readonly closest: (
@@ -1027,7 +1028,7 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<
-    { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID },
+    { providerID: ProviderV2.ID; modelID: ModelV2.ID },
     DefaultModelError
   >
 }
@@ -1080,7 +1081,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
-    id: ProviderV2.ModelID.make(model.id),
+    id: ModelV2.ID.make(model.id),
     providerID: ProviderV2.ID.make(provider.id),
     name: model.name,
     family: model.family,
@@ -1138,7 +1139,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
       const base = fromModelsDevModel(provider, model)
       models[id] = {
         ...base,
-        id: ProviderV2.ModelID.make(id),
+        id: ModelV2.ID.make(id),
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
         options: opts.provider?.body
@@ -1163,7 +1164,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
-function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelID, enableExperimentalModels: boolean) {
+function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
   const available = provider
     ? Object.keys(provider.models).filter((id) => {
         const model = provider.models[id]
@@ -1279,7 +1280,7 @@ export const layer = Layer.effect(
                 id,
                 {
                   ...model,
-                  id: ProviderV2.ModelID.make(id),
+                  id: ModelV2.ID.make(id),
                   providerID,
                 },
               ]),
@@ -1314,7 +1315,7 @@ export const layer = Layer.effect(
               return existingModel?.name ?? modelID
             })
             const parsedModel: Model = {
-              id: ProviderV2.ModelID.make(modelID),
+              id: ModelV2.ID.make(modelID),
               api: {
                 id: apiID,
                 npm: apiNpm,
@@ -1703,7 +1704,7 @@ export const layer = Layer.effect(
       InstanceState.use(state, (s) => s.providers[providerID]),
     )
 
-    const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ProviderV2.ModelID) {
+    const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ModelV2.ID) {
       const s = yield* InstanceState.get(state)
       const provider = s.providers[providerID]
       if (!provider) {
@@ -1792,7 +1793,7 @@ export const layer = Layer.effect(
       if (experimental.model) {
         return {
           ...experimental.model,
-          id: ProviderV2.ModelID.make(experimental.model.id),
+          id: ModelV2.ID.make(experimental.model.id),
           providerID: ProviderV2.ID.make(experimental.model.providerID),
         }
       }
@@ -1846,16 +1847,16 @@ export const layer = Layer.effect(
 
       const s = yield* InstanceState.get(state)
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
-        Effect.map((x): { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }[] => {
+        Effect.map((x): { providerID: ProviderV2.ID; modelID: ModelV2.ID }[] => {
           if (!isRecord(x) || !Array.isArray(x.recent)) return []
           return x.recent.flatMap((item) => {
             if (!isRecord(item)) return []
             if (typeof item.providerID !== "string") return []
             if (typeof item.modelID !== "string") return []
-            return [{ providerID: ProviderV2.ID.make(item.providerID), modelID: ProviderV2.ModelID.make(item.modelID) }]
+            return [{ providerID: ProviderV2.ID.make(item.providerID), modelID: ModelV2.ID.make(item.modelID) }]
           })
         }),
-        Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }[])),
+        Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ModelV2.ID }[])),
       )
       for (const entry of recent) {
         const provider = s.providers[entry.providerID]
@@ -1904,7 +1905,7 @@ export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
     providerID: ProviderV2.ID.make(providerID),
-    modelID: ProviderV2.ModelID.make(rest.join("/")),
+    modelID: ModelV2.ID.make(rest.join("/")),
   }
 }
 

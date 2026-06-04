@@ -243,7 +243,7 @@ export const layer = Layer.effect(
           agent: input.agent,
           model: input.model
             ? {
-                id: ProviderV2.ModelID.make(input.model.id),
+                id: ModelV2.ID.make(input.model.id),
                 providerID: input.model.providerID,
                 variant: input.model.variant,
               }

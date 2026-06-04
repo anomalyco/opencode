@@ -10,6 +10,7 @@ import { NotFoundError } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 void Log.init({ print: false })
 
@@ -98,7 +99,7 @@ const addAssistant = Effect.fn("Test.addAssistant")(function* (
     role: "assistant",
     time: { created: Date.now() },
     parentID,
-    modelID: ProviderV2.ModelID.make("test"),
+    modelID: ModelV2.ID.make("test"),
     providerID: ProviderV2.ID.make("test"),
     mode: "",
     agent: "default",

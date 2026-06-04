@@ -87,6 +87,7 @@
     "@opencode-ai/llm": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
+    "@opencode-ai/server": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.8.1",

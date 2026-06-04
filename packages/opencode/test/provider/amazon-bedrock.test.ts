@@ -10,6 +10,7 @@ import { Provider } from "@/provider/provider"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer))
 
@@ -113,7 +114,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
-      const model = yield* Provider.use.getModel(ProviderV2.ID.amazonBedrock, ProviderV2.ModelID.make("openai.gpt-5.5"))
+      const model = yield* Provider.use.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5"))
       const language = yield* Provider.use.getLanguage(model)
       expect((language as { provider: string }).provider).toBe("bedrock-mantle.responses")
       expect((language as { modelId: string }).modelId).toBe("openai.gpt-5.5")
@@ -143,7 +144,7 @@ it.instance(
       yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
       const model = yield* Provider.use.getModel(
         ProviderV2.ID.amazonBedrock,
-        ProviderV2.ModelID.make("openai.gpt-oss-safeguard-120b"),
+        ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
       )
       const language = yield* Provider.use.getLanguage(model)
       expect((language as { provider: string }).provider).toBe("bedrock-mantle.chat")

@@ -87,14 +87,18 @@
       "name": "@opencode-ai/cli",
       "version": "1.15.13",
       "bin": {
-        "opencode": "./src/index.ts",
+        "lildax": "./bin/lildax.cjs",
       },
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/sdk": "workspace:*",
+        "@opencode-ai/server": "workspace:*",
+        "@parcel/watcher": "2.5.1",
         "effect": "catalog:",
       },
       "devDependencies": {
+        "@opencode-ai/script": "workspace:*",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
@@ -517,6 +521,7 @@
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/script": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
+        "@opencode-ai/server": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.8.1",
         "@opentelemetry/api": "1.9.0",
@@ -652,6 +657,20 @@
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
+      },
+    },
+    "packages/server": {
+      "name": "@opencode-ai/server",
+      "version": "1.15.13",
+      "dependencies": {
+        "@opencode-ai/core": "workspace:*",
+        "drizzle-orm": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
       },
     },
     "packages/slack": {
@@ -1714,6 +1733,8 @@
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@workspace:packages/sdk/js"],
+
+    "@opencode-ai/server": ["@opencode-ai/server@workspace:packages/server"],
 
     "@opencode-ai/slack": ["@opencode-ai/slack@workspace:packages/slack"],
 

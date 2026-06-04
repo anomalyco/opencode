@@ -51,6 +51,7 @@ import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -74,7 +75,7 @@ export interface Interface {
   readonly named: () => Effect.Effect<{ task: TaskDef; read: ReadDef }>
   readonly tools: (model: {
     providerID: ProviderV2.ID
-    modelID: ProviderV2.ModelID
+    modelID: ModelV2.ID
     agent: Agent.Info
   }) => Effect.Effect<Tool.Def[]>
 }

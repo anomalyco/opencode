@@ -4,6 +4,7 @@ import { Policy } from "./policy"
 import { Config } from "./config"
 import { PluginV2 } from "./plugin"
 import { Catalog } from "./catalog"
+import { CommandV2 } from "./command"
 import { AgentV2 } from "./agent"
 import { PluginBoot } from "./plugin/boot"
 import { Project } from "./project"
@@ -51,6 +52,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       ProjectReference.locationLayer,
       PluginV2.locationLayer,
       Catalog.locationLayer,
+      CommandV2.locationLayer,
       AgentV2.locationLayer,
       PluginBoot.locationLayer,
       FileSystem.locationLayer,
