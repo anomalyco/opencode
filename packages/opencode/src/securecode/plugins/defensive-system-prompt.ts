@@ -59,8 +59,19 @@ export async function DefensiveSystemPromptPlugin(_input: PluginInput): Promise<
       if (!output || !Array.isArray(output.system)) return
       // Idempotent: a single build turn can trigger this hook more than once
       // when retried after compaction, and we don't want the note to stack up.
-      if (output.system.includes(DEFENSIVE_NOTE)) return
-      output.system.push(DEFENSIVE_NOTE)
+      if (output.system.some((s) => typeof s === "string" && s.includes(DEFENSIVE_NOTE))) return
+      // Qwen3.x chat templates require exactly one {role: "system"} message at
+      // index 0 and raise `System message must be at the beginning.` when they
+      // see a second system entry — even one adjacent at index 1. We therefore
+      // fold the note into the existing system[0] instead of pushing a new
+      // entry, so downstream providers see a single combined system message.
+      // See https://github.com/acompany-develop/securecode/issues/288.
+      if (output.system.length === 0) {
+        output.system.push(DEFENSIVE_NOTE)
+        return
+      }
+      const head = output.system[0]
+      output.system[0] = head ? `${head}\n\n${DEFENSIVE_NOTE}` : DEFENSIVE_NOTE
     },
   }
 }
