@@ -360,7 +360,7 @@ function expand(pattern: string): string {
   return pattern
 }
 
-function normalizeWireMetadata(metadata: Readonly<Record<string, unknown>>): Metadata {
+export function normalizeWireMetadata(metadata: Readonly<Record<string, unknown>>): Metadata {
   const filepath = decodeStringMetadata(metadata.filepath)
   const diff = decodeStringMetadata(metadata.diff)
   const files = decodeFilesMetadata(metadata.files)

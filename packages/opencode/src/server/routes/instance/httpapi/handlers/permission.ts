@@ -10,7 +10,11 @@ export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permiss
     const svc = yield* Permission.Service
 
     const list = Effect.fn("PermissionHttpApi.list")(function* () {
-      return yield* svc.list()
+      const pending = yield* svc.list()
+      return pending.map((item) => ({
+        ...item,
+        metadata: Permission.normalizeWireMetadata(item.metadata),
+      }))
     })
 
     const reply = Effect.fn("PermissionHttpApi.reply")(function* (ctx: {
