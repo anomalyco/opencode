@@ -23,6 +23,7 @@ Compatibility:
 
 - The reset preserves canonical V1 `session`, `message`, and `part` rows.
 - Existing synchronized workspaces are disposable beta state and are removed by the reset.
+- Adapter-managed external workspace resources from unreleased builds are disposable operational state and must also be discarded rather than rediscovered after the reset.
 - Exact prompt retries reconcile one stable `msg_*` identity when Session, prompt, and delivery mode match.
 
 ## Earlier Branch History

@@ -72,7 +72,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     const event = useEvent()
     const sdk = useSDK()
     const applied = new Set<string>()
-    const admitted = new Map<string, Extract<SessionMessage, { type: "user" }>>()
+    let revision = 0
 
     function duplicate(id: string) {
       if (applied.has(id)) return true
@@ -92,8 +92,16 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       )
     }
 
+    async function sync(sessionID: string): Promise<void> {
+      const start = revision
+      const response = await sdk.client.v2.session.messages({ sessionID })
+      if (revision !== start) return sync(sessionID)
+      setStore("messages", sessionID, reconcile(response.data?.data ?? []))
+    }
+
     event.subscribe((event) => {
       if (duplicate(event.id)) return
+      revision += 1
       switch (event.type) {
         case "session.next.agent.switched":
           update(event.properties.sessionID, (draft) => {
@@ -130,26 +138,10 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         }
         case "session.next.prompt.admitted":
-          admitted.set(event.properties.messageID, {
-            id: event.properties.messageID,
-            type: "user",
-            text: event.properties.prompt.text,
-            files: event.properties.prompt.files,
-            agents: event.properties.prompt.agents,
-            references: event.properties.prompt.references,
-            time: { created: event.properties.timestamp },
-          })
           break
-        case "session.next.prompt.promoted": {
-          const message = admitted.get(event.properties.messageID)
-          admitted.delete(event.properties.messageID)
-          if (!message) break
-          update(event.properties.sessionID, (draft) => {
-            if (draft.some((item) => item.id === message.id)) return
-            draft.unshift(message)
-          })
+        case "session.next.prompt.promoted":
+          void sync(event.properties.sessionID)
           break
-        }
         case "session.next.synthetic":
           update(event.properties.sessionID, (draft) => {
             draft.unshift({
@@ -383,10 +375,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       data: store,
       session: {
         message: {
-          async sync(sessionID: string) {
-            const response = await sdk.client.v2.session.messages({ sessionID })
-            setStore("messages", sessionID, reconcile(response.data?.data ?? []))
-          },
+          sync,
           fromSession(sessionID: string) {
             const messages = store.messages[sessionID]
             if (!messages) return []

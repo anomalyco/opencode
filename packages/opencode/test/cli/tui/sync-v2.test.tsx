@@ -6,7 +6,7 @@ import { onMount } from "solid-js"
 import { ProjectProvider } from "../../../src/cli/cmd/tui/context/project"
 import { SDKProvider } from "../../../src/cli/cmd/tui/context/sdk"
 import { SyncProviderV2, useSyncV2 } from "../../../src/cli/cmd/tui/context/sync-v2"
-import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
+import { createEventSource, createFetch, directory, json } from "../../fixture/tui-sdk"
 
 async function wait(fn: () => boolean, timeout = 2000) {
   const start = Date.now()
@@ -134,7 +134,11 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
 
 test("sync v2 renders admitted prompts only after promotion", async () => {
   const events = createEventSource()
-  const calls = createFetch()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-1/message")
+      return json({ data: [{ id: "msg_user_1", type: "user", text: "hello", time: { created: 0 } }] })
+    return undefined
+  })
   let sync!: ReturnType<typeof useSyncV2>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -179,9 +183,105 @@ test("sync v2 renders admitted prompts only after promotion", async () => {
     })
 
     await wait(() => sync.session.message.fromSession("session-1").length === 1)
-    expect(
-      sync.session.message.fromSession("session-1").map((message) => [message.id, message.type, message.text]),
-    ).toEqual([["msg_user_1", "user", "hello"]])
+    const message = sync.session.message.fromSession("session-1")[0]
+    expect(message?.type).toBe("user")
+    if (message?.type !== "user") return
+    expect(message).toMatchObject({ id: "msg_user_1", text: "hello" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("sync v2 hydrates a promoted prompt when admission was missed", async () => {
+  const events = createEventSource()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-1/message")
+      return json({ data: [{ id: "msg_user_1", type: "user", text: "hello", time: { created: 0 } }] })
+    return undefined
+  })
+  let sync!: ReturnType<typeof useSyncV2>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useSyncV2()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+      <ProjectProvider>
+        <SyncProviderV2>
+          <Probe />
+        </SyncProviderV2>
+      </ProjectProvider>
+    </SDKProvider>
+  ))
+
+  try {
+    await mounted
+    emitTwice(events, {
+      id: "evt_promoted_1",
+      type: "session.next.prompt.promoted",
+      properties: { sessionID: "session-1", messageID: "msg_user_1", timestamp: 1 },
+    })
+
+    await wait(() => sync.session.message.fromSession("session-1").length === 1)
+    expect(sync.session.message.fromSession("session-1")[0]?.id).toBe("msg_user_1")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("sync v2 retries hydration when promotion arrives in flight", async () => {
+  const events = createEventSource()
+  const stale = Promise.withResolvers<Response>()
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/session/session-1/message") return undefined
+    requests += 1
+    if (requests === 1) return stale.promise
+    return json({ data: [{ id: "msg_user_1", type: "user", text: "hello", time: { created: 0 } }] })
+  })
+  let sync!: ReturnType<typeof useSyncV2>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useSyncV2()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+      <ProjectProvider>
+        <SyncProviderV2>
+          <Probe />
+        </SyncProviderV2>
+      </ProjectProvider>
+    </SDKProvider>
+  ))
+
+  try {
+    await mounted
+    const hydration = sync.session.message.sync("session-1")
+    await wait(() => requests === 1)
+    emitTwice(events, {
+      id: "evt_promoted_1",
+      type: "session.next.prompt.promoted",
+      properties: { sessionID: "session-1", messageID: "msg_user_1", timestamp: 1 },
+    })
+    stale.resolve(json({ data: [] }))
+    await hydration
+
+    await wait(() => sync.session.message.fromSession("session-1").length === 1)
+    expect(sync.session.message.fromSession("session-1")[0]?.id).toBe("msg_user_1")
   } finally {
     app.renderer.destroy()
   }
