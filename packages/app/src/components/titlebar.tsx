@@ -373,8 +373,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               tabsStoreActions.removeSessions(detail)
             })
 
-            const sessionTabs = () => tabsStore.filter((tab): tab is SessionTab => tab.type === "session")
-
             const openNewTab = () => navigate(newSessionHref())
 
             command.register("tabs", () => {
@@ -444,7 +442,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     disabled: layout.projects.list().length <= index,
                     hidden: true,
                     onSelect: () => {
-                      const tab = sessionTabs()[index]
+                      const tab = tabsStore[index]
                       if (tab) navigate(tabHref(tab))
                     },
                   }
@@ -476,7 +474,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
                 <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
                   <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
-                    <For each={sessionTabs()}>
+                    <For each={tabsStore}>
                       {(tab, i) => (
                         <>
                           {i() !== 0 && (
@@ -511,7 +509,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     <NewSessionTabItem
                       href={`/${params.dir}/session`}
                       title={language.t("command.session.new")}
-                      onClose={() => navigate(sessionTabs().at(-1) ? tabHref(sessionTabs().at(-1)!) : "/")}
+                      onClose={() => navigate(tabsStore.at(-1) ? tabHref(tabsStore.at(-1)!) : "/")}
                     />
                   </Show>
                   <div class="min-w-0 flex-1" />
