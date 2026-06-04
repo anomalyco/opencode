@@ -531,7 +531,7 @@ export const dict = {
   "home.loading.title": "Loading projects",
   "home.title": "Home",
   "home.projects": "Projects",
-  "home.projects.quickSwitch": "Projects quick switch",
+  "home.projects.back": "Back to projects",
   "home.project.add": "Add project",
   "home.sessions.search.placeholder": "Search sessions",
   "home.sessions.empty": "No sessions found",

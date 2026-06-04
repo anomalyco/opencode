@@ -11,8 +11,9 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
 import { MenuV2 } from "@opencode-ai/ui/v2/components/menu-v2.jsx"
 import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { decode64 } from "@/utils/base64"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
@@ -70,10 +71,18 @@ function HomeDesign() {
   const server = useServer()
   const language = useLanguage()
   const notification = useNotification()
-  const [state, setState] = createStore({ search: "", project: undefined as string | undefined })
+  const [searchParams, setSearchParams] = useSearchParams<{ project?: string }>()
+  const [state, setState] = createStore({ search: "" })
 
+  // Selected project is URL-addressable via `/?project=<base64(worktree)>` so other
+  // surfaces (e.g. the mobile bottom bar) can deep-link straight into a project's
+  // session list. Selection stays in-memory free; the query param is the source of truth.
+  const selectedDirectory = createMemo(() => {
+    const raw = searchParams.project
+    return Array.isArray(raw) ? decode64(raw[0]) : decode64(raw)
+  })
   const projects = createMemo(() => layout.projects.list())
-  const selectedProject = createMemo(() => projects().find((project) => project.worktree === state.project))
+  const selectedProject = createMemo(() => projects().find((project) => project.worktree === selectedDirectory()))
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
   const projectDirectories = createMemo(() => {
     const project = selectedProject()
@@ -119,15 +128,24 @@ function HomeDesign() {
   })
   const groups = createMemo(() => groupSessions(records(), language))
 
+  function setSelectedDirectory(directory: string | undefined) {
+    setSearchParams({ project: directory ? base64Encode(directory) : undefined })
+  }
+
   function selectProject(directory: string) {
     if (!projects().some((project) => project.worktree === directory)) return
-    setState("project", directory)
+    setSelectedDirectory(directory)
+  }
+
+  function clearSelectedProject() {
+    setSelectedDirectory(undefined)
+    setState("search", "")
   }
 
   function addProject(directory: string) {
     layout.projects.open(directory)
     server.projects.touch(directory)
-    setState("project", directory)
+    setSelectedDirectory(directory)
   }
 
   function openNewSession() {
@@ -172,7 +190,7 @@ function HomeDesign() {
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
         result.forEach(addProject)
-        if (result[0]) setState("project", result[0])
+        if (result[0]) setSelectedDirectory(result[0])
         return
       }
       if (result) addProject(result)
@@ -199,18 +217,23 @@ function HomeDesign() {
     })
   }
 
+  const projectSelected = createMemo(() => !!selectedProject())
+
   return (
     <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
       <HomeProjectColumn
+        // Mobile is a master -> detail flow: the projects list is the master screen and
+        // collapses once a project is selected. Desktop always shows both columns.
+        class={projectSelected() ? "hidden lg:flex" : "flex"}
         hasProjects={projects().length > 0}
-        selectedProject={state.project}
+        selectedProject={selectedDirectory()}
         selectProject={selectProject}
         openNewSession={openProjectNewSession}
         chooseProject={() => void chooseProject()}
         editProject={showEditProjectDialog}
         closeProject={(directory) => {
           layout.projects.close(directory)
-          if (state.project === directory) setState("project", undefined)
+          if (selectedDirectory() === directory) setSelectedDirectory(undefined)
         }}
         clearNotifications={clearNotifications}
         unseenCount={unseenCount}
@@ -220,7 +243,11 @@ function HomeDesign() {
       />
 
       <section
-        class="min-w-0 flex-1 flex flex-col overflow-y-hidden pt-12"
+        class="min-w-0 flex-1 flex-col overflow-y-hidden lg:flex lg:pt-12"
+        classList={{
+          flex: projectSelected(),
+          hidden: !projectSelected(),
+        }}
         aria-label={language.t("sidebar.project.recentSessions")}
       >
         <Switch>
@@ -254,13 +281,25 @@ function HomeDesign() {
   function HomeSessionsColumn() {
     return (
       <>
-        <HomeProjectTabs
-          projects={projects()}
-          selectedProject={state.project}
-          selectProject={selectProject}
-          chooseProject={() => void chooseProject()}
-          language={language}
-        />
+        <Show when={selectedProject()}>
+          {(project) => (
+            <div class="mb-3 flex min-w-0 items-center gap-2 px-1 lg:hidden">
+              <IconButtonV2
+                data-action="home-sessions-back"
+                variant="ghost-muted"
+                size="large"
+                class="shrink-0 [&_[data-slot=icon-svg]]:text-v2-icon-icon-base"
+                icon={<IconV2 name="outline-chevron-down" class="rotate-90" />}
+                onClick={clearSelectedProject}
+                aria-label={language.t("home.projects.back")}
+              />
+              <HomeProjectAvatar project={project()} class="size-7 shrink-0 rounded-[8px]" />
+              <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:560]">
+                {displayName(project())}
+              </span>
+            </div>
+          )}
+        </Show>
         <HomeSessionSearch
           value={state.search}
           placeholder={language.t("home.sessions.search.placeholder")}
@@ -301,9 +340,15 @@ function HomeDesign() {
                           title={group.title}
                           onNewSession={index() === 0 ? openNewSession : undefined}
                         />
-                        <div class="flex min-w-0 flex-col gap-px">
+                        <div class="flex min-w-0 flex-col gap-2 lg:gap-px">
                           <For each={group.sessions}>
-                            {(record) => <HomeSessionRow record={record} openSession={openSession} />}
+                            {(record) => (
+                              <HomeSessionRow
+                                record={record}
+                                projectSelected={projectSelected()}
+                                openSession={openSession}
+                              />
+                            )}
                           </For>
                         </div>
                       </div>
@@ -320,6 +365,7 @@ function HomeDesign() {
 }
 
 function HomeProjectColumn(props: {
+  class?: string
   hasProjects: boolean
   selectedProject?: string
   selectProject: (directory: string) => void
@@ -337,7 +383,10 @@ function HomeProjectColumn(props: {
   const layout = useLayout()
   const projects = createMemo(() => layout.projects.list())
   return (
-    <aside class="flex min-w-0 flex-col lg:pt-[52px] gap-4" aria-label={props.language.t("home.projects")}>
+    <aside
+      class={`min-w-0 flex-col lg:flex lg:pt-[52px] gap-4 ${props.class ?? "flex"}`}
+      aria-label={props.language.t("home.projects")}
+    >
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <Show when={props.hasProjects}>
@@ -458,54 +507,6 @@ function HomeProjectListViewport(props: { children: JSX.Element }) {
     <div class="max-h-[min(288px,36vh)] min-w-0 overflow-y-auto pr-1 [scrollbar-width:none] lg:max-h-none lg:overflow-visible lg:pr-0 [&::-webkit-scrollbar]:hidden">
       {props.children}
     </div>
-  )
-}
-
-function HomeProjectTabs(props: {
-  projects: LocalProject[]
-  selectedProject?: string
-  selectProject: (directory: string) => void
-  chooseProject: () => void
-  language: ReturnType<typeof useLanguage>
-}) {
-  return (
-    <Show when={props.projects.length > 0}>
-      <nav
-        class="mb-3 flex min-w-0 items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden"
-        aria-label={props.language.t("home.projects.quickSwitch")}
-      >
-        <For each={props.projects}>
-          {(project) => {
-            const name = createMemo(() => displayName(project))
-            const selected = createMemo(() => props.selectedProject === project.worktree)
-
-            return (
-              <button
-                type="button"
-                class="flex h-9 max-w-[180px] shrink-0 items-center gap-2 rounded-full border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 pr-3 text-v2-text-text-muted shadow-[var(--v2-elevation-raised)] transition-[background-color,border-color,box-shadow,color] duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_var(--v2-border-border-focus),var(--v2-elevation-raised)]"
-                classList={{
-                  "border-v2-border-border-focus bg-v2-overlay-simple-overlay-hover text-v2-text-text-base": selected(),
-                }}
-                aria-current={selected() ? "page" : undefined}
-                onClick={() => props.selectProject(project.worktree)}
-              >
-                <HomeProjectAvatar project={project} class="size-5 rounded-md" />
-                <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap [font-weight:560]">{name()}</span>
-              </button>
-            )
-          }}
-        </For>
-        <IconButtonV2
-          data-action="home-project-tabs-add"
-          variant="ghost-muted"
-          size="large"
-          class="h-9 w-9 shrink-0 rounded-full border border-v2-border-border-base bg-v2-background-bg-deep shadow-[var(--v2-elevation-raised)] [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-          icon={<IconV2 name="plus" />}
-          onClick={props.chooseProject}
-          aria-label={props.language.t("home.project.add")}
-        />
-      </nav>
-    </Show>
   )
 }
 
@@ -715,7 +716,11 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
   )
 }
 
-function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (session: Session) => void }) {
+function HomeSessionRow(props: {
+  record: HomeSessionRecord
+  projectSelected: boolean
+  openSession: (session: Session) => void
+}) {
   const serverSync = useServerSync()
   const notification = useNotification()
   const permission = usePermission()
@@ -735,47 +740,114 @@ function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (sessio
   })
   const tint = createMemo(() => messageAgentColor(sessionStore.message[props.record.session.id], sessionStore.agent))
   const showStatus = createMemo(() => isWorking() || hasPermissions() || hasError() || unseenCount() > 0)
+  const language = useLanguage()
+  const timestamp = createMemo(() =>
+    formatChatTimestamp(props.record.session.time.updated ?? props.record.session.time.created, language),
+  )
+  // No cheap last-message snippet exists in memory (home only loads session metadata,
+  // not messages), so the secondary line shows the owning project name on the
+  // all-projects list. In a project's detail view the header already names the
+  // project, so the preview line is dropped to avoid a column of repeated text.
+  const preview = createMemo(() => (props.projectSelected ? undefined : props.record.projectName))
+
+  // Defined as a component (not a shared JSX node) so it can render in both the
+  // mobile and desktop layouts; a reused JSX node would only mount in one place.
+  // `suppressUnseenDot` hides the plain unseen-blue-dot branch where an inline
+  // unread count pill already represents that state (mobile detail view), so we
+  // never show both a dot and a pill for the same "unseen + idle" state.
+  const StatusDot = (dotProps?: { suppressUnseenDot?: boolean }) => (
+    <Show when={showStatus()}>
+      <div
+        class="flex size-4 shrink-0 items-center justify-center"
+        style={{ color: tint() ?? "var(--icon-interactive-base)" }}
+      >
+        <Switch>
+          <Match when={isWorking()}>
+            <Spinner class="size-[15px]" />
+          </Match>
+          <Match when={hasPermissions()}>
+            <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+          </Match>
+          <Match when={hasError()}>
+            <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+          </Match>
+          <Match when={!dotProps?.suppressUnseenDot && unseenCount() > 0}>
+            <div class="size-1.5 rounded-full bg-text-interactive-base" />
+          </Match>
+        </Switch>
+      </div>
+    </Show>
+  )
 
   return (
     <button
       type="button"
       data-component="home-session-row"
-      class={`${HOME_ROW} h-10 gap-2 px-6 py-3 pl-4`}
+      class={`${HOME_ROW} min-h-16 gap-3 rounded-[12px] bg-v2-background-bg-deep px-3 py-2.5 shadow-[var(--v2-elevation-raised)] lg:h-10 lg:min-h-0 lg:gap-2 lg:rounded-[6px] lg:bg-transparent lg:px-6 lg:py-3 lg:pl-4 lg:shadow-none`}
       onClick={() => props.openSession(props.record.session)}
     >
-      <Show when={showStatus()}>
-        <div
-          class="flex size-4 shrink-0 items-center justify-center"
-          style={{ color: tint() ?? "var(--icon-interactive-base)" }}
-        >
-          <Switch>
-            <Match when={isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-      </Show>
-      <span
-        class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${props.record.projectName ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
-      >
-        {title()}
-      </span>
-      <Show when={props.record.projectName}>
-        <span class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]">
-          {props.record.projectName}
+      {/* Mobile: Telegram-style chat row — avatar, bold title + muted preview, trailing time + badge. */}
+      <HomeProjectAvatar project={props.record.project} class="size-11 shrink-0 rounded-full lg:hidden" />
+      <span class="flex min-w-0 flex-1 flex-col gap-0.5 lg:hidden">
+        <span class="flex min-w-0 items-center gap-2">
+          {/* Suppress the unseen blue dot when the inline count pill below already shows it. */}
+          <StatusDot suppressUnseenDot={!preview()} />
+          <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:560]">
+            {title()}
+          </span>
+          <span class="shrink-0 text-[12px] text-v2-text-text-faint [font-weight:440]">{timestamp()}</span>
+          {/* In the detail view there is no second line, so the badge sits inline with the title. */}
+          <Show when={!preview() && unseenCount() > 0}>
+            <span class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-text-interactive-base px-1.5 text-[11px] leading-none text-text-on-interactive-base [font-weight:650]">
+              {Math.min(unseenCount(), 99)}
+            </span>
+          </Show>
         </span>
-      </Show>
+        <Show when={preview()}>
+          {(previewText) => (
+            <span class="flex min-w-0 items-center gap-2">
+              <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]">
+                {previewText()}
+              </span>
+              <Show when={unseenCount() > 0}>
+                <span class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-text-interactive-base px-1.5 text-[11px] leading-none text-text-on-interactive-base [font-weight:650]">
+                  {Math.min(unseenCount(), 99)}
+                </span>
+              </Show>
+            </span>
+          )}
+        </Show>
+      </span>
+
+      {/* Desktop: unchanged compact row. */}
+      <span class="hidden min-w-0 items-center gap-2 lg:flex lg:flex-1">
+        <StatusDot />
+        <span
+          class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${props.record.projectName ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
+        >
+          {title()}
+        </span>
+        <Show when={props.record.projectName}>
+          <span class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]">
+            {props.record.projectName}
+          </span>
+        </Show>
+      </span>
     </button>
   )
+}
+
+function formatChatTimestamp(millis: number, language: ReturnType<typeof useLanguage>): string {
+  // Localize via the app's current Intl locale (e.g. "zh-Hans") so weekday/month/
+  // date/time read correctly for non-English users; keep the translated "Yesterday".
+  const time = DateTime.fromMillis(millis).setLocale(language.intl())
+  if (!time.isValid) return ""
+  const now = DateTime.local()
+  if (time.hasSame(now, "day")) return time.toLocaleString(DateTime.TIME_SIMPLE)
+  if (time.hasSame(now.minus({ days: 1 }), "day")) return language.t("home.sessions.group.yesterday")
+  if (time > now.minus({ days: 7 })) return time.toFormat("ccc")
+  if (time.hasSame(now, "year")) return time.toFormat("d LLL")
+  return time.toLocaleString(DateTime.DATE_SHORT)
 }
 
 function HomeSessionSkeleton(props: { label: string }) {

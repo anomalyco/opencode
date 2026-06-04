@@ -502,7 +502,7 @@ export const dict = {
   "home.loading.title": "正在加载项目",
   "home.title": "主页",
   "home.projects": "项目",
-  "home.projects.quickSwitch": "项目快速切换",
+  "home.projects.back": "返回项目",
   "home.project.add": "添加项目",
   "home.sessions.search.placeholder": "搜索会话",
   "home.sessions.empty": "未找到会话",

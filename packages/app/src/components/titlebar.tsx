@@ -462,7 +462,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   "pl-4": !mac(),
                 }}
               >
-                <ChannelIndicator />
+                <div class="hidden md:flex flex-row items-center gap-1.5">
+                  <ChannelIndicator />
+                </div>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} variant="v2" />
                 </Show>
@@ -471,7 +473,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   size="large"
                   as="a"
                   href="/"
-                  class="!w-9"
+                  class="!w-9 !hidden md:!inline-flex"
                   icon={<IconV2 name="grid-plus" />}
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
