@@ -498,6 +498,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Det oppstod en feil",
 
   "home.recentProjects": "Nylige prosjekter",
+  "home.openedProjects": "Åpnede prosjekter",
   "home.empty.title": "Ingen nylige prosjekter",
   "home.empty.description": "Kom i gang ved å åpne et lokalt prosjekt",
 
@@ -602,6 +603,8 @@ export const dict = {
   "common.archive": "Arkiver",
   "common.delete": "Slett",
   "common.close": "Lukk",
+  "common.moveLeft": "Move left",
+  "common.moveRight": "Move right",
   "common.edit": "Rediger",
   "common.loadMore": "Last flere",
   "common.key.esc": "ESC",

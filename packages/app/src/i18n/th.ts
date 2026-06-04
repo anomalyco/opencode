@@ -493,6 +493,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "เกิดข้อผิดพลาด",
 
   "home.recentProjects": "โปรเจกต์ล่าสุด",
+  "home.openedProjects": "โปรเจกต์ที่เปิดอยู่",
   "home.empty.title": "ไม่มีโปรเจกต์ล่าสุด",
   "home.empty.description": "เริ่มต้นโดยเปิดโปรเจกต์ในเครื่อง",
 
@@ -593,6 +594,8 @@ export const dict = {
   "common.archive": "จัดเก็บ",
   "common.delete": "ลบ",
   "common.close": "ปิด",
+  "common.moveLeft": "Move left",
+  "common.moveRight": "Move right",
   "common.edit": "แก้ไข",
   "common.loadMore": "โหลดเพิ่มเติม",
   "common.key.esc": "ESC",

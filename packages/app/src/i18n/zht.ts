@@ -491,6 +491,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "發生錯誤",
 
   "home.recentProjects": "最近專案",
+  "home.openedProjects": "已開啟專案",
   "home.empty.title": "沒有最近專案",
   "home.empty.description": "透過開啟本地專案開始使用",
 
@@ -589,6 +590,8 @@ export const dict = {
   "common.archive": "封存",
   "common.delete": "刪除",
   "common.close": "關閉",
+  "common.moveLeft": "Move left",
+  "common.moveRight": "Move right",
   "common.edit": "編輯",
   "common.loadMore": "載入更多",
 

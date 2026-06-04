@@ -451,12 +451,12 @@ export default function Page() {
     list.push("turn")
     return list
   })
-  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const mobileChanges = createMemo(() => newSessionDesign() && !isDesktop() && store.mobileTab === "changes")
   const activeDirectory = createMemo(() => (params.dir ? (decodeDirectory(params.dir) ?? undefined) : undefined))
   const wantsReview = createMemo(() =>
     isDesktop()
       ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
-      : store.mobileTab === "changes",
+      : mobileChanges(),
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     if (store.changes === "git" || store.changes === "branch") return store.changes
@@ -1838,7 +1838,7 @@ export default function Page() {
         />
       </div>
 
-      <Show when={!isDesktop() && !!params.id ? mobileTitlebarLeftMount() : undefined}>
+      <Show when={newSessionDesign() && !isDesktop() && !!params.id ? mobileTitlebarLeftMount() : undefined}>
         {(mount) => (
           <Portal mount={mount()}>
             <SessionMobileTabToggle
@@ -1850,7 +1850,9 @@ export default function Page() {
         )}
       </Show>
 
-      <SessionMobileBottomBar activeDirectory={activeDirectory()} />
+      <Show when={newSessionDesign()}>
+        <SessionMobileBottomBar activeDirectory={activeDirectory()} />
+      </Show>
 
       <TerminalPanel />
     </div>

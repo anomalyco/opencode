@@ -496,6 +496,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "发生错误",
 
   "home.recentProjects": "最近项目",
+  "home.openedProjects": "已打开项目",
   "home.empty.title": "还没有项目",
   "home.empty.description": "添加本地项目即可开始使用 opencode。",
   "home.empty.hint": "你的项目和最近会话会显示在这里。",
@@ -606,6 +607,8 @@ export const dict = {
   "common.archive": "归档",
   "common.delete": "删除",
   "common.close": "关闭",
+  "common.moveLeft": "Move left",
+  "common.moveRight": "Move right",
   "common.edit": "编辑",
   "common.loadMore": "加载更多",
   "common.key.esc": "ESC",
