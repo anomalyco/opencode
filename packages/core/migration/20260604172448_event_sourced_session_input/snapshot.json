@@ -1660,7 +1660,7 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
+      "isUnique": false,
       "where": null,
       "origin": "manual",
       "name": "message_session_time_created_id_idx",

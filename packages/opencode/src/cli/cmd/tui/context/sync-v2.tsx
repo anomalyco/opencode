@@ -71,6 +71,17 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
 
     const event = useEvent()
     const sdk = useSDK()
+    const applied = new Set<string>()
+
+    function duplicate(id: string) {
+      if (applied.has(id)) return true
+      applied.add(id)
+      if (applied.size <= 1000) return false
+      const oldest = applied.values().next()
+      if (!oldest.done) applied.delete(oldest.value)
+      return false
+    }
+
     function update(sessionID: string, fn: (messages: SessionMessage[]) => void) {
       setStore(
         "messages",
@@ -81,6 +92,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     }
 
     event.subscribe((event) => {
+      if (duplicate(event.id)) return
       switch (event.type) {
         case "session.next.agent.switched":
           update(event.properties.sessionID, (draft) => {

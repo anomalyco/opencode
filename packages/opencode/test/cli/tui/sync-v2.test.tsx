@@ -20,8 +20,10 @@ function global(payload: Event): GlobalEvent {
   return { directory, project: "proj_test", payload }
 }
 
-function emit(events: ReturnType<typeof createEventSource>, payload: Event) {
-  events.emit(global(payload))
+function emitTwice(events: ReturnType<typeof createEventSource>, payload: Event) {
+  const event = global(payload)
+  events.emit(event)
+  events.emit(event)
 }
 
 test("sync v2 settles pending tools when a live failure arrives", async () => {
@@ -51,12 +53,12 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
 
   try {
     await mounted
-    emit(events, {
+    emitTwice(events, {
       id: "evt_agent_1",
       type: "session.next.agent.switched",
       properties: { sessionID: "session-1", timestamp: 0, agent: "build" },
     })
-    emit(events, {
+    emitTwice(events, {
       id: "evt_model_1",
       type: "session.next.model.switched",
       properties: {
@@ -65,7 +67,7 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
         model: { id: "model-1", providerID: "provider-1" },
       },
     })
-    emit(events, {
+    emitTwice(events, {
       id: "evt_assistant_1",
       type: "session.next.step.started",
       properties: {
@@ -75,7 +77,7 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
         model: { id: "model-1", providerID: "provider-1" },
       },
     })
-    emit(events, {
+    emitTwice(events, {
       id: "evt_input_1",
       type: "session.next.tool.input.started",
       properties: {
@@ -86,7 +88,7 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
         name: "bash",
       },
     })
-    emit(events, {
+    emitTwice(events, {
       id: "evt_failed_1",
       type: "session.next.tool.failed",
       properties: {
