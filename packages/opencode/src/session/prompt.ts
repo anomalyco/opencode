@@ -132,9 +132,53 @@ export const layer = Layer.effect(
       } satisfies TaskPromptOps
     })
 
+    const finalizeOrphanedAssistant = Effect.fn("SessionPrompt.finalizeOrphanedAssistant")(function* (
+      sessionID: SessionID,
+    ) {
+      const messages = yield* sessions.messages({ sessionID }).pipe(Effect.catchCause(() => Effect.succeed([])))
+      const last = messages.at(-1)
+      if (!last || last.info.role !== "assistant") return
+      if (last.info.time.completed) return
+
+      const now = Date.now()
+      for (const part of last.parts) {
+        if (part.type !== "tool") continue
+        if (part.state.status !== "running" && part.state.status !== "pending") continue
+        const metadata = part.state.status === "running" ? part.state.metadata : undefined
+        yield* sessions.updatePart({
+          ...part,
+          state: {
+            status: "error",
+            input: part.state.input,
+            error: "Tool execution aborted",
+            ...(metadata ? { metadata } : {}),
+            time: {
+              start: part.state.status === "running" ? part.state.time.start : now,
+              end: now,
+            },
+          },
+        })
+      }
+
+      yield* sessions.updateMessage({
+        ...last.info,
+        error:
+          last.info.error ??
+          MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
+            providerID: last.info.providerID,
+            aborted: true,
+          }),
+        time: {
+          ...last.info.time,
+          completed: now,
+        },
+      })
+    })
+
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* elog.info("cancel", { sessionID })
       yield* state.cancel(sessionID)
+      yield* finalizeOrphanedAssistant(sessionID)
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -1257,6 +1301,17 @@ export const layer = Layer.effect(
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
+          if (
+            lastAssistant &&
+            lastAssistant.parentID === lastUser.id &&
+            typeof lastAssistant.time.completed !== "number"
+          ) {
+            yield* slog.warn("exiting loop because an assistant message is already active", {
+              messageID: lastAssistant.id,
+              parentID: lastUser.id,
+            })
+            break
+          }
           // Some providers return "stop" even when the assistant message contains tool calls.
           // Keep the loop running so tool results can be sent back to the model.
           // Skip provider-executed tool parts — those were fully handled within the

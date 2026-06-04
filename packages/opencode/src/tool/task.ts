@@ -218,7 +218,13 @@ export const TaskTool = Tool.define(
             .pipe(Effect.orDie)
           if (Option.isNone(latest)) return
           if (latest.value.info.id !== input.userID) return
-          if ((yield* status.get(ctx.sessionID)).type !== "idle") {
+          const activeAssistant = yield* sessions
+            .findMessage(
+              ctx.sessionID,
+              (item) => item.info.role === "assistant" && typeof item.info.time.completed !== "number",
+            )
+            .pipe(Effect.orDie)
+          if ((yield* status.get(ctx.sessionID)).type !== "idle" || Option.isSome(activeAssistant)) {
             yield* Effect.sleep("300 millis")
             return yield* resumeWhenIdle(input)
           }

@@ -608,6 +608,82 @@ describe("tool.task", () => {
     }),
   )
 
+  background.instance("background task resume waits while the parent session has an active assistant", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const looped = defer<SessionID>()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps({ text: "background done" }),
+              prompt: (input) =>
+                input.noReply
+                  ? Effect.gen(function* () {
+                      const user = yield* sessions.updateMessage({
+                        id: input.messageID ?? MessageID.ascending(),
+                        role: "user",
+                        sessionID: input.sessionID,
+                        agent: input.agent ?? "build",
+                        model: input.model ?? ref,
+                        time: { created: Date.now() },
+                      })
+                      const parts = input.parts.map((part) => ({
+                        ...part,
+                        id: part.id ?? PartID.ascending(),
+                        messageID: user.id,
+                        sessionID: input.sessionID,
+                      }))
+                      yield* Effect.forEach(parts, (part) => sessions.updatePart(part), { discard: true })
+                      return { info: user, parts }
+                    })
+                  : Effect.succeed(reply(input, "background done")),
+              loop: (input) =>
+                Effect.sync(() => {
+                  looped.resolve(input.sessionID)
+                  return reply({ sessionID: input.sessionID, parts: [] }, "resumed")
+                }),
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
+      expect(waited.timedOut).toBe(false)
+      expect(waited.info?.status).toBe("completed")
+
+      const beforeCompletion = yield* Effect.promise(() =>
+        Promise.race([looped.promise.then(() => true), new Promise<false>((done) => setTimeout(() => done(false), 400))]),
+      )
+      expect(beforeCompletion).toBe(false)
+
+      yield* sessions.updateMessage({
+        ...assistant,
+        time: { ...assistant.time, completed: Date.now() },
+      })
+
+      expect(yield* Effect.promise(() => looped.promise)).toBe(chat.id)
+    }),
+  )
+
   background.instance("removing the parent session cancels running background tasks", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service

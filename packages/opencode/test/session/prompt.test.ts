@@ -1103,6 +1103,28 @@ noLLMServer.instance("concurrent loop callers get same result", () =>
   }),
 )
 
+noLLMServer.instance(
+  "loop exits instead of creating a duplicate assistant while latest assistant is incomplete",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, sessions, chat } = yield* boot()
+      const existing = yield* seed(chat.id)
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const active = messages.filter(
+        (message) =>
+          message.info.role === "assistant" &&
+          message.info.parentID === existing.user.id &&
+          typeof message.info.time.completed !== "number",
+      )
+
+      expect(result.info.id).toBe(existing.assistant.id)
+      expect(active.map((message) => message.info.id)).toEqual([existing.assistant.id])
+    }),
+  { config: cfg },
+)
+
 it.instance(
   "concurrent loop callers all receive same error result",
   () =>
@@ -2151,6 +2173,63 @@ it.instance(
       expect(last?.info.role).toBe("assistant")
       if (last?.info.role === "assistant") {
         expect(last.info.error?.name).toBe("MessageAbortedError")
+      }
+    }),
+  3_000,
+)
+
+noLLMServer.instance(
+  "cancel finalizes orphaned incomplete assistant messages",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ title: "Orphaned cancel regression" })
+
+      const userMsg = yield* user(session.id, "hello")
+      const assistant: MessageV2.Assistant = {
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: userMsg.id,
+        sessionID: session.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: Date.now() },
+      }
+      yield* sessions.updateMessage(assistant)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID: session.id,
+        type: "tool",
+        callID: "call_orphaned_question",
+        tool: "question",
+        state: {
+          status: "running",
+          input: { questions: [] },
+          time: { start: Date.now() },
+        },
+      })
+
+      yield* prompt.cancel(session.id)
+
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      const last = messages.at(-1)
+      expect(last?.info.role).toBe("assistant")
+      if (last?.info.role === "assistant") {
+        expect(typeof last.info.time.completed).toBe("number")
+        expect(last.info.error?.name).toBe("MessageAbortedError")
+      }
+      const tool = last?.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+      expect(tool?.state.status).toBe("error")
+      if (tool?.state.status === "error") {
+        expect(tool.state.error).toBe("Tool execution aborted")
+        expect(typeof tool.state.time.end).toBe("number")
       }
     }),
   3_000,
