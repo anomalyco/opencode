@@ -377,8 +377,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             const openNewTab = () => navigate(newSessionHref())
 
-            command.register(() => {
-              const commands = [
+            command.register("tabs", () => {
+              const current = currentTab()
+
+              return [
                 {
                   id: "tab.new",
                   category: "tab",
@@ -387,15 +389,14 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   hidden: true,
                   onSelect: openNewTab,
                 },
-                {
+                current && {
                   id: "tab.close",
                   category: "tab",
                   title: language.t("command.tab.close"),
                   keybind: "mod+w",
                   hidden: true,
                   onSelect: () => {
-                    const current = currentTab()
-                    if (current) tabsStoreActions.removeTab(tabsStore.findIndex((tab) => current === tab))
+                    tabsStoreActions.removeTab(tabsStore.findIndex((tab) => current === tab))
                   },
                 },
                 {
@@ -448,9 +449,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     },
                   }
                 }),
-              ]
-
-              return commands
+              ].filter((v) => v !== undefined)
             })
 
             return (
@@ -745,8 +744,6 @@ function TabNavItem(props: {
   onClose: () => void
   active?: boolean
 }) {
-  // const match = useMatch(() => props.href)
-  const isActive = () => props.active
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -769,7 +766,7 @@ function TabNavItem(props: {
   return (
     <div
       class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
-      data-active={isActive()}
+      data-active={props.active}
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
