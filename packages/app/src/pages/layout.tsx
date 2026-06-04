@@ -1231,6 +1231,7 @@ export default function Layout(props: ParentProps) {
 
   function projectRoot(directory: string) {
     const key = pathKey(directory)
+    const knownRoots = new Set(layout.projects.list().map((item) => pathKey(item.worktree)))
     const project = layout.projects
       .list()
       .find((item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key))
@@ -1246,7 +1247,11 @@ export default function Layout(props: ParentProps) {
     if (!id) return directory
 
     const meta = serverSync().data.project.find((item) => item.id === id)
-    return meta?.worktree ?? directory
+    const root = meta?.worktree
+    if (!root) return directory
+    if (pathKey(root) === key) return directory
+    if (knownRoots.has(pathKey(root))) return root
+    return directory
   }
 
   function activeProjectRoot(directory: string) {
