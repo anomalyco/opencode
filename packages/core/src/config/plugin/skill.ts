@@ -18,9 +18,18 @@ export const Plugin = PluginV2.define({
     const skill = yield* SkillV2.Service
     const transform = yield* skill.transform()
     const entries = yield* config.entries()
+    const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
     const items = entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
 
     yield* transform((editor) => {
+      for (const directory of directories) {
+        editor.source(
+          new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }),
+        )
+        editor.source(
+          new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }),
+        )
+      }
       for (const item of items) {
         if (URL.canParse(item) && /^(https?:)$/.test(new URL(item).protocol)) {
           editor.source(new SkillV2.UrlSource({ type: "url", url: item }))

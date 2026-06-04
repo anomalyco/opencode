@@ -24,7 +24,7 @@ import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@opencode-ai/core/database/database"
-import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -88,7 +88,7 @@ function createTextMessage(sessionID: SessionIDType, text: string) {
       role: "user",
       sessionID,
       agent: "build",
-      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
       time: { created: Date.now() },
     })
     const part = yield* svc.updatePart({
@@ -129,7 +129,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
     (info) => Workspace.use.remove(info.id).pipe(Effect.ignore),
   )
 
-const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
+const insertLegacyAssistantMessage = (sessionID: SessionIDType, seq = 1, time = seq) =>
   Effect.gen(function* () {
     const message = new SessionMessage.Assistant({
       id: SessionMessage.ID.create(),
@@ -151,6 +151,7 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
           id: message.id,
           session_id: sessionID,
           type: message.type,
+          seq,
           time_created: time,
           data: {
             time: { created: time },
@@ -162,6 +163,7 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
       ])
       .run()
       .pipe(Effect.orDie)
+    return message
   })
 
 const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
@@ -174,6 +176,7 @@ const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
           id: SessionMessage.ID.create(),
           session_id: sessionID,
           type: "assistant",
+          seq: time,
           time_created: time,
           data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
         },
@@ -388,8 +391,9 @@ describe("session HttpApi", () => {
         yield* insertLegacyAssistantMessage(parent.id)
 
         expect(
-          (yield* requestJson<{ items: SessionMessage.Message[] }>(`/api/session/${parent.id}/message`, { headers }))
-            .items,
+          (yield* requestJson<{ data: SessionMessage.Message[] }>(`/api/session/${parent.id}/message`, {
+            headers,
+          })).data,
         ).toMatchObject([{ type: "assistant" }])
       }),
     { git: true, config: { formatter: false, lsp: false } },
@@ -441,8 +445,8 @@ describe("session HttpApi", () => {
         const test = yield* TestInstance
         const headers = { "x-opencode-directory": test.directory }
         const session = yield* createSession({ title: "v2 cursor" })
-        yield* insertLegacyAssistantMessage(session.id, 1)
-        yield* insertLegacyAssistantMessage(session.id, 2)
+        const firstMessage = yield* insertLegacyAssistantMessage(session.id, 1, 2)
+        const secondMessage = yield* insertLegacyAssistantMessage(session.id, 2, 1)
 
         const sessionPage = yield* request(
           `/api/session?${new URLSearchParams({
@@ -453,7 +457,8 @@ describe("session HttpApi", () => {
           })}`,
           { headers },
         )
-        const sessionCursor = (yield* json<{ cursor: { next?: string } }>(sessionPage)).cursor.next
+        const sessionCursor = (yield* json<{ data: Session.Info[]; cursor: { next?: string } }>(sessionPage)).cursor
+          .next
         expect(sessionCursor).toBeTruthy()
         expect(JSON.parse(Buffer.from(sessionCursor!, "base64url").toString("utf8"))).toMatchObject({
           order: "asc",
@@ -480,8 +485,32 @@ describe("session HttpApi", () => {
         })
 
         const messagePage = yield* request(`/api/session/${session.id}/message?limit=1`, { headers })
-        const messageCursor = (yield* json<{ cursor: { next?: string } }>(messagePage)).cursor.next
+        const messageBody = yield* json<{ data: SessionMessage.Message[]; cursor: { next?: string } }>(messagePage)
+        const messageCursor = messageBody.cursor.next
         expect(messageCursor).toBeTruthy()
+        expect(messageBody.data.map((message) => message.id)).toEqual([secondMessage.id])
+        expect(JSON.parse(Buffer.from(messageCursor!, "base64url").toString("utf8"))).toEqual({
+          id: secondMessage.id,
+          order: "desc",
+          direction: "next",
+        })
+
+        const nextMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${messageCursor}`, {
+          headers,
+        })
+        expect(
+          (yield* json<{ data: SessionMessage.Message[] }>(nextMessagePage)).data.map((message) => message.id),
+        ).toEqual([firstMessage.id])
+
+        const legacyMessageCursor = Buffer.from(
+          JSON.stringify({ id: secondMessage.id, time: 1, order: "desc", direction: "next" }),
+        ).toString("base64url")
+        const legacyMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${legacyMessageCursor}`, {
+          headers,
+        })
+        expect(
+          (yield* json<{ data: SessionMessage.Message[] }>(legacyMessagePage)).data.map((message) => message.id),
+        ).toEqual([firstMessage.id])
 
         const messageCursorWithOrder = yield* request(
           `/api/session/${session.id}/message?cursor=${messageCursor}&order=asc`,
@@ -544,24 +573,70 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "durably records one v2 prompt for exact message-ID retries",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "v2 prompt recording" })
+
+        const recordPrompt = () =>
+          request(`/api/session/${session.id}/prompt`, {
+            method: "POST",
+            headers: { ...headers, "content-type": "application/json" },
+            body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "hello" } }),
+          })
+        const first = yield* recordPrompt()
+        const retried = yield* recordPrompt()
+        type PromptBody = { id: string; type: string; text: string }
+        const firstBody = yield* json<{ data: PromptBody }>(first)
+        const retriedBody = yield* json<{ data: PromptBody }>(retried)
+        expect(first.status).toBe(200)
+        expect(retried.status).toBe(200)
+        expect(retriedBody).toEqual(firstBody)
+        expect(firstBody).toMatchObject({ data: { type: "user", text: "hello" } })
+
+        const messages = yield* requestJson<{ data: PromptBody[] }>(`/api/session/${session.id}/message`, {
+          headers,
+        })
+        expect(messages.data).toHaveLength(0)
+        const admitted = yield* Database.Service.use(({ db }) =>
+          db
+            .select()
+            .from(SessionInputTable)
+            .where(eq(SessionInputTable.id, SessionMessage.ID.make("evt_http_prompt")))
+            .get()
+            .pipe(Effect.orDie),
+        )
+        expect(admitted).toMatchObject({
+          id: "evt_http_prompt",
+          session_id: session.id,
+          delivery: "steer",
+          promoted_seq: null,
+        })
+
+        const conflict = yield* request(`/api/session/${session.id}/prompt`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "goodbye" } }),
+        })
+        expect(conflict.status).toBe(409)
+        expect(yield* responseJson(conflict)).toEqual({
+          _tag: "ConflictError",
+          message: "Prompt message ID conflicts with an existing durable record: evt_http_prompt",
+          resource: "evt_http_prompt",
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public unavailable errors for unfinished session mutations",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const headers = { "x-opencode-directory": test.directory }
         const session = yield* createSession({ title: "v2 unavailable" })
-
-        const prompt = yield* request(`/api/session/${session.id}/prompt`, {
-          method: "POST",
-          headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ prompt: { text: "hello" } }),
-        })
-        expect(prompt.status).toBe(503)
-        expect(yield* responseJson(prompt)).toEqual({
-          _tag: "ServiceUnavailableError",
-          message: "V2 session prompt is not available yet",
-          service: "v2.session.prompt",
-        })
 
         const compact = yield* request(`/api/session/${session.id}/compact`, { method: "POST", headers })
         expect(compact.status).toBe(503)

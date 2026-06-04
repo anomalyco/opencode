@@ -51,6 +51,56 @@ export type ToolResultMediaPart = Schema.Schema.Type<typeof ToolResultMediaPart>
 export const ToolResultContentPart = Schema.Union([TextPart, ToolResultMediaPart])
 export type ToolResultContentPart = Schema.Schema.Type<typeof ToolResultContentPart>
 
+export class ToolTextContent extends Schema.Class<ToolTextContent>("Tool.TextContent")({
+  type: Schema.Literal("text"),
+  text: Schema.String,
+}) {}
+
+export const ToolFileSource = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("data"), data: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("url"), url: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("file"), uri: Schema.String }),
+]).pipe(Schema.toTaggedUnion("type"))
+export type ToolFileSource = Schema.Schema.Type<typeof ToolFileSource>
+
+export class ToolFileContent extends Schema.Class<ToolFileContent>("Tool.FileContent")({
+  type: Schema.Literal("file"),
+  source: ToolFileSource,
+  mime: Schema.String,
+  name: Schema.optional(Schema.String),
+}) {}
+
+/** Ordered, provider-independent content shown to models and UIs after a tool succeeds. */
+export const ToolContent = Schema.Union([ToolTextContent, ToolFileContent]).pipe(Schema.toTaggedUnion("type"))
+export type ToolContent = Schema.Schema.Type<typeof ToolContent>
+
+export const toolText = (value: ConstructorParameters<typeof ToolTextContent>[0]) => new ToolTextContent(value)
+export const toolFile = (value: ConstructorParameters<typeof ToolFileContent>[0]) => new ToolFileContent(value)
+
+const inlineData = (uri: string) => {
+  if (!uri.startsWith("data:")) return undefined
+  const match = /^data:[^;,]+;base64,(.*)$/s.exec(uri)
+  if (!match) throw new Error("Tool file data URI must contain raw base64 bytes")
+  return match[1]!
+}
+
+const legacyInlineData = (value: string) => {
+  const data = inlineData(value)
+  if (data !== undefined) return data
+  if (/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) return value
+  throw new Error("Legacy tool-result media must contain raw base64 bytes or a base64 data URI")
+}
+
+/** Convert a legacy attachment URI without guessing unknown string semantics. */
+export const toolFileSourceFromUri = (uri: string): ToolFileSource => {
+  const data = inlineData(uri)
+  if (data !== undefined) return { type: "data", data }
+  const url = URL.parse(uri)
+  if (url?.protocol === "file:") return { type: "file", uri }
+  if (url?.protocol === "http:" || url?.protocol === "https:") return { type: "url", url: uri }
+  throw new Error(`Unsupported tool file URI: ${uri}`)
+}
+
 const isToolResultValue = (value: unknown): value is ToolResultValue =>
   isRecord(value) &&
   (value.type === "text" || value.type === "json" || value.type === "error" || value.type === "content") &&
@@ -85,6 +135,81 @@ export const ToolResultValue = Object.assign(
   },
 )
 export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>
+
+export interface ToolOutput {
+  readonly structured: unknown
+  readonly content: ReadonlyArray<ToolContent>
+}
+
+export const ToolOutput = Object.assign(
+  Schema.Struct({
+    structured: Schema.Unknown,
+    content: Schema.Array(ToolContent),
+  }).annotate({ identifier: "LLM.ToolOutput" }),
+  {
+    make: (structured: unknown, content: ReadonlyArray<ToolContent> = []): ToolOutput => ({
+      structured,
+      content: content.map((item) =>
+        item.type === "text"
+          ? toolText({ type: "text", text: item.text })
+          : toolFile({ type: "file", source: item.source, mime: item.mime, name: item.name }),
+      ),
+    }),
+    fromResultValue: (result: ToolResultValue): ToolOutput | undefined => {
+      switch (result.type) {
+        case "json":
+          return { structured: result.value, content: [] }
+        case "text":
+          return { structured: {}, content: [toolText({ type: "text", text: toolResultText(result.value) })] }
+        case "content":
+          return {
+            structured: {},
+            content: result.value.map((item) =>
+              item.type === "text"
+                ? toolText({ type: "text", text: item.text })
+                : toolFile({
+                    type: "file",
+                    source: { type: "data", data: legacyInlineData(item.data) },
+                    mime: item.mediaType,
+                    name: item.filename,
+                  }),
+            ),
+          }
+        case "error":
+          return undefined
+      }
+    },
+    toResultValue: (output: ToolOutput): ToolResultValue => {
+      if (output.content.length === 0) return { type: "json", value: output.structured }
+      if (output.content.length === 1 && output.content[0]?.type === "text")
+        return { type: "text", value: output.content[0].text }
+      const unsupported = output.content.find((item) => item.type === "file" && item.source.type !== "data")
+      if (unsupported?.type === "file")
+        return {
+          type: "error",
+          value: `Tool file source "${unsupported.source.type}" must be materialized to inline data before provider conversion`,
+        }
+      return {
+        type: "content",
+        value: output.content.map((item) => {
+          if (item.type === "text") return { type: "text", text: item.text }
+          if (item.source.type !== "data")
+            throw new Error("Unmaterialized tool file source reached provider conversion")
+          return { type: "media", mediaType: item.mime, data: item.source.data, filename: item.name }
+        }),
+      }
+    },
+  },
+)
+
+const toolResultText = (value: unknown) => {
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
 
 export const ToolCallPart = Object.assign(
   Schema.Struct({
@@ -157,6 +282,7 @@ export class Message extends Schema.Class<Message>("LLM.Message")({
 
 export namespace Message {
   export type ContentInput = string | ContentPart | ReadonlyArray<ContentPart>
+  export type SystemContentInput = string | TextPart | ReadonlyArray<TextPart>
   export type Input = Omit<ConstructorParameters<typeof Message>[0], "content"> & {
     readonly content: ContentInput
   }
@@ -175,6 +301,14 @@ export namespace Message {
 
   export const assistant = (content: ContentInput) => make({ role: "assistant", content })
 
+  /**
+   * Add an operator-authored instruction at this chronological point in the
+   * conversation. This is distinct from the initial `LLMRequest.system`
+   * prompt. Keep raw retrieved, tool, and web content out of privileged system
+   * updates; pass that untrusted content through ordinary user/tool channels.
+   */
+  export const system = (content: SystemContentInput) => make({ role: "system", content })
+
   export const tool = (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
@@ -183,6 +317,7 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
+  outputSchema: Schema.optional(JsonSchema),
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),

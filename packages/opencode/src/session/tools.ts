@@ -20,6 +20,7 @@ import { PartID } from "./schema"
 import { Log } from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const log = Log.create({ service: "session.tools" })
 
@@ -75,7 +76,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   })
 
   for (const item of yield* registry.tools({
-    modelID: ProviderV2.ModelID.make(input.model.api.id),
+    modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
   })) {
