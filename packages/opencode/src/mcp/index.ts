@@ -119,6 +119,24 @@ function remoteURL(key: string, value: string) {
   log.warn("invalid remote mcp url", { key })
 }
 
+function remoteHeaders(mcp: ConfigMCP.Info & { type: "remote" }) {
+  const derived: Record<string, string> = {}
+  if (mcp.bifrost?.virtualKey) derived["x-bf-vk"] = mcp.bifrost.virtualKey
+  if (mcp.bifrost?.includeClients !== undefined) {
+    derived["x-bf-mcp-include-clients"] = mcp.bifrost.includeClients.join(",")
+  }
+  if (mcp.bifrost?.includeTools !== undefined) {
+    derived["x-bf-mcp-include-tools"] = mcp.bifrost.includeTools.join(",")
+  }
+
+  const headers = { ...derived, ...mcp.headers }
+  return Object.keys(headers).length > 0 ? headers : undefined
+}
+
+function isOAuthDisabled(mcp: ConfigMCP.Info & { type: "remote" }) {
+  return mcp.oauth === false || (mcp.bifrost !== undefined && mcp.oauth === undefined)
+}
+
 function isOutputSchemaValidationError(error: Error) {
   return /can't resolve reference|resolves to more than one schema|outputSchema|schema.*reference|reference.*schema/i.test(
     error.message,
@@ -306,7 +324,7 @@ export const layer = Layer.effect(
       key: string,
       mcp: ConfigMCP.Info & { type: "remote" },
     ) {
-      const oauthDisabled = mcp.oauth === false
+      const oauthDisabled = isOAuthDisabled(mcp)
       const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
       const url = remoteURL(key, mcp.url)
       if (!url) {
@@ -337,19 +355,21 @@ export const layer = Layer.effect(
         )
       }
 
+      const headers = remoteHeaders(mcp)
+      const requestInit = headers ? { headers } : undefined
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(url, {
             authProvider,
-            requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            requestInit,
           }),
         },
         {
           name: "SSE",
           transport: new SSEClientTransport(url, {
             authProvider,
-            requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            requestInit,
           }),
         },
       ]
@@ -781,7 +801,7 @@ export const layer = Layer.effect(
     const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string) {
       const mcpConfig = yield* requireMcpConfig(mcpName)
       if (mcpConfig.type !== "remote") throw new Error(`MCP server ${mcpName} is not a remote server`)
-      if (mcpConfig.oauth === false) throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
+      if (isOAuthDisabled(mcpConfig)) throw new Error(`MCP server ${mcpName} has OAuth disabled`)
       const url = remoteURL(mcpName, mcpConfig.url)
       if (!url) throw new Error(`Invalid MCP URL for "${mcpName}"`)
 
@@ -929,7 +949,7 @@ export const layer = Layer.effect(
 
     const supportsOAuth = Effect.fn("MCP.supportsOAuth")(function* (mcpName: string) {
       const mcpConfig = yield* requireMcpConfig(mcpName)
-      return mcpConfig.type === "remote" && mcpConfig.oauth !== false
+      return mcpConfig.type === "remote" && !isOAuthDisabled(mcpConfig)
     })
 
     const hasStoredTokens = Effect.fn("MCP.hasStoredTokens")(function* (mcpName: string) {

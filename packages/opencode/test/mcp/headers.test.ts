@@ -123,4 +123,153 @@ describe("mcp.headers", () => {
       }
     }),
   )
+
+  it.instance("bifrost config derives headers and disables oauth by default", () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      yield* mcp
+        .add("test-bifrost", {
+          type: "remote",
+          url: "https://bifrost.example.com/mcp",
+          bifrost: {
+            virtualKey: "vk-test",
+            includeClients: ["filesystem", "github"],
+            includeTools: ["filesystem-read_file", "github-*"],
+          },
+        })
+        .pipe(Effect.catch(() => Effect.void))
+
+      expect(transportCalls.map((call) => call.type)).toEqual(["streamable", "sse"])
+
+      for (const call of transportCalls) {
+        expect(call.options.requestInit).toBeDefined()
+        expect(call.options.requestInit?.headers).toEqual({
+          "x-bf-vk": "vk-test",
+          "x-bf-mcp-include-clients": "filesystem,github",
+          "x-bf-mcp-include-tools": "filesystem-read_file,github-*",
+        })
+        expect(call.options.authProvider).toBeUndefined()
+      }
+    }),
+  )
+
+  it.instance("bifrost includeClients can be used without virtualKey and disables oauth by default", () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      yield* mcp
+        .add("test-bifrost-include-clients-only", {
+          type: "remote",
+          url: "https://bifrost.example.com/mcp",
+          bifrost: {
+            includeClients: ["filesystem"],
+          },
+        })
+        .pipe(Effect.catch(() => Effect.void))
+
+      expect(transportCalls.map((call) => call.type)).toEqual(["streamable", "sse"])
+
+      for (const call of transportCalls) {
+        expect(call.options.requestInit).toBeDefined()
+        expect(call.options.requestInit?.headers).toEqual({
+          "x-bf-mcp-include-clients": "filesystem",
+        })
+        expect(call.options.requestInit?.headers).not.toHaveProperty("x-bf-vk")
+        expect(call.options.authProvider).toBeUndefined()
+      }
+    }),
+  )
+
+  it.instance("bifrost empty include arrays send empty header values", () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      yield* mcp
+        .add("test-bifrost-empty-filters", {
+          type: "remote",
+          url: "https://bifrost.example.com/mcp",
+          bifrost: {
+            virtualKey: "vk-test",
+            includeClients: [],
+            includeTools: [],
+          },
+        })
+        .pipe(Effect.catch(() => Effect.void))
+
+      expect(transportCalls.map((call) => call.type)).toEqual(["streamable", "sse"])
+
+      for (const call of transportCalls) {
+        expect(call.options.requestInit).toBeDefined()
+        expect(call.options.requestInit?.headers).toEqual({
+          "x-bf-vk": "vk-test",
+          "x-bf-mcp-include-clients": "",
+          "x-bf-mcp-include-tools": "",
+        })
+        expect(call.options.authProvider).toBeUndefined()
+      }
+    }),
+  )
+
+  it.instance("bifrost oauth support follows explicit oauth config", () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+
+      yield* mcp
+        .add("test-bifrost-no-oauth", {
+          type: "remote",
+          url: "https://bifrost.example.com/mcp",
+          bifrost: {
+            virtualKey: "vk-test",
+          },
+        })
+        .pipe(Effect.catch(() => Effect.void))
+      expect(yield* mcp.supportsOAuth("test-bifrost-no-oauth")).toBe(false)
+
+      yield* mcp
+        .add("test-bifrost-with-oauth", {
+          type: "remote",
+          url: "https://bifrost.example.com/mcp",
+          bifrost: {
+            virtualKey: "vk-test",
+          },
+          oauth: {},
+        })
+        .pipe(Effect.catch(() => Effect.void))
+      expect(yield* mcp.supportsOAuth("test-bifrost-with-oauth")).toBe(true)
+    }),
+  )
+
+  it.instance("explicit headers override bifrost headers and explicit oauth is preserved", () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      yield* mcp
+        .add("test-bifrost-overrides", {
+          type: "remote",
+          url: "https://bifrost.example.com/mcp",
+          bifrost: {
+            virtualKey: "derived-vk",
+            includeClients: ["filesystem"],
+            includeTools: ["filesystem-read_file"],
+          },
+          headers: {
+            "x-bf-vk": "raw-vk",
+            "x-bf-mcp-include-tools": "raw-tool",
+          },
+          oauth: {
+            clientId: "client-id",
+          },
+        })
+        .pipe(Effect.catch(() => Effect.void))
+
+      expect(transportCalls.map((call) => call.type)).toEqual(["streamable", "sse"])
+
+      for (const call of transportCalls) {
+        expect(call.options.requestInit).toBeDefined()
+        expect(call.options.requestInit?.headers).toEqual({
+          "x-bf-vk": "raw-vk",
+          "x-bf-mcp-include-clients": "filesystem",
+          "x-bf-mcp-include-tools": "raw-tool",
+        })
+        expect(call.options.authProvider).toBeDefined()
+      }
+    }),
+  )
 })

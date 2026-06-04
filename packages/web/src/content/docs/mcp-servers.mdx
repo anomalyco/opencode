@@ -158,8 +158,51 @@ The `url` is the URL of the remote MCP server and with the `headers` option you 
 | `url`     | String  | Y        | URL of the remote MCP server.                                                       |
 | `enabled` | Boolean |          | Enable or disable the MCP server on startup.                                        |
 | `headers` | Object  |          | Headers to send with the request.                                                   |
+| `bifrost` | Object  |          | Bifrost gateway virtual-key auth and client/tool filtering.                         |
 | `oauth`   | Object  |          | OAuth authentication configuration. See [OAuth](#oauth) section below.              |
 | `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+
+---
+
+### Bifrost gateway
+
+For a Bifrost MCP gateway, use `bifrost` to send an optional virtual key and optionally narrow the visible clients or tools.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "bifrost-files": {
+      "type": "remote",
+      "url": "http://localhost:8080/mcp",
+      "bifrost": {
+        "virtualKey": "{env:BIFROST_VIRTUAL_KEY}",
+        "includeClients": ["filesystem"],
+        "includeTools": ["filesystem-read_file", "filesystem-list_directory"]
+      }
+    }
+  }
+}
+```
+
+You can also use include filters without a virtual key when Bifrost allows unauthenticated `/mcp` requests:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "bifrost-files": {
+      "type": "remote",
+      "url": "http://localhost:8080/mcp",
+      "bifrost": {
+        "includeClients": ["filesystem"]
+      }
+    }
+  }
+}
+```
+
+`virtualKey` is sent as `x-bf-vk` when configured. `includeClients` and `includeTools` are sent as Bifrost include headers and can be used by themselves if the gateway allows unauthenticated MCP. If Bifrost enforces authentication, configure `virtualKey` or raw `headers`. These include filters only narrow what Bifrost exposes for this request; authentication or the virtual key's MCP allowlist is the authorization boundary. OpenCode disables OAuth auto-detection for native Bifrost config unless you explicitly set `oauth`.
 
 ---
 
