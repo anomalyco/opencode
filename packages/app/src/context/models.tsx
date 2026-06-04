@@ -1,4 +1,4 @@
-import { createEffect, createMemo } from "solid-js"
+import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
@@ -122,20 +122,6 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       if (!date?.isValid) return true
       return false
     }
-
-    createEffect(() => {
-      // [DEBUG] Temporary visibility probe for native openai in the desktop model list.
-      const gpt55Key = modelKey({ providerID: "openai", modelID: "gpt-5.5" })
-      const gpt55 = list().find((m) => m.id === "gpt-5.5" && m.provider.id === "openai")
-      const state = visibility().get(gpt55Key)
-      console.debug("[DEBUG] models visible openai/gpt-5.5", {
-        inList: !!gpt55,
-        visible: gpt55 ? visible({ providerID: "openai", modelID: "gpt-5.5" }) : null,
-        latestSetHas: latestSet().has(gpt55Key),
-        releaseDate: gpt55?.release_date ?? null,
-        state: state ?? "default",
-      })
-    })
 
     const setVisibility = (model: ModelKey, state: boolean) => {
       update(model, state ? "show" : "hide")

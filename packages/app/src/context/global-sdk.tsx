@@ -1,4 +1,4 @@
-import type { Event, GlobalEvent } from "@opencode-ai/sdk/v2/client"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2/client"
 import { createContext, createEffect, createSignal, getOwner, onCleanup, useContext, type ParentProps } from "solid-js"
 import { createGlobalEmitter, type GlobalEmitter } from "@solid-primitives/event-bus"
 import z from "zod"
@@ -160,6 +160,7 @@ export function GlobalSDKProvider(props: ParentProps) {
       type Queued = { directory: string; payload: GlobalEvent["payload"] }
       const FLUSH_FRAME_MS = 16
       const FLUSH_BUDGET_MS = 6
+      const FLUSH_EVENT_LIMIT = 12
       const STREAM_YIELD_MS = 8
       const RECONNECT_DELAY_MS = 250
       const HEARTBEAT_TIMEOUT_MS = 15_000
@@ -256,10 +257,13 @@ export function GlobalSDKProvider(props: ParentProps) {
 
         last = Date.now()
         const start = performance.now()
-        while (flushing && flushIndex < flushing.length) {
-          dispatch(flushing[flushIndex]!)
+        let dispatched = 0
+        const events = flushing
+        while (flushIndex < events.length) {
+          dispatch(events[flushIndex])
           flushIndex++
-          if (!drain && performance.now() - start >= FLUSH_BUDGET_MS) {
+          dispatched++
+          if (!drain && (dispatched >= FLUSH_EVENT_LIMIT || performance.now() - start >= FLUSH_BUDGET_MS)) {
             timer = setTimeout(() => flush(), 0)
             return
           }
@@ -380,17 +384,6 @@ export function GlobalSDKProvider(props: ParentProps) {
   })
 
   return <GlobalSDKContext.Provider value={value}>{props.children}</GlobalSDKContext.Provider>
-}
-
-function eventFetchMode(url: string, platformFetch: typeof globalThis.fetch | undefined) {
-  if (!platformFetch) return "webview"
-  try {
-    const parsed = new URL(url)
-    const loopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1"
-    return parsed.protocol === "http:" && !loopback ? "platform" : "webview"
-  } catch {
-    return "webview"
-  }
 }
 
 export function useGlobalSDK() {

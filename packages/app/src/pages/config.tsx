@@ -10,6 +10,7 @@ import {
   onMount,
   Show,
   Switch,
+  untrack,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -2238,7 +2239,6 @@ export default function ConfigPage() {
   const mainRoot = createMemo(() => globalSync.data.rootByDomain[mainDomain])
   const mainPath = createMemo(() => mainRoot()?.path ?? globalSync.data.path)
   const mainConfig = createMemo(() => mainRoot()?.config ?? globalSync.data.config)
-  const mainProviderAuth = createMemo(() => mainRoot()?.provider_auth ?? globalSync.data.provider_auth)
 
   const space = createMemo<ConfigWorkspace | undefined>(() => {
     const data = workspace() as ConfigWorkspace | undefined
@@ -2255,8 +2255,14 @@ export default function ConfigPage() {
       plugins: data?.plugins ?? [],
     }
   })
-  const cfg = createMemo(() => globalSync.data.config)
+  const cfg = createMemo(() => mainConfig())
   const mainProviders = createMemo(() => globalSync.data.rootByDomain[mainDomain]?.provider ?? globalSync.data.provider)
+  const enabledPluginKey = createMemo(() =>
+    (cfg().plugin ?? [])
+      .map((entry) => (Array.isArray(entry) ? entry[0] : entry))
+      .map((entry) => entry.replace(/\x1f|\x1e/g, ""))
+      .join("\x1e"),
+  )
   const t = language.t
   const [marketSkills, setMarketSkills] = createSignal<SkillMarketLoadResult>({ skills: [] })
   const [marketSkillsLoading, setMarketSkillsLoading] = createSignal(false)
@@ -2350,6 +2356,15 @@ export default function ConfigPage() {
       .filter((item) => !isExtraAgentDirectory(item.worktree))
       .sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
   )
+  const openedKey = createMemo(() =>
+    opened()
+      .map((item) =>
+        [item.id, item.name ?? "", item.worktree, ...(item.sandboxes ?? [])]
+          .map((part) => part.replace(/\x1f|\x1e/g, ""))
+          .join("\x1f"),
+      )
+      .join("\x1e"),
+  )
 
   const agentsMd = createMemo<DocItem[]>(() => {
     if (!space()?.agentsMdPath) return []
@@ -2381,7 +2396,7 @@ export default function ConfigPage() {
   const skills = createMemo<SkillItem[]>(() => {
     const root = local(space()?.skillsRoot ?? "")
     const claude = mainPath().home ? join(mainPath().home, ".claude", "skills") : undefined
-    return (rawSkills() ?? []).map((item) => {
+    return (rawSkills.latest ?? []).map((item) => {
       const source = classifySkillSource(item.location, opened(), { opencodeRoot: root, claudeRoot: claude })
       const group: SkillGroup = source.group === "global" ? "external" : source.group
       return {
@@ -2496,8 +2511,9 @@ export default function ConfigPage() {
   }
 
   const [diskAgents] = createResource(
-    () => [state.agentRev, opened()] as const,
-    async ([, list]) => {
+    () => [state.agentRev, openedKey()] as const,
+    async () => {
+      const list = untrack(opened)
       return Promise.all(
         list.map(async (item) => {
           const label = item.name ?? name(item.worktree)
@@ -2546,8 +2562,9 @@ export default function ConfigPage() {
   )
 
   const [pluginAgents] = createResource(
-    () => [state.agentRev, mainPath().home, cfg().plugin] as const,
-    async ([, home, plugins]) => {
+    () => [state.agentRev, mainPath().home, enabledPluginKey()] as const,
+    async ([, home]) => {
+      const plugins = untrack(() => cfg().plugin)
       const cache = home ? join(home, ".cache", "opencode") : undefined
       if (!cache || !plugins?.length) return [] as DocItem[]
 
@@ -2593,9 +2610,9 @@ export default function ConfigPage() {
 
   const runtimeAgents = createMemo<DocItem[]>(() => {
     const names = new Set(
-      [...globalAgents(), ...(diskAgents() ?? []), ...(pluginAgents() ?? [])].map((item) => item.label),
+      [...globalAgents(), ...(diskAgents.latest ?? []), ...(pluginAgents.latest ?? [])].map((item) => item.label),
     )
-    return (loaded() ?? [])
+    return (loaded.latest ?? [])
       .filter((item) => !item.native && !item.hidden && !names.has(item.name))
       .map((item) => ({
         id: `agent-runtime:${item.name}`,
@@ -2612,7 +2629,7 @@ export default function ConfigPage() {
 
   const agents = createMemo<DocItem[]>(() => {
     const seen = new Set<string>()
-    return [...globalAgents(), ...(diskAgents() ?? []), ...(pluginAgents() ?? []), ...runtimeAgents()]
+    return [...globalAgents(), ...(diskAgents.latest ?? []), ...(pluginAgents.latest ?? []), ...runtimeAgents()]
       .filter((item) => {
         const key = norm(item.path)
         if (seen.has(key)) return false
@@ -2657,8 +2674,9 @@ export default function ConfigPage() {
   )
 
   const [diskProject] = createResource(
-    () => [state.skillRev, opened()] as const,
-    async ([, list]) => {
+    () => [state.skillRev, openedKey()] as const,
+    async () => {
+      const list = untrack(opened)
       return Promise.all(
         list.map(async (item) => {
           const label = item.name ?? name(item.worktree)
@@ -2706,7 +2724,7 @@ export default function ConfigPage() {
 
   const skillDocs = createMemo<DocItem[]>(() => {
     const seen = new Set<string>()
-    return [...skills(), ...(diskOpenCode() ?? []), ...(diskClaude() ?? []), ...(diskProject() ?? [])]
+    return [...skills(), ...(diskOpenCode.latest ?? []), ...(diskClaude.latest ?? []), ...(diskProject.latest ?? [])]
       .filter((item) => {
         const key = norm(item.location)
         if (seen.has(key)) return false
@@ -2800,8 +2818,9 @@ export default function ConfigPage() {
   }
 
   const [diskProjectPlugins] = createResource(
-    () => [state.skillRev, opened()] as const,
-    async ([, list]) => {
+    () => [state.skillRev, openedKey()] as const,
+    async () => {
+      const list = untrack(opened)
       return Promise.all(
         list.map(async (item) => {
           const label = item.name ?? name(item.worktree)
@@ -2865,7 +2884,7 @@ export default function ConfigPage() {
       })
     }
 
-    for (const item of diskProjectPlugins() ?? []) {
+    for (const item of diskProjectPlugins.latest ?? []) {
       const key = pluginKey(item.path ?? item.name)
       const existing = map.get(key)
       map.set(key, {
