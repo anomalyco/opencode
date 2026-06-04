@@ -1,7 +1,7 @@
 export * as Git from "./git"
 
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath } from "./schema"
 import { FSUtil } from "./fs-util"
@@ -33,6 +33,13 @@ export class WorktreeError extends Schema.TaggedErrorClass<WorktreeError>()("Git
   cause: Schema.optional(Schema.Defect),
 }) {}
 
+export class PatchError extends Schema.TaggedErrorClass<PatchError>()("Git.PatchError", {
+  operation: Schema.Literals(["capture", "apply", "reset"]),
+  directory: AbsolutePath,
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
 export interface Interface {
   readonly find: (input: AbsolutePath) => Effect.Effect<Repo | undefined>
   readonly remote: (repo: Repo, name?: string) => Effect.Effect<string | undefined>
@@ -52,6 +59,10 @@ export interface Interface {
   readonly fetchBranch: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly checkout: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly reset: (directory: string, target: string) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly patch: (directory: AbsolutePath) => Effect.Effect<string, PatchError>
+  readonly applyPatch: (input: { directory: AbsolutePath; patch: string }) => Effect.Effect<void, PatchError>
+  readonly resetChanges: (directory: AbsolutePath) => Effect.Effect<void, PatchError>
+  readonly softResetChanges: (directory: AbsolutePath) => Effect.Effect<void, PatchError>
   readonly worktreeCreate: (input: { repo: Repo; directory: AbsolutePath }) => Effect.Effect<void, WorktreeError>
   readonly worktreeRemove: (input: { repo: Repo; directory: AbsolutePath }) => Effect.Effect<void, WorktreeError>
   readonly worktreeList: (repo: Repo) => Effect.Effect<AbsolutePath[], WorktreeError>
@@ -159,6 +170,156 @@ export const layer = Layer.effect(
       execute(directory, proc)(["reset", "--hard", target]),
     )
 
+    const patch = Effect.fn("Git.patch")(function* (directory: AbsolutePath) {
+      const root = yield* execute(
+        directory,
+        proc,
+      )(["rev-parse", "--show-toplevel"]).pipe(
+        Effect.mapError((cause) => new PatchError({ operation: "capture", directory, message: cause.message, cause })),
+      )
+      if (root.exitCode !== 0) {
+        return yield* new PatchError({
+          operation: "capture",
+          directory,
+          message: root.stderr.trim() || root.text.trim() || "Failed to locate repository root",
+        })
+      }
+      const repo = AbsolutePath.make(resolvePath(directory, root.text))
+      const scope = path.relative(repo, directory).replaceAll("\\", "/") || "."
+      const tracked = yield* execute(
+        repo,
+        proc,
+      )(["diff", "--binary", "HEAD", "--", scope]).pipe(
+        Effect.mapError((cause) => new PatchError({ operation: "capture", directory, message: cause.message, cause })),
+      )
+      if (tracked.exitCode !== 0) {
+        return yield* new PatchError({
+          operation: "capture",
+          directory,
+          message: tracked.stderr.trim() || tracked.text.trim() || "Failed to capture tracked changes",
+        })
+      }
+
+      const untracked = yield* execute(
+        repo,
+        proc,
+      )(["ls-files", "--others", "--exclude-standard", "-z", "--", scope]).pipe(
+        Effect.mapError((cause) => new PatchError({ operation: "capture", directory, message: cause.message, cause })),
+      )
+      if (untracked.exitCode !== 0) {
+        return yield* new PatchError({
+          operation: "capture",
+          directory,
+          message: untracked.stderr.trim() || untracked.text.trim() || "Failed to list untracked changes",
+        })
+      }
+
+      const created = yield* Effect.forEach(untracked.text.split("\0").filter(Boolean), (file) =>
+        execute(
+          repo,
+          proc,
+        )(["diff", "--binary", "--no-index", "--", "/dev/null", file]).pipe(
+          Effect.mapError(
+            (cause) => new PatchError({ operation: "capture", directory, message: cause.message, cause }),
+          ),
+          Effect.flatMap((result) =>
+            // git diff --no-index returns 1 when differences were found.
+            result.exitCode === 0 || result.exitCode === 1
+              ? Effect.succeed(result.text)
+              : Effect.fail(
+                  new PatchError({
+                    operation: "capture",
+                    directory,
+                    message:
+                      result.stderr.trim() || result.text.trim() || `Failed to capture untracked change: ${file}`,
+                  }),
+                ),
+          ),
+        ),
+      )
+      return [tracked.text, ...created].filter(Boolean).join("\n")
+    })
+
+    const applyPatch = Effect.fn("Git.applyPatch")(function* (input: { directory: AbsolutePath; patch: string }) {
+      const result = yield* proc
+        .run(
+          ChildProcess.make("git", ["apply", "-"], {
+            cwd: input.directory,
+            extendEnv: true,
+            stdin: Stream.make(new TextEncoder().encode(input.patch)),
+          }),
+        )
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new PatchError({ operation: "apply", directory: input.directory, message: cause.message, cause }),
+          ),
+        )
+      if (result.exitCode === 0) return
+      return yield* new PatchError({
+        operation: "apply",
+        directory: input.directory,
+        message:
+          result.stderr.toString("utf8").trim() || result.stdout.toString("utf8").trim() || "Failed to apply changes",
+      })
+    })
+
+    const resetChanges = Effect.fn("Git.resetChanges")(function* (directory: AbsolutePath) {
+      const reset = yield* execute(
+        directory,
+        proc,
+      )(["reset", "--hard", "HEAD"]).pipe(
+        Effect.mapError((cause) => new PatchError({ operation: "reset", directory, message: cause.message, cause })),
+      )
+      if (reset.exitCode !== 0) {
+        return yield* new PatchError({
+          operation: "reset",
+          directory,
+          message: reset.stderr.trim() || reset.text.trim() || "Failed to reset tracked changes",
+        })
+      }
+      const clean = yield* execute(
+        directory,
+        proc,
+      )(["clean", "-fd"]).pipe(
+        Effect.mapError((cause) => new PatchError({ operation: "reset", directory, message: cause.message, cause })),
+      )
+      if (clean.exitCode === 0) return
+      return yield* new PatchError({
+        operation: "reset",
+        directory,
+        message: clean.stderr.trim() || clean.text.trim() || "Failed to clean untracked changes",
+      })
+    })
+
+    const softResetChanges = Effect.fn("Git.softResetChanges")(function* (directory: AbsolutePath) {
+      const checkout = yield* execute(
+        directory,
+        proc,
+      )(["checkout", "--", "."]).pipe(
+        Effect.mapError((cause) => new PatchError({ operation: "reset", directory, message: cause.message, cause })),
+      )
+      if (checkout.exitCode !== 0) {
+        return yield* new PatchError({
+          operation: "reset",
+          directory,
+          message: checkout.stderr.trim() || checkout.text.trim() || "Failed to restore tracked changes",
+        })
+      }
+      const clean = yield* execute(
+        directory,
+        proc,
+      )(["clean", "-fd", "--", "."]).pipe(
+        Effect.mapError((cause) => new PatchError({ operation: "reset", directory, message: cause.message, cause })),
+      )
+      if (clean.exitCode === 0) return
+      return yield* new PatchError({
+        operation: "reset",
+        directory,
+        message: clean.stderr.trim() || clean.text.trim() || "Failed to clean untracked changes",
+      })
+    })
+
     const worktree = Effect.fnUntraced(function* (
       operation: "create" | "remove" | "list",
       repo: Repo,
@@ -216,6 +377,10 @@ export const layer = Layer.effect(
       fetchBranch,
       checkout,
       reset,
+      patch,
+      applyPatch,
+      resetChanges,
+      softResetChanges,
       worktreeCreate,
       worktreeRemove,
       worktreeList,

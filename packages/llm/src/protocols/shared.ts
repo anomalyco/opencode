@@ -9,6 +9,7 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
+  type TextPart,
   type ToolResultPart,
 } from "../schema"
 export { isRecord } from "../utils/record"
@@ -103,6 +104,44 @@ export const parseJson = (route: string, input: string, message: string) =>
  * `systemInstruction.parts[].text`).
  */
 export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) => parts.map((part) => part.text).join("\n")
+
+const escapeSystemUpdateText = (text: string) =>
+  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+
+/**
+ * Stable fallback representation for chronological `Message.system(...)`
+ * updates on routes that do not support that privileged role natively. The
+ * wrapper remains visibly lower-authority user text, preserves the original
+ * temporal position, and XML-escapes content so it cannot close the wrapper.
+ */
+export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>) =>
+  `<system-update>\n${escapeSystemUpdateText(joinText(parts))}\n</system-update>`
+
+/**
+ * Chronological system updates deliberately accept text only. Do not insert
+ * raw retrieved, tool, or web content into privileged updates: keep untrusted
+ * data in ordinary user/tool messages instead.
+ */
+export const systemUpdateText = Effect.fn("ProviderShared.systemUpdateText")(function* (
+  route: string,
+  message: LLMRequest["messages"][number],
+) {
+  const content: TextPart[] = []
+  for (const part of message.content) {
+    if (!supportsContent(part, ["text"])) return yield* unsupportedContent(route, "system", ["text"])
+    content.push(part)
+  }
+  return content
+})
+
+/** Lower an unsupported privileged update into visible, in-order user text. */
+export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate")(function* (
+  route: string,
+  message: LLMRequest["messages"][number],
+) {
+  const content = yield* systemUpdateText(route, message)
+  return { type: "text" as const, text: wrapSystemUpdate(content), cache: content.at(-1)?.cache }
+})
 
 /**
  * Parse the streamed JSON input of a tool call. Treats an empty string as

@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { ProviderMetadata } from "@opencode-ai/llm"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { NonNegativeInt } from "../schema"
@@ -6,6 +7,8 @@ import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionSchema } from "./schema"
+import { Location } from "../location"
+import { RelativePath } from "../schema"
 
 export { FileAttachment }
 
@@ -27,6 +30,12 @@ const options = {
   sync: {
     aggregate: "sessionID",
     version: 1,
+  },
+} as const
+const stepSettlementOptions = {
+  sync: {
+    aggregate: "sessionID",
+    version: 2,
   },
 } as const
 
@@ -58,12 +67,24 @@ export const ModelSwitched = EventV2.define({
 })
 export type ModelSwitched = typeof ModelSwitched.Type
 
+export const Moved = EventV2.define({
+  type: "session.next.moved",
+  ...options,
+  schema: {
+    ...Base,
+    location: Location.Ref,
+    subdirectory: RelativePath.pipe(Schema.optional),
+  },
+})
+export type Moved = typeof Moved.Type
+
 export const Prompted = EventV2.define({
   type: "session.next.prompted",
   ...options,
   schema: {
     ...Base,
     prompt: Prompt,
+    delivery: Schema.Literals(["steer", "queue"]),
   },
 })
 export type Prompted = typeof Prompted.Type
@@ -117,9 +138,10 @@ export namespace Step {
 
   export const Ended = EventV2.define({
     type: "session.next.step.ended",
-    ...options,
+    ...stepSettlementOptions,
     schema: {
       ...Base,
+      assistantMessageID: EventV2.ID,
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
@@ -138,9 +160,10 @@ export namespace Step {
 
   export const Failed = EventV2.define({
     type: "session.next.step.failed",
-    ...options,
+    ...stepSettlementOptions,
     schema: {
       ...Base,
+      assistantMessageID: EventV2.ID,
       error: UnknownError,
     },
   })
@@ -153,15 +176,17 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      textID: Schema.String,
     },
   })
   export type Started = typeof Started.Type
 
+  // Stream fragments are live-only; Text.Ended is the replayable full-value boundary.
   export const Delta = EventV2.define({
     type: "session.next.text.delta",
-    ...options,
     schema: {
       ...Base,
+      textID: Schema.String,
       delta: Schema.String,
     },
   })
@@ -172,6 +197,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      textID: Schema.String,
       text: Schema.String,
     },
   })
@@ -185,13 +211,14 @@ export namespace Reasoning {
     schema: {
       ...Base,
       reasoningID: Schema.String,
+      providerMetadata: ProviderMetadata.pipe(Schema.optional),
     },
   })
   export type Started = typeof Started.Type
 
+  // Stream fragments are live-only; Reasoning.Ended is the replayable full-value boundary.
   export const Delta = EventV2.define({
     type: "session.next.reasoning.delta",
-    ...options,
     schema: {
       ...Base,
       reasoningID: Schema.String,
@@ -207,30 +234,35 @@ export namespace Reasoning {
       ...Base,
       reasoningID: Schema.String,
       text: Schema.String,
+      providerMetadata: ProviderMetadata.pipe(Schema.optional),
     },
   })
   export type Ended = typeof Ended.Type
 }
 
 export namespace Tool {
+  const ToolBase = {
+    ...Base,
+    assistantMessageID: EventV2.ID,
+    callID: Schema.String,
+  }
+
   export namespace Input {
     export const Started = EventV2.define({
       type: "session.next.tool.input.started",
       ...options,
       schema: {
-        ...Base,
-        callID: Schema.String,
+        ...ToolBase,
         name: Schema.String,
       },
     })
     export type Started = typeof Started.Type
 
+    // Stream fragments are live-only; Input.Ended is the replayable raw-input boundary.
     export const Delta = EventV2.define({
       type: "session.next.tool.input.delta",
-      ...options,
       schema: {
-        ...Base,
-        callID: Schema.String,
+        ...ToolBase,
         delta: Schema.String,
       },
     })
@@ -240,8 +272,7 @@ export namespace Tool {
       type: "session.next.tool.input.ended",
       ...options,
       schema: {
-        ...Base,
-        callID: Schema.String,
+        ...ToolBase,
         text: Schema.String,
       },
     })
@@ -252,24 +283,26 @@ export namespace Tool {
     type: "session.next.tool.called",
     ...options,
     schema: {
-      ...Base,
-      callID: Schema.String,
+      ...ToolBase,
       tool: Schema.String,
       input: Schema.Record(Schema.String, Schema.Unknown),
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(Schema.optional),
       }),
     },
   })
   export type Called = typeof Called.Type
 
+  /**
+   * Replayable bounded running-tool state. Tools should checkpoint semantic
+   * transitions or at a bounded cadence, not persist every stdout/stderr chunk.
+   */
   export const Progress = EventV2.define({
     type: "session.next.tool.progress",
     ...options,
     schema: {
-      ...Base,
-      callID: Schema.String,
+      ...ToolBase,
       structured: ToolOutput.Structured,
       content: Schema.Array(ToolOutput.Content),
     },
@@ -280,13 +313,13 @@ export namespace Tool {
     type: "session.next.tool.success",
     ...options,
     schema: {
-      ...Base,
-      callID: Schema.String,
+      ...ToolBase,
       structured: ToolOutput.Structured,
       content: Schema.Array(ToolOutput.Content),
+      result: Schema.Unknown.pipe(Schema.optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(Schema.optional),
       }),
     },
   })
@@ -296,12 +329,12 @@ export namespace Tool {
     type: "session.next.tool.failed",
     ...options,
     schema: {
-      ...Base,
-      callID: Schema.String,
+      ...ToolBase,
       error: UnknownError,
+      result: Schema.Unknown.pipe(Schema.optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(Schema.optional),
       }),
     },
   })
@@ -364,39 +397,40 @@ export namespace Compaction {
   export type Ended = typeof Ended.Type
 }
 
-export const All = Schema.Union(
-  [
-    AgentSwitched,
-    ModelSwitched,
-    Prompted,
-    Synthetic,
-    Shell.Started,
-    Shell.Ended,
-    Step.Started,
-    Step.Ended,
-    Step.Failed,
-    Text.Started,
-    Text.Delta,
-    Text.Ended,
-    Tool.Input.Started,
-    Tool.Input.Delta,
-    Tool.Input.Ended,
-    Tool.Called,
-    Tool.Progress,
-    Tool.Success,
-    Tool.Failed,
-    Reasoning.Started,
-    Reasoning.Delta,
-    Reasoning.Ended,
-    Retried,
-    Compaction.Started,
-    Compaction.Delta,
-    Compaction.Ended,
-  ],
-  {
-    mode: "oneOf",
-  },
-).pipe(Schema.toTaggedUnion("type"))
+const DurableDefinitions = [
+  AgentSwitched,
+  ModelSwitched,
+  Moved,
+  Prompted,
+  Synthetic,
+  Shell.Started,
+  Shell.Ended,
+  Step.Started,
+  Step.Ended,
+  Step.Failed,
+  Text.Started,
+  Text.Ended,
+  Tool.Input.Started,
+  Tool.Input.Ended,
+  Tool.Called,
+  Tool.Progress,
+  Tool.Success,
+  Tool.Failed,
+  Reasoning.Started,
+  Reasoning.Ended,
+  Retried,
+  Compaction.Started,
+  Compaction.Delta,
+  Compaction.Ended,
+] as const
+const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta] as const
+
+export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
+export type DurableEvent = typeof Durable.Type
+
+export const All = Schema.Union([...DurableDefinitions, ...EphemeralDefinitions], { mode: "oneOf" }).pipe(
+  Schema.toTaggedUnion("type"),
+)
 export type Event = typeof All.Type
 export type Type = Event["type"]
 

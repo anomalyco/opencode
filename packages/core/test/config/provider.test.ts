@@ -25,11 +25,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = ProviderV2.ID.make("custom")
       const modelID = ModelV2.ID.make("chat")
       const config = Config.Service.of({
-        directories: () => Effect.succeed([]),
-        get: () =>
+        entries: () =>
           Effect.succeed([
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 providers: {
                   custom: {
@@ -57,8 +56,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
                 },
               }),
             }),
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 providers: {
                   custom: {
@@ -86,8 +85,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
                 },
               }),
             }),
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 providers: {
                   custom: { name: "Renamed" },
