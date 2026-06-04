@@ -20,6 +20,7 @@
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/meta": "catalog:",
+    "@hono/standard-validator": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
     "js-base64": "3.7.7",
