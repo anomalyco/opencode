@@ -6,6 +6,10 @@ import { channelTable } from "../channel.sql"
 import { router } from "../runtime/router"
 import { health } from "../runtime/health"
 import { capabilities } from "../runtime/capabilities"
+import { getChannelPlugin } from "../channel.config"
+import { Service as RegistryService } from "../runtime/registry"
+import { Service as MessageBusService, layer as messageBusLayer } from "../runtime/bus"
+import { typingKeepalive as keepaliveTyping } from "../runtime/keepalive"
 import * as Log from "@opencode-ai/core/util/log"
 import { Identifier } from "@/id/id"
 
@@ -23,6 +27,8 @@ export interface Interface {
   readonly stream: (channelId: string, chunks: AsyncIterable<string>) => Effect.Effect<void>
   readonly health: () => Effect.Effect<Record<string, any>>
   readonly capabilities: () => Effect.Effect<Record<string, any>>
+  /** Start a typing keepalive that repeats until the scope closes */
+  readonly typingKeepalive: (channelId: string, intervalMs?: number) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Channels") {}
@@ -35,16 +41,40 @@ export const layer = Layer.effect(
     const create = Effect.fn("Channels.create")(function* (input: Schema.Schema.Type<typeof CreateChannel>) {
       const now = Date.now()
       const id = Identifier.ascending("channel") as Schema.Schema.Type<typeof ChannelID>
+
+      // Persist to DB
       yield* db.insert(channelTable).values({
         id,
         type: input.type,
         name: input.name,
         webhook_url: "",
         enabled: input.enabled ?? true,
+        config: input.config ? JSON.stringify(input.config) : null,
         created_at: now,
         updated_at: now,
       }).run().pipe(Effect.orDie)
-      log.info("channel created", { id, type: input.type, name: input.name })
+
+      // Instantiate and register plugin if type is known
+      const plugin = getChannelPlugin(input.type)
+      if (plugin) {
+        const registry = yield* RegistryService
+        const bus = yield* MessageBusService
+        const channelConfig = (input.config ?? {}) as Record<string, unknown>
+        const channelInstance = plugin.create(id, input.name, channelConfig)
+
+        // Inject the message bus for inbound processing (if plugin supports it)
+        if ("setBus" in channelInstance && typeof channelInstance.setBus === "function") {
+          channelInstance.setBus(bus)
+          log.debug("message bus injected into channel plugin", { id, type: input.type })
+        }
+
+        yield* registry.register(id, channelInstance)
+        yield* channelInstance.start()
+        log.info("channel plugin registered and started", { id, type: input.type, name: input.name })
+      } else {
+        log.info("channel created (no plugin registered)", { id, type: input.type, name: input.name })
+      }
+
       return {
         id,
         type: input.type,
@@ -68,6 +98,15 @@ export const layer = Layer.effect(
     })
 
     const remove = Effect.fn("Channels.remove")(function* (id: Schema.Schema.Type<typeof ChannelID>) {
+      // Stop and unregister plugin if running
+      const registry = yield* RegistryService
+      const channel = yield* registry.get(id)
+      if (channel) {
+        yield* channel.stop()
+        yield* registry.unregister(id)
+        log.info("channel plugin stopped and unregistered", { id })
+      }
+
       yield* db.delete(channelTable).where(eq(channelTable.id, id)).run().pipe(Effect.orDie)
       log.info("channel removed", { id })
     })
@@ -113,6 +152,13 @@ export const layer = Layer.effect(
       return yield* capabilities.getAll()
     })
 
+    const typingKeepaliveEffect = Effect.fn("Channels.typingKeepalive")(function* (
+      channelId: string,
+      intervalMs?: number
+    ) {
+      return yield* keepaliveTyping(channelId, intervalMs)
+    })
+
     return Service.of({
       create: create as Interface["create"],
       list: list as Interface["list"],
@@ -125,8 +171,12 @@ export const layer = Layer.effect(
       stream: streamEffect as Interface["stream"],
       health: healthCheck as Interface["health"],
       capabilities: capabilitiesCheck as Interface["capabilities"],
+      typingKeepalive: typingKeepaliveEffect as Interface["typingKeepalive"],
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(messageBusLayer),
+)
