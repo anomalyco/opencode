@@ -340,7 +340,7 @@ export function SessionSwitcherDialog() {
         {list}
       </box>
       <Show when={showPreview()}>
-        <box width={1} flexShrink={0} border={["left"]} borderColor={theme.borderSubtle} />
+        <box width={1} height={height() - 1} flexShrink={0} border={["left"]} borderColor={theme.borderSubtle} />
         <box flexGrow={1} flexShrink={1} flexDirection="column">
           <SessionPreviewPane sessionID={focusedSession} session={focusedSessionInfo} />
         </box>
