@@ -31,8 +31,8 @@ let connectError = "Mock transport cannot connect"
 let clientCreateCount = 0
 // Tracks how many times transport.close() is called across all mock transports
 let transportCloseCount = 0
-// Captures the opts passed to the most recently constructed MockStdioTransport
-let lastStdioOpts: any | undefined
+// Captures the opts passed to each MockStdioTransport, keyed by lastCreatedClientName
+const stdioOptsByName = new Map<string, any>()
 
 function getOrCreateClientState(name?: string): MockClientState {
   const key = name ?? "default"
@@ -61,7 +61,7 @@ class MockStdioTransport {
   stderr: null = null
   pid = 12345
   constructor(opts: any) {
-    lastStdioOpts = opts
+    if (lastCreatedClientName) stdioOptsByName.set(lastCreatedClientName, opts)
   }
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
@@ -200,9 +200,8 @@ it.instance(
       Effect.gen(function* () {
         const { directory } = yield* TestInstance
         lastCreatedClientName = "no-cwd"
-        lastStdioOpts = undefined
         yield* mcp.add("no-cwd", { type: "local", command: ["echo", "test"] })
-        expect(lastStdioOpts?.cwd).toBe(directory)
+        expect(stdioOptsByName.get("no-cwd")?.cwd).toBe(directory)
       }),
     ),
   { config: { mcp: {} } },
@@ -215,9 +214,8 @@ it.instance(
       Effect.gen(function* () {
         const { directory } = yield* TestInstance
         lastCreatedClientName = "rel-cwd"
-        lastStdioOpts = undefined
         yield* mcp.add("rel-cwd", { type: "local", command: ["echo", "test"], cwd: "plugins/sub" })
-        expect(lastStdioOpts?.cwd).toBe(path.resolve(directory, "plugins/sub"))
+        expect(stdioOptsByName.get("rel-cwd")?.cwd).toBe(path.resolve(directory, "plugins/sub"))
       }),
     ),
   { config: { mcp: {} } },
@@ -229,9 +227,8 @@ it.instance(
     MCP.Service.use((mcp: MCPNS.Interface) =>
       Effect.gen(function* () {
         lastCreatedClientName = "abs-cwd"
-        lastStdioOpts = undefined
         yield* mcp.add("abs-cwd", { type: "local", command: ["echo", "test"], cwd: "/tmp/abs-path" })
-        expect(lastStdioOpts?.cwd).toBe("/tmp/abs-path")
+        expect(stdioOptsByName.get("abs-cwd")?.cwd).toBe("/tmp/abs-path")
       }),
     ),
   { config: { mcp: {} } },
