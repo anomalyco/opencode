@@ -13,7 +13,7 @@ const sessionID = SessionV2.ID.make("ses_webfetch_test")
 const requests: Array<{ readonly url: string; readonly headers: Record<string, string> }> = []
 const assertions: PermissionV2.AssertInput[] = []
 const truncations: ToolOutputStore.TruncateInput[] = []
-let respond = (request: HttpClientRequest.HttpClientRequest) =>
+let respond = (_request: HttpClientRequest.HttpClientRequest) =>
   Effect.succeed(new Response("hello", { headers: { "content-type": "text/plain" } }))
 let truncate = (input: ToolOutputStore.TruncateInput): Effect.Effect<ToolOutputStore.TruncateResult> =>
   Effect.succeed({ content: input.content, truncated: false })
@@ -147,7 +147,7 @@ describe("WebFetchTool contribution", () => {
             { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
           ])
         }),
-      (server) => Effect.sync(() => server.stop(true)),
+      (server) => Effect.promise(() => server.stop(true)),
     ),
   )
 
