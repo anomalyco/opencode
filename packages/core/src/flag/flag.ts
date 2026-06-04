@@ -1,4 +1,5 @@
 import { Config } from "effect"
+import path from "path"
 
 export function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
@@ -9,6 +10,22 @@ const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
 
 function enabledByExperimental(key: string) {
   return process.env[key] === undefined ? truthy("OPENCODE_EXPERIMENTAL") : truthy(key)
+}
+
+export function splitConfigDirectories(value: string | undefined, delimiter = path.delimiter) {
+  return value
+    ?.split(delimiter)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0) ?? []
+}
+
+export function configDirectories() {
+  const directory = process.env["OPENCODE_CONFIG_DIR"]?.trim()
+  return [...splitConfigDirectories(process.env["OPENCODE_CONFIG_DIRS"]), ...(directory ? [directory] : [])]
+}
+
+export function configDirectory() {
+  return configDirectories().at(-1)
 }
 
 export const Flag = {
@@ -61,6 +78,9 @@ export const Flag = {
   },
   get OPENCODE_CONFIG_DIR() {
     return process.env["OPENCODE_CONFIG_DIR"]
+  },
+  get OPENCODE_CONFIG_DIRS() {
+    return process.env["OPENCODE_CONFIG_DIRS"]
   },
   get OPENCODE_PURE() {
     return truthy("OPENCODE_PURE")

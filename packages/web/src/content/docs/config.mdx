@@ -135,19 +135,41 @@ Custom config is loaded between global and project configs in the precedence ord
 
 ---
 
-### Custom directory
+### Custom directories
 
-Specify a custom config directory using the `OPENCODE_CONFIG_DIR`
-environment variable. This directory will be searched for agents, commands,
-modes, and plugins just like the standard `.opencode` directory, and should
-follow the same structure.
+Specify custom config directories using the `OPENCODE_CONFIG_DIRS`
+environment variable. The value is separated the same way as your system `PATH`:
+use `:` on Linux/macOS and `;` on Windows. Directories are loaded left-to-right,
+so later directories override earlier directories for conflicting settings.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export OPENCODE_CONFIG_DIRS=/path/to/base-config:/path/to/team-config
 opencode run "Hello world"
 ```
 
-The custom directory is loaded after the global config and `.opencode` directories, so it **can override** their settings.
+Each custom directory is searched for agents, commands, modes, plugins, skills,
+tools, themes, and config files just like the standard `.opencode` directory,
+and should follow the same structure. Config files are deep-merged, with later
+directories winning conflicting scalar values. Named entries such as agents,
+commands, and skills are loaded by name, so later directories replace earlier
+definitions with the same name.
+
+`OPENCODE_CONFIG_DIR` is still supported for a single custom directory. When both
+variables are set, `OPENCODE_CONFIG_DIR` is appended after `OPENCODE_CONFIG_DIRS`,
+making it the highest-priority custom directory and the target for global config
+writes.
+
+```bash
+export OPENCODE_CONFIG_DIRS=/path/to/base-config:/path/to/team-config
+export OPENCODE_CONFIG_DIR=/path/to/personal-config
+opencode run "Hello world"
+```
+
+The effective load order is `/path/to/base-config`, then `/path/to/team-config`,
+then `/path/to/personal-config`.
+
+Custom directories are loaded after the global config and project `.opencode`
+directories, so they **can override** those settings.
 
 ---
 

@@ -32,6 +32,7 @@ import fs from "fs/promises"
 import os from "os"
 import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
+import { splitConfigDirectories } from "@opencode-ai/core/flag/flag"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
@@ -284,6 +285,15 @@ async function check(map: (dir: string) => string) {
     await clear()
   }
 }
+
+test("splitConfigDirectories uses the provided path delimiter and ignores empty entries", () => {
+  expect(splitConfigDirectories(" /base :/team:: /local ", ":")).toEqual(["/base", "/team", "/local"])
+  expect(splitConfigDirectories("C:\\base;D:\\team;;E:\\local", ";")).toEqual([
+    "C:\\base",
+    "D:\\team",
+    "E:\\local",
+  ])
+})
 
 it.instance("loads config with defaults when no files exist", () =>
   Effect.gen(function* () {
@@ -917,6 +927,48 @@ it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
 
     expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+)
+
+it.effect("loads OPENCODE_CONFIG_DIRS in order and appends OPENCODE_CONFIG_DIR", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const base = yield* tmpdirScoped({ config: { shell: "bash", username: "base-user" } })
+    const team = yield* tmpdirScoped({ config: { model: "team/model", username: "team-user" } })
+    const local = yield* tmpdirScoped({ config: { model: "local/model" } })
+
+    const config = yield* withProcessEnvs(
+      {
+        OPENCODE_CONFIG_DIRS: [base, team].join(path.delimiter),
+        OPENCODE_CONFIG_DIR: local,
+      },
+      Config.use.get().pipe(provideInstanceEffect(dir)),
+    )
+
+    expect(config.shell).toBe("bash")
+    expect(config.username).toBe("team-user")
+    expect(config.model).toBe("local/model")
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+)
+
+it.effect("uses the highest-priority custom config directory as the global write target", () =>
+  Effect.gen(function* () {
+    const base = yield* tmpdirScoped()
+    const team = yield* tmpdirScoped()
+    const local = yield* tmpdirScoped()
+
+    yield* withProcessEnvs(
+      { OPENCODE_CONFIG_DIRS: [base, team].join(path.delimiter), OPENCODE_CONFIG_DIR: undefined },
+      Effect.sync(() => {
+        expect(Global.Path.config).toBe(team)
+      }),
+    )
+    yield* withProcessEnvs(
+      { OPENCODE_CONFIG_DIRS: [base, team].join(path.delimiter), OPENCODE_CONFIG_DIR: local },
+      Effect.sync(() => {
+        expect(Global.Path.config).toBe(local)
+      }),
+    )
+  }).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer)),
 )
 
 // Note: deduplication and serialization of npm installs is now handled by the
@@ -1819,6 +1871,23 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
           Effect.gen(function* () {
             const config = yield* Config.use.get()
             expect(config.model).toBe("configdir/model")
+          }),
+        )
+      }),
+    { config: { model: "project/model" } },
+  )
+
+  it.instance(
+    "OPENCODE_CONFIG_DIRS still works when flag is set",
+    () =>
+      Effect.gen(function* () {
+        const base = yield* tmpdirScoped({ config: { model: "base/model" } })
+        const team = yield* tmpdirScoped({ config: { model: "team/model" } })
+        yield* withProcessEnvs(
+          { OPENCODE_DISABLE_PROJECT_CONFIG: "true", OPENCODE_CONFIG_DIRS: [base, team].join(path.delimiter) },
+          Effect.gen(function* () {
+            const config = yield* Config.use.get()
+            expect(config.model).toBe("team/model")
           }),
         )
       }),

@@ -41,6 +41,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
+import { ConfigPaths } from "@/config/paths"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
@@ -487,13 +488,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
 async function getCustomThemes() {
   const directories = [
-    Global.Path.config,
+    Global.Path.defaultConfig,
     ...(await Array.fromAsync(
       Filesystem.up({
         targets: [".opencode"],
         start: process.cwd(),
       }),
     )),
+    ...ConfigPaths.customDirectories(),
   ]
 
   const result: Record<string, ThemeJson> = {}

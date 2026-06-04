@@ -27,7 +27,7 @@ function testLayer(
 ) {
   return Config.locationLayer.pipe(
     Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Global.layerWith({ config: globalDirectory })),
+    Layer.provide(Global.layerWith({ config: globalDirectory, defaultConfig: globalDirectory })),
     Layer.provide(
       Layer.succeed(
         Location.Service,
@@ -49,6 +49,28 @@ const provider = {
     body: {},
   },
   models: {},
+}
+
+function withProcessEnvs<A, E, R>(entries: Record<string, string | undefined>, effect: Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous: Record<string, string | undefined> = {}
+      for (const [key, value] of Object.entries(entries)) {
+        previous[key] = process.env[key]
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+      return previous
+    }),
+    () => effect,
+    (previous) =>
+      Effect.sync(() => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        }
+      }),
+  )
 }
 
 describe("Config", () => {
@@ -193,6 +215,54 @@ describe("Config", () => {
                 .map((document) => document.info.$schema),
             ).toEqual(["base", "middle", "last"])
           }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("loads OPENCODE_CONFIG_DIRS after project .opencode directories", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const globalDirectory = path.join(tmp.path, "global")
+          const base = path.join(tmp.path, "base")
+          const team = path.join(tmp.path, "team")
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.mkdir(globalDirectory, { recursive: true }),
+              fs.mkdir(base, { recursive: true }),
+              fs.mkdir(team, { recursive: true }),
+              fs.mkdir(path.join(tmp.path, ".opencode"), { recursive: true }),
+            ]),
+          )
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.writeFile(path.join(globalDirectory, "opencode.json"), JSON.stringify({ $schema: "global" })),
+              fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ $schema: "project" })),
+              fs.writeFile(path.join(tmp.path, ".opencode", "opencode.json"), JSON.stringify({ $schema: "local" })),
+              fs.writeFile(path.join(base, "opencode.json"), JSON.stringify({ $schema: "base" })),
+              fs.writeFile(path.join(team, "opencode.json"), JSON.stringify({ $schema: "team" })),
+            ]),
+          )
+
+          return yield* withProcessEnvs(
+            { OPENCODE_CONFIG_DIRS: [base, team].join(path.delimiter), OPENCODE_CONFIG_DIR: undefined },
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+              expect(documents.map((document) => document.info.$schema)).toEqual([
+                "global",
+                "project",
+                "local",
+                "base",
+                "team",
+              ])
+            }).pipe(Effect.provide(testLayer(tmp.path, globalDirectory))),
+          )
         }),
       ),
     ),

@@ -5,6 +5,7 @@ import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
+import { configDirectories } from "./flag/flag"
 import { Location } from "./location"
 import { PermissionSchema } from "./permission/schema"
 import { Policy } from "./policy"
@@ -168,8 +169,10 @@ export const layer = Layer.effect(
       ]
     })
 
-    const globalDirectory = AbsolutePath.make(global.config)
-    const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
+    const customDirectories = configDirectories()
+    const locationIsGlobal = [global.defaultConfig, global.config, ...customDirectories].some(
+      (directory) => path.resolve(location.directory) === path.resolve(directory),
+    )
     // Read configuration once when this location opens. Later calls reuse these
     // values until the location is reopened.
     const discovered = locationIsGlobal
@@ -181,13 +184,14 @@ export const layer = Layer.effect(
             stop: location.project.directory,
           })
           .pipe(Effect.orDie)
-    const directories = [
-      globalDirectory,
+    const directoryPaths = [
+      global.defaultConfig,
       ...discovered
         .filter((item) => path.basename(item) === ".opencode")
         .toReversed()
-        .map((directory) => AbsolutePath.make(directory)),
-    ]
+        .map((directory) => directory),
+    ].filter((directory) => !customDirectories.includes(directory))
+    const directories = [...directoryPaths, ...customDirectories].map((directory) => AbsolutePath.make(directory))
     // A config closer to the opened directory should win over one higher up.
     // Search starts nearby, so reverse the results before applying them.
     const directPaths = discovered.filter((item) => path.basename(item) !== ".opencode").toReversed()
@@ -197,7 +201,7 @@ export const layer = Layer.effect(
     )
     const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
-    // global config, project files, then `.opencode` files.
+    // global config, project files, `.opencode` files, then env-provided config directories.
     const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.

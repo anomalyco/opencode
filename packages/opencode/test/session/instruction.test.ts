@@ -17,14 +17,17 @@ import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import type { Config } from "../../src/config/config"
 
 const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer, testInstanceStoreLayer))
 
-const configLayer = TestConfig.layer()
-
-const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
+const instructionLayer = (
+  global: Partial<Global.Interface>,
+  flags: Partial<RuntimeFlags.Info> = {},
+  config: Partial<Config.Interface> = {},
+) =>
   Instruction.layer.pipe(
-    Layer.provide(configLayer),
+    Layer.provide(TestConfig.layer(config)),
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(Global.layerWith(global)),
@@ -32,9 +35,9 @@ const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<Runt
   )
 
 const provideInstruction =
-  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>) =>
+  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>, config?: Partial<Config.Interface>) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(Effect.provide(instructionLayer(global, flags)))
+    self.pipe(Effect.provide(instructionLayer(global, flags, config)))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -55,6 +58,27 @@ const withFiles = <A, E, R>(files: Record<string, string>, self: (dir: string) =
       yield* writeFiles(dir, files)
       return yield* self(dir).pipe(provideInstruction({ home: dir, config: dir }))
     }),
+  )
+
+const withProcessEnvs = <A, E, R>(entries: Record<string, string | undefined>, self: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous: Record<string, string | undefined> = {}
+      for (const [key, value] of Object.entries(entries)) {
+        previous[key] = process.env[key]
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+      return previous
+    }),
+    () => self,
+    (previous) =>
+      Effect.sync(() => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        }
+      }),
   )
 
 const tmpWithFiles = (files: Record<string, string>) =>
@@ -251,6 +275,50 @@ describe("Instruction.systemPaths global config", () => {
         const paths = yield* svc.systemPaths()
         expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("uses highest-priority OPENCODE_CONFIG_DIRS AGENTS.md", () =>
+    Effect.gen(function* () {
+      const base = yield* tmpWithFiles({ "AGENTS.md": "# Base Instructions" })
+      const team = yield* tmpWithFiles({ "AGENTS.md": "# Team Instructions" })
+      const project = yield* tmpdirScoped()
+
+      yield* withProcessEnvs(
+        { OPENCODE_CONFIG_DIRS: [base, team].join(path.delimiter), OPENCODE_CONFIG_DIR: undefined },
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const rules = yield* svc.system()
+
+          expect(rules).toEqual([`Instructions from: ${path.join(team, "AGENTS.md")}\n# Team Instructions`])
+        }).pipe(provideInstance(project), provideInstruction({ home: project, config: project, defaultConfig: project })),
+      )
+    }),
+  )
+
+  it.live("finds relative configured instructions in custom config directories", () =>
+    Effect.gen(function* () {
+      const base = yield* tmpWithFiles({ "CUSTOM.md": "# Base Custom" })
+      const team = yield* tmpWithFiles({ "CUSTOM.md": "# Team Custom" })
+      const project = yield* tmpdirScoped()
+
+      yield* withProcessEnvs(
+        { OPENCODE_CONFIG_DIRS: [base, team].join(path.delimiter), OPENCODE_CONFIG_DIR: undefined },
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const rules = yield* svc.system()
+
+          expect(rules).toContain(`Instructions from: ${path.join(base, "CUSTOM.md")}\n# Base Custom`)
+          expect(rules).toContain(`Instructions from: ${path.join(team, "CUSTOM.md")}\n# Team Custom`)
+        }).pipe(
+          provideInstance(project),
+          provideInstruction(
+            { home: project, config: project, defaultConfig: project },
+            undefined,
+            { get: () => Effect.succeed({ instructions: ["CUSTOM.md"] }) },
+          ),
+        ),
+      )
     }),
   )
 })

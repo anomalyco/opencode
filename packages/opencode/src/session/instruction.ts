@@ -5,7 +5,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag, configDirectories } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
@@ -55,8 +55,9 @@ export const layer: Layer.Layer<
     const global = yield* Global.Service
     const flags = yield* RuntimeFlags.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
-    const globalFiles = [
-      path.join(global.config, "AGENTS.md"),
+    const globalConfigDirectories = () => [...configDirectories().toReversed(), global.defaultConfig]
+    const globalInstructionFiles = () => [
+      ...globalConfigDirectories().map((dir) => path.join(dir, "AGENTS.md")),
       ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
     ]
     const instructionFiles = [
@@ -76,14 +77,17 @@ export const layer: Layer.Layer<
 
     const relative = Effect.fnUntraced(function* (instruction: string) {
       const ctx = yield* InstanceState.context
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        return yield* fs
-          .globUp(instruction, ctx.directory, ctx.worktree)
-          .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-      }
-      return yield* fs
-        .globUp(instruction, global.config, global.config)
+      const globalMatches = yield* Effect.forEach(
+        globalConfigDirectories(),
+        (dir) => fs.globUp(instruction, dir, dir).pipe(Effect.catch(() => Effect.succeed([] as string[]))),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map((matches) => matches.flat()))
+      if (Flag.OPENCODE_DISABLE_PROJECT_CONFIG) return globalMatches
+
+      const projectMatches = yield* fs
+        .globUp(instruction, ctx.directory, ctx.worktree)
         .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      return [...projectMatches, ...globalMatches]
     })
 
     const read = Effect.fnUntraced(function* (filepath: string) {
@@ -110,7 +114,8 @@ export const layer: Layer.Layer<
       const ctx = yield* InstanceState.context
       const paths = new Set<string>()
 
-      for (const file of globalFiles) {
+      // globalInstructionFiles is ordered highest-priority first; stop at the winning AGENTS.md.
+      for (const file of globalInstructionFiles()) {
         if (yield* fs.existsSafe(file)) {
           paths.add(path.resolve(file))
           break

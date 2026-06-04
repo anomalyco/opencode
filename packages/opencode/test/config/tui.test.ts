@@ -22,6 +22,8 @@ const cleanState = Effect.gen(function* () {
   const fs = yield* FSUtil.Service
   delete process.env.OPENCODE_CONFIG
   delete process.env.OPENCODE_TUI_CONFIG
+  delete process.env.OPENCODE_CONFIG_DIR
+  delete process.env.OPENCODE_CONFIG_DIRS
   yield* Effect.forEach(globalConfigFiles, (file) => fs.remove(file, { force: true }).pipe(Effect.ignore), {
     discard: true,
   })
@@ -47,6 +49,27 @@ const withEnv = <A, E, R>(name: string, value: string | undefined, self: Effect.
       Effect.sync(() => {
         if (previous === undefined) delete process.env[name]
         else process.env[name] = previous
+      }),
+  )
+
+const withEnvs = <A, E, R>(entries: Record<string, string | undefined>, self: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous: Record<string, string | undefined> = {}
+      for (const [name, value] of Object.entries(entries)) {
+        previous[name] = process.env[name]
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
+      return previous
+    }),
+    () => self,
+    (previous) =>
+      Effect.sync(() => {
+        for (const [name, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[name]
+          else process.env[name] = value
+        }
       }),
   )
 
@@ -126,6 +149,33 @@ it.instance("loads tui config with the same precedence order as server config pa
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("local")
       expect(config.diff_style).toBe("stacked")
+    }),
+  ),
+)
+
+it.instance("loads OPENCODE_CONFIG_DIRS tui config in order and appends OPENCODE_CONFIG_DIR", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const test = yield* TestInstance
+      const base = path.join(test.directory, "base-config")
+      const team = path.join(test.directory, "team-config")
+      const local = path.join(test.directory, "local-config")
+      yield* fs.writeWithDirs(path.join(base, "tui.json"), JSON.stringify({ diff_style: "auto", theme: "base" }))
+      yield* fs.writeWithDirs(path.join(team, "tui.json"), JSON.stringify({ theme: "team" }))
+      yield* fs.writeWithDirs(path.join(local, "tui.json"), JSON.stringify({ theme: "local" }))
+      yield* fs.writeWithDirs(path.join(test.directory, ".opencode", "tui.json"), JSON.stringify({ theme: "project" }))
+
+      const config = yield* withEnvs(
+        {
+          OPENCODE_CONFIG_DIRS: [base, team].join(path.delimiter),
+          OPENCODE_CONFIG_DIR: local,
+        },
+        getTuiConfig(test.directory),
+      )
+
+      expect(config.diff_style).toBe("auto")
+      expect(config.theme).toBe("local")
     }),
   ),
 )
