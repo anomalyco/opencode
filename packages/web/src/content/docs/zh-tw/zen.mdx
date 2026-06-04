@@ -86,6 +86,7 @@ OpenCode Zen 的運作方式和 OpenCode 中的其他供應商一樣。
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`   | `@ai-sdk/google`            |
 | Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -98,7 +99,7 @@ OpenCode Zen 的運作方式和 OpenCode 中的其他供應商一樣。
 | Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| Nemotron 3 Super Free  | nemotron-3-super-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
 OpenCode 設定中的 [模型 ID](/docs/config/#models) 會使用 `opencode/<model-id>`
@@ -125,7 +126,7 @@ https://opencode.ai/zen/v1/models
 | Big Pickle                        | Free   | Free    | Free     | -        |
 | DeepSeek V4 Flash Free            | Free   | Free    | Free     | -        |
 | MiMo-V2.5 Free                    | Free   | Free    | Free     | -        |
-| Nemotron 3 Super Free             | Free   | Free    | Free     | -        |
+| Nemotron 3 Ultra Free             | Free   | Free    | Free     | -        |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06    | $0.375   |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06    | $0.375   |
 | GLM 5.1                           | $1.40  | $4.40   | $0.26    | -        |
@@ -133,6 +134,7 @@ https://opencode.ai/zen/v1/models
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10    | -        |
 | Kimi K2.6                         | $0.95  | $4.00   | $0.16    | -        |
 | Qwen3.7 Max                       | $2.50  | $7.50   | $0.50    | $3.125   |
+| Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04    | $0.50    |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05    | $0.625   |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02    | $0.25    |
 | DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03    | -        |
@@ -183,7 +185,7 @@ https://opencode.ai/zen/v1/models
 
 - DeepSeek V4 Flash Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
 - MiMo-V2.5 Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
-- Nemotron 3 Super Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
+- Nemotron 3 Ultra Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
 - Big Pickle 是一個隱身模型，在 OpenCode 上限時免費提供。團隊正在利用這段時間收集回饋並改進模型。
 
 如果你有任何問題，請<a href={email}>聯絡我們</a>。
@@ -236,7 +238,7 @@ https://opencode.ai/zen/v1/models
 - Big Pickle: 在免費期間，收集到的資料可能會用於改進模型。
 - DeepSeek V4 Flash Free: 在免費期間，收集到的資料可能會用於改進模型。
 - MiMo-V2.5 Free: 在免費期間，收集到的資料可能會用於改進模型。
-- Nemotron 3 Super Free（NVIDIA 免費端點）：依據 [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) 提供。僅供試用，不適用於正式環境或敏感資料。NVIDIA 會記錄提示詞與輸出內容，以改進其模型與服務。請勿提交個人或機密資料。
+- Nemotron 3 Ultra Free（NVIDIA 免費端點）：僅供試用 — 請勿提交個人或機密資料。基於安全目的以及為了改進 NVIDIA 產品與服務，系統會記錄你的使用情況。基於改進目的而記錄的工作階段資料不會與你的身分或任何持久識別碼相關聯。有關我們資料處理實務的更多資訊，請參閱我們的[隱私政策](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)。與此端點進行互動，即表示你同意我們收集、記錄與使用此類資訊，並同意 [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)。
 - OpenAI APIs: 請求會依據 [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) 保留 30 天。
 - Anthropic APIs: 請求會依據 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) 保留 30 天。
 

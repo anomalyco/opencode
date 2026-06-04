@@ -13,7 +13,6 @@
     "bench:test": "bun run script/bench-test-suite.ts",
     "profile:test": "bun run script/profile-test-files.ts",
     "build": "bun run script/build.ts",
-    "fix-node-pty": "bun run script/fix-node-pty.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
@@ -28,11 +27,6 @@
       "bun": "./src/storage/db.bun.ts",
       "node": "./src/storage/db.node.ts",
       "default": "./src/storage/db.bun.ts"
-    },
-    "#pty": {
-      "bun": "./src/pty/pty.bun.ts",
-      "node": "./src/pty/pty.node.ts",
-      "default": "./src/pty/pty.bun.ts"
     }
   },
   "devDependencies": {
@@ -63,7 +57,7 @@
     "@actions/github": "6.0.1",
     "@agentclientprotocol/sdk": "0.21.0",
     "@ai-sdk/alibaba": "1.0.17",
-    "@ai-sdk/amazon-bedrock": "4.0.107",
+    "@ai-sdk/amazon-bedrock": "4.0.112",
     "@ai-sdk/anthropic": "3.0.71",
     "@ai-sdk/azure": "3.0.49",
     "@ai-sdk/cerebras": "2.0.41",
@@ -81,12 +75,11 @@
     "@ai-sdk/togetherai": "2.0.41",
     "@ai-sdk/vercel": "2.0.39",
     "@ai-sdk/xai": "3.0.82",
-    "@aws-sdk/credential-providers": "3.993.0",
+    "@aws-sdk/credential-providers": "3.1057.0",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
     "@gitlab/opencode-gitlab-auth": "1.3.3",
-    "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/sdk": "1.27.1",
     "@octokit/graphql": "9.0.2",
     "@octokit/rest": "catalog:",
@@ -94,9 +87,10 @@
     "@opencode-ai/llm": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
+    "@opencode-ai/server": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
-    "@openrouter/ai-sdk-provider": "2.8.1",
+    "@openrouter/ai-sdk-provider": "2.9.0",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
@@ -116,7 +110,6 @@
     "ai": "catalog:",
     "ai-gateway-provider": "3.1.2",
     "bonjour-service": "1.3.0",
-    "bun-pty": "0.4.8",
     "chokidar": "4.0.3",
     "clipboardy": "4.0.0",
     "cross-spawn": "catalog:",

@@ -2,6 +2,8 @@ import { sqliteTable, text, integer, index, primaryKey, real } from "drizzle-orm
 import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
+import type { Prompt } from "./prompt"
+import type { SessionInput } from "./input"
 import type { Snapshot } from "../snapshot"
 import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
@@ -120,12 +122,40 @@ export const SessionMessageTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionMessage.Type>().notNull(),
+    seq: integer().notNull(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<SessionMessageData>(),
   },
   (table) => [
-    index("session_message_session_idx").on(table.session_id),
-    index("session_message_session_type_idx").on(table.session_id, table.type),
+    index("session_message_session_seq_idx").on(table.session_id, table.seq),
+    index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
+    index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
     index("session_message_time_created_idx").on(table.time_created),
+  ],
+)
+
+export const SessionInputTable = sqliteTable(
+  "session_input",
+  {
+    seq: integer().primaryKey({ autoIncrement: true }),
+    id: text().$type<SessionMessage.ID>().notNull().unique(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    prompt: text({ mode: "json" }).notNull().$type<Prompt>(),
+    delivery: text().$type<SessionInput.Delivery>().notNull(),
+    promoted_seq: integer(),
+    time_created: integer()
+      .notNull()
+      .$default(() => Date.now()),
+  },
+  (table) => [
+    index("session_input_session_pending_delivery_seq_idx").on(
+      table.session_id,
+      table.promoted_seq,
+      table.delivery,
+      table.seq,
+    ),
   ],
 )

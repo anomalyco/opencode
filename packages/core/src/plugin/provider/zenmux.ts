@@ -7,12 +7,12 @@ export const ZenmuxPlugin = PluginV2.define({
     return {
       "catalog.transform": Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
-          if (item.provider.endpoint.type !== "aisdk") continue
-          if (item.provider.endpoint.package !== "@ai-sdk/openai-compatible") continue
-          if (item.provider.endpoint.url !== "https://zenmux.ai/api/v1") continue
+          if (item.provider.api.type !== "aisdk") continue
+          if (item.provider.api.package !== "@ai-sdk/openai-compatible") continue
+          if (item.provider.api.url !== "https://zenmux.ai/api/v1") continue
           evt.provider.update(item.provider.id, (provider) => {
-            provider.options.headers["HTTP-Referer"] ??= "https://opencode.ai/"
-            provider.options.headers["X-Title"] ??= "opencode"
+            provider.request.headers["HTTP-Referer"] ??= "https://opencode.ai/"
+            provider.request.headers["X-Title"] ??= "opencode"
           })
         }
       }),
