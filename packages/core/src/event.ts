@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
@@ -262,6 +262,14 @@ export const layerWith = (options?: LayerOptions) =>
                           const encoded = syncRegistry
                             .get(versionedType(definition.type, sync.version))!
                             .encode(event.data) as Record<string, unknown>
+                          if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
+                            yield* Effect.die(
+                              new InvalidSyncEventError({
+                                type: event.type,
+                                message: `Replay owner mismatch for aggregate ${aggregateID}: expected ${row.ownerID}, got ${input.ownerID ?? "none"}`,
+                              }),
+                            )
+                          }
                           if (input && input.seq <= latest) {
                             const stored = yield* db
                               .select()
@@ -283,14 +291,6 @@ export const layerWith = (options?: LayerOptions) =>
                             )
                           }
                           if (input && row?.ownerID && row.ownerID !== input.ownerID) {
-                            if (input.strictOwner) {
-                              yield* Effect.die(
-                                new InvalidSyncEventError({
-                                  type: event.type,
-                                  message: `Replay owner mismatch for aggregate ${aggregateID}: expected ${row.ownerID}, got ${input.ownerID ?? "none"}`,
-                                }),
-                              )
-                            }
                             return
                           }
                           const seq = input?.seq ?? latest + 1
@@ -373,18 +373,37 @@ export const layerWith = (options?: LayerOptions) =>
             const committed = yield* commitSyncEvent(event as Payload)
             if (committed) {
               event = { ...event, seq: committed.seq }
-              for (const sync of syncHandlers) {
-                yield* sync(event as Payload)
-              }
+              yield* Effect.forEach(syncHandlers, (sync) => observe(event as Payload, "sync", sync), { discard: true })
+              yield* notify(event as Payload, true)
+              return event
             }
           }
-          for (const listener of listeners) {
-            yield* listener(event as Payload)
-          }
-          const pubsub = typed.get(event.type)
-          if (pubsub) yield* PubSub.publish(pubsub, event as Payload)
-          yield* PubSub.publish(all, event as Payload)
+          yield* notify(event as Payload, false)
           return event
+        })
+      }
+
+      const observe = (event: Payload, kind: "sync" | "listener", observer: (event: Payload) => Effect.Effect<void>) =>
+        Effect.suspend(() => observer(event)).pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterrupts(cause),
+            (cause) =>
+              Effect.logError("Event observer failed").pipe(
+                Effect.annotateLogs({ eventID: event.id, eventType: event.type, kind, cause }),
+              ),
+          ),
+        )
+
+      function notify(event: Payload, isolateListeners: boolean) {
+        return Effect.gen(function* () {
+          yield* Effect.forEach(
+            listeners,
+            (listener) => (isolateListeners ? observe(event, "listener", listener) : listener(event)),
+            { discard: true },
+          )
+          const pubsub = typed.get(event.type)
+          if (pubsub) yield* PubSub.publish(pubsub, event)
+          yield* PubSub.publish(all, event)
         })
       }
 
@@ -431,13 +450,7 @@ export const layerWith = (options?: LayerOptions) =>
               strictOwner: options?.strictOwner,
             })
             if (committed && options?.publish) {
-              const published = { ...payload, seq: committed.seq }
-              for (const listener of listeners) {
-                yield* listener(published)
-              }
-              const pubsub = typed.get(payload.type)
-              if (pubsub) yield* PubSub.publish(pubsub, published)
-              yield* PubSub.publish(all, published)
+              yield* notify({ ...payload, seq: committed.seq }, true)
             }
           }
         })

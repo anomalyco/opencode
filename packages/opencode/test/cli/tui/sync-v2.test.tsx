@@ -357,3 +357,99 @@ test("sync v2 replaces stale cached rows while preserving in-flight live rows", 
     app.renderer.destroy()
   }
 })
+
+test("sync v2 preserves snapshot order and metadata for in-flight updates", async () => {
+  const events = createEventSource()
+  const response = Promise.withResolvers<Response>()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-1/message") return response.promise
+    return undefined
+  })
+  let sync!: ReturnType<typeof useSyncV2>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useSyncV2()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+      <ProjectProvider>
+        <SyncProviderV2>
+          <Probe />
+        </SyncProviderV2>
+      </ProjectProvider>
+    </SDKProvider>
+  ))
+
+  try {
+    await mounted
+    emitTwice(events, {
+      id: "evt_step_1",
+      type: "session.next.step.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_old",
+        timestamp: 1,
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    await wait(() => sync.session.message.fromSession("session-1")[0]?.id === "msg_assistant_old")
+    const hydration = sync.session.message.sync("session-1")
+    emitTwice(events, {
+      id: "evt_text_1",
+      type: "session.next.text.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_old",
+        timestamp: 2,
+        textID: "text-1",
+      },
+    })
+    await wait(() => {
+      const message = sync.session.message.fromSession("session-1")[0]
+      return message?.type === "assistant" && message.content[0]?.type === "text"
+    })
+    response.resolve(
+      json({
+        data: [
+          {
+            id: "msg_assistant_new",
+            type: "assistant",
+            agent: "build",
+            model: { id: "model", providerID: "provider" },
+            content: [],
+            time: { created: 3 },
+          },
+          {
+            id: "msg_assistant_old",
+            type: "assistant",
+            metadata: { source: "snapshot" },
+            agent: "build",
+            model: { id: "model", providerID: "provider" },
+            content: [],
+            time: { created: 1 },
+          },
+        ],
+      }),
+    )
+    await hydration
+
+    expect(sync.session.message.fromSession("session-1").map((message) => message.id)).toEqual([
+      "msg_assistant_new",
+      "msg_assistant_old",
+    ])
+    expect(JSON.parse(JSON.stringify(sync.session.message.fromSession("session-1")[1]))).toMatchObject({
+      metadata: { source: "snapshot" },
+      content: [{ type: "text", id: "text-1", text: "" }],
+    })
+  } finally {
+    app.renderer.destroy()
+  }
+})

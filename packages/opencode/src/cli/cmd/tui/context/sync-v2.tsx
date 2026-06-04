@@ -88,14 +88,39 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     }
 
     async function sync(sessionID: string) {
-      const before = new Map((store.messages[sessionID] ?? []).map((message) => [message.id, JSON.stringify(message)]))
+      const before = new Map(
+        (store.messages[sessionID] ?? []).map((message) => [
+          message.id,
+          JSON.parse(JSON.stringify(message)) as SessionMessage,
+        ]),
+      )
       const response = await sdk.client.v2.session.messages({ sessionID })
       const messages = response.data?.data ?? []
       const live = (store.messages[sessionID] ?? []).filter(
-        (message) => before.get(message.id) !== JSON.stringify(message),
+        (message) => JSON.stringify(before.get(message.id)) !== JSON.stringify(message),
       )
-      const liveIDs = new Set(live.map((message) => message.id))
-      setStore("messages", sessionID, reconcile([...live, ...messages.filter((message) => !liveIDs.has(message.id))]))
+      const liveByID = new Map(live.map((message) => [message.id, message]))
+      const snapshotIDs = new Set(messages.map((message) => message.id))
+      setStore(
+        "messages",
+        sessionID,
+        reconcile([
+          ...live.filter((message) => !snapshotIDs.has(message.id)),
+          ...messages.map((message) => {
+            const current = liveByID.get(message.id)
+            const previous = before.get(message.id)
+            if (!current || !previous) return message
+            return {
+              ...message,
+              ...Object.fromEntries(
+                Object.entries(current).filter(
+                  ([key, value]) => JSON.stringify(value) !== JSON.stringify(previous[key as keyof SessionMessage]),
+                ),
+              ),
+            } as SessionMessage
+          }),
+        ]),
+      )
     }
 
     event.subscribe((event) => {

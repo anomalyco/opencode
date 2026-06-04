@@ -1443,6 +1443,30 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("does not strand a committed promotion when a post-commit listener defects", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* events.listen((event) =>
+        event.type === SessionEvent.PromptLifecycle.Promoted.type
+          ? Effect.die("fail after prompt promotion commits")
+          : Effect.void,
+      )
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Run committed promotion" }),
+        resume: false,
+      })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0]!)).toEqual(["Run committed promotion"])
+    }),
+  )
+
   it.effect("runs different sessions concurrently", () =>
     Effect.gen(function* () {
       yield* setup

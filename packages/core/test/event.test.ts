@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
@@ -233,6 +233,56 @@ describe("EventV2", () => {
       yield* events.publish(SyncMessage, { id: "one", text: "after unsubscribe" })
 
       expect(received).toEqual(["projector", "listener", "projector"])
+    }),
+  )
+
+  it.effect("isolates observer defects after durable events commit", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<string>()
+      yield* events.sync(() => Effect.die("sync defect"))
+      yield* events.listen(() => {
+        throw new Error("listener defect")
+      })
+      yield* events.listen((event) =>
+        Effect.sync(() => {
+          received.push(event.type)
+        }),
+      )
+
+      const event = yield* events.publish(SyncMessage, { id: "one", text: "hello" })
+
+      expect(received).toEqual([SyncMessage.type])
+      expect(event.seq).toBeNumber()
+    }),
+  )
+
+  it.effect("preserves observer interruption", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      yield* events.listen(() => Effect.interrupt)
+
+      const exit = yield* events.publish(SyncMessage, { id: "interrupted", text: "hello" }).pipe(Effect.exit)
+      const committed = yield* db
+        .select({ id: EventTable.id })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, "interrupted"))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBeTrue()
+      expect(committed).toBeDefined()
+    }),
+  )
+
+  it.effect("keeps live-only listener defects fail-fast", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const defect = new Error("listener defect")
+      yield* events.listen(() => Effect.die(defect))
+
+      expect(yield* events.publish(Message, { text: "hello" }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
     }),
   )
 
@@ -711,6 +761,26 @@ describe("EventV2", () => {
       )
 
       expect(received).toHaveLength(0)
+    }),
+  )
+
+  it.effect("strict owner fences exact replay", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const id = EventV2.ID.create()
+      const replayed = {
+        id,
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "owned" },
+      }
+      yield* events.replay(replayed, { ownerID: "owner-a" })
+
+      const exit = yield* events.replay(replayed, { ownerID: "owner-b", strictOwner: true }).pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay owner mismatch")
     }),
   )
 
