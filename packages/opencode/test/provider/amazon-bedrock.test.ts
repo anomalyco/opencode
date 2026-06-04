@@ -138,6 +138,41 @@ it.instance(
 )
 
 it.instance(
+  "Bedrock Mantle: OpenAI model URL uses configured region",
+  () =>
+    Effect.gen(function* () {
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
+      const model = yield* Provider.use.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.4"))
+      const language = yield* Provider.use.getLanguage(model)
+      expect((language as { provider: string }).provider).toBe("bedrock-mantle.responses")
+      expect(
+        (language as unknown as { config: { url: (input: { path: string; modelId: string }) => string } }).config.url({
+          path: "/responses",
+          modelId: "openai.gpt-5.4",
+        }),
+      ).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses")
+    }),
+  {
+    config: {
+      provider: {
+        "amazon-bedrock": {
+          options: { region: "us-west-2" },
+          models: {
+            "openai.gpt-5.4": {
+              ...mantleModelConfig,
+              provider: {
+                npm: "@ai-sdk/amazon-bedrock/mantle",
+                api: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "Bedrock Mantle: GPT OSS safeguard uses Chat Completions and Mantle base path",
   () =>
     Effect.gen(function* () {
