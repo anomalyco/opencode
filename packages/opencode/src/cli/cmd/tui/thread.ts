@@ -12,7 +12,6 @@ import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { writeHeapSnapshot } from "v8"
 import { TuiConfig } from "./config/tui"
 import {
   OPENCODE_PROCESS_ROLE,
@@ -231,11 +230,6 @@ export const TuiThreadCommand = cmd({
         const { tui } = await import("./app")
         await tui({
           url: transport.url,
-          async onSnapshot() {
-            const tui = writeHeapSnapshot("tui.heapsnapshot")
-            const server = await client.call("snapshot", undefined)
-            return [tui, server]
-          },
           config,
           directory: cwd,
           fetch: transport.fetch,

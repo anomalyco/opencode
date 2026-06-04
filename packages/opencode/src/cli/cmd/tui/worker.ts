@@ -7,7 +7,6 @@ import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { ServerAuth } from "@/server/auth"
-import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
@@ -65,10 +64,6 @@ export const rpc = {
       headers: Object.fromEntries(response.headers.entries()),
       body,
     }
-  },
-  snapshot() {
-    const result = writeHeapSnapshot("server.heapsnapshot")
-    return result
   },
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     if (server) await server.stop(true)

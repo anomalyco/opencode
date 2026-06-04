@@ -96,7 +96,6 @@ const appBindingCommands = [
   "help.show",
   "app.debug",
   "app.console",
-  "app.heap_snapshot",
   "terminal.suspend",
   "terminal.title.toggle",
   "app.toggle.animations",
@@ -150,7 +149,6 @@ export function tui(input: {
   url: string
   args: Args
   config: TuiConfig.Resolved
-  onSnapshot?: () => Promise<string[]>
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
@@ -221,7 +219,7 @@ export function tui(input: {
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
                                               <EditorContextProvider>
-                                                <App onSnapshot={input.onSnapshot} />
+                                                <App />
                                               </EditorContextProvider>
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
@@ -247,7 +245,7 @@ export function tui(input: {
   })
 }
 
-function App(props: { onSnapshot?: () => Promise<string[]> }) {
+function App() {
   const tuiConfig = useTuiConfig()
   const route = useRoute()
   const dimensions = useTerminalDimensions()
@@ -592,20 +590,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
         run: () => {
           renderer.console.toggle()
-          dialog.clear()
-        },
-      },
-      {
-        name: "app.heap_snapshot",
-        title: "Write heap snapshot",
-        category: "System",
-        run: async () => {
-          const files = await props.onSnapshot?.()
-          toast.show({
-            variant: "info",
-            message: `Heap snapshot written to ${files?.join(", ")}`,
-            duration: 5000,
-          })
           dialog.clear()
         },
       },
