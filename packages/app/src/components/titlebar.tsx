@@ -461,7 +461,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             return (
               <div
-                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 pt-2"
+                class="h-full flex-1 min-w-0 flex flex-row items-center gap-1.5 pr-3 pt-2"
                 classList={{
                   "pl-2": mac(),
                   "pl-4": !mac(),
@@ -482,7 +482,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 />
 
                 <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
-                  <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
+                  <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
                     <For each={tabsEnriched()}>
                       {(tab, i) => (
                         <>
@@ -762,7 +762,7 @@ function TabNavItem(props: {
   }
   return (
     <div
-      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 min-w-24 max-w-60 shrink-0 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={isActive()}
       onMouseDown={(event) => {
         if (event.button !== 1) return
