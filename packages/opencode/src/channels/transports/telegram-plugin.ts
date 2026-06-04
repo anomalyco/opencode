@@ -5,10 +5,12 @@ import type { MessageEditor } from "../contracts/editor"
 import type { TypingCapable } from "../contracts/typing"
 import type { ReactionCapable } from "../contracts/reactions"
 import type { MediaSender, MediaPart } from "../contracts/media"
+import type { StreamingCapable } from "../contracts/streaming"
 import type { InboundContext, InboundMessage, SenderInfo, ChatType } from "../contracts/inbound"
 import { buildCanonicalId } from "../contracts/identity"
 import type { Interface as MessageBus } from "../runtime/bus"
 import { markdownToTelegramHTML, markdownToTelegramMarkdownV2 } from "../runtime/formatting"
+import { createDraftStream } from "../runtime/draft-stream"
 import * as Log from "@opencode-ai/core/util/log"
 import type { Interface as MediaStore } from "../runtime/media-store"
 
@@ -90,7 +92,14 @@ class TelegramApiError extends Schema.TaggedErrorClass<TelegramApiError>()("Tele
 
 
 export class TelegramChannel
-  implements Channel, MessageSender, MessageEditor, TypingCapable, ReactionCapable, MediaSender
+  implements
+    Channel,
+    MessageSender,
+    MessageEditor,
+    TypingCapable,
+    ReactionCapable,
+    MediaSender,
+    StreamingCapable
 {
   readonly id: string
   readonly type = "telegram"
@@ -185,7 +194,7 @@ export class TelegramChannel
       reactions: true,
       media: true,
       voice: false,
-      streaming: false,
+      streaming: true,
       files: true
     })
   }
@@ -248,6 +257,15 @@ export class TelegramChannel
   // MessageEditor
 
   edit(channelId: string, messageId: string, content: string): Effect.Effect<void> {
+    return this.editInternal(channelId, Number(messageId), content)
+  }
+
+  /** Internal edit that takes a numeric message id — used by draft stream. */
+  private editInternal(
+    channelId: string,
+    messageId: number,
+    content: string,
+  ): Effect.Effect<void, TelegramApiError, never> {
     const self = this
     return Effect.gen(function* () {
       log.info("editing telegram message", { channelId, messageId })
@@ -256,7 +274,7 @@ export class TelegramChannel
       const parseMode = self.config.parseMode ?? "HTML"
       const body: Record<string, unknown> = {
         chat_id: channelId,
-        message_id: Number(messageId),
+        message_id: messageId,
         text: formatted,
         parse_mode: parseMode,
       }
@@ -371,6 +389,73 @@ export class TelegramChannel
         })
       )
     )
+  }
+
+  // StreamingCapable
+
+  /**
+   * Consume an async iterable of text chunks and render them as a single
+   * draft preview message that edits forward as text arrives. When the
+   * stream ends, the preview is finalized and any overflow text (beyond
+   * Telegram's 4096-char limit) is sent as continuation messages.
+   */
+  stream(channelId: string, chunks: AsyncIterable<string>): Effect.Effect<void, never, never> {
+    const self = this
+    return Effect.gen(function* () {
+      log.info("starting telegram draft stream", { channelId })
+
+      const handle = createDraftStream({
+        chatId: channelId,
+        send: (text) =>
+          Effect.gen(function* () {
+            const result = yield* self.apiFetchJson<{ message_id: number }>("/sendMessage", {
+              chat_id: channelId,
+              text,
+              parse_mode: self.config.parseMode ?? "HTML",
+            })
+            if (typeof result.message_id !== "number") {
+              return yield* Effect.fail(
+                new Error(`sendMessage returned no message_id (chat=${channelId})`),
+              )
+            }
+            return result.message_id
+          }).pipe(Effect.orDie),
+        edit: (messageId, text) => self.editInternal(channelId, messageId, text).pipe(Effect.orDie),
+        delete: (messageId) =>
+          self.apiFetchJson("/deleteMessage", {
+            chat_id: channelId,
+            message_id: messageId,
+          }).pipe(
+            Effect.catchTag("TelegramApiError", (error) =>
+              Effect.gen(function* () {
+                log.warn("draft stream delete failed (non-fatal)", {
+                  chatId: channelId,
+                  messageId,
+                  error: error.detail,
+                })
+                return yield* Effect.void
+              }),
+            ),
+          ),
+        renderText: (text) => self.formatContent(text),
+      })
+
+      // Pump the async iterable into the draft stream. We track the
+      // *cumulative* text locally so each `update` sees the full so-far
+      // text — the draft stream coalesces to the throttled transport.
+      let cumulative = ""
+      try {
+        for await (const chunk of chunks) {
+          cumulative += chunk
+          yield* handle.update(cumulative)
+        }
+        yield* handle.finalize()
+        log.info("telegram draft stream finalized", { channelId, length: cumulative.length })
+      } catch (error) {
+        log.error("telegram draft stream consumer failed", { channelId, error: String(error) })
+        yield* handle.clear()
+      }
+    })
   }
 
   /** Split a message respecting Telegram's 4096 character limit */
