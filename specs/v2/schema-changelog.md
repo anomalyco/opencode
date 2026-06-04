@@ -103,7 +103,7 @@ Affected schema:
 
 Change:
 
-- Add and backfill `session_message.seq` from matching synchronized events.
+- Reset pre-launch Session-message projections and add `session_message.seq` for newly projected synchronized events.
 - Add event aggregate-sequence and aggregate-type-sequence indexes.
 - Add Session-message sequence, type-sequence, and compatibility timestamp indexes.
 
@@ -114,7 +114,8 @@ Reason:
 
 Compatibility:
 
-- Migration fails rather than inventing chronology if an existing projected Session message has no matching durable event.
+- Pre-launch Session-message projections are disposable because historical versions could write them without durable creator events.
+- The migration resets those projections rather than inventing chronology or blocking startup.
 - The timestamp compatibility index remains for legacy or transitional query shapes.
 
 ### Structured Tool Registry And Canonical Output
