@@ -15,6 +15,7 @@ type Entry = {
 
 const max = 200
 const cache = new Map<string, Entry>()
+const imageMax = 50
 const imageCache = new Map<string, Promise<string | undefined>>()
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
@@ -36,7 +37,7 @@ const config = {
   FORBID_TAGS: ["style"],
   FORBID_CONTENTS: ["style", "script"],
   ADD_TAGS: ["svg", "path"],
-  ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
+  ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target", "data-local-image", "data-local-image-resolved"],
 }
 
 const iconPaths = {
@@ -323,6 +324,16 @@ export function Markdown(
         ) {
           setCopyState(toEl, labels, true)
         }
+        if (
+          fromEl instanceof HTMLImageElement &&
+          toEl instanceof HTMLImageElement &&
+          fromEl.getAttribute("data-local-image") === toEl.getAttribute("data-local-image") &&
+          fromEl.hasAttribute("data-local-image-resolved")
+        ) {
+          const src = fromEl.getAttribute("src")
+          if (src) toEl.setAttribute("src", src)
+          toEl.setAttribute("data-local-image-resolved", "")
+        }
         if (fromEl.isEqualNode(toEl)) return false
         return true
       },
@@ -344,6 +355,10 @@ export function Markdown(
         const cacheKey = `${local.directory}\0${imgPath}`
         const pending = imageCache.get(cacheKey) ?? resolver(imgPath, local.directory)
         imageCache.set(cacheKey, pending)
+        if (imageCache.size > imageMax) {
+          const oldest = imageCache.keys().next().value
+          if (oldest !== undefined) imageCache.delete(oldest)
+        }
         pending
           .then((dataUri) => {
             if (!alive || !img.isConnected || !dataUri) return

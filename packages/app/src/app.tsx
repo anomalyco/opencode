@@ -71,11 +71,11 @@ function LocalImageResolverProvider(props: ParentProps) {
   const serverSDK = useServerSDK()
   const resolver: LocalImageResolver = async (rawPath, directory) => {
     if (!directory) return undefined
-    if (!rawPath || /(^|[/\\])\.\.([/\\]|$)/.test(rawPath)) return undefined
+    if (!rawPath || /^[/\\]/.test(rawPath) || /^[a-zA-Z]:/.test(rawPath) || /(^|[/\\])\.\.([/\\]|$)/.test(rawPath)) return undefined
     try {
       const client = serverSDK.createClient({ directory, throwOnError: true })
       const resp = await client.file.read({ path: rawPath })
-      if (resp.data?.type === "binary" && resp.data.encoding === "base64" && resp.data.mimeType) {
+      if (resp.data?.type === "binary" && resp.data.encoding === "base64" && resp.data.mimeType?.startsWith("image/")) {
         return `data:${resp.data.mimeType};base64,${resp.data.content}`
       }
     } catch (err) {
