@@ -84,6 +84,7 @@ OpenCode Zen ทำงานเหมือน provider อื่น ๆ ใน 
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`   | `@ai-sdk/google`            |
 | Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -130,6 +131,7 @@ https://opencode.ai/zen/v1/models
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10       | -            |
 | Kimi K2.6                         | $0.95  | $4.00   | $0.16       | -            |
 | Qwen3.7 Max                       | $2.50  | $7.50   | $0.50       | $3.125       |
+| Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04       | $0.50        |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
 | DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03       | -            |
@@ -231,7 +233,7 @@ https://opencode.ai/zen/v1/models
 - Big Pickle: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
 - DeepSeek V4 Flash Free: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
 - MiMo-V2.5 Free: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
-- Nemotron 3 Super Free (endpoint ฟรีของ NVIDIA): ให้บริการภายใต้ [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) ใช้สำหรับการทดลองเท่านั้น ไม่เหมาะสำหรับ production หรือข้อมูลที่อ่อนไหว NVIDIA จะบันทึก prompt และ output เพื่อนำไปปรับปรุงโมเดลและบริการของตน โปรดอย่าส่งข้อมูลส่วนบุคคลหรือข้อมูลลับ.
+- Nemotron 3 Super Free (endpoint ฟรีของ NVIDIA): ใช้สำหรับการทดลองเท่านั้น — โปรดอย่าส่งข้อมูลส่วนบุคคลหรือข้อมูลลับ การใช้งานของคุณจะถูกบันทึกเพื่อวัตถุประสงค์ด้านความปลอดภัยและเพื่อปรับปรุงผลิตภัณฑ์และบริการของ NVIDIA ข้อมูลเซสชันที่บันทึกไว้เพื่อวัตถุประสงค์ในการปรับปรุงจะไม่เชื่อมโยงกับตัวตนของคุณหรือตัวระบุถาวรใด ๆ สำหรับข้อมูลเพิ่มเติมเกี่ยวกับแนวปฏิบัติในการประมวลผลข้อมูลของเรา โปรดดู [นโยบายความเป็นส่วนตัว](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) ของเรา การโต้ตอบกับ endpoint นี้ถือว่าคุณยินยอมให้เราเก็บรวบรวม บันทึก และใช้ข้อมูลดังกล่าว รวมถึง [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)
 - OpenAI APIs: คำขอจะถูกเก็บไว้เป็นเวลา 30 วันตาม [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: คำขอจะถูกเก็บไว้เป็นเวลา 30 วันตาม [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 
