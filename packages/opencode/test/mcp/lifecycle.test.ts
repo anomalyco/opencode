@@ -193,10 +193,6 @@ function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server:
   return status[server]?.status
 }
 
-// ========================================================================
-// Test: local mcp `cwd` resolves against the instance directory
-// ========================================================================
-
 it.instance(
   "local mcp cwd defaults to instance directory when omitted",
   () =>
