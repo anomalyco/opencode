@@ -30,6 +30,7 @@ import {
 } from "@/components/titlebar-session-events"
 import { Persist, persisted } from "@/utils/persist"
 import { useGlobal } from "@/context/global"
+import { decode64 } from "@/utils/base64"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -255,7 +256,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return `/${base64Encode(project.worktree)}/session`
             }
 
-            type SessionTab = { type: "session"; dir: string; dirBase64: string; sessionId: string }
+            type SessionTab = { type: "session"; dirBase64: string; sessionId: string }
             type Tab = SessionTab
 
             const tabHref = (tab: Tab) => {
@@ -361,7 +362,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 const sessionId = session.parentID ?? session.id
                 tabsStoreActions.addSessionTab({
                   dirBase64: route.dirBase64,
-                  dir: route.dir,
                   sessionId,
                 })
               }
@@ -484,7 +484,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                           )}
                           <TabNavItem
                             href={tabHref(tab)}
-                            directory={tab.dir}
+                            directory={decode64(tab.dirBase64)!}
                             sessionId={tab.sessionId}
                             onClose={() => tabsStoreActions.removeTab(i())}
                             active={currentTab() === tab}
