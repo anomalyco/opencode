@@ -13,7 +13,7 @@ export const XAIPlugin = PluginV2.define({
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("xai")) return
-        evt.language = evt.sdk.responses(evt.model.apiID)
+        evt.language = evt.sdk.responses(evt.model.api.id)
       }),
     }
   }),

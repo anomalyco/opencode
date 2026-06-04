@@ -1647,6 +1647,7 @@
   :is(
     [data-section="leaderboard"],
     [data-section="market-share"],
+    [data-section="geo-breakdown"],
     [data-section="token-cost"],
     [data-section="cache-ratio"],
     [data-section="session-cost"]
@@ -2121,6 +2122,191 @@
   font-weight: 500;
   line-height: 1.1;
   white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="geo-breakdown"] {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+[data-page="stats"] [data-slot="geo-map-panel"] {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--stats-layer);
+  border: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-component="geo-world-map"] {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+[data-page="stats"] [data-slot="geo-countries"] path {
+  fill: var(--stats-layer-2);
+  stroke: var(--stats-bg);
+  stroke-width: 0.45px;
+  transition:
+    fill 140ms ease,
+    opacity 140ms ease;
+}
+
+[data-page="stats"] [data-slot="geo-countries"] path[data-has-data="true"] {
+  fill: var(--stats-accent);
+  opacity: var(--geo-country-opacity);
+  cursor: pointer;
+}
+
+[data-page="stats"] [data-slot="geo-countries"] path[data-active="true"] {
+  fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
+  opacity: 1;
+}
+
+[data-page="stats"] [data-slot="geo-borders"] {
+  fill: none;
+  stroke: var(--stats-line-strong);
+  stroke-linejoin: round;
+  stroke-width: 0.6px;
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="geo-active-country"] {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  display: grid;
+  gap: 8px;
+  min-width: 168px;
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  padding: 12px;
+  background: color-mix(in srgb, var(--stats-bg) 92%, transparent);
+  box-shadow:
+    0 0 0 0.5px var(--stats-line-strong),
+    0 6px 16px #0000000d,
+    0 2px 6px #0000000f;
+}
+
+[data-page="stats"] [data-slot="geo-active-country"] span,
+[data-page="stats"] [data-slot="geo-active-country"] em {
+  color: var(--stats-faint);
+  font-style: normal;
+}
+
+[data-page="stats"] [data-slot="geo-active-country"] span {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="geo-active-country"] strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="geo-active-country"] p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+[data-page="stats"] [data-slot="geo-active-country"] b {
+  color: var(--stats-accent-text);
+  font-weight: 600;
+}
+
+[data-page="stats"] [data-component="geo-country-list"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 212px), 1fr));
+  align-content: start;
+  gap: 8px 10px;
+  min-width: 0;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-page="stats"] [data-component="geo-country-list"] li {
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="geo-country-list"] button {
+  display: grid;
+  grid-template-columns: 28px 8px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--stats-line);
+  border-radius: 0;
+  background: var(--stats-layer);
+  color: var(--stats-muted);
+  font-size: 11px;
+  line-height: 1;
+  text-align: left;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+[data-page="stats"] [data-component="geo-country-list"] button[data-active="true"],
+[data-page="stats"] [data-component="geo-country-list"] button:focus-visible {
+  border-color: var(--stats-text);
+  background: var(--stats-layer);
+  color: var(--stats-text);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--stats-text) 70%, transparent),
+    0 1px 2px -1px #00000014,
+    0 2px 4px #0000000a;
+}
+
+[data-page="stats"] [data-component="geo-country-list"] span {
+  color: var(--stats-faint);
+  font-weight: 500;
+  text-align: center;
+}
+
+[data-page="stats"] [data-component="geo-country-list"] i {
+  width: 8px;
+  height: 8px;
+  background: var(--stats-accent);
+  opacity: var(--geo-row-opacity);
+}
+
+[data-page="stats"] [data-component="geo-country-list"] strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="geo-country-list"] em,
+[data-page="stats"] [data-component="geo-country-list"] b {
+  color: var(--stats-faint);
+  font-style: normal;
+}
+
+[data-page="stats"] [data-component="geo-country-list"] b {
+  color: var(--stats-muted);
+  font-weight: 500;
 }
 
 [data-page="stats"] [data-component="token-cost"],
@@ -2734,6 +2920,7 @@
   [data-page="stats"] [data-section="top-models"],
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="market-share"],
+  [data-page="stats"] [data-section="geo-breakdown"],
   [data-page="stats"] [data-section="token-cost"],
   [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"] {
@@ -2866,6 +3053,7 @@
   [data-page="stats"] [data-section="top-models"],
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="market-share"],
+  [data-page="stats"] [data-section="geo-breakdown"],
   [data-page="stats"] [data-section="token-cost"],
   [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"] {
@@ -2958,6 +3146,21 @@
   [data-page="stats"] [data-component="market-share"] {
     grid-template-rows: 40px minmax(0, 1fr);
     height: 400px;
+  }
+
+  [data-page="stats"] [data-slot="geo-active-country"] {
+    position: static;
+    min-width: 0;
+    max-width: none;
+    margin: 0 12px 12px;
+  }
+
+  [data-page="stats"] [data-component="geo-country-list"] button {
+    grid-template-columns: 26px 8px minmax(0, 1fr) auto;
+  }
+
+  [data-page="stats"] [data-component="geo-country-list"] b {
+    display: none;
   }
 
   [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"],

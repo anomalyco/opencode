@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
@@ -14,6 +15,7 @@ import { Storage } from "@/storage/storage"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { GlobalBus } from "@/bus/global"
 
 void Log.init({ print: false })
 
@@ -97,6 +99,31 @@ describe("session.created event", () => {
       expect(receivedEvents).toContain("created")
       expect(receivedEvents).toContain("updated")
       expect(receivedEvents.indexOf("created")).toBeLessThan(receivedEvents.indexOf("updated"))
+
+      yield* session.remove(info.id)
+    }),
+  )
+
+  it.instance("emits legacy global sync payload", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const received = yield* Deferred.make<{ syncEvent: EventV2.SerializedEvent }>()
+      const listener = (event: { payload: { type?: string; syncEvent?: EventV2.SerializedEvent } }) => {
+        if (event.payload.type === "sync" && event.payload.syncEvent)
+          Deferred.doneUnsafe(received, Effect.succeed({ syncEvent: event.payload.syncEvent }))
+      }
+      GlobalBus.on("event", listener)
+      yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
+
+      const info = yield* session.create({})
+      const event = yield* awaitDeferred(received, "timed out waiting for legacy global sync event")
+
+      expect(event.syncEvent).toMatchObject({
+        type: EventV2.versionedType(SessionNs.Event.Created.type, 1),
+        seq: 0,
+        aggregateID: info.id,
+        data: { sessionID: info.id },
+      })
 
       yield* session.remove(info.id)
     }),

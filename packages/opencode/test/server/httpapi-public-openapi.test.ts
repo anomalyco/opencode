@@ -3,7 +3,14 @@ import { OpenApi } from "effect/unstable/httpapi"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
-type OpenApiSchema = { readonly $ref?: string }
+type OpenApiSchema = {
+  readonly $ref?: string
+  readonly anyOf?: ReadonlyArray<OpenApiSchema>
+  readonly type?: string
+  readonly enum?: readonly unknown[]
+  readonly properties?: Record<string, OpenApiSchema>
+  readonly required?: readonly string[]
+}
 type OpenApiResponse = {
   readonly description?: string
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
@@ -16,10 +23,14 @@ type OpenApiOperation = {
     readonly schema?: { readonly type?: string }
   }>
   readonly responses?: Record<string, OpenApiResponse>
+  readonly requestBody?: { readonly required?: boolean }
   readonly security?: unknown
 }
 type OpenApiPathItem = Partial<Record<Method, OpenApiOperation>>
-type OpenApiSpec = { readonly paths: Record<string, OpenApiPathItem> }
+type OpenApiSpec = {
+  readonly paths: Record<string, OpenApiPathItem>
+  readonly components: { readonly schemas: Record<string, OpenApiSchema> }
+}
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
 
@@ -44,11 +55,34 @@ function componentName(ref: string) {
   return ref.replace("#/components/schemas/", "")
 }
 
+function componentNames(response: OpenApiResponse | undefined) {
+  const schema = response?.content?.["application/json"]?.schema
+  if (!schema) return []
+  return [schema, ...(schema.anyOf ?? [])].flatMap((item) => (item.$ref ? [componentName(item.$ref)] : []))
+}
+
 function isBuiltInEndpointError(name: string) {
   return name.startsWith("EffectHttpApiError") || name.startsWith("effect_HttpApiError_")
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  test("documents nested legacy global sync events", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const schema = spec.components.schemas.SyncEventSessionCreated
+
+    expect(schema?.required).toEqual(["type", "id", "syncEvent"])
+    expect(schema?.properties?.type?.enum).toEqual(["sync"])
+    expect(schema?.properties?.syncEvent).toMatchObject({
+      required: ["type", "id", "seq", "aggregateID", "data"],
+      properties: {
+        type: { enum: ["session.created.1"] },
+        id: { type: "string" },
+        seq: { type: "number" },
+        aggregateID: { type: "string" },
+      },
+    })
+  })
+
   test("preserves /api auth responses", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
@@ -68,6 +102,18 @@ describe("PublicApi OpenAPI v2 errors", () => {
         required: false,
         schema: { type: "string" },
       })
+    }
+  })
+
+  test("preserves required request bodies for v2 mutations", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const path of [
+      "/api/session/{sessionID}/prompt",
+      "/api/session/{sessionID}/permission/request/{requestID}/reply",
+      "/api/session/{sessionID}/question/request/{requestID}/reply",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
   })
 
@@ -139,7 +185,6 @@ describe("PublicApi OpenAPI v2 errors", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
     for (const route of [
-      ["post", "/api/session/{sessionID}/prompt"],
       ["post", "/api/session/{sessionID}/compact"],
       ["post", "/api/session/{sessionID}/wait"],
     ] as const) {
@@ -190,6 +235,15 @@ describe("PublicApi OpenAPI v2 errors", () => {
       expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
         "QuestionNotFoundError",
       )
+    }
+    for (const route of [
+      ["post", "/api/session/{sessionID}/question/request/{requestID}/reply"],
+      ["post", "/api/session/{sessionID}/question/request/{requestID}/reject"],
+    ] as const) {
+      expect(componentNames(spec.paths[route[1]]?.[route[0]]?.responses?.["404"])).toEqual([
+        "SessionNotFoundError",
+        "QuestionNotFoundError",
+      ])
     }
   })
 
