@@ -55,11 +55,13 @@ import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import { SessionMobileBottomBar } from "@/pages/session/session-mobile-bottom-bar"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { shouldUseV2NewSessionPage } from "@/pages/session/new-session-layout"
+import { decodeDirectory } from "@/pages/directory-layout"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
@@ -449,6 +451,7 @@ export default function Page() {
     return list
   })
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const activeDirectory = createMemo(() => (params.dir ? (decodeDirectory(params.dir) ?? undefined) : undefined))
   const wantsReview = createMemo(() =>
     isDesktop()
       ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
@@ -1849,6 +1852,18 @@ export default function Page() {
           size={size}
         />
       </div>
+
+      <SessionMobileBottomBar
+        activeDirectory={activeDirectory()}
+        hasSession={!!params.id && !isDesktop()}
+        tab={store.mobileTab}
+        changesLabel={
+          hasReview()
+            ? language.t("session.review.filesChanged", { count: reviewCount() })
+            : language.t("session.review.change.other")
+        }
+        onTabChange={(tab) => setStore("mobileTab", tab)}
+      />
 
       <TerminalPanel />
     </div>

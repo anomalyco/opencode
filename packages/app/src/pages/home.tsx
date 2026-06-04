@@ -156,10 +156,10 @@ function HomeDesign() {
 
     const root = canonicalProjectRoot(directory)
     if (!root) {
-      // `sync.ready` currently tracks the bootstrap query pending state. Wait until
-      // bootstrap has finished before deciding an unknown project param is invalid;
-      // sandbox routes need project metadata to canonicalize to their root.
-      if (!sync.ready) setSelectedDirectory(undefined, true)
+      // `sync.ready` means the initial bootstrap finished. Wait until then before
+      // deciding an unknown project param is invalid; sandbox routes need project
+      // metadata to canonicalize to their root.
+      if (sync.ready) setSelectedDirectory(undefined, true)
       return
     }
 
