@@ -1,6 +1,6 @@
 import { AccountID, OrgID } from "@/account/schema"
 import { MCP } from "@/mcp"
-import { ProviderID, ModelID } from "@/provider/schema"
+
 import { Session } from "@/session/session"
 import { Worktree } from "@/worktree"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
@@ -15,6 +15,8 @@ import {
 } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const ConsoleStateResponse = Schema.Struct({
   consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
@@ -49,8 +51,8 @@ const ToolListItem = Schema.Struct({
 const ToolList = Schema.Array(ToolListItem).annotate({ identifier: "ToolList" })
 export const ToolListQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
-  provider: ProviderID,
-  model: ModelID,
+  provider: ProviderV2.ID,
+  model: ModelV2.ID,
 })
 
 const WorktreeList = Schema.Array(Schema.String)

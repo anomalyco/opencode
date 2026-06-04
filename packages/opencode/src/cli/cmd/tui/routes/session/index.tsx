@@ -210,7 +210,9 @@ export function Session() {
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
+    const completed = messages().findLast((x) => x.role === "assistant" && x.time.completed)?.id
+    return messages().findLast((x) => x.role === "assistant" && !x.time.completed && (!completed || x.id > completed))
+      ?.id
   })
 
   const lastAssistant = createMemo(() => {
@@ -1259,7 +1261,10 @@ export function Session() {
                   <PermissionPrompt request={permissions()[0]} />
                 </Show>
                 <Show when={permissions().length === 0 && questions().length > 0}>
-                  <QuestionPrompt request={questions()[0]} />
+                  <QuestionPrompt
+                    request={questions()[0]}
+                    directory={sync.session.get(questions()[0].sessionID)?.directory}
+                  />
                 </Show>
                 <Show when={session()?.parentID}>
                   <SubagentFooter />
@@ -1529,6 +1534,8 @@ const PART_MAPPING = {
   reasoning: ReasoningPart,
 }
 
+const INLINE_TOOL_ICON_WIDTH = 2
+
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme } = useTheme()
   const ctx = use()
@@ -1790,29 +1797,22 @@ function InlineTool(props: {
   complete: any
   pending: string
   spinner?: boolean
+  subagent?: boolean
   children: JSX.Element
   part: ToolPart
   onClick?: () => void
 }) {
-  const [margin, setMargin] = createSignal(0)
   const { theme } = useTheme()
   const ctx = use()
   const sync = useSync()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
+  const [errorExpanded, setErrorExpanded] = createSignal(false)
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
     if (!callID) return false
     return callID === props.part.callID
-  })
-
-  const fg = createMemo(() => {
-    if (props.color) return props.color
-    if (permission()) return theme.warning
-    if (hover() && props.onClick) return theme.text
-    if (props.complete) return theme.textMuted
-    return theme.text
   })
 
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
@@ -1825,53 +1825,142 @@ function InlineTool(props: {
       error()?.includes("user dismissed"),
   )
 
+  const failed = createMemo(() => Boolean(error() && !denied()))
+  const clickable = createMemo(() => Boolean(props.onClick || failed()))
+  const fg = createMemo(() => {
+    if (props.color) return props.color
+    if (permission()) return theme.warning
+    if (failed()) return theme.error
+    if (hover() && props.onClick) return theme.text
+    if (props.complete) return theme.textMuted
+    return theme.text
+  })
+
   return (
-    <box
-      marginTop={margin()}
-      paddingLeft={3}
-      onMouseOver={() => props.onClick && setHover(true)}
+    <InlineToolRow
+      id={`tool-inline-${props.subagent ? "subagent-" : ""}${props.part.id}`}
+      icon={props.icon}
+      iconColor={props.iconColor}
+      color={fg()}
+      errorColor={theme.error}
+      failed={failed()}
+      denied={Boolean(denied())}
+      error={error()}
+      errorExpanded={errorExpanded()}
+      complete={props.complete}
+      pending={props.pending}
+      spinner={props.spinner}
+      subagent={props.subagent}
+      separateAfter={(id) =>
+        sync.data.message[ctx.sessionID]?.some((message) => message.role === "user" && message.id === id) ?? false
+      }
+      onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
+        if (failed()) {
+          setErrorExpanded((value) => !value)
+          return
+        }
         props.onClick?.()
       }}
+    >
+      {props.children}
+    </InlineToolRow>
+  )
+}
+
+export function InlineToolRow(props: {
+  id?: string
+  icon: string
+  iconColor?: RGBA
+  color?: RGBA
+  errorColor?: RGBA
+  failed?: boolean
+  denied?: boolean
+  error?: string
+  errorExpanded?: boolean
+  complete: any
+  pending: string
+  spinner?: boolean
+  subagent?: boolean
+  children: JSX.Element
+  separateAfter?: (id: string | undefined) => boolean
+  onMouseOver?: () => void
+  onMouseOut?: () => void
+  onMouseUp?: () => void
+}) {
+  const [margin, setMargin] = createSignal(0)
+
+  return (
+    <box
+      id={props.id}
+      marginTop={margin()}
+      paddingLeft={3}
+      onMouseOver={props.onMouseOver}
+      onMouseOut={props.onMouseOut}
+      onMouseUp={props.onMouseUp}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
         if (!parent) {
           return
         }
-        if (el.height > 1) {
-          setMargin(1)
-          return
-        }
         const children = parent.getChildren()
         const index = children.indexOf(el)
         const previous = children[index - 1]
-        if (!previous) {
-          setMargin(0)
-          return
-        }
-        if (previous.height > 1 || previous.id.startsWith("text-")) {
-          setMargin(1)
-          return
-        }
+        const previousInline = previous?.id.startsWith("tool-inline-") ?? false
+        const previousSubagent = previous?.id.startsWith("tool-inline-subagent-") ?? false
+        setMargin(
+          previous?.id.startsWith("text-") ||
+            previous?.id.startsWith("tool-block-") ||
+            (previousInline && previousSubagent !== Boolean(props.subagent)) ||
+            props.separateAfter?.(previous?.id)
+            ? 1
+            : 0,
+        )
       }}
     >
       <Switch>
         <Match when={props.spinner}>
-          <Spinner color={fg()} children={props.children} />
+          <Spinner color={props.color} children={props.children} />
         </Match>
         <Match when={true}>
-          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
-            </Show>
-          </text>
+          <Show
+            fallback={
+              <text
+                paddingLeft={3}
+                fg={props.color}
+                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+              >
+                ~ {props.pending}
+              </text>
+            }
+            when={props.complete}
+          >
+            <box flexDirection="row">
+              <text
+                width={INLINE_TOOL_ICON_WIDTH}
+                fg={props.failed ? props.errorColor : (props.iconColor ?? props.color)}
+                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+              >
+                {props.icon}
+              </text>
+              <text
+                flexGrow={1}
+                fg={props.failed ? props.errorColor : props.color}
+                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+              >
+                {props.children}
+              </text>
+            </box>
+          </Show>
         </Match>
       </Switch>
-      <Show when={error() && !denied()}>
-        <text fg={theme.error}>{error()}</text>
+      <Show when={props.failed && props.errorExpanded}>
+        <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
+          <text fg={props.errorColor}>{props.error}</text>
+        </box>
       </Show>
     </box>
   )
@@ -1890,6 +1979,7 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
+      id={props.part ? "tool-block-" + props.part.id : undefined}
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -2050,8 +2140,8 @@ function Read(props: ToolProps<typeof ReadTool>) {
         Read {pathFormatter.format(props.input.filePath)} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
-        {(filepath) => (
-          <box paddingLeft={3}>
+        {(filepath, index) => (
+          <box id={`tool-inline-loaded-${props.part.id}-${index()}`} paddingLeft={3}>
             <text paddingLeft={3} fg={theme.textMuted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
@@ -2117,11 +2207,18 @@ function Task(props: ToolProps<typeof TaskTool>) {
     tools().findLast((x) => (x.state.status === "running" || x.state.status === "completed") && x.state.title),
   )
 
-  const isRunning = createMemo(() => props.part.state.status === "running")
+  const status = createMemo(() => sync.data.session_status[props.metadata.sessionId ?? ""])
+  const isRunning = createMemo(() => {
+    const value = status()
+    return (
+      props.part.state.status === "running" ||
+      (props.metadata.background === true && value !== undefined && value.type !== "idle")
+    )
+  })
   const retry = createMemo(() => {
-    const status = sync.data.session_status[props.metadata.sessionId ?? ""]
-    if (status?.type !== "retry") return
-    return status
+    const value = status()
+    if (value?.type !== "retry") return
+    return value
   })
 
   const duration = createMemo(() => {
@@ -2133,28 +2230,27 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   const content = createMemo(() => {
     if (!props.input.description) return ""
-    const description =
-      props.metadata.background === true ? `${props.input.description} (background)` : props.input.description
-    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${description}`]
+    let content = [
+      formatSubagentTitle(
+        Locale.titlecase(props.input.subagent_type ?? "General"),
+        props.input.description,
+        props.metadata.background === true,
+      ),
+    ]
 
     const retrying = retry()
     if (isRunning() && retrying) {
-      content.push(`↳ ${Locale.truncate(retrying.message, 80)} [retrying attempt #${retrying.attempt}]`)
+      content.push(`↳ ${formatSubagentRetry(retrying.attempt, Locale.truncate(retrying.message, 80))}`)
     } else if (isRunning() && tools().length > 0) {
-      // content[0] += ` · ${tools().length} toolcalls`
       if (current()) {
         const state = current()!.state
         const title = state.status === "running" || state.status === "completed" ? state.title : undefined
         content.push(`↳ ${Locale.titlecase(current()!.tool)} ${title}`)
-      } else content.push(`↳ ${tools().length} toolcalls`)
+      } else content.push(`↳ ${formatSubagentToolcalls(tools().length)}`)
     }
 
-    if (props.part.state.status === "completed") {
-      content.push(
-        props.metadata.background === true
-          ? `└ ${tools().length} toolcalls`
-          : `└ ${tools().length} toolcalls · ${Locale.duration(duration())}`,
-      )
+    if (!isRunning() && props.part.state.status === "completed") {
+      content.push(`↳ ${formatCompletedSubagentDetail(tools().length, Locale.duration(duration()))}`)
     }
 
     return content.join("\n")
@@ -2162,7 +2258,8 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   return (
     <InlineTool
-      icon="│"
+      icon={props.part.state.status === "completed" ? "✓" : "│"}
+      subagent={true}
       color={retry() ? theme.error : undefined}
       spinner={isRunning()}
       complete={props.input.description}
@@ -2179,6 +2276,23 @@ function Task(props: ToolProps<typeof TaskTool>) {
       {content()}
     </InlineTool>
   )
+}
+
+export function formatSubagentToolcalls(count: number) {
+  return `${count} toolcall${count === 1 ? "" : "s"}`
+}
+
+export function formatSubagentTitle(agent: string, description: string, background: boolean) {
+  return `${agent} Task${background ? " (background)" : ""} — ${description}`
+}
+
+export function formatSubagentRetry(attempt: number, message: string) {
+  return `Retrying (attempt ${attempt}) · ${message}`
+}
+
+export function formatCompletedSubagentDetail(toolcalls: number, duration: string) {
+  if (toolcalls === 0) return duration
+  return `${formatSubagentToolcalls(toolcalls)} · ${duration}`
 }
 
 function Edit(props: ToolProps<typeof EditTool>) {

@@ -73,7 +73,7 @@ describe("CoherePlugin", () => {
       yield* plugin.add(CoherePlugin)
       const result = yield* plugin.trigger(
         "aisdk.language",
-        { model: model("cohere", "alias", { apiID: ModelV2.ID.make("command-r-plus") }), sdk, options: {} },
+        { model: model("cohere", "alias", { api: { id: ModelV2.ID.make("command-r-plus") } }), sdk, options: {} },
         {},
       )
 

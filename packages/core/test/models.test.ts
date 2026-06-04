@@ -1,7 +1,7 @@
 import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
@@ -92,7 +92,7 @@ const buildLayer = (state: Ref.Ref<MockState>) =>
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
   Layer.fresh(ModelsDev.layer).pipe(
     Layer.provide(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(EventV2.defaultLayer),
   )
 
