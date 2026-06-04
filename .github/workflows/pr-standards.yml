@@ -229,7 +229,10 @@ jobs:
             if (!isDocsRefactorOrFeat && hasIssueSection) {
               const issueMatch = body.match(/### Issue for this PR\s*\n([\s\S]*?)(?=###|$)/);
               const issueContent = issueMatch ? issueMatch[1].trim() : '';
-              const hasIssueRef = /(closes|fixes|resolves)\s+#\d+/i.test(issueContent) || /#\d+/.test(issueContent);
+              const hasIssueRef =
+                /(closes|fixes|resolves)\s+#\d+/i.test(issueContent) ||
+                /#\d+/.test(issueContent) ||
+                /https?:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/i.test(issueContent);
               if (!hasIssueRef) {
                 issues.push('No issue referenced. Please add `Closes #<number>` linking to the relevant issue.');
               }
