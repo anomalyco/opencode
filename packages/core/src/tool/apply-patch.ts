@@ -70,11 +70,15 @@ export const layer = Layer.effectDiscard(
 
             const planned: Planned[] = []
             for (const hunk of hunks) planned.push({ hunk, plan: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
+            const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()
             for (const { plan } of planned) {
               const external = plan.target.externalDirectory
-              if (external) yield* assertPermission({ action: external.action, resources: [external.resource], save: [external.save] })
+              if (external) externalDirectories.set(external.resource, external)
             }
-            yield* assertPermission({ action: "edit", resources: planned.map(({ plan }) => plan.target.resource), save: ["*"] })
+            for (const external of externalDirectories.values()) {
+              yield* assertPermission(LocationMutation.externalDirectoryPermission(external))
+            }
+            yield* assertPermission({ action: "edit", resources: [...new Set(planned.map(({ plan }) => plan.target.resource))], save: ["*"] })
 
             const prepared: Prepared[] = []
             for (const { hunk, plan } of planned) {
@@ -99,17 +103,17 @@ export const layer = Layer.effectDiscard(
               Effect.forEach(prepared, (change) =>
                 Effect.gen(function* () {
                   if (change.type === "add") {
-                    const receipt = yield* files.create({ plan: change.plan, content: change.hunk.contents.endsWith("\n") || change.hunk.contents === "" ? change.hunk.contents : `${change.hunk.contents}\n` })
-                    applied.push({ type: change.type, resource: receipt.resource, target: receipt.target })
+                    const result = yield* files.create({ plan: change.plan, content: change.hunk.contents.endsWith("\n") || change.hunk.contents === "" ? change.hunk.contents : `${change.hunk.contents}\n` })
+                    applied.push({ type: change.type, resource: result.resource, target: result.target })
                     return
                   }
                   if (change.type === "delete") {
-                    const receipt = yield* files.remove({ plan: change.plan })
-                    applied.push({ type: change.type, resource: receipt.resource, target: receipt.target })
+                    const result = yield* files.remove({ plan: change.plan })
+                    applied.push({ type: change.type, resource: result.resource, target: result.target })
                     return
                   }
-                  const receipt = yield* files.writeIfUnchanged({ plan: change.plan, expected: change.source, content: change.content })
-                  applied.push({ type: change.type, resource: receipt.resource, target: receipt.target })
+                  const result = yield* files.writeIfUnchanged({ plan: change.plan, expected: change.source, content: change.content })
+                  applied.push({ type: change.type, resource: result.resource, target: result.target })
                 }).pipe(Effect.catchCause((cause) => Effect.fail(fail(change.hunk.path, Cause.squash(cause))))),
               { discard: true }),
             )

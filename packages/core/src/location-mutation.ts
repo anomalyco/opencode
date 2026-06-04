@@ -9,12 +9,13 @@ export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
 
 /**
- * Mutation paths deliberately do not accept project references. References are
- * read-oriented aliases, while mutation authority starts at the active Location
- * or at an explicit absolute external path approved separately.
+ * Mutation paths do not accept project references. Relative paths must stay
+ * inside the active Location. Absolute paths outside it require separate
+ * `external_directory` approval.
  */
 export const ResolveInput = Schema.Struct({
   path: Schema.String,
+  /** Selects the external approval boundary; it does not validate the target type. */
   kind: Kind.pipe(Schema.optional),
 })
 export type ResolveInput = typeof ResolveInput.Type
@@ -39,7 +40,7 @@ export class RevalidationError extends Schema.TaggedErrorClass<RevalidationError
 ) {}
 
 export interface Identity {
-  /** Canonical path whose filesystem identity anchors this authority. */
+  /** Canonical path for this saved filesystem identity. */
   readonly canonical: string
   readonly dev: number
   readonly ino?: number
@@ -47,19 +48,24 @@ export interface Identity {
 
 export interface ExternalDirectoryAuthorization {
   readonly action: "external_directory"
-  /** Canonical existing directory below which the external mutation is admitted. */
+  /** Canonical existing directory used as the external approval boundary. */
   readonly directory: string
-  /** Permission resource suitable for a dedicated external_directory approval. */
+  /** `external_directory` permission resource. */
   readonly resource: string
   readonly save: string
-  /** Revalidated after approval so an approved external boundary cannot be swapped. */
+  /** Saved identity checked again after approval to detect swaps. */
   readonly authority: Identity
 }
 
+/** Build the `external_directory` permission request. */
+export const externalDirectoryPermission = (input: ExternalDirectoryAuthorization) => ({
+  action: input.action,
+  resources: [input.resource],
+  save: [input.save],
+})
+
 export interface Target {
-  /** Lexically resolved path requested by the caller. */
-  readonly absolute: string
-  /** Canonical mutation path. Leaf tools should mutate this path after revalidation. */
+  /** Canonical existing path, or missing path below a canonical directory. */
   readonly canonical: string
   readonly exists: boolean
   readonly type?:
@@ -71,40 +77,47 @@ export interface Target {
     | "FIFO"
     | "Socket"
     | "Unknown"
-  /** Stable mutation-action resource: Location-relative internally, canonical externally. */
+  /** Permission resource: Location-relative for internal paths, canonical for external paths. */
   readonly resource: string
   readonly externalDirectory?: ExternalDirectoryAuthorization
 }
 
 /**
- * A prospective mutation authority captured before permission prompts.
+ * A path checked before permission approval.
  *
- * Leaf tools should resolve a plan, approve `target.externalDirectory` when it
- * exists, perform their ordinary mutation-action approval, then call
- * `revalidate` immediately before mutating `target.canonical`. This two-phase
- * contract detects lexical escapes, symlink-ancestor escapes, and path-identity
- * swaps introduced while approval was pending. Filesystem path APIs cannot make
- * the final syscall atomic with revalidation, so leaf tools must not insert work
- * between revalidation and mutation.
+ *   resolve(path) -> Plan -> approve -> revalidate(plan) -> mutate immediately
+ *
+ * Tools must approve `target.externalDirectory`, when present, and their normal
+ * mutation action before calling `revalidate`. Revalidation rejects escapes,
+ * symlinks in missing suffixes, and changes made while approval is pending. It
+ * cannot be atomic with the next filesystem call, so mutate immediately afterward.
  */
 export interface Plan {
   readonly input: ResolveInput
   readonly target: Target
-  /** Existing canonical target or ancestor that makes prospective creation safe. */
+  /** Saved identity of the existing target or nearest existing ancestor. */
   readonly authority: Identity
 }
 
 export interface Interface {
-  /** Resolve a mutation path without asserting leaf-tool permission policy. */
+  /**
+   * Check a path before approval and derive its permission resources. Relative
+   * paths must stay inside the Location. Absolute paths outside it require
+   * separate `external_directory` approval. This does not approve the tool's
+   * mutation action.
+   */
   readonly resolve: (input: ResolveInput) => Effect.Effect<Plan, PathError | FSUtil.Error>
-  /** Re-prove a previously approved plan immediately before its leaf mutation. */
+  /**
+   * Check the plan again immediately before mutation. Reject changes to the
+   * target, its saved identity, or approval resources. Mutate the returned
+   * target immediately.
+   */
   readonly revalidate: (plan: Plan) => Effect.Effect<Target, RevalidationError | FSUtil.Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/LocationMutation") {}
 
 interface ResolvedPath {
-  readonly absolute: string
   readonly canonical: string
   readonly exists: boolean
   readonly type?: Target["type"]
@@ -121,16 +134,16 @@ export const layer = Layer.effect(
     const locationRoot = yield* fs.realPath(location.directory)
     const locationAuthority = yield* identity(locationRoot)
 
+    function identityFrom(canonical: string, info: Effect.Success<ReturnType<typeof fs.stat>>): Identity {
+      return {
+        canonical,
+        dev: info.dev,
+        ino: Option.getOrUndefined(info.ino),
+      }
+    }
+
     function identity(canonical: string) {
-      return fs.stat(canonical).pipe(
-        Effect.map(
-          (info): Identity => ({
-            canonical,
-            dev: info.dev,
-            ino: Option.getOrUndefined(info.ino),
-          }),
-        ),
-      )
+      return fs.stat(canonical).pipe(Effect.map((info) => identityFrom(canonical, info)))
     }
 
     function notFound<A>(effect: Effect.Effect<A, FSUtil.Error>) {
@@ -141,6 +154,7 @@ export const layer = Layer.effect(
       return left.canonical === right.canonical && left.dev === right.dev && left.ino === right.ino
     }
 
+    /** Check whether a saved path still points to the same filesystem object. */
     const assertIdentity = Effect.fnUntraced(function* (expected: Identity) {
       const canonical = yield* notFound(fs.realPath(expected.canonical))
       if (canonical === undefined) return false
@@ -170,16 +184,24 @@ export const layer = Layer.effect(
       return false
     })
 
+    /**
+     * Resolve a path to a canonical target and save an existing filesystem
+     * identity for later revalidation.
+     *
+     *   existing path -> save target identity
+     *   missing path  -> save nearest existing directory identity
+     *
+     * Missing suffixes must not contain symlinks.
+     */
     const resolvePath = Effect.fnUntraced(function* (absolute: string) {
       const existing = yield* notFound(fs.realPath(absolute))
       if (existing !== undefined) {
         const info = yield* fs.stat(existing)
         return {
-          absolute,
           canonical: existing,
           exists: true,
           type: info.type,
-          authority: yield* identity(existing),
+          authority: identityFrom(existing, info),
         } satisfies ResolvedPath
       }
 
@@ -195,10 +217,9 @@ export const layer = Layer.effect(
             return yield* new PathError({ path: absolute, reason: "unresolved_symlink" })
           }
           return {
-            absolute,
             canonical: path.resolve(canonical, suffix),
             exists: false,
-            authority: yield* identity(canonical),
+            authority: identityFrom(canonical, info),
           } satisfies ResolvedPath
         }
         const parent = path.dirname(anchor)
@@ -207,15 +228,20 @@ export const layer = Layer.effect(
       }
     })
 
+    /**
+     * Choose the existing directory used for separate external approval.
+     *
+     *   existing directory target -> "<target>/*"
+     *   file or missing target    -> "<nearest existing parent>/*"
+     */
     const externalDirectory = Effect.fnUntraced(function* (resolved: ResolvedPath, kind: Kind) {
       const candidate =
         kind === "directory" && resolved.type === "Directory" ? resolved.canonical : path.dirname(resolved.canonical)
       const boundary = yield* resolvePath(candidate)
       const directory =
         boundary.exists && boundary.type === "Directory" ? boundary.canonical : boundary.authority.canonical
-      const authority = yield* identity(directory)
       const resource = slash(path.join(directory, "*"))
-      return { action: "external_directory" as const, directory, resource, save: resource, authority }
+      return { action: "external_directory" as const, directory, resource, save: resource, authority: boundary.authority }
     })
 
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
@@ -235,7 +261,6 @@ export const layer = Layer.effect(
         ? slash(resolved.canonical)
         : slash(path.relative(locationRoot, resolved.canonical) || ".")
       const target: Target = {
-        absolute,
         canonical: resolved.canonical,
         exists: resolved.exists,
         type: resolved.type,
@@ -245,12 +270,13 @@ export const layer = Layer.effect(
       return { input, target, authority: resolved.authority } satisfies Plan
     })
 
+    /**
+     * Re-resolve a plan immediately before mutation and reject any changed
+     * identity, target, or approval resource. This reduces the race window but
+     * cannot make the next filesystem call atomic.
+     */
     const revalidate = Effect.fn("LocationMutation.revalidate")(function* (plan: Plan) {
       const invalid = (reason: string) => new RevalidationError({ path: plan.input.path, reason })
-      if (!(yield* assertIdentity(plan.authority))) return yield* invalid("mutation authority identity changed")
-      if (plan.target.externalDirectory && !(yield* assertIdentity(plan.target.externalDirectory.authority))) {
-        return yield* invalid("external directory identity changed")
-      }
       const fresh = yield* resolve(plan.input).pipe(
         Effect.mapError((error) => (error instanceof PathError ? invalid(error.reason) : error)),
       )

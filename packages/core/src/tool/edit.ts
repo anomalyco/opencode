@@ -129,9 +129,7 @@ export const layer = Layer.effectDiscard(
             const plan = yield* unableToEdit(mutation.resolve({ path: parameters.path, kind: "file" }))
             const external = plan.target.externalDirectory
             if (external) {
-              yield* unableToEdit(
-                assertPermission({ action: external.action, resources: [external.resource], save: [external.save] }),
-              )
+              yield* unableToEdit(assertPermission(LocationMutation.externalDirectoryPermission(external)))
             }
 
             yield* unableToEdit(assertPermission({ action: "edit", resources: [plan.target.resource], save: ["*"] }))
@@ -159,10 +157,10 @@ export const layer = Layer.effectDiscard(
                 ? source.text.replaceAll(oldString, newString)
                 : source.text.replace(oldString, newString)
             const next = splitBom(replaced)
-            const receipt = yield* unableToEdit(
+            const result = yield* unableToEdit(
               files.writeIfUnchanged({ plan, expected: source.content, content: joinBom(next.text, source.bom || next.bom) }),
             )
-            return { ...receipt, replacements } satisfies Success
+            return { ...result, replacements } satisfies Success
           })
         },
       }),

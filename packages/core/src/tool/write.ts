@@ -62,13 +62,7 @@ export const layer = Layer.effectDiscard(
           Effect.gen(function* () {
             const plan = yield* mutation.resolve({ path: parameters.path, kind: "file" })
             const external = plan.target.externalDirectory
-            if (external) {
-              yield* assertPermission({
-                action: external.action,
-                resources: [external.resource],
-                save: [external.save],
-              })
-            }
+            if (external) yield* assertPermission(LocationMutation.externalDirectoryPermission(external))
             yield* assertPermission({ action: "edit", resources: [plan.target.resource], save: ["*"] })
             return yield* files.write({ plan, content: parameters.content })
           }).pipe(

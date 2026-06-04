@@ -194,6 +194,34 @@ describe("ApplyPatchTool", () => {
     ),
   )
 
+  it.live("approves one external directory scope for multiple files under the same parent", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        const first = path.join(outside.path, "first.txt")
+        const second = path.join(outside.path, "second.txt")
+        return Effect.promise(() => Promise.all([fs.writeFile(first, "before\n"), fs.writeFile(second, "before\n")])).pipe(
+          Effect.andThen(
+            withTool(active.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* registry.execute(call(`*** Begin Patch\n*** Update File: ${first}\n@@\n-before\n+after\n*** Update File: ${second}\n@@\n-before\n+after\n*** End Patch`)),
+                ).toMatchObject({ type: "text" })
+                expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
+                expect(assertions[0]?.resources).toEqual([
+                  path.join(yield* Effect.promise(() => fs.realpath(outside.path)), "*").replaceAll("\\", "/"),
+                ])
+              }),
+            ),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() => Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined)),
+    ),
+  )
+
   it.live("rejects invalid later update before applying an earlier add", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

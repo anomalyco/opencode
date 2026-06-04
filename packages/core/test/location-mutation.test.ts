@@ -39,7 +39,6 @@ describe("LocationMutation", () => {
         const plan = yield* (yield* LocationMutation.Service).resolve({ path: "hello.txt" })
 
         expect(plan.target).toMatchObject({
-          absolute: targetPath,
           canonical: yield* Effect.promise(() => fs.realpath(targetPath)),
           exists: true,
           resource: "hello.txt",
@@ -125,7 +124,6 @@ describe("LocationMutation", () => {
             resource: path.join(root, "new.txt"),
           })
           expect(plan.target.externalDirectory).toMatchObject({
-            action: "external_directory",
             directory: root,
             resource: path.join(root, "*").replaceAll("\\", "/"),
           })
@@ -196,14 +194,16 @@ describe("LocationMutation", () => {
         const service = yield* LocationMutation.Service
         const plan = yield* service.resolve({ path: "existing.txt" })
         yield* Effect.promise(async () => {
+          const replacementPath = path.join(directory, "replacement.txt")
+          await fs.writeFile(replacementPath, "second")
           await fs.rm(targetPath)
-          await fs.writeFile(targetPath, "second")
+          await fs.rename(replacementPath, targetPath)
         })
 
         const error = yield* Effect.flip(service.revalidate(plan))
         expect(error).toMatchObject({
           _tag: "LocationMutation.RevalidationError",
-          reason: "mutation authority identity changed",
+          reason: "mutation authority changed",
         })
       }).pipe(provide(directory)),
     ),

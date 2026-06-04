@@ -13,7 +13,7 @@ sessions.create({ id?, location, ... })
 sessions.prompt({ id?, sessionID, prompt, delivery?, resume? })
   -> omitted ID generates one internal message ID
   -> supplied ID admits one durable Session input when absent
-  -> exact reuse returns the same user-shaped admission receipt
+  -> exact reuse returns the same admitted user-shaped message
   -> reusing one message ID for another Session, prompt, or delivery mode fails
   -> exact retry schedules another wake unless resume is false
   -> resume omitted or true schedules execution after admission
@@ -82,7 +82,7 @@ resolve one path relative to the Location or a named project reference
 
 V2 `bash` is isolated behind a safe default. It is denied unless the selected agent's configured rules contain a matching exact-action `bash` rule with `ask` or `allow`. A remembered approval cannot enable bash by itself, and an authored catch-all allow rule does not count as explicit bash opt-in. Once opted in, bash is not sandboxed: the spawned shell runs with the host user's filesystem, process, and network authority. Structured external `workdir` resolution remains an enforced `external_directory` authority check. Best-effort scans of absolute command arguments produce advisory warnings only; they are not sandbox boundaries and do not request or enforce `external_directory` approval.
 
-The first V2 `apply_patch` leaf supports add, update, and delete hunks. It parses every hunk, resolves every mutation target, approves external directories, approves one edit batch, and preflights approved update/delete targets before committing operations sequentially. A later commit-time failure leaves earlier operations applied and returns an explicit partial-application receipt. Moves and atomic rollback remain separate follow-ups rather than implied behavior.
+The first V2 `apply_patch` leaf supports add, update, and delete hunks. It parses every hunk, resolves every mutation target, approves external directories, approves one edit batch, and preflights approved update/delete targets before committing operations sequentially. A later commit-time failure leaves earlier operations applied and returns an explicit partial-application report. Moves and atomic rollback remain separate follow-ups rather than implied behavior.
 
 ### Current Runner Follow-Ups
 

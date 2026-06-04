@@ -29,7 +29,7 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("FileMutation", () => {
-  it.live("writes an existing internal file and returns a stable receipt", () =>
+  it.live("writes an existing internal file and returns a stable result", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const targetPath = path.join(directory, "hello.txt")
@@ -38,7 +38,7 @@ describe("FileMutation", () => {
 
         expect(yield* (yield* FileMutation.Service).write({ plan, content: "after" })).toEqual({
           operation: "write",
-          target: yield* Effect.promise(() => fs.realpath(targetPath)),
+          target: plan.target.canonical,
           resource: "hello.txt",
           existed: true,
         })
@@ -51,15 +51,15 @@ describe("FileMutation", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         const plan = yield* (yield* LocationMutation.Service).resolve({ path: path.join("src", "nested", "hello.txt") })
-        const receipt = yield* (yield* FileMutation.Service).write({ plan, content: "hello" })
+        const result = yield* (yield* FileMutation.Service).write({ plan, content: "hello" })
 
-        expect(receipt).toEqual({
+        expect(result).toEqual({
           operation: "write",
-          target: path.join(yield* Effect.promise(() => fs.realpath(directory)), "src", "nested", "hello.txt"),
+          target: plan.target.canonical,
           resource: "src/nested/hello.txt",
           existed: false,
         })
-        expect(yield* Effect.promise(() => fs.readFile(receipt.target, "utf8"))).toBe("hello")
+        expect(yield* Effect.promise(() => fs.readFile(result.target, "utf8"))).toBe("hello")
       }).pipe(provide(directory)),
     ),
   )
@@ -85,9 +85,9 @@ describe("FileMutation", () => {
         const targetPath = path.join(directory, "remove.txt")
         yield* Effect.promise(() => fs.writeFile(targetPath, "remove"))
         const plan = yield* (yield* LocationMutation.Service).resolve({ path: "remove.txt" })
-        const receipt = yield* (yield* FileMutation.Service).remove({ plan })
+        const result = yield* (yield* FileMutation.Service).remove({ plan })
 
-        expect(receipt).toEqual({ operation: "remove", target: plan.target.canonical, resource: "remove.txt", existed: true })
+        expect(result).toEqual({ operation: "remove", target: plan.target.canonical, resource: "remove.txt", existed: true })
         expect(yield* Effect.promise(() => fs.stat(targetPath).then(() => true, () => false))).toBe(false)
       }).pipe(provide(directory)),
     ),
@@ -99,9 +99,9 @@ describe("FileMutation", () => {
         Effect.gen(function* () {
           const targetPath = path.join(outside, "external.txt")
           const plan = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
-          const receipt = yield* (yield* FileMutation.Service).write({ plan, content: "external" })
+          const result = yield* (yield* FileMutation.Service).write({ plan, content: "external" })
 
-          expect(receipt).toEqual({ operation: "write", target: plan.target.canonical, resource: plan.target.resource, existed: false })
+          expect(result).toEqual({ operation: "write", target: plan.target.canonical, resource: plan.target.resource, existed: false })
           expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("external")
         }).pipe(provide(directory)),
       ),
@@ -115,9 +115,9 @@ describe("FileMutation", () => {
           const targetPath = path.join(outside, "external.txt")
           yield* Effect.promise(() => fs.writeFile(targetPath, "external"))
           const plan = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
-          const receipt = yield* (yield* FileMutation.Service).remove({ plan })
+          const result = yield* (yield* FileMutation.Service).remove({ plan })
 
-          expect(receipt).toEqual({ operation: "remove", target: plan.target.canonical, resource: plan.target.resource, existed: true })
+          expect(result).toEqual({ operation: "remove", target: plan.target.canonical, resource: plan.target.resource, existed: true })
           expect(yield* Effect.promise(() => fs.stat(targetPath).then(() => true, () => false))).toBe(false)
         }).pipe(provide(directory)),
       ),
