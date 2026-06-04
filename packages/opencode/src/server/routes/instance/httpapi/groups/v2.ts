@@ -3,12 +3,21 @@ import { MessageGroup } from "./v2/message"
 import { ModelGroup } from "./v2/model"
 import { ProviderGroup } from "./v2/provider"
 import { SessionGroup } from "./v2/session"
+import { PermissionGroup, PermissionSavedGroup, SessionPermissionGroup } from "./v2/permission"
+import { FileSystemGroup } from "./v2/fs"
+import { QuestionGroup, SessionQuestionGroup } from "./v2/question"
 
 export const V2Api = HttpApi.make("v2")
   .add(SessionGroup)
   .add(MessageGroup)
   .add(ModelGroup)
   .add(ProviderGroup)
+  .add(PermissionGroup)
+  .add(SessionPermissionGroup)
+  .add(PermissionSavedGroup)
+  .add(FileSystemGroup)
+  .add(QuestionGroup)
+  .add(SessionQuestionGroup)
   .annotateMerge(
     OpenApi.annotations({
       title: "opencode experimental HttpApi",

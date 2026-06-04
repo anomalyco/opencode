@@ -1,4 +1,5 @@
 import os from "os"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -21,7 +22,7 @@ import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
@@ -142,7 +143,7 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
 
 type CustomDep = {
   auth: (id: string) => Effect.Effect<Auth.Info | undefined>
-  config: () => Effect.Effect<Config.Info>
+  config: () => Effect.Effect<ConfigV1.Info>
   env: () => Effect.Effect<Record<string, string | undefined>>
   get: (key: string) => Effect.Effect<string | undefined>
 }
@@ -1183,7 +1184,7 @@ function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelI
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const config = yield* Config.Service
     const auth = yield* Auth.Service
     const env = yield* Env.Service
@@ -1765,6 +1766,19 @@ export const layer = Layer.effect(
       const provider = s.providers[providerID]
       if (!provider) return undefined
 
+      const experimental = yield* plugin.trigger<"experimental.provider.small_model">(
+        "experimental.provider.small_model",
+        { provider: toPublicInfo(provider) },
+        { model: undefined },
+      )
+      if (experimental.model) {
+        return {
+          ...experimental.model,
+          id: ProviderV2.ModelID.make(experimental.model.id),
+          providerID: ProviderV2.ID.make(experimental.model.providerID),
+        }
+      }
+
       const defaultPriority = [
         "claude-haiku-4-5",
         "claude-haiku-4.5",
@@ -1848,7 +1862,7 @@ export const layer = Layer.effect(
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(Env.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Auth.defaultLayer),

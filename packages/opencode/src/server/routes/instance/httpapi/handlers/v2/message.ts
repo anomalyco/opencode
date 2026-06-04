@@ -1,7 +1,6 @@
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Effect, Schema } from "effect"
-import * as DateTime from "effect/DateTime"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
 import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../../errors"
@@ -10,7 +9,6 @@ const DefaultMessagesLimit = 50
 
 const Cursor = Schema.Struct({
   id: SessionMessage.ID,
-  time: Schema.Finite,
   order: Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")]),
   direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
 })
@@ -19,9 +17,7 @@ const decodeCursor = Schema.decodeUnknownSync(Cursor)
 
 const cursor = {
   encode(message: SessionMessage.Message, order: "asc" | "desc", direction: "previous" | "next") {
-    return Buffer.from(
-      JSON.stringify({ id: message.id, time: DateTime.toEpochMillis(message.time.created), order, direction }),
-    ).toString("base64url")
+    return Buffer.from(JSON.stringify({ id: message.id, order, direction })).toString("base64url")
   },
   decode(input: string) {
     return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
@@ -47,7 +43,7 @@ export const messageHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.message
             sessionID: ctx.params.sessionID,
             limit: ctx.query.limit ?? DefaultMessagesLimit,
             order,
-            cursor: decoded ? { id: decoded.id, time: decoded.time, direction: decoded.direction } : undefined,
+            cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
           })
           .pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>

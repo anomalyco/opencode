@@ -8,7 +8,7 @@
 //
 // Also wires SIGINT so Ctrl-c clears a live prompt draft first, then falls
 // back to the usual two-press exit sequence through RunFooter.requestExit().
-import { createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
+import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Session as SessionApi } from "@/session/session"
 import { registerOpencodeKeymap } from "@/cli/cmd/tui/keymap"
@@ -75,6 +75,8 @@ export type LifecycleInput = {
 
 export type Lifecycle = {
   footer: FooterApi
+  onResize(fn: () => void): () => void
+  resetForReplay(input: { sessionTitle?: string; sessionID?: string; history: RunPrompt[] }): Promise<void>
   close(input: { showExit: boolean; sessionTitle?: string; sessionID?: string; history?: RunPrompt[] }): Promise<void>
 }
 
@@ -307,6 +309,46 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
 
         return {
           footer,
+          onResize(fn) {
+            let width = renderer.terminalWidth
+            let height = renderer.terminalHeight
+            const resize = () => {
+              if (width === renderer.terminalWidth && height === renderer.terminalHeight) {
+                return
+              }
+
+              width = renderer.terminalWidth
+              height = renderer.terminalHeight
+              fn()
+            }
+            renderer.on(CliRenderEvents.RESIZE, resize)
+            return () => renderer.off(CliRenderEvents.RESIZE, resize)
+          },
+          async resetForReplay(next) {
+            if (closed || renderer.isDestroyed || footer.isClosed) {
+              throw new Error("runtime closed")
+            }
+
+            await footer.idle()
+            if (closed || renderer.isDestroyed || footer.isClosed) {
+              throw new Error("runtime closed")
+            }
+
+            footer.resetForReplay(true)
+            renderer.resetSplitFooterForReplay({ clearSavedLines: true })
+            const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history)
+            renderer.writeToScrollback(
+              entrySplash({
+                ...splashMeta({
+                  title: splash.title,
+                  session_id: next.sessionID ?? input.getSessionID?.() ?? input.sessionID,
+                }),
+                theme: theme.splash,
+                showSession: splash.showSession,
+              }),
+            )
+            renderer.requestRender()
+          },
           close,
         }
       } catch (error) {

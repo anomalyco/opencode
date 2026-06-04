@@ -55,6 +55,7 @@ export const DialogSelectMcp: Component = () => {
       description={language.t("dialog.mcp.description", { enabled: enabledCount(), total: totalCount() })}
     >
       <List
+        class="px-3"
         search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.mcp.empty")}
         key={(x) => x?.name ?? ""}

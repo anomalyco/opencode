@@ -6,7 +6,10 @@ import { AgentV2 } from "../agent"
 import { Catalog } from "../catalog"
 import { Config } from "../config"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
+import { ConfigSkillPlugin } from "../config/plugin/skill"
 import { EventV2 } from "../event"
+import { FSUtil } from "../fs-util"
+import { Global } from "../global"
 import { Location } from "../location"
 import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
@@ -17,6 +20,7 @@ import { ConfigProviderPlugin } from "../config/plugin/provider"
 import { EnvPlugin } from "./env"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
+import { SkillV2 } from "../skill"
 
 type Plugin = {
   id: PluginV2.ID
@@ -26,10 +30,13 @@ type Plugin = {
     | AgentV2.Service
     | Npm.Service
     | EventV2.Service
+    | FSUtil.Service
+    | Global.Service
     | Location.Service
     | PluginV2.Service
     | Config.Service
     | ModelsDev.Service
+    | SkillV2.Service
   >
 }
 
@@ -51,6 +58,9 @@ export const layer = Layer.effect(
     const modelsDev = yield* ModelsDev.Service
     const npm = yield* Npm.Service
     const events = yield* EventV2.Service
+    const fs = yield* FSUtil.Service
+    const global = yield* Global.Service
+    const skill = yield* SkillV2.Service
     const done = yield* Deferred.make<void>()
 
     const add = Effect.fn("PluginBoot.add")(function* (input: Plugin) {
@@ -65,6 +75,9 @@ export const layer = Layer.effect(
           Effect.provideService(ModelsDev.Service, modelsDev),
           Effect.provideService(Npm.Service, npm),
           Effect.provideService(EventV2.Service, events),
+          Effect.provideService(FSUtil.Service, fs),
+          Effect.provideService(Global.Service, global),
+          Effect.provideService(SkillV2.Service, skill),
           Effect.provideService(PluginV2.Service, plugin),
         ),
       })
@@ -80,6 +93,7 @@ export const layer = Layer.effect(
       yield* add(ModelsDevPlugin)
       yield* add(ConfigProviderPlugin.Plugin)
       yield* add(ConfigAgentPlugin.Plugin)
+      yield* add(ConfigSkillPlugin.Plugin)
     }).pipe(Effect.withSpan("PluginBoot.boot"))
 
     yield* boot.pipe(
@@ -98,4 +112,5 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(Catalog.locationLayer),
   Layer.provideMerge(Config.locationLayer),
   Layer.provideMerge(AgentV2.locationLayer),
+  Layer.provideMerge(SkillV2.locationLayer),
 )

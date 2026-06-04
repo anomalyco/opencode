@@ -1,19 +1,19 @@
 import { describe, test, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import path from "path"
 
-const live = AppFileSystem.layer.pipe(Layer.provide(NodeFileSystem.layer))
+const live = FSUtil.layer.pipe(Layer.provide(NodeFileSystem.layer))
 const { effect: it } = testEffect(live)
 
-describe("AppFileSystem", () => {
+describe("FSUtil", () => {
   describe("isDir", () => {
     it(
       "returns true for directories",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         expect(yield* fs.isDir(tmp)).toBe(true)
       }),
@@ -22,7 +22,7 @@ describe("AppFileSystem", () => {
     it(
       "returns false for files",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const file = path.join(tmp, "test.txt")
         yield* fs.writeFileString(file, "hello")
@@ -33,7 +33,7 @@ describe("AppFileSystem", () => {
     it(
       "returns false for non-existent paths",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         expect(yield* fs.isDir("/tmp/nonexistent-" + Math.random())).toBe(false)
       }),
     )
@@ -43,7 +43,7 @@ describe("AppFileSystem", () => {
     it(
       "returns true for files",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const file = path.join(tmp, "test.txt")
         yield* fs.writeFileString(file, "hello")
@@ -54,7 +54,7 @@ describe("AppFileSystem", () => {
     it(
       "returns false for directories",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         expect(yield* fs.isFile(tmp)).toBe(false)
       }),
@@ -65,7 +65,7 @@ describe("AppFileSystem", () => {
     it(
       "round-trips JSON data",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const file = path.join(tmp, "data.json")
         const data = { name: "test", count: 42, nested: { ok: true } }
@@ -82,7 +82,7 @@ describe("AppFileSystem", () => {
     it(
       "creates nested directories",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const nested = path.join(tmp, "a", "b", "c")
 
@@ -96,7 +96,7 @@ describe("AppFileSystem", () => {
     it(
       "is idempotent",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const dir = path.join(tmp, "existing")
         yield* fs.makeDirectory(dir)
@@ -113,7 +113,7 @@ describe("AppFileSystem", () => {
     it(
       "creates parent directories if missing",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const file = path.join(tmp, "deep", "nested", "file.txt")
 
@@ -126,7 +126,7 @@ describe("AppFileSystem", () => {
     it(
       "writes directly when parent exists",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const file = path.join(tmp, "direct.txt")
 
@@ -139,7 +139,7 @@ describe("AppFileSystem", () => {
     it(
       "writes Uint8Array content",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const file = path.join(tmp, "binary.bin")
         const content = new Uint8Array([0x00, 0x01, 0x02, 0x03])
@@ -156,7 +156,7 @@ describe("AppFileSystem", () => {
     it(
       "finds target in start directory",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         yield* fs.writeFileString(path.join(tmp, "target.txt"), "found")
 
@@ -168,7 +168,7 @@ describe("AppFileSystem", () => {
     it(
       "finds target in parent directories",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         yield* fs.writeFileString(path.join(tmp, "marker"), "root")
         const child = path.join(tmp, "a", "b")
@@ -182,7 +182,7 @@ describe("AppFileSystem", () => {
     it(
       "returns empty array when not found",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const result = yield* fs.findUp("nonexistent", tmp, tmp)
         expect(result).toEqual([])
@@ -194,7 +194,7 @@ describe("AppFileSystem", () => {
     it(
       "finds multiple targets walking up",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         yield* fs.writeFileString(path.join(tmp, "a.txt"), "a")
         yield* fs.writeFileString(path.join(tmp, "b.txt"), "b")
@@ -215,7 +215,7 @@ describe("AppFileSystem", () => {
     it(
       "finds files matching pattern",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         yield* fs.writeFileString(path.join(tmp, "a.ts"), "a")
         yield* fs.writeFileString(path.join(tmp, "b.ts"), "b")
@@ -229,7 +229,7 @@ describe("AppFileSystem", () => {
     it(
       "supports absolute paths",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         yield* fs.writeFileString(path.join(tmp, "file.txt"), "hello")
 
@@ -243,7 +243,7 @@ describe("AppFileSystem", () => {
     it(
       "matches patterns",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         expect(fs.globMatch("*.ts", "foo.ts")).toBe(true)
         expect(fs.globMatch("*.ts", "foo.json")).toBe(false)
         expect(fs.globMatch("src/**", "src/a/b.ts")).toBe(true)
@@ -255,7 +255,7 @@ describe("AppFileSystem", () => {
     it(
       "finds files walking up directories",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         yield* fs.writeFileString(path.join(tmp, "root.md"), "root")
         const child = path.join(tmp, "a", "b")
@@ -273,7 +273,7 @@ describe("AppFileSystem", () => {
     it(
       "exists works",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const file = path.join(tmp, "exists.txt")
         yield* fs.writeFileString(file, "yes")
@@ -286,7 +286,7 @@ describe("AppFileSystem", () => {
     it(
       "remove works",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const tmp = yield* fs.makeTempDirectoryScoped()
         const file = path.join(tmp, "delete-me.txt")
         yield* fs.writeFileString(file, "bye")
@@ -300,20 +300,20 @@ describe("AppFileSystem", () => {
 
   describe("pure helpers", () => {
     test("mimeType returns correct types", () => {
-      expect(AppFileSystem.mimeType("file.json")).toBe("application/json")
-      expect(AppFileSystem.mimeType("image.png")).toBe("image/png")
-      expect(AppFileSystem.mimeType("unknown.qzx")).toBe("application/octet-stream")
+      expect(FSUtil.mimeType("file.json")).toBe("application/json")
+      expect(FSUtil.mimeType("image.png")).toBe("image/png")
+      expect(FSUtil.mimeType("unknown.qzx")).toBe("application/octet-stream")
     })
 
     test("contains checks path containment", () => {
-      expect(AppFileSystem.contains("/a/b", "/a/b/c")).toBe(true)
-      expect(AppFileSystem.contains("/a/b", "/a/c")).toBe(false)
+      expect(FSUtil.contains("/a/b", "/a/b/c")).toBe(true)
+      expect(FSUtil.contains("/a/b", "/a/c")).toBe(false)
     })
 
     test("overlaps detects overlapping paths", () => {
-      expect(AppFileSystem.overlaps("/a/b", "/a/b/c")).toBe(true)
-      expect(AppFileSystem.overlaps("/a/b/c", "/a/b")).toBe(true)
-      expect(AppFileSystem.overlaps("/a", "/b")).toBe(false)
+      expect(FSUtil.overlaps("/a/b", "/a/b/c")).toBe(true)
+      expect(FSUtil.overlaps("/a/b/c", "/a/b")).toBe(true)
+      expect(FSUtil.overlaps("/a", "/b")).toBe(false)
     })
   })
 })

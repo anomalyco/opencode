@@ -128,6 +128,7 @@ type AnthropicToolResultBlock = Schema.Schema.Type<typeof AnthropicToolResultBlo
 const AnthropicMessage = Schema.Union([
   Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
   Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
+  Schema.Struct({ role: Schema.Literal("system"), content: Schema.Array(AnthropicTextBlock) }),
 ]).pipe(Schema.toTaggedUnion("role"))
 type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
 
@@ -340,13 +341,86 @@ const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultConte
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
+// Mid-conversation system messages are a native Claude API feature only for
+// Opus 4.8. Other Anthropic models intentionally use the same visible wrapped-
+// user fallback as non-Anthropic routes rather than sending a role they reject.
+const supportsNativeSystemUpdates = (request: LLMRequest) => String(request.model.id) === "claude-opus-4-8"
+
+const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
+  const last = message.content.at(-1)
+  return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted === true
+}
+
+const endsInLocalToolUse = (message: LLMRequest["messages"][number]) => {
+  const last = message.content.at(-1)
+  return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted !== true
+}
+
+const validateNativeSystemUpdate = Effect.fn("AnthropicMessages.validateNativeSystemUpdate")(function* (
+  messages: LLMRequest["messages"],
+  index: number,
+) {
+  const previous = messages[index - 1]
+  const next = messages[index + 1]
+  if (!previous)
+    return yield* invalid(
+      "Anthropic Messages chronological system updates cannot be the first message; use LLMRequest.system",
+    )
+  if (previous.role === "system")
+    return yield* invalid("Anthropic Messages chronological system updates cannot be consecutive")
+  if (endsInLocalToolUse(previous))
+    return yield* invalid(
+      "Anthropic Messages chronological system updates cannot appear between a local tool call and its tool result",
+    )
+  if (previous.role !== "user" && previous.role !== "tool" && !endsInServerToolUse(previous))
+    return yield* invalid(
+      "Anthropic Messages chronological system updates must follow a user message, tool result, or assistant server tool use",
+    )
+  if (next?.role === "system")
+    return yield* invalid("Anthropic Messages chronological system updates cannot be consecutive")
+  if (next && next.role !== "assistant")
+    return yield* invalid(
+      "Anthropic Messages chronological system updates must end the messages array or immediately precede an assistant message",
+    )
+})
+
+const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
+  message: LLMRequest["messages"][number],
+  breakpoints: Cache.Breakpoints,
+) {
+  const content = yield* ProviderShared.systemUpdateText("Anthropic Messages", message)
+  return {
+    role: "system" as const,
+    content: content.map((part) => ({
+      type: "text" as const,
+      text: part.text,
+      cache_control: cacheControl(breakpoints, part.cache),
+    })),
+  }
+})
+
 const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   request: LLMRequest,
   breakpoints: Cache.Breakpoints,
 ) {
   const messages: AnthropicMessage[] = []
 
-  for (const message of request.messages) {
+  for (const [index, message] of request.messages.entries()) {
+    if (message.role === "system") {
+      if (supportsNativeSystemUpdates(request)) {
+        yield* validateNativeSystemUpdate(request.messages, index)
+        messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
+        continue
+      }
+      const part = yield* ProviderShared.wrappedSystemUpdate("Anthropic Messages", message)
+      const block = { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
+      const previous = messages.at(-1)
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: [...previous.content, block] }
+      else messages.push({ role: "user", content: [block] })
+      continue
+    }
+
     if (message.role === "user") {
       const content: AnthropicUserBlock[] = []
       for (const part of message.content) {

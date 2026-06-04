@@ -1,14 +1,15 @@
 export * as SessionProjector from "./projector"
 
-import { and, eq, sql } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { SessionEvent } from "./event"
-import { SessionLegacy } from "./legacy"
+import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
+import { SessionInput } from "./input"
 import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
@@ -16,6 +17,9 @@ type DatabaseService = Database.Interface["db"]
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
+
+export class PromptAlreadyProjected extends Error {}
+export class SessionAlreadyProjected extends Error {}
 
 type Usage = {
   cost: number
@@ -27,7 +31,7 @@ type Usage = {
   }
 }
 
-function usage(part: (typeof SessionLegacy.Event.PartUpdated.Type)["data"]["part"] | unknown): Usage | undefined {
+function usage(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"] | unknown): Usage | undefined {
   if (typeof part !== "object" || part === null) return undefined
   const value = part as Record<string, unknown>
   if (value.type !== "step-finish") return undefined
@@ -35,7 +39,7 @@ function usage(part: (typeof SessionLegacy.Event.PartUpdated.Type)["data"]["part
   return { cost: value.cost as Usage["cost"], tokens: value.tokens as Usage["tokens"] }
 }
 
-function sessionRow(info: SessionLegacy.SessionInfo): typeof SessionTable.$inferInsert {
+function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInsert {
   return {
     id: info.id,
     project_id: info.projectID,
@@ -70,22 +74,20 @@ function sessionRow(info: SessionLegacy.SessionInfo): typeof SessionTable.$infer
 }
 
 function messageData(
-  info: (typeof SessionLegacy.Event.MessageUpdated.Type)["data"]["info"],
+  info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"],
 ): typeof MessageTable.$inferInsert.data {
   const { id: _, sessionID: __, ...rest } = info
   return rest as DeepMutable<typeof rest>
 }
 
-function partData(
-  part: (typeof SessionLegacy.Event.PartUpdated.Type)["data"]["part"],
-): typeof PartTable.$inferInsert.data {
+function partData(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"]): typeof PartTable.$inferInsert.data {
   const { id: _, messageID: __, sessionID: ___, ...rest } = part
   return rest as DeepMutable<typeof rest>
 }
 
 function applyUsage(
   db: DatabaseService,
-  sessionID: (typeof SessionLegacy.Event.MessageUpdated.Type)["data"]["sessionID"],
+  sessionID: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["sessionID"],
   value: Usage,
   sign = 1,
 ) {
@@ -107,37 +109,84 @@ function applyUsage(
 
 function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
+    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
+      decodeMessage({ ...row.data, id: row.id, type: row.type })
+    const writeMessage = (message: SessionMessage.Message) => {
+      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+      const encoded = encodeMessage(message)
+      const { id, type, ...data } = encoded
+      return db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: SessionMessage.ID.make(id),
+            session_id: event.data.sessionID,
+            type,
+            seq: event.seq,
+            time_created: DateTime.toEpochMillis(message.time.created),
+            data,
+          },
+        ])
+        .onConflictDoUpdate({
+          target: SessionMessageTable.id,
+          set: { type, time_created: DateTime.toEpochMillis(message.time.created), data },
+        })
+        .run()
+        .pipe(Effect.orDie)
+    }
     const adapter: SessionMessageUpdater.Adapter = {
       getCurrentAssistant() {
         return Effect.gen(function* () {
-          const rows = yield* db
+          // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
+          const row = yield* db
             .select()
             .from(SessionMessageTable)
             .where(
               and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
             )
-            .all()
+            .orderBy(desc(SessionMessageTable.seq))
+            .limit(1)
+            .get()
             .pipe(Effect.orDie)
-          return rows
-            .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
-            .find(
-              (message): message is SessionMessage.Assistant => message.type === "assistant" && !message.time.completed,
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "assistant" && !message.time.completed ? message : undefined
+        })
+      },
+      getAssistant(messageID) {
+        return Effect.gen(function* () {
+          const row = yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.id, messageID),
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.type, "assistant"),
+              ),
             )
+            .get()
+            .pipe(Effect.orDie)
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "assistant" ? message : undefined
         })
       },
       getCurrentCompaction() {
         return Effect.gen(function* () {
-          const rows = yield* db
+          const row = yield* db
             .select()
             .from(SessionMessageTable)
             .where(
               and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "compaction")),
             )
-            .all()
+            .orderBy(desc(SessionMessageTable.seq))
+            .limit(1)
+            .get()
             .pipe(Effect.orDie)
-          return rows
-            .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
-            .find((message): message is SessionMessage.Compaction => message.type === "compaction")
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "compaction" ? message : undefined
         })
       },
       getCurrentShell(callID) {
@@ -146,121 +195,18 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .select()
             .from(SessionMessageTable)
             .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "shell")))
+            .orderBy(desc(SessionMessageTable.seq))
             .all()
             .pipe(Effect.orDie)
           return rows
-            .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+            .map(decodeRow)
             .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
         })
       },
-      updateAssistant(message) {
-        return Effect.gen(function* () {
-          const encoded = encodeMessage(message)
-          const { id, type, ...data } = encoded
-          yield* db
-            .insert(SessionMessageTable)
-            .values([
-              {
-                id: SessionMessage.ID.make(id),
-                session_id: event.data.sessionID,
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            ])
-            .onConflictDoUpdate({
-              target: SessionMessageTable.id,
-              set: {
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            })
-            .run()
-            .pipe(Effect.orDie)
-        })
-      },
-      updateCompaction(message) {
-        return Effect.gen(function* () {
-          const encoded = encodeMessage(message)
-          const { id, type, ...data } = encoded
-          yield* db
-            .insert(SessionMessageTable)
-            .values([
-              {
-                id: SessionMessage.ID.make(id),
-                session_id: event.data.sessionID,
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            ])
-            .onConflictDoUpdate({
-              target: SessionMessageTable.id,
-              set: {
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            })
-            .run()
-            .pipe(Effect.orDie)
-        })
-      },
-      updateShell(message) {
-        return Effect.gen(function* () {
-          const encoded = encodeMessage(message)
-          const { id, type, ...data } = encoded
-          yield* db
-            .insert(SessionMessageTable)
-            .values([
-              {
-                id: SessionMessage.ID.make(id),
-                session_id: event.data.sessionID,
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            ])
-            .onConflictDoUpdate({
-              target: SessionMessageTable.id,
-              set: {
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            })
-            .run()
-            .pipe(Effect.orDie)
-        })
-      },
-      appendMessage(message) {
-        return Effect.gen(function* () {
-          const encoded = encodeMessage(message)
-          const { id, type, ...data } = encoded
-          yield* db
-            .insert(SessionMessageTable)
-            .values([
-              {
-                id: SessionMessage.ID.make(id),
-                session_id: event.data.sessionID,
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            ])
-            .onConflictDoUpdate({
-              target: SessionMessageTable.id,
-              set: {
-                type,
-                time_created: DateTime.toEpochMillis(message.time.created),
-                data,
-              },
-            })
-            .run()
-            .pipe(Effect.orDie)
-        })
-      },
+      updateAssistant: writeMessage,
+      updateCompaction: writeMessage,
+      updateShell: writeMessage,
+      appendMessage: writeMessage,
     }
     yield* SessionMessageUpdater.update(adapter, event)
   })
@@ -270,9 +216,17 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const { db } = yield* Database.Service
-    yield* events.project(SessionLegacy.Event.Created, (event) =>
+    yield* events.beforeCommit((event) => SessionInput.guardReservedID(db, event))
+    yield* events.project(SessionV1.Event.Created, (event) =>
       Effect.gen(function* () {
-        yield* db.insert(SessionTable).values(sessionRow(event.data.info)).run().pipe(Effect.orDie)
+        const stored = yield* db
+          .insert(SessionTable)
+          .values(sessionRow(event.data.info))
+          .onConflictDoNothing()
+          .returning({ sessionID: SessionTable.id })
+          .get()
+          .pipe(Effect.orDie)
+        if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
         if (event.data.info.workspaceID) {
           yield* db
             .update(WorkspaceTable)
@@ -283,7 +237,7 @@ export const layer = Layer.effectDiscard(
         }
       }),
     )
-    yield* events.project(SessionLegacy.Event.Updated, (event) =>
+    yield* events.project(SessionV1.Event.Updated, (event) =>
       db
         .update(SessionTable)
         .set(sessionRow(event.data.info))
@@ -291,10 +245,10 @@ export const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie),
     )
-    yield* events.project(SessionLegacy.Event.Deleted, (event) =>
+    yield* events.project(SessionV1.Event.Deleted, (event) =>
       db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
     )
-    yield* events.project(SessionLegacy.Event.MessageUpdated, (event) =>
+    yield* events.project(SessionV1.Event.MessageUpdated, (event) =>
       Effect.gen(function* () {
         const time_created = event.data.info.time.created
         const id = event.data.info.id
@@ -308,7 +262,7 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       }),
     )
-    yield* events.project(SessionLegacy.Event.MessageRemoved, (event) =>
+    yield* events.project(SessionV1.Event.MessageRemoved, (event) =>
       Effect.gen(function* () {
         const rows = yield* db
           .select()
@@ -327,7 +281,7 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       }),
     )
-    yield* events.project(SessionLegacy.Event.PartRemoved, (event) =>
+    yield* events.project(SessionV1.Event.PartRemoved, (event) =>
       Effect.gen(function* () {
         const row = yield* db
           .select()
@@ -344,7 +298,7 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       }),
     )
-    yield* events.project(SessionLegacy.Event.PartUpdated, (event) =>
+    yield* events.project(SessionV1.Event.PartUpdated, (event) =>
       Effect.gen(function* () {
         const id = event.data.part.id
         const messageID = event.data.part.messageID
@@ -363,93 +317,73 @@ export const layer = Layer.effectDiscard(
         if (next) yield* applyUsage(db, sessionID, next)
       }),
     )
-    // session.next.* projectors are disabled while the v2 message projection is stabilized.
-    // The events still publish through EventV2 and fan out through the opencode bridge.
-    // yield* events.project(SessionEvent.AgentSwitched, (event) =>
-    //   Effect.gen(function* () {
-    //     const message = Schema.encodeSync(SessionMessage.AgentSwitched)(
-    //       new SessionMessage.AgentSwitched({
-    //         id: event.id,
-    //         type: "agent-switched",
-    //         metadata: event.metadata,
-    //         agent: event.data.agent,
-    //         time: { created: event.data.timestamp },
-    //       }),
-    //     )
-    //     const data = { metadata: message.metadata, agent: message.agent, time: message.time }
-    //     yield* db
-    //       .update(SessionTable)
-    //       .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
-    //       .where(eq(SessionTable.id, event.data.sessionID))
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //     yield* db
-    //       .insert(SessionMessageTable)
-    //       .values([
-    //         {
-    //           id: SessionMessage.ID.make(event.id),
-    //           session_id: event.data.sessionID,
-    //           type: "agent-switched",
-    //           time_created: DateTime.toEpochMillis(event.data.timestamp),
-    //           data,
-    //         },
-    //       ])
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //   }),
-    // )
-    // yield* events.project(SessionEvent.ModelSwitched, (event) =>
-    //   Effect.gen(function* () {
-    //     const message = Schema.encodeSync(SessionMessage.ModelSwitched)(
-    //       new SessionMessage.ModelSwitched({
-    //         id: event.id,
-    //         type: "model-switched",
-    //         metadata: event.metadata,
-    //         model: event.data.model,
-    //         time: { created: event.data.timestamp },
-    //       }),
-    //     )
-    //     const data = { metadata: message.metadata, model: message.model, time: message.time }
-    //     yield* db
-    //       .update(SessionTable)
-    //       .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
-    //       .where(eq(SessionTable.id, event.data.sessionID))
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //     yield* db
-    //       .insert(SessionMessageTable)
-    //       .values([
-    //         {
-    //           id: SessionMessage.ID.make(event.id),
-    //           session_id: event.data.sessionID,
-    //           type: "model-switched",
-    //           time_created: DateTime.toEpochMillis(event.data.timestamp),
-    //           data,
-    //         },
-    //       ])
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //   }),
-    // )
-    // yield* events.project(SessionEvent.Prompted, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.AgentSwitched, (event) =>
+      db
+        .update(SessionTable)
+        .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
+    )
+    yield* events.project(SessionEvent.ModelSwitched, (event) =>
+      db
+        .update(SessionTable)
+        .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
+    )
+    yield* events.project(SessionEvent.Prompted, (event) =>
+      Effect.gen(function* () {
+        const existing = yield* db
+          .select({ id: SessionMessageTable.id })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.id, event.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (existing) return yield* Effect.die(new PromptAlreadyProjected())
+        yield* run(db, event)
+        const row = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.id, event.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row) return yield* Effect.die("Prompt projection was not stored")
+        const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
+        if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
+        if (event.seq === undefined)
+          return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
+        yield* SessionInput.project(db, {
+          id: SessionMessage.ID.make(event.id),
+          sessionID: event.data.sessionID,
+          prompt: event.data.prompt,
+          delivery: event.data.delivery,
+          timeCreated: event.data.timestamp,
+          promotedSeq: event.seq,
+        })
+      }),
+    )
+    yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
+    yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Progress, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Delta, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
   }),
 )
 

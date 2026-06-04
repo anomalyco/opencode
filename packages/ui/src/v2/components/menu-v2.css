@@ -11,7 +11,6 @@
   box-shadow: var(--v2-elevation-floating);
 
   outline: none;
-  font-family: var(--v2-font-family-sans), "Inter", system-ui, sans-serif;
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -26,11 +25,11 @@
 }
 
 [data-component="menu-v2-item"] {
-  --menu-v2-fg: var(--text-text-base);
-  --menu-v2-fg-muted: var(--text-text-faint);
-  --menu-v2-fg-subtle: var(--text-text-muted);
-  --menu-v2-icon: var(--icon-icon-base);
-  --menu-v2-accent: var(--text-text-accent);
+  --menu-v2-fg: var(--v2-text-text-base);
+  --menu-v2-fg-muted: var(--v2-text-text-faint);
+  --menu-v2-fg-subtle: var(--v2-text-text-muted);
+  --menu-v2-icon: var(--v2-icon-icon-base);
+  --menu-v2-accent: var(--v2-text-text-accent);
   --menu-v2-badge-bg: var(--v2-background-bg-layer-02);
   --menu-v2-badge-border: var(--v2-border-border-base);
   --menu-v2-hover: var(--v2-overlay-simple-overlay-hover);
@@ -52,7 +51,6 @@
   cursor: default;
   user-select: none;
 
-  font-family: var(--v2-font-family-sans), "Inter", system-ui, sans-serif;
   font-variation-settings: "slnt" 0;
   font-variant-numeric: tabular-nums;
   color: var(--menu-v2-fg);
@@ -164,12 +162,11 @@
   height: 28px;
   padding: 0 12px;
 
-  font-family: var(--v2-font-family-sans), "Inter", system-ui, sans-serif;
   font-size: 11px;
   font-weight: 530;
   line-height: 100%;
   letter-spacing: 0.05px;
-  color: var(--text-text-faint);
+  color: var(--v2-text-text-faint);
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
