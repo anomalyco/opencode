@@ -11,11 +11,66 @@ import { Global } from "@opencode-ai/core/global"
 import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 import { Filesystem } from "@/util/filesystem"
 import { PluginLoader } from "../../../src/plugin/loader"
+import { needsBunServeCompat } from "../../../src/plugin"
 
 const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
 type Row = Record<string, unknown>
+
+test("detects Bun serve compatibility from plugin entry source", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const bunServePlugin = path.join(dir, "bun-serve-plugin.js")
+      const contextModePlugin = path.join(dir, "context-mode-plugin.js")
+      await Bun.write(
+        bunServePlugin,
+        `const bun = runtime.Bun
+if (!bun) throw new Error("Runtime skill source server requires Bun.serve")
+bun.serve({ fetch() { return new Response("ok") } })
+`,
+      )
+      await Bun.write(
+        contextModePlugin,
+        `if (globalThis.Bun) {
+  require(["bun", "sqlite"].join(":")).Database
+} else {
+  require(["node", "sqlite"].join(":")).DatabaseSync
+}
+`,
+      )
+      return { bunServePlugin, contextModePlugin }
+    },
+  })
+
+  await expect(needsBunServeCompat({ entry: tmp.extra.bunServePlugin })).resolves.toBe(true)
+  await expect(needsBunServeCompat({ entry: tmp.extra.contextModePlugin })).resolves.toBe(false)
+})
+
+test("detects Bun serve compatibility without a Bun global", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "bun-serve-plugin.js")
+      await Bun.write(file, `const server = bun.serve({ fetch() { return new Response("ok") } })\n`)
+      return { file }
+    },
+  })
+
+  const runtime = globalThis as { Bun?: unknown }
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Bun")
+  if (descriptor?.configurable === false) {
+    await expect(needsBunServeCompat({ entry: tmp.extra.file })).resolves.toBe(true)
+    return
+  }
+
+  try {
+    delete runtime.Bun
+    await expect(needsBunServeCompat({ entry: tmp.extra.file })).resolves.toBe(true)
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "Bun", descriptor)
+    else delete runtime.Bun
+  }
+})
 
 test("does not retry permanent file plugin load errors", async () => {
   await using tmp = await tmpdir({

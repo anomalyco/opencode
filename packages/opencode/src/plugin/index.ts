@@ -32,6 +32,8 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { spawnSync } from "node:child_process"
 import { createServer } from "node:http"
+import { readFile } from "node:fs/promises"
+import { fileURLToPath } from "node:url"
 
 const log = Log.create({ service: "plugin" })
 
@@ -50,7 +52,7 @@ type BunServeResult = {
   stop(force?: boolean): void
 }
 
-type BunCompat = {
+type BunServeCompat = {
   serve?: (options: BunServeOptions) => BunServeResult
   which?: (command: string) => string | null
 }
@@ -74,13 +76,16 @@ function port(input: number | undefined) {
   return 20_000 + Math.floor(Math.random() * 40_000)
 }
 
-function ensureBunCompat() {
-  const runtime = globalThis as unknown as { Bun?: BunCompat }
-  if (runtime.Bun?.serve) return
+function withBunServeCompat<T>(enabled: boolean, callback: () => Promise<T>) {
+  if (!enabled) return callback()
+
+  const runtime = globalThis as unknown as { Bun?: BunServeCompat }
+  const original = runtime.Bun
+  if (original?.serve) return callback()
 
   runtime.Bun = {
-    ...runtime.Bun,
-    which: runtime.Bun?.which ?? which,
+    ...original,
+    which: original?.which ?? which,
     serve(options: BunServeOptions) {
       const hostname = options.hostname ?? "127.0.0.1"
       const listenPort = port(options.port)
@@ -115,6 +120,20 @@ function ensureBunCompat() {
       }
     },
   }
+
+  return Promise.resolve()
+    .then(callback)
+    .finally(() => {
+      if (original) runtime.Bun = original
+      else delete runtime.Bun
+    })
+}
+
+export async function needsBunServeCompat(load: Pick<PluginLoader.Loaded, "entry">) {
+  const source = await readFile(load.entry.startsWith("file://") ? fileURLToPath(load.entry) : load.entry, "utf8").catch(
+    () => "",
+  )
+  return /\b[Bb]un\.serve\s*\(/.test(source) || /\b[Bb]un\.which\s*\(/.test(source) || source.includes("requires Bun.serve")
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -259,8 +278,6 @@ export const layer = Layer.effect(
         }
         if (plugins.length) yield* config.waitForDependencies()
 
-        ensureBunCompat()
-
         const loaded = yield* Effect.promise(() =>
           PluginLoader.loadExternal({
             items: plugins,
@@ -308,7 +325,7 @@ export const layer = Layer.effect(
           // Keep plugin execution sequential so hook registration and execution
           // order remains deterministic across plugin runs.
           yield* Effect.tryPromise({
-            try: () => applyPlugin(load, input, hooks),
+            try: async () => withBunServeCompat(await needsBunServeCompat(load), () => applyPlugin(load, input, hooks)),
             catch: (err) => {
               const message = errorMessage(err)
               log.error("failed to load plugin", { path: load.spec, error: message })
