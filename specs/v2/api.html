@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>opencode v2 API</title>
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --fg: #1f2723;
+        --muted: #6f756d;
+        --dim: #ebe3d6;
+        --panel: #fffaf1;
+        --line: #26342f;
+        --thin: #d6ccbd;
+        --code: #eee5d8;
+        --accent: #496b5a;
+        --accent-soft: #dce7dc;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--bg);
+        color: var(--fg);
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(73, 107, 90, 0.12), transparent 34rem),
+          linear-gradient(90deg, rgba(38, 52, 47, 0.055) 1px, transparent 1px),
+          linear-gradient(rgba(38, 52, 47, 0.045) 1px, transparent 1px), var(--bg);
+        background-size: 72px 72px;
+        color: var(--fg);
+        line-height: 1.5;
+      }
+
+      main {
+        width: 100%;
+        padding: 40px 32px 72px;
+      }
+
+      header {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+        gap: 32px;
+        align-items: end;
+        border-bottom: 2px solid var(--line);
+        padding-bottom: 32px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 1180px;
+        font-size: clamp(4rem, 12vw, 13rem);
+        line-height: 0.82;
+        letter-spacing: -0.09em;
+      }
+
+      h2 {
+        font-size: clamp(1.75rem, 4vw, 4rem);
+        line-height: 0.95;
+        letter-spacing: -0.07em;
+      }
+
+      h3 {
+        font-size: 0.78rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      }
+
+      code {
+        border: 1px solid var(--thin);
+        padding: 1px 5px;
+        background: var(--code);
+        color: var(--fg);
+        font-size: 0.9em;
+      }
+
+      pre {
+        overflow: auto;
+        margin: 0;
+        border: 1px solid var(--line);
+        padding: 16px;
+        background: var(--code);
+        color: var(--fg);
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      pre code {
+        border: 0;
+        padding: 0;
+        background: transparent;
+        font-size: inherit;
+      }
+
+      section {
+        margin-top: 34px;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        border: 1px solid var(--line);
+        margin-bottom: 18px;
+        padding: 5px 8px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .lede {
+        max-width: 620px;
+        color: var(--muted);
+        font-size: 1.15rem;
+      }
+
+      .panel {
+        border: 2px solid var(--line);
+        background: rgba(255, 250, 241, 0.92);
+        box-shadow: 0 20px 50px rgba(31, 39, 35, 0.08);
+      }
+
+      .panel-pad {
+        padding: 22px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .span-12 {
+        grid-column: span 12;
+      }
+
+      .span-8 {
+        grid-column: span 8;
+      }
+
+      .span-6 {
+        grid-column: span 6;
+      }
+
+      .span-4 {
+        grid-column: span 4;
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .rule {
+        display: grid;
+        gap: 16px;
+        border: 2px solid var(--line);
+        padding: 22px;
+        background: var(--accent);
+        color: #fffaf1;
+      }
+
+      .rule strong {
+        font-size: clamp(1.45rem, 3vw, 2.45rem);
+        line-height: 1;
+        letter-spacing: -0.06em;
+      }
+
+      .rule code {
+        border-color: var(--bg);
+        background: rgba(255, 250, 241, 0.18);
+        color: #fffaf1;
+      }
+
+      .key {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        border: 1px solid var(--line);
+        padding: 4px 8px;
+        background: var(--panel);
+        color: var(--fg);
+        font-size: 0.75rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .pill.inverse {
+        background: var(--accent);
+        color: #fffaf1;
+      }
+
+      .diagram {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 2px solid var(--line);
+        background: var(--panel);
+      }
+
+      .diagram text {
+        fill: var(--fg);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      .diagram .box {
+        fill: var(--panel);
+        stroke: var(--fg);
+        stroke-width: 2;
+      }
+
+      .diagram .fill {
+        fill: var(--accent);
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+
+      .diagram .fill-text {
+        fill: #fffaf1;
+      }
+
+      .diagram .line {
+        stroke: var(--fg);
+        stroke-width: 2;
+        fill: none;
+        marker-end: url(#arrow);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 2px solid var(--line);
+        background: var(--panel);
+      }
+
+      th,
+      td {
+        border: 1px solid var(--thin);
+        padding: 11px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        border-bottom: 2px solid var(--line);
+        background: var(--accent);
+        color: #fffaf1;
+        font-size: 0.75rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      td.route {
+        width: 34%;
+        white-space: nowrap;
+      }
+
+      td.body {
+        width: 28%;
+      }
+
+      td.body code {
+        display: block;
+        white-space: pre-wrap;
+        line-height: 1.45;
+      }
+
+      td.method {
+        width: 72px;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+      }
+
+      td.context {
+        width: 150px;
+      }
+
+      td.operation {
+        width: 210px;
+        white-space: nowrap;
+      }
+
+      .context-tag {
+        display: inline-block;
+        border: 1px solid var(--line);
+        padding: 3px 7px;
+        font-size: 0.72rem;
+        font-weight: 900;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      tr.question-row td {
+        background: #f7e8b7;
+      }
+
+      .request {
+        background: var(--accent);
+        color: #fffaf1;
+      }
+
+      .session {
+        background: var(--panel);
+        color: var(--fg);
+      }
+
+      .server {
+        background: var(--dim);
+        color: var(--fg);
+      }
+
+      .note {
+        border-left: 6px solid var(--line);
+        padding: 14px 18px;
+        background: var(--dim);
+      }
+
+      .toc {
+        display: grid;
+        gap: 8px;
+      }
+
+      .toc a {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--thin);
+        padding: 8px 0;
+        color: var(--fg);
+        text-decoration: none;
+      }
+
+      .toc span {
+        color: var(--muted);
+      }
+
+      @media (max-width: 980px) {
+        main {
+          padding: 28px 16px 56px;
+        }
+
+        header,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .span-12,
+        .span-8,
+        .span-6,
+        .span-4 {
+          grid-column: 1 / -1;
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <div class="eyebrow">opencode v2</div>
+          <h1>API map</h1>
+        </div>
+        <div class="stack">
+          <p class="lede">
+            A single <code>/api</code> route surface for simple clients and multi-directory frontends. The important
+            design question is not route nesting; it is where runtime context comes from.
+          </p>
+          <div class="key">
+            <span class="pill">Server scoped</span>
+            <span class="pill inverse">Request context</span>
+            <span class="pill">Session pinned</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="grid">
+        <article class="span-8 rule">
+          <strong
+            >Everything has one canonical route. Some routes are server-scoped; runtime routes use context; session item
+            routes use the session.</strong
+          >
+          <p>
+            Server-scoped routes manage the whole server: projects, workspace lifecycle, and auth accounts. Runtime
+            context is for anything resolved from an active directory, including config, provider capabilities, tools,
+            files, and VCS.
+          </p>
+        </article>
+        <nav class="span-4 panel panel-pad toc" aria-label="Page sections">
+          <a href="#context"><strong>Context Model</strong><span>how calls resolve</span></a>
+          <a href="#endpoints"><strong>Endpoint Inventory</strong><span>all planned routes</span></a>
+          <a href="#events"><strong>Events</strong><span>one envelope</span></a>
+          <a href="#store"><strong>Frontend Store</strong><span>sync model</span></a>
+        </nav>
+      </section>
+
+      <section id="context" class="grid">
+        <div class="span-12 stack">
+          <h2>Context Model</h2>
+          <svg class="diagram" viewBox="0 0 1280 360" role="img" aria-labelledby="ctx-title ctx-desc">
+            <title id="ctx-title">API context resolution</title>
+            <desc id="ctx-desc">
+              Non-session routes resolve from request context, session item routes resolve from session storage.
+            </desc>
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L9,3 z" fill="#26342f" />
+              </marker>
+            </defs>
+
+            <rect class="fill" x="34" y="44" width="294" height="96" />
+            <text class="fill-text" x="58" y="84" font-size="24" font-weight="900">Non-session route</text>
+            <text class="fill-text" x="58" y="116" font-size="17">/api/file, /api/vcs/status</text>
+            <path class="line" d="M328 92 H472" />
+            <rect class="box" x="486" y="44" width="286" height="96" />
+            <text x="510" y="84" font-size="24" font-weight="900">Request context</text>
+            <text x="510" y="116" font-size="17">query params or default runtime</text>
+            <path class="line" d="M772 92 H916" />
+            <rect class="box" x="930" y="44" width="316" height="96" />
+            <text x="954" y="84" font-size="24" font-weight="900">Runtime context</text>
+            <text x="954" y="116" font-size="17">directory + workspaceID?</text>
+
+            <rect class="box" x="34" y="220" width="294" height="96" />
+            <text x="58" y="260" font-size="24" font-weight="900">Session item route</text>
+            <text x="58" y="292" font-size="17">/api/session/:id/prompt</text>
+            <path class="line" d="M328 268 H472" />
+            <rect class="fill" x="486" y="220" width="286" height="96" />
+            <text class="fill-text" x="510" y="260" font-size="24" font-weight="900">Session row</text>
+            <text class="fill-text" x="510" y="292" font-size="17">contains pinned context</text>
+            <path class="line" d="M772 268 H916" />
+            <rect class="box" x="930" y="220" width="316" height="96" />
+            <text x="954" y="260" font-size="24" font-weight="900">Runtime context</text>
+            <text x="954" y="292" font-size="17">directory + workspaceID?</text>
+          </svg>
+        </div>
+
+        <article class="span-6 panel panel-pad stack">
+          <h3>Request-context calls</h3>
+          <p class="muted">
+            These calls operate against a directory, optionally through a workspace. Simple clients omit context and use
+            the default runtime.
+          </p>
+          <pre><code>GET /api/fs/tree?path=.&directory=/repo/app&workspace=ws_123</code></pre>
+        </article>
+
+        <article class="span-6 panel panel-pad stack">
+          <h3>Session-pinned calls</h3>
+          <p class="muted">
+            These calls never take request context. The session is already pinned to the directory and workspace it was
+            created in.
+          </p>
+          <pre><code>POST /api/session/ses_123/prompt
+
+// server resolves
+sessionID -&gt; { directory, workspaceID? }</code></pre>
+        </article>
+      </section>
+
+      <section id="endpoints" class="grid">
+        <div class="span-12 stack">
+          <h2>Operation Inventory</h2>
+          <p class="muted">
+            The SDK is the source of truth. HTTP routes are mounts for RPC-style operations.
+            <span class="context-tag server">server</span> operations do not use runtime context.
+            <span class="context-tag request">request</span> operations use request/default runtime context from
+            <code>directory</code> and <code>workspace</code> query parameters.
+            <span class="context-tag session">session</span> operations use pinned session context and should not accept
+            context input.
+          </p>
+        </div>
+
+        <article class="span-12 panel panel-pad stack">
+          <table>
+            <thead>
+              <tr>
+                <th>Operation</th>
+                <th>Input</th>
+                <th>Context</th>
+                <th>HTTP mount</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="operation"><code>agent.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/agent</code></td>
+                <td>Available agents.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>auth.activate</code></td>
+                <td class="body"><code>{ accountID: AccountID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>POST /api/auth/:accountID/activate</code></td>
+                <td>Set the account as active for its service.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>auth.create</code></td>
+                <td class="body">
+                  <code
+                    >{ serviceID: ServiceID credential: | { type: "oauth", refresh: string, access: string, expires:
+                    number } | { type: "api", key: string, metadata?: Record&lt;string, string&gt; } description?:
+                    string active?: boolean }</code
+                  >
+                </td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>POST /api/auth</code></td>
+                <td>Create an auth account.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>auth.delete</code></td>
+                <td class="body"><code>{ accountID: AccountID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>DELETE /api/auth/:accountID</code></td>
+                <td>Remove an auth account.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>auth.get</code></td>
+                <td class="body"><code>{ accountID: AccountID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/auth/:accountID</code></td>
+                <td>Get one auth account.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>auth.list</code></td>
+                <td class="body"><code>{ serviceID?: ServiceID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/auth</code></td>
+                <td>List saved auth accounts. Response includes active account mapping.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>auth.update</code></td>
+                <td class="body">
+                  <code
+                    >{ accountID: AccountID description?: string credential?: | { type: "oauth", refresh: string,
+                    access: string, expires: number } | { type: "api", key: string, metadata?: Record&lt;string,
+                    string&gt; } }</code
+                  >
+                </td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>PATCH /api/auth/:accountID</code></td>
+                <td>Update account description or credential.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>catalog.model.get</code></td>
+                <td class="body"><code>{ providerID: ProviderID modelID: ModelID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/catalog/model/:providerID/:modelID</code></td>
+                <td>Get one catalog model.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>catalog.model.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/catalog/model</code></td>
+                <td>List flattened catalog models.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>command.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/command</code></td>
+                <td>Available commands.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>config.get</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/config</code></td>
+                <td>Resolved config.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>config.update</code></td>
+                <td class="body"><code>{ config: Config }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>PATCH /api/config</code></td>
+                <td>Update config.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>event.subscribe</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/event</code></td>
+                <td>Server-sent events for the resolved runtime context.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>formatter.status</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/formatter</code></td>
+                <td>Formatter status.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>fs.file</code></td>
+                <td class="body"><code>{ path: string }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/fs/file</code></td>
+                <td>Read one file.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>fs.grep</code></td>
+                <td class="body"><code>{ pattern: string include?: string limit?: number }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/fs/grep</code></td>
+                <td>Search file contents.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>fs.search</code></td>
+                <td class="body"><code>{ query: string type?: "file" | "directory" limit?: number }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/fs/search</code></td>
+                <td>Search paths by name.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>fs.tree</code></td>
+                <td class="body"><code>{ path: string }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/fs/tree</code></td>
+                <td>Browse a directory.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>lsp.status</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/lsp</code></td>
+                <td>LSP status.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.prompt.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/mcp/prompt</code></td>
+                <td>List MCP prompts.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.prompt.render</code></td>
+                <td class="body">
+                  <code>{ server: string name: string arguments?: Record&lt;string, string&gt; }</code>
+                </td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/mcp/prompt/render</code></td>
+                <td>Render one MCP prompt.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.resource.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/mcp/resource</code></td>
+                <td>List MCP resources.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.resource.read</code></td>
+                <td class="body"><code>{ server: string uri: string }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/mcp/resource/read</code></td>
+                <td>Read one MCP resource.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.server.create</code></td>
+                <td class="body">
+                  <code
+                    >{ name: string config: | { type: "local", command: string, arguments?: string[], environment?:
+                    Record&lt;string, string&gt; } | { type: "remote", url: string, headers?: Record&lt;string,
+                    string&gt;, oauth?: boolean | object } }</code
+                  >
+                </td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/mcp/server</code></td>
+                <td>Add an MCP server to runtime config.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.server.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/mcp/server</code></td>
+                <td>List MCP servers with status and auth state.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.server.oauth.callback</code></td>
+                <td class="body"><code>{ name: string code: string }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/mcp/server/:name/oauth/callback</code></td>
+                <td>Complete MCP OAuth.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.server.oauth.delete</code></td>
+                <td class="body"><code>{ name: string }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>DELETE /api/mcp/server/:name/oauth</code></td>
+                <td>Remove MCP OAuth credentials.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>mcp.server.oauth.start</code></td>
+                <td class="body"><code>{ name: string }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/mcp/server/:name/oauth</code></td>
+                <td>Start MCP OAuth.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>permission.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/permission</code></td>
+                <td>Pending permission requests.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>permission.reply</code></td>
+                <td class="body"><code>{ permissionID: PermissionID response: PermissionReply }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/permission/:permissionID/reply</code></td>
+                <td>Reply to a permission request.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>project.get</code></td>
+                <td class="body"><code>{ projectID: ProjectID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/project/:projectID</code></td>
+                <td>Get project metadata.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>project.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/project</code></td>
+                <td>List projects known to this server.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>project.update</code></td>
+                <td class="body">
+                  <code
+                    >{ projectID: ProjectID name?: string icon?: string commands?: Array&lt;{ name: string command:
+                    string }&gt; }</code
+                  >
+                </td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>PATCH /api/project/:projectID</code></td>
+                <td>Update project metadata.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>provider.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/provider</code></td>
+                <td>Provider inventory for the runtime context.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>pty.create</code></td>
+                <td class="body"><code>{ command?: string cwd?: string shell?: string }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/pty</code></td>
+                <td>Create PTY in the runtime context.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>pty.delete</code></td>
+                <td class="body"><code>{ ptyID: PtyID }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>DELETE /api/pty/:ptyID</code></td>
+                <td>Delete PTY.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>pty.get</code></td>
+                <td class="body"><code>{ ptyID: PtyID }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/pty/:ptyID</code></td>
+                <td>Get PTY info.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>pty.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/pty</code></td>
+                <td>List PTYs for the runtime.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>pty.update</code></td>
+                <td class="body">
+                  <code>{ ptyID: PtyID title?: string size?: { columns: number, rows: number } }</code>
+                </td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>PATCH /api/pty/:ptyID</code></td>
+                <td>Update PTY.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>question.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/question</code></td>
+                <td>Pending user questions.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>question.reject</code></td>
+                <td class="body"><code>{ questionID: QuestionID }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/question/:questionID/reject</code></td>
+                <td>Reject a question.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>question.reply</code></td>
+                <td class="body"><code>{ questionID: QuestionID response: QuestionResponse }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/question/:questionID/reply</code></td>
+                <td>Reply to a question.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.compact</code></td>
+                <td class="body"><code>{ sessionID: SessionID }</code></td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>POST /api/session/:sessionID/compact</code></td>
+                <td>Compact the session conversation.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.context</code></td>
+                <td class="body"><code>{ sessionID: SessionID }</code></td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>GET /api/session/:sessionID/context</code></td>
+                <td>Return active context messages after the last compaction.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.create</code></td>
+                <td class="body">
+                  <code
+                    >{ title?: string agent?: string model?: { providerID: ProviderID, modelID: ModelID } permission?:
+                    PermissionRule[] }</code
+                  >
+                </td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/session</code></td>
+                <td>Create a session pinned to resolved runtime context.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.delete</code></td>
+                <td class="body"><code>{ sessionID: SessionID }</code></td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>DELETE /api/session/:sessionID</code></td>
+                <td>Delete a session.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.diff</code></td>
+                <td class="body"><code>{ sessionID: SessionID }</code></td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>GET /api/session/:sessionID/diff</code></td>
+                <td>Return session diff summary.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.get</code></td>
+                <td class="body"><code>{ sessionID: SessionID }</code></td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>GET /api/session/:sessionID</code></td>
+                <td>Get one session.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.list</code></td>
+                <td class="body">
+                  <code
+                    >{ limit?: number order?: "asc" | "desc" path?: string roots?: boolean start?: number search?:
+                    string cursor?: string }</code
+                  >
+                </td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/session</code></td>
+                <td>List sessions for the current runtime context by default.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.message.list</code></td>
+                <td class="body">
+                  <code>{ sessionID: SessionID limit?: number order?: "asc" | "desc" cursor?: string }</code>
+                </td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>GET /api/session/:sessionID/message</code></td>
+                <td>Page through session messages.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.prompt</code></td>
+                <td class="body">
+                  <code>{ sessionID: SessionID prompt: Prompt delivery?: "immediate" | "deferred" }</code>
+                </td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>POST /api/session/:sessionID/prompt</code></td>
+                <td>Create a user message and queue the agent loop.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.todo</code></td>
+                <td class="body"><code>{ sessionID: SessionID }</code></td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>GET /api/session/:sessionID/todo</code></td>
+                <td>Return todos associated with the session.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.update</code></td>
+                <td class="body">
+                  <code>{ sessionID: SessionID title?: string archived?: number permission?: PermissionRule[] }</code>
+                </td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>PATCH /api/session/:sessionID</code></td>
+                <td>Update title, archival state, or session metadata.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>session.wait</code></td>
+                <td class="body"><code>{ sessionID: SessionID }</code></td>
+                <td><span class="context-tag session">session</span></td>
+                <td class="route"><code>POST /api/session/:sessionID/wait</code></td>
+                <td>Wait until the session is idle.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>skill.list</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/skill</code></td>
+                <td>Available skills.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>vcs.diff</code></td>
+                <td class="body"><code>{ format?: "json" | "patch" mode?: "worktree" | "default" }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/vcs/diff</code></td>
+                <td>Diff for the runtime directory.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>vcs.get</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/vcs</code></td>
+                <td>VCS metadata.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>vcs.patch</code></td>
+                <td class="body"><code>{ patch: string }</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>POST /api/vcs/patch</code></td>
+                <td>Apply a patch to the runtime directory.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>vcs.status</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag request">request</span></td>
+                <td class="route"><code>GET /api/vcs/status</code></td>
+                <td>Changed files.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>workspace.create</code></td>
+                <td class="body">
+                  <code
+                    >{ projectID?: ProjectID name?: string directory?: string type: string metadata?: Record&lt;string,
+                    unknown&gt; }</code
+                  >
+                </td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>POST /api/workspace</code></td>
+                <td>Create or register a workspace.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>workspace.delete</code></td>
+                <td class="body"><code>{ workspaceID: WorkspaceID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>DELETE /api/workspace/:workspaceID</code></td>
+                <td>Remove a workspace registration.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>workspace.get</code></td>
+                <td class="body"><code>{ workspaceID: WorkspaceID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/workspace/:workspaceID</code></td>
+                <td>Get workspace metadata.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>workspace.list</code></td>
+                <td class="body"><code>{ projectID?: ProjectID }</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/workspace</code></td>
+                <td>List workspaces, optionally filtered by project.</td>
+              </tr>
+              <tr class="question-row">
+                <td class="operation"><code>workspace.status</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>GET /api/workspace/status</code></td>
+                <td>Connection/lifecycle status for all workspaces. Needs team discussion.</td>
+              </tr>
+              <tr class="question-row">
+                <td class="operation"><code>workspace.sync</code></td>
+                <td class="body"><code>{}</code></td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>POST /api/workspace/sync</code></td>
+                <td>Sync workspace metadata from adapters. Needs team discussion.</td>
+              </tr>
+              <tr>
+                <td class="operation"><code>workspace.update</code></td>
+                <td class="body">
+                  <code
+                    >{ workspaceID: WorkspaceID name?: string metadata?: Record&lt;string, unknown&gt; archived?:
+                    boolean }</code
+                  >
+                </td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>PATCH /api/workspace/:workspaceID</code></td>
+                <td>Update workspace metadata or lifecycle state.</td>
+              </tr>
+              <tr class="question-row">
+                <td class="operation"><code>workspace.warp</code></td>
+                <td class="body">
+                  <code>{ workspaceID?: WorkspaceID sessionID: SessionID copyChanges: boolean }</code>
+                </td>
+                <td><span class="context-tag server">server</span></td>
+                <td class="route"><code>POST /api/workspace/warp</code></td>
+                <td>Move a session into or out of a workspace. Needs team discussion.</td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section id="events" class="grid">
+        <article class="span-12 panel panel-pad stack">
+          <h2>Event Envelope</h2>
+          <p class="muted">
+            Every event uses the same envelope. Resource identity belongs in <code>payload</code>. Runtime identity
+            belongs in <code>context</code>.
+          </p>
+          <div class="grid">
+            <pre class="span-6"><code>type ApiEvent&lt;Payload&gt; = {
+  id: string
+  type: string
+  time: number
+  context: {
+    directory: string
+    workspaceID?: string
+  }
+  payload: Payload
+}</code></pre>
+            <pre class="span-6"><code>{
+  "id": "evt_01",
+  "type": "message.part.delta",
+  "time": 1760000000000,
+  "context": {
+    "directory": "/repo/app",
+    "workspaceID": "ws_123"
+  },
+  "payload": {
+    "sessionID": "ses_123",
+    "messageID": "msg_456",
+    "partID": "part_789",
+    "field": "text",
+    "delta": "hello"
+  }
+}</code></pre>
+          </div>
+        </article>
+      </section>
+
+      <section id="store" class="grid">
+        <article class="span-12 panel panel-pad stack">
+          <h2>Frontend Sync Store</h2>
+          <p class="muted">
+            A frontend can keep one giant store like the current TUI. Runtime data is partitioned by
+            <code>contextKey</code>. Durable entities such as sessions and messages are keyed by their own IDs.
+          </p>
+          <pre><code>type RuntimeContext = {
+  directory: string
+  workspaceID?: string
+}
+
+type ContextKey = string
+type SessionID = string
+type MessageID = string
+
+type SyncStore = {
+  status: "loading" | "partial" | "complete"
+
+  shared: {
+    provider: Provider[]
+    provider_default: Record&lt;string, string&gt;
+    provider_next: ProviderListResponse
+    provider_auth: Record&lt;string, ProviderAuthMethod[]&gt;
+    console_state: ConsoleState
+  }
+
+  contexts: Record&lt;
+    ContextKey,
+    {
+      context: RuntimeContext
+
+      config: Config
+      agent: Agent[]
+      command: Command[]
+      lsp: LspStatus[]
+      formatter: FormatterStatus[]
+      vcs: VcsInfo | undefined
+      mcp: Record&lt;string, McpStatus&gt;
+      mcp_resource: Record&lt;string, McpResource&gt;
+
+      session: SessionID[]
+      session_status: Record&lt;SessionID, SessionStatus&gt;
+    }
+  &gt;
+
+  session: Record&lt;SessionID, Session &amp; { context: RuntimeContext }&gt;
+  session_diff: Record&lt;SessionID, Snapshot.FileDiff[]&gt;
+  todo: Record&lt;SessionID, Todo[]&gt;
+  permission: Record&lt;SessionID, PermissionRequest[]&gt;
+  question: Record&lt;SessionID, QuestionRequest[]&gt;
+
+  message: Record&lt;SessionID, Message[]&gt;
+  part: Record&lt;MessageID, Part[]&gt;
+}
+
+function contextKey(context: RuntimeContext) {
+  return `${context.workspaceID ?? "local"}:${context.directory}`
+}</code></pre>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

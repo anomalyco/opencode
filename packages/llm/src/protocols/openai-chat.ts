@@ -1,8 +1,7 @@
-import { Array as Arr, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
@@ -10,6 +9,7 @@ import {
   Usage,
   type FinishReason,
   type LLMRequest,
+  type ReasoningPart,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
@@ -128,6 +128,7 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 
 const OpenAIChatDelta = Schema.Struct({
   content: optionalNull(Schema.String),
+  reasoning_content: optionalNull(Schema.String),
   tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
 })
 
@@ -202,12 +203,17 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   message: OpenAIChatRequestMessage,
 ) {
   const content: TextPart[] = []
+  const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["text", "tool-call"]))
-      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "tool-call"])
+    if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
       content.push(part)
+      continue
+    }
+    if (part.type === "reasoning") {
+      reasoning.push(part)
       continue
     }
     if (part.type === "tool-call") {
@@ -219,7 +225,10 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
-    reasoning_content: openAICompatibleReasoningContent(message.native?.openaiCompatible),
+    reasoning_content:
+      reasoning.length > 0
+        ? reasoning.map((part) => part.text).join("")
+        : openAICompatibleReasoningContent(message.native?.openaiCompatible),
   }
 })
 
@@ -242,7 +251,19 @@ const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: Op
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
-  return [...system, ...Arr.flatten(yield* Effect.forEach(request.messages, lowerMessage))]
+  const messages = [...system]
+  for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
+      const previous = messages.at(-1)
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: `${previous.content}\n${part.text}` }
+      else messages.push({ role: "user", content: part.text })
+      continue
+    }
+    messages.push(...(yield* lowerMessage(message)))
+  }
+  return messages
 })
 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
@@ -325,6 +346,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     let lifecycle = state.lifecycle
 
+    if (delta?.reasoning_content)
+      lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
+
     if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
 
     for (const tool of toolDeltas) {
@@ -393,28 +417,15 @@ export const protocol = Protocol.make({
   },
 })
 
-const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIChatBody))
-
-export const httpTransport = HttpTransport.httpJson({
-  endpoint: Endpoint.path(PATH),
-  auth: Auth.bearer(),
-  framing: Framing.sse,
-  encodeBody,
-})
+export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>()
 
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
   protocol,
+  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
+  auth: Auth.none,
   transport: httpTransport,
-  defaults: {
-    baseURL: DEFAULT_BASE_URL,
-  },
 })
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
 
 export * as OpenAIChat from "./openai-chat"

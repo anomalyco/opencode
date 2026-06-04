@@ -9,8 +9,10 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
+  type TextPart,
   type ToolResultPart,
 } from "../schema"
+export { isRecord } from "../utils/record"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -18,13 +20,6 @@ export const encodeJson = Schema.encodeSync(Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
-
-/**
- * Plain-record narrowing. Excludes arrays so routes checking nested JSON
- * Schema fragments don't accidentally treat a tuple as a key/value bag.
- */
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across
@@ -86,7 +81,7 @@ export const subtractTokens = (total: number | undefined, subtrahend: number | u
  */
 export const sumTokens = (...values: ReadonlyArray<number | undefined>): number | undefined => {
   if (values.every((value) => value === undefined)) return undefined
-  return values.reduce<number>((acc, value) => acc + (value ?? 0), 0)
+  return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
@@ -110,6 +105,44 @@ export const parseJson = (route: string, input: string, message: string) =>
  */
 export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) => parts.map((part) => part.text).join("\n")
 
+const escapeSystemUpdateText = (text: string) =>
+  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+
+/**
+ * Stable fallback representation for chronological `Message.system(...)`
+ * updates on routes that do not support that privileged role natively. The
+ * wrapper remains visibly lower-authority user text, preserves the original
+ * temporal position, and XML-escapes content so it cannot close the wrapper.
+ */
+export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>) =>
+  `<system-update>\n${escapeSystemUpdateText(joinText(parts))}\n</system-update>`
+
+/**
+ * Chronological system updates deliberately accept text only. Do not insert
+ * raw retrieved, tool, or web content into privileged updates: keep untrusted
+ * data in ordinary user/tool messages instead.
+ */
+export const systemUpdateText = Effect.fn("ProviderShared.systemUpdateText")(function* (
+  route: string,
+  message: LLMRequest["messages"][number],
+) {
+  const content: TextPart[] = []
+  for (const part of message.content) {
+    if (!supportsContent(part, ["text"])) return yield* unsupportedContent(route, "system", ["text"])
+    content.push(part)
+  }
+  return content
+})
+
+/** Lower an unsupported privileged update into visible, in-order user text. */
+export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate")(function* (
+  route: string,
+  message: LLMRequest["messages"][number],
+) {
+  const content = yield* systemUpdateText(route, message)
+  return { type: "text" as const, text: wrapSystemUpdate(content), cache: content.at(-1)?.cache }
+})
+
 /**
  * Parse the streamed JSON input of a tool call. Treats an empty string as
  * `"{}"` — providers occasionally finish a tool call without ever emitting
@@ -128,10 +161,21 @@ export const parseToolInput = (route: string, name: string, raw: string) =>
 export const mediaBytes = (part: MediaPart) =>
   typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
 
+export const mediaBase64 = (part: MediaPart) => {
+  if (typeof part.data !== "string" || !part.data.startsWith("data:")) return mediaBytes(part)
+  return part.data.slice(part.data.indexOf(",") + 1)
+}
+
+export const mediaDataUrl = (part: MediaPart) =>
+  typeof part.data === "string" && part.data.startsWith("data:")
+    ? part.data
+    : `data:${part.mediaType};base64,${mediaBytes(part)}`
+
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
+  if (part.result.type === "content") return encodeJson(part.result.value)
   return encodeJson(part.result.value)
 }
 

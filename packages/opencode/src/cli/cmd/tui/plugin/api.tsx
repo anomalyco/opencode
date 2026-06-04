@@ -40,6 +40,7 @@ type Input = {
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
+  attention: TuiPluginApi["attention"]
 }
 
 function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
@@ -206,6 +207,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
   }
   return {
     app: appApi(),
+    attention: input.attention,
     // Keep deprecated `api.command` working for v1 plugins; remove in v2.
     command: createCommandShim(input.keymap, input.dialog, input.tuiConfig.keybinds),
     keys: {
@@ -217,6 +219,14 @@ export function createTuiApi(input: Input): TuiPluginApi {
       },
     },
     keymap: input.keymap,
+    mode: {
+      current() {
+        return Keymap.getOpencodeModeStack(input.keymap).current()
+      },
+      push(mode) {
+        return Keymap.getOpencodeModeStack(input.keymap).push(mode)
+      },
+    },
     route: {
       register(list) {
         return routeRegister(input.routes, list, input.bump)
@@ -267,7 +277,6 @@ export function createTuiApi(input: Input): TuiPluginApi {
         return (
           <Prompt
             sessionID={props.sessionID}
-            workspaceID={props.workspaceID}
             visible={props.visible}
             disabled={props.disabled}
             onSubmit={props.onSubmit}

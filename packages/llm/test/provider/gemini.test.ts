@@ -1,17 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
-import { LLMClient } from "../../src/route"
+import { Auth, LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import { sseEvents, sseRaw } from "../lib/sse"
 
-const model = Gemini.model({
-  id: "gemini-2.5-flash",
-  baseURL: "https://generativelanguage.test/v1beta/",
-  headers: { "x-goog-api-key": "test" },
-})
+const model = Gemini.route
+  .with({
+    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+    auth: Auth.header("x-goog-api-key", "test"),
+  })
+  .model({ id: "gemini-2.5-flash" })
 
 const request = LLM.request({
   id: "req_1",
@@ -31,6 +32,22 @@ describe("Gemini route", () => {
         systemInstruction: { parts: [{ text: "You are concise." }] },
         generationConfig: { maxOutputTokens: 20, temperature: 0 },
       })
+    }),
+  )
+
+  it.effect("lowers chronological system updates to wrapped user text in order", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "user", parts: [{ text: "Before." }, { text: "<system-update>\nUpdate.\n</system-update>" }] },
+        { role: "model", parts: [{ text: "After." }] },
+      ])
     }),
   )
 
@@ -232,9 +249,75 @@ describe("Gemini route", () => {
         { type: "text-end", id: "text-0" },
         { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "stop",
           usage,
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves thoughtSignature for reasoning and tool-call continuation", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                { text: "thinking", thought: true },
+                { text: "", thought: true, thoughtSignature: "thought_sig" },
+                { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+      const reasoning = response.events.find((event) => event.type === "reasoning-start")
+      const reasoningEnd = response.events.find((event) => event.type === "reasoning-end")
+      const toolCall = response.events.find((event) => event.type === "tool-call")
+
+      expect(reasoning).toEqual({
+        type: "reasoning-start",
+        id: "reasoning-0",
+        providerMetadata: undefined,
+      })
+      expect(reasoningEnd).toEqual({
+        type: "reasoning-end",
+        id: "reasoning-0",
+        providerMetadata: { google: { thoughtSignature: "thought_sig" } },
+      })
+      expect(toolCall).toMatchObject({ providerMetadata: { google: { thoughtSignature: "tool_sig" } } })
+
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "thinking", providerMetadata: reasoningEnd?.providerMetadata },
+              ToolCallPart.make({
+                id: "tool_0",
+                name: "lookup",
+                input: { query: "weather" },
+                providerMetadata: toolCall?.providerMetadata,
+              }),
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            { text: "thinking", thought: true, thoughtSignature: "thought_sig" },
+            { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+          ],
         },
       ])
     }),
@@ -291,7 +374,7 @@ describe("Gemini route", () => {
         },
         { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "tool-calls",
           usage,
         },
@@ -325,7 +408,7 @@ describe("Gemini route", () => {
         { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
       ])
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "tool-calls" })
     }),
   )
 
@@ -344,10 +427,10 @@ describe("Gemini route", () => {
         ),
       )
 
-      expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "request-finish"])
-      expect(length.events.at(-1)).toMatchObject({ type: "request-finish", reason: "length" })
-      expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "request-finish"])
-      expect(filtered.events.at(-1)).toMatchObject({ type: "request-finish", reason: "content-filter" })
+      expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(length.events.at(-1)).toMatchObject({ type: "finish", reason: "length" })
+      expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "content-filter" })
     }),
   )
 

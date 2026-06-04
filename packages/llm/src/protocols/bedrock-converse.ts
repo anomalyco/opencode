@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Route, type RouteModelInput } from "../route/client"
+import { Route } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Protocol } from "../route/protocol"
 import {
@@ -8,13 +8,15 @@ import {
   type CacheHint,
   type FinishReason,
   type LLMRequest,
+  type ProviderMetadata,
+  type ReasoningPart,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
-import { BedrockAuth, type Credentials as BedrockCredentials } from "./utils/bedrock-auth"
+import { BedrockAuth } from "./utils/bedrock-auth"
 import { BedrockCache } from "./utils/bedrock-cache"
 import { BedrockMedia } from "./utils/bedrock-media"
 import { Lifecycle } from "./utils/lifecycle"
@@ -23,23 +25,6 @@ import { ToolStream } from "./utils/tool-stream"
 const ADAPTER = "bedrock-converse"
 
 export type { Credentials as BedrockCredentials } from "./utils/bedrock-auth"
-
-// =============================================================================
-// Public Model Input
-// =============================================================================
-export type BedrockConverseModelInput = RouteModelInput & {
-  /**
-   * Bearer API key (Bedrock's newer API key auth). Sets the `Authorization`
-   * header and bypasses SigV4 signing. Mutually exclusive with `credentials`.
-   */
-  readonly apiKey?: string
-  /**
-   * AWS credentials for SigV4 signing. The route signs each request at
-   * `toHttp` time using `aws4fetch`. Mutually exclusive with `apiKey`.
-   */
-  readonly credentials?: BedrockCredentials
-  readonly headers?: Record<string, string>
-}
 
 // =============================================================================
 // Request Body Schema
@@ -61,6 +46,7 @@ type BedrockToolUseBlock = Schema.Schema.Type<typeof BedrockToolUseBlock>
 const BedrockToolResultContentItem = Schema.Union([
   Schema.Struct({ text: Schema.String }),
   Schema.Struct({ json: Schema.Unknown }),
+  BedrockMedia.ImageBlock,
 ])
 
 const BedrockToolResultBlock = Schema.Struct({
@@ -253,6 +239,16 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ tool: { name } }) as const,
   })
 
+const bedrockMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ bedrock: metadata })
+
+const reasoningSignature = (part: ReasoningPart) => {
+  const bedrock = part.providerMetadata?.bedrock
+  return (
+    part.encrypted ??
+    (ProviderShared.isRecord(bedrock) && typeof bedrock.signature === "string" ? bedrock.signature : undefined)
+  )
+}
+
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
   toolUse: {
     toolUseId: part.id,
@@ -261,15 +257,33 @@ const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
   },
 })
 
-const lowerToolResult = (part: ToolResultPart): BedrockToolResultBlock => ({
-  toolResult: {
-    toolUseId: part.id,
-    content:
-      part.result.type === "text" || part.result.type === "error"
-        ? [{ text: ProviderShared.toolResultText(part) }]
-        : [{ json: part.result.value }],
-    status: part.result.type === "error" ? "error" : "success",
-  },
+const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent")(function* (part: ToolResultPart) {
+  if (part.result.type === "text" || part.result.type === "error")
+    return [{ text: ProviderShared.toolResultText(part) }]
+  if (part.result.type === "json") return [{ json: part.result.value }]
+
+  const content: Array<Schema.Schema.Type<typeof BedrockToolResultContentItem>> = []
+  for (const item of part.result.value) {
+    if (item.type === "text") {
+      content.push({ text: item.text })
+      continue
+    }
+    const media = yield* BedrockMedia.lower(item)
+    if (!("image" in media))
+      return yield* ProviderShared.invalidRequest("Bedrock Converse only supports image media in tool results")
+    content.push(media)
+  }
+  return content
+})
+
+const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (part: ToolResultPart) {
+  return {
+    toolResult: {
+      toolUseId: part.id,
+      content: yield* lowerToolResultContent(part),
+      status: part.result.type === "error" ? "error" : "success",
+    },
+  } satisfies BedrockToolResultBlock
 })
 
 const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
@@ -279,6 +293,16 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   const messages: BedrockMessage[] = []
 
   for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)
+      const content = textWithCache(breakpoints, part.text, part.cache)
+      const previous = messages.at(-1)
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+      else messages.push({ role: "user", content })
+      continue
+    }
+
     if (message.role === "user") {
       const content: BedrockUserBlock[] = []
       for (const part of message.content) {
@@ -313,7 +337,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
         if (part.type === "reasoning") {
           content.push({
             reasoningContent: {
-              reasoningText: { text: part.text, signature: part.encrypted },
+              reasoningText: { text: part.text, signature: reasoningSignature(part) },
             },
           })
           continue
@@ -331,7 +355,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
-      content.push(lowerToolResult(part))
+      content.push(yield* lowerToolResult(part))
       const cachePoint = BedrockCache.block(breakpoints, part.cache)
       if (cachePoint) content.push(cachePoint)
     }
@@ -423,6 +447,7 @@ interface ParserState {
   readonly pendingFinish: { readonly reason: FinishReason; readonly usage?: Usage } | undefined
   readonly hasToolCalls: boolean
   readonly lifecycle: Lifecycle.State
+  readonly reasoningSignatures: Readonly<Record<number, string>>
 }
 
 const step = (state: ParserState, event: BedrockEvent) =>
@@ -466,17 +491,19 @@ const step = (state: ParserState, event: BedrockEvent) =>
       ] as const
     }
 
-    if (event.contentBlockDelta?.delta?.reasoningContent?.text) {
+    if (event.contentBlockDelta?.delta?.reasoningContent) {
+      const index = event.contentBlockDelta.contentBlockIndex
+      const reasoning = event.contentBlockDelta.delta.reasoningContent
       const events: LLMEvent[] = []
       return [
         {
           ...state,
-          lifecycle: Lifecycle.reasoningDelta(
-            state.lifecycle,
-            events,
-            `reasoning-${event.contentBlockDelta.contentBlockIndex}`,
-            event.contentBlockDelta.delta.reasoningContent.text,
-          ),
+          lifecycle: reasoning.text
+            ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text)
+            : state.lifecycle,
+          reasoningSignatures: reasoning.signature
+            ? { ...state.reasoningSignatures, [index]: reasoning.signature }
+            : state.reasoningSignatures,
         },
         events,
       ] as const
@@ -499,15 +526,19 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.contentBlockStop) {
-      const result = yield* ToolStream.finish(ADAPTER, state.tools, event.contentBlockStop.contentBlockIndex)
+      const index = event.contentBlockStop.contentBlockIndex
+      const result = yield* ToolStream.finish(ADAPTER, state.tools, index)
       const events: LLMEvent[] = []
       const resultEvents = result.events ?? []
       const lifecycle = resultEvents.length
         ? Lifecycle.stepStart(state.lifecycle, events)
         : Lifecycle.reasoningEnd(
-            Lifecycle.textEnd(state.lifecycle, events, `text-${event.contentBlockStop.contentBlockIndex}`),
+            Lifecycle.textEnd(state.lifecycle, events, `text-${index}`),
             events,
-            `reasoning-${event.contentBlockStop.contentBlockIndex}`,
+            `reasoning-${index}`,
+            state.reasoningSignatures[index]
+              ? bedrockMetadata({ signature: state.reasoningSignatures[index] })
+              : undefined,
           )
       events.push(...resultEvents)
       return [
@@ -516,6 +547,9 @@ const step = (state: ParserState, event: BedrockEvent) =>
           hasToolCalls: resultEvents.some(LLMEvent.is.toolCall) ? true : state.hasToolCalls,
           lifecycle,
           tools: result.tools,
+          reasoningSignatures: Object.fromEntries(
+            Object.entries(state.reasoningSignatures).filter(([key]) => key !== String(index)),
+          ),
         },
         events,
       ] as const
@@ -589,6 +623,7 @@ export const protocol = Protocol.make({
       pendingFinish: undefined,
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
+      reasoningSignatures: {},
     }),
     step,
     onHalt,
@@ -597,11 +632,11 @@ export const protocol = Protocol.make({
 
 export const route = Route.make({
   id: ADAPTER,
+  provider: "bedrock",
   protocol,
-  // Bedrock's URL embeds the region in the host (set on `model.baseURL` by
-  // the provider helper from credentials) and the validated modelId in the
-  // path. We read the validated body so the URL matches the body that gets
-  // signed.
+  // Bedrock's URL embeds the region in the route endpoint host and the
+  // validated modelId in the path. We read the validated body so the URL
+  // matches the body that gets signed.
   endpoint: Endpoint.path<BedrockConverseBody>(
     ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
   ),
@@ -609,26 +644,6 @@ export const route = Route.make({
   framing,
 })
 
-export const nativeCredentials = BedrockAuth.nativeCredentials
-
-const bedrockModel = Route.model(
-  route,
-  {
-    provider: "bedrock",
-  },
-  {
-    mapInput: (input: BedrockConverseModelInput) => {
-      const { credentials, ...rest } = input
-      const region = credentials?.region ?? "us-east-1"
-      return {
-        ...rest,
-        baseURL: rest.baseURL ?? `https://bedrock-runtime.${region}.amazonaws.com`,
-        native: nativeCredentials(input.native, credentials),
-      }
-    },
-  },
-)
-
-export const model = bedrockModel
+export const sigV4Auth = BedrockAuth.sigV4
 
 export * as BedrockConverse from "./bedrock-converse"

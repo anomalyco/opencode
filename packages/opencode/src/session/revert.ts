@@ -1,10 +1,10 @@
 import { Effect, Layer, Context, Schema } from "effect"
-import { Bus } from "../bus"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
-import { SyncEvent } from "../sync"
-import * as Log from "@opencode-ai/core/util/log"
-import * as Session from "./session"
+import { Log } from "@opencode-ai/core/util/log"
+import { Session } from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
 import { SessionRunState } from "./run-state"
@@ -20,8 +20,8 @@ export const RevertInput = Schema.Struct({
 export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
 export interface Interface {
-  readonly revert: (input: RevertInput) => Effect.Effect<Session.Info>
-  readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info>
+  readonly revert: (input: RevertInput) => Effect.Effect<Session.Info, Session.BusyError>
+  readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info, Session.BusyError>
   readonly cleanup: (session: Session.Info) => Effect.Effect<void>
 }
 
@@ -33,15 +33,14 @@ export const layer = Layer.effect(
     const sessions = yield* Session.Service
     const snap = yield* Snapshot.Service
     const storage = yield* Storage.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const summary = yield* SessionSummary.Service
     const state = yield* SessionRunState.Service
-    const sync = yield* SyncEvent.Service
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
-      const all = yield* sessions.messages({ sessionID: input.sessionID })
-      let lastUser: MessageV2.User | undefined
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      let lastUser: SessionV1.User | undefined
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
 
       let rev: Session.Info["revert"]
@@ -77,7 +76,7 @@ export const layer = Layer.effect(
       const range = all.filter((msg) => msg.info.id >= rev.messageID)
       const diffs = yield* summary.computeDiff({ messages: range })
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
-      yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
+      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
       yield* sessions.setRevert({
         sessionID: input.sessionID,
         revert: rev,
@@ -103,10 +102,10 @@ export const layer = Layer.effect(
     const cleanup = Effect.fn("SessionRevert.cleanup")(function* (session: Session.Info) {
       if (!session.revert) return
       const sessionID = session.id
-      const msgs = yield* sessions.messages({ sessionID })
+      const msgs = yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
       const messageID = session.revert.messageID
-      const remove = [] as MessageV2.WithParts[]
-      let target: MessageV2.WithParts | undefined
+      const remove = [] as SessionV1.WithParts[]
+      let target: SessionV1.WithParts | undefined
       for (const msg of msgs) {
         if (msg.info.id < messageID) continue
         if (msg.info.id > messageID) {
@@ -120,10 +119,7 @@ export const layer = Layer.effect(
         remove.push(msg)
       }
       for (const msg of remove) {
-        yield* sync.run(MessageV2.Event.Removed, {
-          sessionID,
-          messageID: msg.info.id,
-        })
+        yield* sessions.removeMessage({ sessionID, messageID: msg.info.id })
       }
       if (session.revert.partID && target) {
         const partID = session.revert.partID
@@ -132,11 +128,7 @@ export const layer = Layer.effect(
           const removeParts = target.parts.slice(idx)
           target.parts = target.parts.slice(0, idx)
           for (const part of removeParts) {
-            yield* sync.run(MessageV2.Event.PartRemoved, {
-              sessionID,
-              messageID: target.info.id,
-              partID: part.id,
-            })
+            yield* sessions.removePart({ sessionID, messageID: target.info.id, partID: part.id })
           }
         }
       }
@@ -153,9 +145,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(Snapshot.defaultLayer),
     Layer.provide(Storage.defaultLayer),
-    Layer.provide(Bus.layer),
+    Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
-    Layer.provide(SyncEvent.defaultLayer),
   ),
 )
 

@@ -7,31 +7,9 @@ import {
   isNewCommand,
   mentionTriggerIndex,
   movePromptHistory,
-  printableBinding,
-  promptCycle,
-  promptHit,
-  promptInfo,
-  promptKeys,
   pushPromptHistory,
 } from "@/cli/cmd/run/prompt.shared"
 import type { RunPrompt } from "@/cli/cmd/run/types"
-
-function bindings(...keys: string[]) {
-  return keys.map((key) => ({ key }))
-}
-
-const keybinds = {
-  leader: "ctrl+x",
-  leaderTimeout: 2000,
-  commandList: bindings("ctrl+p"),
-  variantCycle: bindings("ctrl+t", "<leader>t"),
-  interrupt: bindings("escape"),
-  historyPrevious: bindings("up"),
-  historyNext: bindings("down"),
-  inputClear: bindings("ctrl+c"),
-  inputSubmit: bindings("return"),
-  inputNewline: bindings("shift+return,ctrl+return,alt+return,ctrl+j"),
-}
 
 function prompt(text: string, parts: RunPrompt["parts"] = []): RunPrompt {
   return { text, parts }
@@ -126,6 +104,12 @@ describe("run prompt shared", () => {
     expect(mentionTriggerIndex("👨‍👩‍👧‍👦 @src", Bun.stringWidth("👨‍👩‍👧‍👦 @src"))).toBe(3)
     expect(displayCharAt("👨‍👩‍👧‍👦 @src", Bun.stringWidth("👨‍👩‍👧‍👦 @"))).toBe("s")
     expect(displaySlice("👨‍👩‍👧‍👦 @src", 3, Bun.stringWidth("👨‍👩‍👧‍👦 @src"))).toBe("@src")
+    expect(mentionTriggerIndex("@file1\n@file2", 13)).toBe(7)
+    expect(displayCharAt("@file1\n@file2", 6)).toBe("\n")
+    expect(displaySlice("@file1\n@file2", 8, 13)).toBe("file2")
+    expect(mentionTriggerIndex("@file1\nfoo @file2", 17)).toBe(11)
+    expect(mentionTriggerIndex("中文 @one\n@two", 14)).toBe(10)
+    expect(displaySlice("中文 @one\n@two", 11, 14)).toBe("two")
     expect(mentionTriggerIndex("中文@")).toBeUndefined()
     expect(mentionTriggerIndex("こんにちは@")).toBeUndefined()
     expect(mentionTriggerIndex("한국어@")).toBeUndefined()
@@ -133,39 +117,6 @@ describe("run prompt shared", () => {
     expect(mentionTriggerIndex("hello@")).toBeUndefined()
     expect(mentionTriggerIndex("foo@bar.com")).toBeUndefined()
     expect(mentionTriggerIndex("中文 @src file")).toBeUndefined()
-  })
-
-  test("handles direct and leader-based variant cycling", () => {
-    const keys = promptKeys(keybinds)
-
-    expect(promptHit(keys.clear, promptInfo({ name: "c", ctrl: true }))).toBe(true)
-
-    expect(promptCycle(false, promptInfo({ name: "x", ctrl: true }), keys.leaders, keys.cycles)).toEqual({
-      arm: true,
-      clear: false,
-      cycle: false,
-      consume: true,
-    })
-
-    expect(promptCycle(true, promptInfo({ name: "t" }), keys.leaders, keys.cycles)).toEqual({
-      arm: false,
-      clear: true,
-      cycle: true,
-      consume: true,
-    })
-
-    expect(promptCycle(false, promptInfo({ name: "t", ctrl: true }), keys.leaders, keys.cycles)).toEqual({
-      arm: false,
-      clear: false,
-      cycle: true,
-      consume: true,
-    })
-  })
-
-  test("prints bindings with leader substitution and esc normalization", () => {
-    expect(printableBinding(keybinds.variantCycle.slice(1), "ctrl+x")).toBe("ctrl+x t")
-    expect(printableBinding(keybinds.interrupt, "ctrl+x")).toBe("esc")
-    expect(printableBinding([], "ctrl+x")).toBe("")
   })
 
   test("recognizes exit commands", () => {

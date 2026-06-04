@@ -1,15 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { ContentPart, LLMEvent, LLMRequest, ModelID, ModelLimits, ModelRef, ProviderID, Usage } from "../src/schema"
+import * as OpenAIChat from "../src/protocols/openai-chat"
+import * as OpenAIResponses from "../src/protocols/openai-responses"
+import { ContentPart, LLMEvent, LLMRequest, Model, ModelID, ProviderID, Usage } from "../src/schema"
 import { ProviderShared } from "../src/protocols/shared"
 
-const model = new ModelRef({
+const model = new Model({
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
-  route: "openai-chat",
-  baseURL: "https://fake.local",
-  limits: new ModelLimits({}),
+  route: OpenAIChat.route,
 })
+
+const decodeLLMRequest = Schema.decodeUnknownSync(LLMRequest as unknown as Schema.Decoder<LLMRequest>)
+const decodeLLMEvent = Schema.decodeUnknownSync(LLMEvent as unknown as Schema.Decoder<LLMEvent>)
 
 describe("llm schema", () => {
   test("decodes a minimal request", () => {
@@ -22,26 +25,42 @@ describe("llm schema", () => {
       generation: {},
     }
 
-    const decoded = Schema.decodeUnknownSync(LLMRequest)(input)
+    const decoded = decodeLLMRequest(input)
 
     expect(decoded.id).toBe("req_1")
     expect(decoded.messages[0]?.content[0]?.type).toBe("text")
   })
 
   test("accepts custom route ids", () => {
-    const decoded = Schema.decodeUnknownSync(LLMRequest)({
-      model: { ...model, route: "custom-route" },
+    const decoded = decodeLLMRequest({
+      model: Model.update(model, { route: OpenAIResponses.route }),
       system: [],
       messages: [],
       tools: [],
       generation: {},
     })
 
-    expect(decoded.model.route).toBe("custom-route")
+    expect(decoded.model.route.id).toBe("openai-responses")
+  })
+
+  test("decodes chronological system messages", () => {
+    const decoded = decodeLLMRequest({
+      model,
+      system: [],
+      messages: [{ role: "system", content: [{ type: "text", text: "Operator update." }] }],
+      tools: [],
+    })
+
+    expect(decoded.messages[0]).toMatchObject({ role: "system", content: [{ type: "text", text: "Operator update." }] })
   })
 
   test("rejects invalid event type", () => {
-    expect(() => Schema.decodeUnknownSync(LLMEvent)({ type: "bogus" })).toThrow()
+    expect(() => decodeLLMEvent({ type: "bogus" })).toThrow()
+  })
+
+  test("finish constructors accept usage input", () => {
+    expect(LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 1 } }).usage).toBeInstanceOf(Usage)
+    expect(LLMEvent.finish({ reason: "stop", usage: { outputTokens: 2 } }).usage).toBeInstanceOf(Usage)
   })
 
   test("content part tagged union exposes guards", () => {

@@ -12,7 +12,7 @@ import {
 } from "effect/unstable/http"
 import * as CassetteService from "./cassette"
 import { defaultMatcher, selectSequential, type RequestMatcher } from "./matching"
-import { appendOrFail, makeReplayState, resolveAutoMode } from "./recorder"
+import { makeReplayState, resolveAutoMode } from "./recorder"
 import { defaults, type Redactor } from "./redactor"
 import { redactUrl } from "./redaction"
 import { httpInteractions, type CassetteMetadata, type HttpInteraction, type ResponseSnapshot } from "./schema"
@@ -100,9 +100,11 @@ export const recordingLayer = (
                 ...captured,
               }),
             }
-            yield* appendOrFail(cassetteService, name, interaction, options.metadata).pipe(
-              Effect.catchTag("UnsafeCassetteError", (error) => Effect.fail(transportError(request, error.message))),
-            )
+            yield* cassetteService
+              .append(name, interaction, options.metadata)
+              .pipe(
+                Effect.catchTag("UnsafeCassetteError", (error) => Effect.fail(transportError(request, error.message))),
+              )
             return HttpClientResponse.fromWeb(
               request,
               new Response(decodeResponseBody(interaction.response), interaction.response),
