@@ -19,14 +19,18 @@ afterEach(() => {
 const stubHookInput = { sessionID: "s1", model: { id: "claude-sonnet-4-6" } as any }
 
 describe("DefensiveSystemPromptPlugin", () => {
-  test("appends the defensive note to system[]", async () => {
+  test("folds DEFENSIVE_NOTE into system[0] without adding a second entry (Issue #288)", async () => {
+    // Qwen3.x chat templates raise `System message must be at the beginning.`
+    // when they see a second {role: "system"} message — even one adjacent at
+    // index 1. The plugin must therefore merge the note into the existing
+    // system[0] string instead of pushing a separate entry.
     const hooks = await DefensiveSystemPromptPlugin(stubPluginInput)
     const transform = hooks["experimental.chat.system.transform"]!
     const output = { system: ["You are a helpful assistant."] }
     await transform(stubHookInput as any, output as any)
-    expect(output.system).toHaveLength(2)
-    expect(output.system[0]).toBe("You are a helpful assistant.")
-    expect(output.system[1]).toBe(DEFENSIVE_NOTE)
+    expect(output.system).toHaveLength(1)
+    expect(output.system[0]).toContain("You are a helpful assistant.")
+    expect(output.system[0]).toContain(DEFENSIVE_NOTE)
   })
 
   test("is idempotent — does not stack the note when called twice", async () => {
@@ -35,7 +39,9 @@ describe("DefensiveSystemPromptPlugin", () => {
     const output = { system: ["agent prompt"] }
     await transform(stubHookInput as any, output as any)
     await transform(stubHookInput as any, output as any)
-    expect(output.system.filter((s) => s === DEFENSIVE_NOTE)).toHaveLength(1)
+    expect(output.system).toHaveLength(1)
+    const occurrences = output.system[0].split(DEFENSIVE_NOTE).length - 1
+    expect(occurrences).toBe(1)
   })
 
   test("works on an empty system[]", async () => {
