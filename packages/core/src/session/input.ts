@@ -221,7 +221,8 @@ const publish = Effect.fn("SessionInput.publish")(function* (
       SessionEvent.Prompted,
       {
         sessionID,
-        timestamp: DateTime.makeUnsafe(row.time_created),
+        timestamp: yield* DateTime.now,
+        admittedAt: DateTime.makeUnsafe(row.time_created),
         prompt: decodePrompt(row.prompt),
         delivery: row.delivery,
       },

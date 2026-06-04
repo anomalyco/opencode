@@ -3,6 +3,7 @@ import { DateTime, Effect, Layer, Schema } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -110,7 +111,7 @@ describe("SessionProjector", () => {
     ),
   )
 
-  it.effect("marks an admitted inbox row promoted with the Prompted event sequence", () =>
+  it.effect("promotes admitted prompts with visible order and separate timestamps", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       yield* db
@@ -133,16 +134,33 @@ describe("SessionProjector", () => {
       const events = yield* EventV2.Service
       const id = SessionMessage.ID.make("evt_admitted")
       yield* SessionInput.admit(db, { id, sessionID, prompt: new Prompt({ text: "promote me" }), delivery: "steer" })
+      yield* db
+        .update(SessionInputTable)
+        .set({ time_created: 1 })
+        .where(eq(SessionInputTable.id, id))
+        .run()
+        .pipe(Effect.orDie)
 
-      const event = yield* events.publish(
-        SessionEvent.Prompted,
-        { sessionID, timestamp: created, prompt: new Prompt({ text: "promote me" }), delivery: "steer" },
-        { id },
-      )
+      yield* SessionInput.promoteSteers(db, events, sessionID)
 
       expect(
         yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie),
-      ).toMatchObject({ promoted_seq: event.seq })
+      ).toMatchObject({ promoted_seq: 0, time_created: 1 })
+      const event = yield* db.select().from(EventTable).where(eq(EventTable.id, id)).get().pipe(Effect.orDie)
+      expect(event).toMatchObject({
+        seq: 0,
+        data: { admittedAt: 1, timestamp: expect.any(Number) },
+      })
+      expect(event!.data.timestamp).not.toBe(1)
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(
+        Schema.decodeUnknownSync(SessionMessage.Message)({ ...row!.data, id: row!.id, type: row!.type }),
+      ).toMatchObject({ time: { created: DateTime.makeUnsafe(1) } })
     }),
   )
 

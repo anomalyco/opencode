@@ -152,7 +152,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             files: event.data.prompt.files,
             agents: event.data.prompt.agents,
             references: event.data.prompt.references,
-            time: { created: event.data.timestamp },
+            time: { created: event.data.admittedAt ?? event.data.timestamp },
           }),
         )
       },

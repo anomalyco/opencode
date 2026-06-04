@@ -20,7 +20,7 @@ sessions.prompt({ id?, sessionID, prompt, delivery?, resume? })
   -> resume false admits only
 ```
 
-`session_input` is the durable admission inbox. Admitted inputs remain outside model-visible Session history until the serialized runner promotes them by publishing ordinary `Prompted` events. The existing projector atomically writes the visible user message and marks its inbox row promoted in the same event transaction.
+`session_input` is the durable admission inbox. Admitted inputs remain outside model-visible Session history until the serialized runner promotes them by publishing ordinary `Prompted` events. A prompted event's timestamp records promotion while its optional `admittedAt` preserves when the user submitted the prompt for display and historical replay compatibility. The existing projector atomically writes the visible user message and marks its inbox row promoted in the same event transaction.
 
 Execution routing starts from only the Session ID:
 

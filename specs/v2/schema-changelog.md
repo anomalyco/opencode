@@ -76,13 +76,14 @@ Affected schema:
 
 - New `session_input` table from `20260603141458_session_input_inbox.ts`.
 - Updated pending-input index from `20260603160727_jittery_ezekiel_stane.ts`.
-- New `SessionInput.Admitted` schema and `Prompted.delivery` field.
+- New `SessionInput.Admitted` schema and `Prompted.delivery` and optional `Prompted.admittedAt` fields.
 - Prompt-admission conflict behavior in `SessionV2.prompt(...)`.
 
 Change:
 
 - Persist admitted prompts before projection with an autoincrement inbox sequence, unique message ID, Session ID, encoded prompt, `steer` or `queue` delivery mode, optional promoted event sequence, and creation time.
 - Index pending inputs by Session, promotion state, delivery mode, and admission sequence.
+- Record prompt promotion time as the `Prompted` event timestamp while retaining admission time explicitly for user-message display.
 
 Reason:
 
@@ -93,6 +94,7 @@ Compatibility:
 
 - Database migration creates the inbox table and replaces its first pending index with a delivery-aware index.
 - Exact prompt retries are idempotent; reusing a message ID for different input fails.
+- Historical `Prompted` events without `admittedAt` continue using their event timestamp as the user-message creation time.
 
 ### Durable Session Projection Order
 
@@ -103,7 +105,7 @@ Affected schema:
 
 Change:
 
-- Add and backfill `session_message.seq` from matching synchronized events.
+- Reset pre-launch Session-message projections and add `session_message.seq` for newly projected synchronized events.
 - Add event aggregate-sequence and aggregate-type-sequence indexes.
 - Add Session-message sequence, type-sequence, and compatibility timestamp indexes.
 
@@ -114,7 +116,8 @@ Reason:
 
 Compatibility:
 
-- Migration fails rather than inventing chronology if an existing projected Session message has no matching durable event.
+- Pre-launch Session-message projections are disposable because historical versions could write them without durable creator events.
+- The migration resets those projections rather than inventing chronology or blocking startup.
 - The timestamp compatibility index remains for legacy or transitional query shapes.
 
 ### Structured Tool Registry And Canonical Output

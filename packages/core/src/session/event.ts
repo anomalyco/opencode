@@ -70,6 +70,7 @@ export const Prompted = EventV2.define({
   ...options,
   schema: {
     ...Base,
+    admittedAt: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
     prompt: Prompt,
     delivery: Schema.Literals(["steer", "queue"]),
   },
