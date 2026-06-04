@@ -8,6 +8,7 @@ import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
+import { isSafeExternalLink } from "./external-link"
 import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 import type { UpdaterController } from "./updater-controller"
@@ -164,6 +165,7 @@ export function registerIpcHandlers(deps: Deps) {
   )
 
   ipcMain.on("open-link", (_event: IpcMainEvent, url: string) => {
+    if (!isSafeExternalLink(url)) return
     void shell.openExternal(url)
   })
 
