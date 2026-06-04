@@ -12,6 +12,8 @@ import { NamedError } from "../util/error"
 import { SessionSchema } from "../session/schema"
 import { WorkspaceV2 } from "../workspace"
 
+const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
+
 export const MessageID = Schema.String.check(Schema.isStartsWith("msg")).pipe(
   Schema.brand("MessageID"),
   withStatics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "msg_" + Identifier.ascending()) })),
@@ -329,7 +331,7 @@ export const User = Schema.Struct({
   ...messageBase,
   role: Schema.Literal("user"),
   time: Schema.Struct({
-    created: NonNegativeInt,
+    created: Timestamp,
   }),
   format: Schema.optional(Format),
   summary: Schema.optional(

@@ -11,6 +11,46 @@ import * as Log from "../util/log"
 const skillConcurrency = 4
 const fileConcurrency = 8
 
+function isSafeSegment(value: string) {
+  return (
+    value.length > 0 &&
+    value !== "." &&
+    value !== ".." &&
+    !value.includes("/") &&
+    !value.includes("\\") &&
+    !value.includes("\0")
+  )
+}
+
+function isSafeRelativePath(value: string) {
+  const segments = value.split("/")
+  return (
+    value.length > 0 &&
+    !value.includes("\\") &&
+    !value.includes("\0") &&
+    !value.includes("?") &&
+    !value.includes("#") &&
+    !URL.canParse(value) &&
+    !path.posix.isAbsolute(value) &&
+    !path.win32.isAbsolute(value) &&
+    segments.every((segment) => {
+      try {
+        const decoded = decodeURIComponent(segment)
+        return (
+          decoded.length > 0 &&
+          decoded !== "." &&
+          decoded !== ".." &&
+          !decoded.includes("/") &&
+          !decoded.includes("\\") &&
+          !decoded.includes("\0")
+        )
+      } catch {
+        return false
+      }
+    })
+  )
+}
+
 class IndexSkill extends Schema.Class<IndexSkill>("SkillDiscovery.IndexSkill")({
   name: Schema.String,
   files: Schema.Array(Schema.String),
@@ -54,7 +94,8 @@ export const layer = Layer.effect(
     return Service.of({
       pull: Effect.fn("SkillDiscovery.pull")(function* (url) {
         const base = url.endsWith("/") ? url : `${url}/`
-        const index = new URL("index.json", base).href
+        const source = new URL(base)
+        const index = new URL("index.json", source).href
         const data = yield* HttpClientRequest.get(index).pipe(
           HttpClientRequest.acceptJson,
           http.execute,
@@ -66,20 +107,54 @@ export const layer = Layer.effect(
         )
         if (!data) return []
 
+        const sourceRoot = path.resolve(global.cache, "skills", Bun.hash(base).toString(16))
         return yield* Effect.forEach(
-          data.skills.filter((skill) => {
-            if (skill.files.includes("SKILL.md") || skill.files.includes(`${skill.name}.md`)) return true
-            log.warn("skill entry missing Markdown definition", { url: index, skill: skill.name })
-            return false
+          data.skills.flatMap((skill) => {
+            if (!isSafeSegment(skill.name)) {
+              log.warn("skill entry has unsafe name", { url: index, skill: skill.name })
+              return []
+            }
+            if (!skill.files.includes("SKILL.md") && !skill.files.includes(`${skill.name}.md`)) {
+              log.warn("skill entry missing Markdown definition", { url: index, skill: skill.name })
+              return []
+            }
+
+            const root = path.resolve(sourceRoot, skill.name)
+            if (!FSUtil.contains(sourceRoot, root) || root === sourceRoot) {
+              log.warn("skill entry escapes cache root", { url: index, skill: skill.name })
+              return []
+            }
+
+            const skillUrl = new URL(`${encodeURIComponent(skill.name)}/`, source)
+            const files = skill.files.map((file) => {
+              if (!isSafeRelativePath(file)) return undefined
+              let resource: URL
+              try {
+                resource = new URL(file, skillUrl)
+              } catch {
+                return undefined
+              }
+              if (resource.origin !== source.origin) return undefined
+
+              const destination = path.resolve(root, file)
+              if (!FSUtil.contains(root, destination) || destination === root) return undefined
+              return {
+                url: resource.href,
+                destination,
+              }
+            })
+            if (files.some((file) => file === undefined)) {
+              log.warn("skill entry has unsafe file", { url: index, skill: skill.name })
+              return []
+            }
+            return [{ skill, root, files: files as { url: string; destination: string }[] }]
           }),
-          (skill) =>
+          ({ skill, root, files }) =>
             Effect.gen(function* () {
-              const root = path.join(global.cache, "skills", Bun.hash(base).toString(16), skill.name)
-              yield* Effect.forEach(
-                skill.files,
-                (file) => download(new URL(file, `${base}${skill.name}/`).href, path.join(root, file)),
-                { concurrency: fileConcurrency, discard: true },
-              )
+              yield* Effect.forEach(files, (file) => download(file.url, file.destination), {
+                concurrency: fileConcurrency,
+                discard: true,
+              })
               return (yield* fs.exists(path.join(root, "SKILL.md")).pipe(Effect.orDie)) ||
                 (yield* fs.exists(path.join(root, `${skill.name}.md`)).pipe(Effect.orDie))
                 ? [AbsolutePath.make(root)]

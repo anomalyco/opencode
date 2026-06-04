@@ -1,5 +1,6 @@
 import { SessionID } from "@/session/schema"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionInput } from "@opencode-ai/core/session/input"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -8,6 +9,7 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
+  ConflictError,
   InvalidCursorError,
   InvalidRequestError,
   ServiceUnavailableError,
@@ -110,16 +112,18 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       payload: Schema.Struct({
+        id: SessionMessage.ID.pipe(Schema.optional),
         prompt: Prompt,
-        delivery: SessionV2.Delivery.pipe(Schema.optional),
+        delivery: SessionInput.Delivery.pipe(Schema.optional),
+        resume: Schema.Boolean.pipe(Schema.optional),
       }),
-      success: SessionMessage.Message,
-      error: [SessionNotFoundError, ServiceUnavailableError],
+      success: SessionMessage.User,
+      error: [ConflictError, SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.prompt",
         summary: "Send v2 message",
-        description: "Create a v2 session message and queue it for the agent loop.",
+        description: "Durably admit one v2 session input and schedule agent-loop execution unless resume is false.",
       }),
     ),
   )
