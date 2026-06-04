@@ -1,533 +1,429 @@
 # State Management
 
-> Local state, global state, and server state patterns in this project.
+> Auth context, layout context, and navigation patterns.
 
 ---
 
-## Overview
+## Authentication Context
 
-This project uses **SolidJS** reactive primitives for state management. State is organized into three categories:
-1. **Local state** - Component-level state
-2. **Global state** - Application-level state via contexts
-3. **Server state** - Data from external sources
+Use React Context for global auth state with session restoration on app startup.
 
----
+```tsx
+// src/renderer/src/features/auth/AuthContext.tsx
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from 'react';
+import type { AuthUser, LoginInput, RegisterInput, SessionData } from '../shared/types/auth';
 
-## Local State
+// ============================================
+// Types
+// ============================================
 
-### Simple State with createSignal
+interface AuthContextValue {
+  // State
+  user: AuthUser | null;
+  isLoggedIn: boolean;
+  isLoading: boolean;
 
-For single reactive values:
+  // Actions
+  login: (data: LoginInput) => Promise<{ success: boolean; error?: string }>;
+  register: (data: RegisterInput) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+}
 
-```typescript
-import { createSignal } from "solid-js"
+// ============================================
+// Context
+// ============================================
 
-export function MyComponent() {
-  const [collapsed, setCollapsed] = createSignal(false)
-  const [count, setCount] = createSignal(0)
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+// ============================================
+// Provider
+// ============================================
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Restore session on mount
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const session: SessionData = await window.api.session.restore();
+        if (session.isLoggedIn && session.user) {
+          setUser(session.user);
+          setIsLoggedIn(true);
+        }
+      } catch (error) {
+        console.error('Failed to restore session:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    restoreSession();
+  }, []);
+
+  // Login
+  const login = useCallback(async (data: LoginInput) => {
+    const result = await window.api.auth.login(data);
+    if (result.success && result.user) {
+      setUser(result.user);
+      setIsLoggedIn(true);
+      return { success: true };
+    }
+    return { success: false, error: result.error };
+  }, []);
+
+  // Register (auto-login on success)
+  const register = useCallback(async (data: RegisterInput) => {
+    const result = await window.api.auth.register(data);
+    if (result.success && result.user) {
+      setUser(result.user);
+      setIsLoggedIn(true);
+      return { success: true };
+    }
+    return { success: false, error: result.error };
+  }, []);
+
+  // Logout
+  const logout = useCallback(async () => {
+    await window.api.auth.logout();
+    setUser(null);
+    setIsLoggedIn(false);
+  }, []);
 
   return (
-    <div>
-      <button onClick={() => setCollapsed(!collapsed())}>
-        {collapsed() ? "Expand" : "Collapse"}
-      </button>
-      <button onClick={() => setCount(count() + 1)}>
-        Count: {count()}
-      </button>
-    </div>
-  )
-}
-```
-
-**Use when**: Simple boolean flags, counters, single values
-
-**Example**: `packages/ui/src/components/message-part.tsx` (collapsed state)
-
-### Complex State with createStore
-
-For objects with multiple properties:
-
-```typescript
-import { createStore } from "solid-js/store"
-
-export function QuestionPrompt() {
-  const [store, setStore] = createStore({
-    tab: 0,
-    answers: [] as QuestionAnswer[],
-    custom: [] as string[],
-    editing: false,
-  })
-
-  // Update single property
-  setStore("tab", 1)
-
-  // Update nested property
-  setStore("answers", 0, "value")
-
-  // Update with function
-  setStore("answers", (prev) => [...prev, newAnswer])
-
-  return <div>{/* Use store */}</div>
-}
-```
-
-**Use when**: Multiple related values, nested objects, arrays
-
-**Example**: `packages/ui/src/components/message-part.tsx` (QuestionPrompt)
-
----
-
-## Global State (Contexts)
-
-### Context Pattern
-
-This project uses a helper pattern for creating contexts:
-
-```typescript
-// context/data.tsx
-import { createSimpleContext } from "./helper"
-
-type Data = {
-  session: Session[]
-  message: { [sessionID: string]: Message[] }
-  part: { [messageID: string]: Part[] }
+    <AuthContext.Provider value={{ user, isLoggedIn, isLoading, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-export const { use: useData, provider: DataProvider } = createSimpleContext({
-  name: "Data",
-  init: (props: {
-    data: Data
-    directory: string
-    onPermissionRespond?: PermissionRespondFn
-  }) => {
-    return {
-      get store() {
-        return props.data
-      },
-      get directory() {
-        return props.directory
-      },
-      respondToPermission: props.onPermissionRespond,
-    }
-  },
-})
-```
-
-**Example**: `packages/ui/src/context/data.tsx`
-
-### Using Contexts
-
-```typescript
-import { useData } from "../context"
-
-export function MyComponent() {
-  const data = useData()
-
-  // Access store
-  const sessions = data.store.session
-
-  // Access methods
-  data.respondToPermission?.({ ... })
-
-  return <div>{/* Use data */}</div>
-}
-```
-
-### Available Contexts
-
-| Context | Purpose | Hook |
-|---------|---------|------|
-| Data | Application data (sessions, messages, parts) | `useData()` |
-| Dialog | Dialog management | `useDialog()` |
-| I18n | Internationalization | `useI18n()` |
-| Diff | Diff component provider | `useDiffComponent()` |
-| Code | Code component provider | `useCodeComponent()` |
-
-**Location**: `packages/ui/src/context/`
-
----
-
-## State Organization
-
-### When to Use Local State
-
-Use `createSignal` or `createStore` when:
-- State is only used in one component
-- State doesn't need to be shared
-- State is UI-specific (collapsed, selected, etc.)
-
-**Examples**:
-- Collapsed/expanded state
-- Form input values
-- Tab selection
-- Modal open/closed
-
-### When to Use Context
-
-Use context when:
-- State needs to be shared across multiple components
-- State is application-level
-- State comes from external sources (props from parent app)
-
-**Examples**:
-- User data
-- Session data
-- Theme settings
-- i18n translations
-
-### Convention: Project Ownership Resolution
-
-**What**: When a route directory must be mapped to a project, use the shared `projectOwner(directory, projects)` helper from `packages/app/src/pages/layout/helpers.ts`.
-
-**Why**: Project rail selection, session list loading, child-store bootstrap, and project labels must agree on the same owner. A directory can temporarily appear both as a real project `worktree` and as stale `sandboxes` metadata on another project. Exact `worktree` matches must win before any sandbox match.
-
-**Contract**:
-- Input: `directory: string | undefined`, `projects: { worktree: string; sandboxes?: string[] }[]`.
-- Output: `{ project, root, directory, sandbox } | undefined`.
-- Rule: exact normalized `worktree` match first; only fall back to `sandboxes` when no project owns the directory as its `worktree`.
-- Derived state: layout code should expose the active project as one object with `root` and `entry` fields, not as separate `currentProject()` and `currentProjectRoot()` memos.
-- Debugging: log ignored stale sandbox ownership with `console.debug` so mismatched project metadata is observable.
-
-**Good**:
-```typescript
-const owner = projectOwner(directory, layout.projects.list())
-if (!owner) return
-return { ...owner.project, root: owner.root, entry: owner.root }
-```
-
-**Bad**:
-```typescript
-return layout.projects.list().find((project) => project.worktree === directory || project.sandboxes?.includes(directory))
-const currentProject = createMemo(() => activeProject()?.project)
-const currentProjectRoot = createMemo(() => activeProject()?.root)
-```
-
-**Tests Required**:
-- Exact worktree wins when another project also lists the same path as a sandbox.
-- Sandbox ownership still works when no exact project worktree exists.
-- Project rail selection receives the resolved owner root and only compares exact project roots.
-
-### When to Use Props
-
-Use props when:
-- Parent component controls the state
-- State flows down the component tree
-- Component is controlled by parent
-
-**Examples**:
-- Controlled form inputs
-- Callback functions
-- Configuration options
-
----
-
-## State Update Patterns
-
-### Updating Signals
-
-```typescript
-const [count, setCount] = createSignal(0)
-
-// Direct value
-setCount(1)
-
-// Function updater
-setCount((prev) => prev + 1)
-```
-
-### Updating Stores
-
-```typescript
-const [store, setStore] = createStore({
-  user: { name: "John", age: 30 },
-  items: [1, 2, 3],
-})
-
-// Update single property
-setStore("user", "name", "Jane")
-
-// Update nested property
-setStore("user", { name: "Jane", age: 31 })
-
-// Update array
-setStore("items", (prev) => [...prev, 4])
-
-// Update array item
-setStore("items", 0, 10)
-```
-
-### Batch Updates
-
-SolidJS automatically batches updates:
-
-```typescript
-// These updates are batched
-setCount(count() + 1)
-setName("John")
-setAge(30)
-// Only one re-render
-```
-
----
-
-## Derived State
-
-### Using createMemo
-
-For computed values:
-
-```typescript
-import { createMemo } from "solid-js"
-
-const [count, setCount] = createSignal(0)
-
-// Derived value
-const doubled = createMemo(() => count() * 2)
-
-// Use in JSX
-return <div>{doubled()}</div>
-```
-
-**Use when**: Expensive computation, derived from reactive values
-
-### Using Functions
-
-For simple derivations:
-
-```typescript
-const [firstName, setFirstName] = createSignal("John")
-const [lastName, setLastName] = createSignal("Doe")
-
-// Simple function
-const fullName = () => `${firstName()} ${lastName()}`
-
-// Use in JSX
-return <div>{fullName()}</div>
-```
-
-**Use when**: Simple computation, not expensive
-
----
-
-## State Persistence
-
-### Local Storage
-
-```typescript
-import { createSignal, createEffect } from "solid-js"
-
-export function useLocalStorage<T>(key: string, initialValue: T) {
-  const stored = localStorage.getItem(key)
-  const [value, setValue] = createSignal<T>(
-    stored ? JSON.parse(stored) : initialValue
-  )
-
-  createEffect(() => {
-    localStorage.setItem(key, JSON.stringify(value()))
-  })
-
-  return [value, setValue] as const
-}
-```
-
-### Session Storage
-
-Similar pattern with `sessionStorage`
-
----
-
-## State Debugging
-
-### Logging State Changes
-
-```typescript
-import { createEffect } from "solid-js"
-
-const [count, setCount] = createSignal(0)
-
-// Log changes
-createEffect(() => {
-  console.log("Count changed:", count())
-})
-```
-
-### SolidJS DevTools
-
-Use SolidJS DevTools browser extension for debugging
-
----
-
-## Common Patterns
-
-### Pattern 1: Toggle State
-
-```typescript
-const [open, setOpen] = createSignal(false)
-
-const toggle = () => setOpen(!open())
-```
-
-### Pattern 2: Form State
-
-```typescript
-const [form, setForm] = createStore({
-  name: "",
-  email: "",
-  age: 0,
-})
-
-const handleChange = (field: string, value: any) => {
-  setForm(field, value)
-}
-```
-
-### Pattern 3: List State
-
-```typescript
-const [items, setItems] = createSignal<string[]>([])
-
-const addItem = (item: string) => {
-  setItems([...items(), item])
-}
-
-const removeItem = (index: number) => {
-  setItems(items().filter((_, i) => i !== index))
-}
-```
-
-### Pattern 4: Async State
-
-```typescript
-const [data, setData] = createSignal<Data | null>(null)
-const [loading, setLoading] = createSignal(false)
-const [error, setError] = createSignal<Error | null>(null)
-
-const fetchData = async () => {
-  setLoading(true)
-  setError(null)
-  try {
-    const result = await fetch("/api/data")
-    setData(await result.json())
-  } catch (e) {
-    setError(e as Error)
-  } finally {
-    setLoading(false)
+// ============================================
+// Hook
+// ============================================
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
+  return context;
+}
+```
+
+### Usage in App
+
+```tsx
+// src/renderer/src/App.tsx
+import { AuthProvider, useAuth } from './features/auth';
+
+function AppContent() {
+  const { user, isLoggedIn, isLoading, logout } = useAuth();
+
+  // Show loading while restoring session
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  // Not logged in - show auth form
+  if (!isLoggedIn) {
+    return <AuthForm />;
+  }
+
+  // Logged in - show main app
+  return (
+    <div>
+      <p>Welcome, {user?.email}</p>
+      <button onClick={logout}>Sign Out</button>
+    </div>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
 }
 ```
 
 ---
 
-## Anti-Patterns
+## Layout Context (UI shell state)
 
-### ❌ Don't
+Use a dedicated layout context for **UI shell state** that is not domain data:
 
-1. **Don't mutate state directly**
-   ```typescript
-   // Bad
-   store.items.push(newItem)
+- Left sidebar visibility (collapsed/expanded)
+- Right sidebar visibility (collapsed/expanded)
+- Sidebar widths (resizable via drag handle)
 
-   // Good
-   setStore("items", [...store.items, newItem])
-   ```
+**Rules**:
 
-2. **Don't use createEffect for derived values**
-   ```typescript
-   // Bad
-   const [doubled, setDoubled] = createSignal(0)
-   createEffect(() => setDoubled(count() * 2))
+- Keep this context UI-only. Do NOT store domain entities here.
+- Expose a minimal API for each sidebar:
+  - Left: `sidebarVisible`, `setSidebarVisible`, `toggleSidebar`, `leftSidebarWidth`, `setLeftSidebarWidth`
+  - Right: `rightSidebarVisible`, `setRightSidebarVisible`, `toggleRightSidebar`, `rightSidebarWidth`, `setRightSidebarWidth`
+- Prefer boolean + toggles over multiple derived flags.
+- Persist sidebar state and widths to `localStorage` for session continuity.
 
-   // Good
-   const doubled = createMemo(() => count() * 2)
-   ```
+**Sidebar Width Constants**:
 
-3. **Don't create signals in loops**
-   ```typescript
-   // Bad
-   items.map(item => {
-     const [selected, setSelected] = createSignal(false)
-     return <div>{/* ... */}</div>
-   })
+| Constant                      | Value | Description                 |
+| ----------------------------- | ----- | --------------------------- |
+| `DEFAULT_LEFT_SIDEBAR_WIDTH`  | 240px | Default left sidebar width  |
+| `DEFAULT_RIGHT_SIDEBAR_WIDTH` | 280px | Default right sidebar width |
+| `MIN_SIDEBAR_WIDTH`           | 180px | Minimum width constraint    |
+| `MAX_SIDEBAR_WIDTH`           | 480px | Maximum width constraint    |
 
-   // Good - use store or single signal with array
-   const [selected, setSelected] = createSignal<number[]>([])
-   ```
+**CSS Variables** (for performance-optimized resizing):
 
-4. **Don't forget to call signals**
-   ```typescript
-   // Bad
-   if (count > 5) { ... }  // count is a function
+- `--left-sidebar-width` - Left sidebar width
+- `--right-sidebar-width` - Right sidebar width
 
-   // Good
-   if (count() > 5) { ... }
-   ```
+**ResizeHandle Component**:
 
-5. **Don't overuse context**
-   ```typescript
-   // Bad - context for component-local state
-   const { collapsed, setCollapsed } = useCollapsedContext()
+The `ResizeHandle` component enables drag-to-resize for sidebars:
 
-   // Good - local state
-   const [collapsed, setCollapsed] = createSignal(false)
-   ```
+- Uses CSS variables during drag for 60fps performance (no React re-renders)
+- Only syncs to React state on `mouseup`
+- Adds `resize-dragging` class to body to disable transitions during drag
 
-### ✅ Do
+**Keyboard Shortcuts**:
 
-1. **Use createSignal for simple state**
-   ```typescript
-   const [count, setCount] = createSignal(0)
-   ```
-
-2. **Use createStore for complex state**
-   ```typescript
-   const [store, setStore] = createStore({ ... })
-   ```
-
-3. **Use createMemo for derived values**
-   ```typescript
-   const doubled = createMemo(() => count() * 2)
-   ```
-
-4. **Use context for shared state**
-   ```typescript
-   const data = useData()
-   ```
-
-5. **Keep state close to where it's used**
-   ```typescript
-   // Component-local state in component
-   // Shared state in context
-   ```
+- `Cmd+\` (Cmd+\) - Toggle left sidebar
+- `Shift+Cmd+\` (Shift+Cmd+\) - Toggle right sidebar
 
 ---
 
-## Examples from Codebase
+## App Preferences Context (User settings)
 
-### Local State
-- `packages/ui/src/components/message-part.tsx` (collapsed, expanded)
+Use `AppPreferencesContext` for **user preferences** that persist across sessions:
 
-### Complex State
-- `packages/ui/src/components/message-part.tsx` (QuestionPrompt store)
+- Display variants
+- Theme settings
+- Font size preferences
 
-### Global State
-- `packages/ui/src/context/data.tsx` (application data)
-- `packages/ui/src/context/dialog.tsx` (dialog management)
-- `packages/ui/src/context/i18n.tsx` (translations)
+**Rules**:
 
-### Derived State
-- `packages/ui/src/components/message-part.tsx` (computed values with createMemo)
+- Use `localStorage` for persistence (no backend required)
+- Keep preferences UI-focused (not domain data)
+- Provide typed setter functions for each preference
+- Load defaults gracefully if localStorage is empty/corrupt
+
+**Storage Key**: `app-preferences`
+
+**Example Preferences**:
+
+| Key              | Type                            | Default     | Description      |
+| ---------------- | ------------------------------- | ----------- | ---------------- |
+| `displayVariant` | `"minimal" \| "classic"`        | `"minimal"` | Display style    |
+| `theme`          | `"light" \| "dark" \| "system"` | `"system"`  | Theme preference |
+
+**Usage**:
+
+```tsx
+import { useAppPreferences } from '../modules/settings';
+
+function MyComponent() {
+  const { preferences, setDisplayVariant } = useAppPreferences();
+
+  // Read preference
+  const isMinimal = preferences.displayVariant === 'minimal';
+
+  // Update preference (auto-persists to localStorage)
+  setDisplayVariant('classic');
+}
+```
+
+**Provider Location**:
+
+- Wrap at `App.tsx` level (outermost, before other providers)
+- Does NOT require auth (preferences work before login)
 
 ---
 
-## Key Takeaways
+## Tabs + Navigation Pattern
 
-1. **createSignal** - Simple reactive values
-2. **createStore** - Complex objects and arrays
-3. **createMemo** - Derived values
-4. **Context** - Shared application state
-5. **Props** - Parent-controlled state
-6. **Local first** - Keep state close to where it's used
-7. **Immutable updates** - Never mutate state directly
-8. **Call signals** - Always call signals to read values
-9. **Batch updates** - SolidJS automatically batches
-10. **DevTools** - Use SolidJS DevTools for debugging
+When implementing a tab-based interface (like VS Code, Obsidian), use **tabs as the single source of truth** for navigation.
+
+### Core Principle
+
+**Rule**: Tabs are the single source of truth for "what content the user is viewing".
+
+- `activeTab` determines `currentView`
+- `activeTab.entityId` (for content tabs) determines `activeEntityId`
+- `navigate(view, opts)` is a **facade** that only opens/focuses tabs
+
+**Why**:
+
+- Avoid circular updates (tab change -> navigate -> openTab -> tab change)
+- Make the TabBar the primary router
+- Keep pages simple: they render based on navigation state derived from tabs
+
+### Implementation Pattern
+
+1. **Keep the mapping centralized** (no scattered `if/else`):
+
+```typescript
+// src/renderer/src/modules/navigation/lib/tab-mapping.ts
+export const TAB_TO_VIEW: Record<TabType, ViewId> = {
+  home: 'home',
+  settings: 'settings',
+  doc: 'doc',
+  // ...
+};
+
+export const VIEW_TO_TAB: Record<ViewId, TabType> = {
+  home: 'home',
+  settings: 'settings',
+  doc: 'doc',
+  // ...
+};
+```
+
+2. **Derive navigation state from tabs**:
+
+```typescript
+// In NavigationContext, compute currentView/activeEntityId from useTabs().activeTab
+// Do NOT store a second copy of view/entity state in Navigation
+```
+
+3. **Keep AppShell free of sync effects**:
+
+- Do NOT add a `useEffect` that tries to sync tabs <-> navigation (it becomes bidirectional quickly)
+
+### Adding a New Tab Type (Checklist)
+
+When adding a new view:
+
+1. Add the `TabType` in `TabsContext.tsx`
+2. Add the `ViewId` + `VIEW_CONFIGS` entry in navigation types
+3. Update both directions in `tab-mapping.ts`
+4. Update `TabBar` icon/title mapping
+5. Ensure `ViewContent` renders the new view for the derived `currentView`
+
+### Example: Tab Context
+
+```tsx
+// src/renderer/src/modules/tabs/TabsContext.tsx
+import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+
+// Tab types
+export type TabType = 'home' | 'settings' | 'doc' | 'folder';
+
+export interface Tab {
+  id: string;
+  type: TabType;
+  title: string;
+  entityId?: string; // For content tabs (doc, folder)
+}
+
+interface TabsContextValue {
+  tabs: Tab[];
+  activeTabId: string | null;
+  activeTab: Tab | null;
+  openTab: (tab: Omit<Tab, 'id'>) => void;
+  closeTab: (tabId: string) => void;
+  setActiveTab: (tabId: string) => void;
+}
+
+const TabsContext = createContext<TabsContextValue | null>(null);
+
+export function TabsProvider({ children }: { children: ReactNode }) {
+  const [tabs, setTabs] = useState<Tab[]>([{ id: 'home', type: 'home', title: 'Home' }]);
+  const [activeTabId, setActiveTabId] = useState<string>('home');
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+
+  const openTab = useCallback(
+    (tabData: Omit<Tab, 'id'>) => {
+      // Check if tab with same entityId already exists
+      const existing = tabs.find((t) => t.type === tabData.type && t.entityId === tabData.entityId);
+
+      if (existing) {
+        setActiveTabId(existing.id);
+        return;
+      }
+
+      const newTab: Tab = {
+        ...tabData,
+        id: `${tabData.type}-${Date.now()}`,
+      };
+
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+    },
+    [tabs]
+  );
+
+  const closeTab = useCallback(
+    (tabId: string) => {
+      setTabs((prev) => {
+        const newTabs = prev.filter((t) => t.id !== tabId);
+
+        // If closing active tab, switch to previous tab
+        if (tabId === activeTabId && newTabs.length > 0) {
+          const closedIndex = prev.findIndex((t) => t.id === tabId);
+          const newActiveIndex = Math.max(0, closedIndex - 1);
+          setActiveTabId(newTabs[newActiveIndex].id);
+        }
+
+        return newTabs;
+      });
+    },
+    [activeTabId]
+  );
+
+  const setActiveTab = useCallback((tabId: string) => {
+    setActiveTabId(tabId);
+  }, []);
+
+  return (
+    <TabsContext.Provider
+      value={{
+        tabs,
+        activeTabId,
+        activeTab,
+        openTab,
+        closeTab,
+        setActiveTab,
+      }}
+    >
+      {children}
+    </TabsContext.Provider>
+  );
+}
+
+export function useTabs(): TabsContextValue {
+  const context = useContext(TabsContext);
+  if (!context) {
+    throw new Error('useTabs must be used within a TabsProvider');
+  }
+  return context;
+}
+```
+
+---
+
+## State Organization Summary
+
+| State Type           | Where to Store           | Persistence                              |
+| -------------------- | ------------------------ | ---------------------------------------- |
+| Auth state           | `AuthContext`            | Session (via main process)               |
+| UI layout (sidebars) | `LayoutContext`          | `localStorage`                           |
+| User preferences     | `AppPreferencesContext`  | `localStorage`                           |
+| Navigation/Tabs      | `TabsContext`            | None (or `localStorage` for tab history) |
+| Page-level UI        | Component state (lifted) | None                                     |
+| Form inputs          | Component state          | None                                     |
+
+---
+
+**Language**: All documentation must be written in **English**.

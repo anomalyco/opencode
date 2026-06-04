@@ -1,244 +1,279 @@
-# Frontend Directory Structure
+# Directory Structure
 
-> Module organization and file layout conventions for this project.
-
----
-
-## Overview
-
-This project uses **SolidJS** with a component-based architecture. The UI package (`packages/ui/`) contains all reusable UI components, hooks, and contexts.
+> Project structure conventions for Electron + React applications.
 
 ---
 
-## Directory Layout
+## Recommended Directory Structure
 
 ```
-packages/ui/src/
-├── assets/              # Static assets
-│   ├── audio/          # Sound files
-│   ├── favicon/        # Favicon variants
-│   ├── fonts/          # Custom fonts
-│   ├── icons/          # SVG icons
-│   └── images/         # Images
-├── components/         # UI components
-│   ├── file-icons/    # File type icons
-│   └── provider-icons/ # Provider-specific icons
-├── context/            # React/Solid contexts
-├── hooks/              # Custom hooks
-├── i18n/               # Internationalization
-├── pierre/             # Diff rendering library
-├── styles/             # Global styles
-│   └── tailwind/      # Tailwind config
-└── theme/              # Theme system
-    └── themes/        # Theme definitions
+src/
+├── main/                     # Electron main process
+│   ├── main.ts               # Entry point
+│   ├── ipc/                   # IPC handlers
+│   │   ├── auth.handler.ts
+│   │   ├── dialog.handler.ts
+│   │   └── ...
+│   ├── services/              # Business logic
+│   │   ├── auth/
+│   │   ├── database/
+│   │   └── ...
+│   └── utils/                 # Main process utilities
+│
+├── preload/                   # Preload scripts
+│   └── preload.ts             # Context bridge setup
+│
+├── renderer/                  # React application
+│   └── src/
+│       ├── App.tsx            # Root component
+│       ├── main.tsx           # React entry point
+│       │
+│       ├── components/        # Shared UI components
+│       │   ├── ui/            # Base UI components (Button, Input, etc.)
+│       │   └── layout/        # Layout components (Sidebar, Header, etc.)
+│       │
+│       ├── features/          # Feature-based modules (auth, settings)
+│       │   └── auth/
+│       │       ├── components/
+│       │       ├── hooks/
+│       │       ├── context/
+│       │       └── index.ts
+│       │
+│       ├── modules/           # Domain modules
+│       │   └── {feature}/
+│       │       ├── components/
+│       │       ├── hooks/
+│       │       ├── context/
+│       │       ├── constants.ts
+│       │       └── types.ts
+│       │
+│       ├── hooks/             # Global hooks
+│       ├── context/           # Global contexts
+│       ├── lib/               # Utility functions
+│       └── styles/            # CSS files
+│
+└── shared/                    # Shared between main and renderer
+    ├── types/                 # Type definitions
+    │   ├── auth.ts
+    │   ├── entity.ts
+    │   └── ...
+    └── constants/             # Shared constants
+        ├── channels.ts        # IPC channel names
+        └── config.ts
+```
+
+---
+
+## Module Structure
+
+Each module follows a consistent internal structure:
+
+```
+modules/
+├── {feature}/
+│   ├── components/     # UI components specific to this module
+│   │   ├── FeatureList.tsx
+│   │   ├── FeatureItem.tsx
+│   │   └── FeatureDialog.tsx
+│   │
+│   ├── hooks/          # Custom hooks for this module
+│   │   ├── index.ts    # Re-exports
+│   │   ├── useFeature.ts
+│   │   └── useFeatureMutation.ts
+│   │
+│   ├── context/        # React context (if needed)
+│   │   └── FeatureContext.tsx
+│   │
+│   ├── constants.ts    # Module-specific constants
+│   ├── types.ts        # Module-specific types
+│   └── index.ts        # Public exports
+```
+
+---
+
+## CSS Location
+
+Use **centralized CSS organization**:
+
+```
+src/renderer/src/styles/
+├── index.css            # Entry point (imports all other files)
+├── tokens.css           # CSS custom properties (:root variables)
+├── base.css             # html/body/typography/focus/scrollbars
+├── components/          # Component-scoped styles
+│   ├── sidebar.css
+│   ├── tabbar.css
+│   └── ...
+├── layout/              # Shell-level layout helpers
+└── pages/               # Page-specific styles
+```
+
+**Rules**:
+
+1. `index.css` is the single entrypoint imported by the renderer
+2. When adding new styles, put them in the closest domain file
+3. If a file grows beyond ~300-500 lines, split it
+
+**Import in entry point**:
+
+```typescript
+// src/renderer/src/main.tsx
+import './styles/index.css';
+```
+
+---
+
+## Feature vs Module
+
+| Type        | Purpose                                | Examples                                   |
+| ----------- | -------------------------------------- | ------------------------------------------ |
+| **Feature** | Cross-cutting concerns, infrastructure | `auth`, `settings`, `navigation`, `layout` |
+| **Module**  | Domain-specific functionality          | `todos`, `documents`, `projects`, `users`  |
+
+**Features** live in `features/`:
+
+- Used across multiple modules
+- Provide contexts, hooks for app-wide functionality
+- Examples: authentication, theming, navigation
+
+**Modules** live in `modules/`:
+
+- Self-contained domain logic
+- May depend on features but not other modules
+- Examples: todo management, document editing
+
+---
+
+## Import Conventions
+
+### From Within a Module
+
+```typescript
+// Inside modules/todos/components/TodoList.tsx
+import { useTodos } from '../hooks';
+import { TODO_STATES } from '../constants';
+import type { Todo } from '../types';
+```
+
+### From Outside a Module
+
+```typescript
+// Inside modules/projects/components/ProjectDetail.tsx
+import { useTodos } from '../../todos/hooks';
+// Or if re-exported from module index:
+import { useTodos } from '../../todos';
+```
+
+### From Shared
+
+```typescript
+// From anywhere in renderer
+import type { User } from '@shared/types/user';
+import { IPC_CHANNELS } from '@shared/constants/channels';
 ```
 
 ---
 
 ## File Naming Conventions
 
-### Components
-- **Pattern**: `kebab-case.tsx` + `kebab-case.css`
-- **Examples**:
-  - `button.tsx` + `button.css`
-  - `message-part.tsx` + `message-part.css`
-  - `context-menu.tsx` + `context-menu.css`
-
-### Hooks
-- **Pattern**: `kebab-case.tsx` (or `.ts`)
-- **Prefix**: `create-` for hook factories, `use-` for React-style hooks
-- **Examples**:
-  - `create-auto-scroll.tsx` - Hook factory
-  - `use-filtered-list.tsx` - React-style hook
-
-### Contexts
-- **Pattern**: `kebab-case.tsx`
-- **Examples**:
-  - `data.tsx` - Data context
-  - `dialog.tsx` - Dialog context
-  - `i18n.tsx` - Internationalization context
+| Type       | Convention                       | Example                           |
+| ---------- | -------------------------------- | --------------------------------- |
+| Components | PascalCase                       | `TodoList.tsx`, `UserAvatar.tsx`  |
+| Hooks      | camelCase with `use` prefix      | `useTodos.ts`, `useAuth.ts`       |
+| Contexts   | PascalCase with `Context` suffix | `AuthContext.tsx`                 |
+| Constants  | SCREAMING_SNAKE_CASE (values)    | `constants.ts` with `TODO_STATES` |
+| Types      | PascalCase                       | `types.ts` with `TodoItem`        |
+| Utilities  | camelCase                        | `formatDate.ts`, `parseQuery.ts`  |
+| CSS        | kebab-case                       | `sidebar.css`, `todo-list.css`    |
 
 ---
 
-## Component Organization
+## Index File Patterns
 
-### Single Component per File
-Each component gets its own file pair:
-```
-button.tsx       # Component logic
-button.css       # Component styles
-```
+### Module Index (Public API)
 
-### Component with Subcomponents
-Complex components with subcomponents use a single file:
 ```typescript
-// accordion.tsx
-export function Accordion() { ... }
-export function AccordionItem() { ... }
-export function AccordionHeader() { ... }
-export function AccordionTrigger() { ... }
-export function AccordionContent() { ... }
+// modules/todos/index.ts
+// Re-export only what should be public
+
+// Components
+export { TodoList } from './components/TodoList';
+export { TodoItem } from './components/TodoItem';
+
+// Hooks
+export { useTodos, useCreateTodo, useUpdateTodo } from './hooks';
+
+// Context
+export { TodoProvider, useTodoContext } from './context/TodoContext';
+
+// Types (re-export from types.ts)
+export type { Todo, TodoState } from './types';
+
+// Constants
+export { TODO_STATES, PRIORITY_OPTIONS } from './constants';
 ```
 
-**Example**: `packages/ui/src/components/accordion.tsx`
+### Hooks Index (Internal Organization)
 
-### Component Exports
-Components are exported directly (no default exports):
 ```typescript
-export function Button(props: ButtonProps) { ... }
-export interface ButtonProps { ... }
+// modules/todos/hooks/index.ts
+export { useTodos } from './useTodos';
+export { useCreateTodo } from './useCreateTodo';
+export { useUpdateTodo } from './useUpdateTodo';
+export { useDeleteTodo } from './useDeleteTodo';
 ```
 
 ---
 
-## Context Organization
+## Shared Types Organization
 
-### Context Pattern
-Contexts use a helper pattern for creation:
-```typescript
-// packages/ui/src/context/data.tsx
-export const { use: useData, provider: DataProvider } = createSimpleContext({
-  name: "Data",
-  init: (props) => { ... }
-})
+```
+src/shared/types/
+├── index.ts            # Re-exports all types
+├── auth.ts             # Authentication types
+├── entity.ts           # Domain entity types
+├── api.ts              # API request/response types
+└── common.ts           # Utility types
 ```
 
-### Context Index
-All contexts are re-exported from `context/index.ts`:
+**Example entity types file**:
+
 ```typescript
-export * from "./helper"
-export * from "./data"
-export * from "./diff"
-export * from "./dialog"
-export * from "./i18n"
-```
+// src/shared/types/entity.ts
+import { z } from 'zod';
 
----
+// Zod schemas
+export const todoStateSchema = z.enum(['open', 'in_progress', 'done', 'canceled']);
+export const todoPrioritySchema = z.enum(['low', 'medium', 'high']);
 
-## Hook Organization
+// TypeScript types derived from schemas
+export type TodoState = z.infer<typeof todoStateSchema>;
+export type TodoPriority = z.infer<typeof todoPrioritySchema>;
 
-### Hook Files
-Hooks are organized by functionality:
-- `create-auto-scroll.tsx` - Auto-scroll behavior
-- `use-filtered-list.tsx` - List filtering logic
-
-### Hook Exports
-Hooks export a single function:
-```typescript
-export function createAutoScroll(options: AutoScrollOptions) { ... }
-```
-
----
-
-## Asset Organization
-
-### Icons
-- **SVG icons**: `assets/icons/`
-- **File type icons**: `components/file-icons/`
-- **Provider icons**: `components/provider-icons/`
-
-### Fonts
-Custom fonts in `assets/fonts/` with proper licensing
-
-### Images
-Static images in `assets/images/`
-
----
-
-## Style Organization
-
-### Component Styles
-Each component has a corresponding CSS file using CSS modules pattern:
-```css
-/* button.css */
-[data-component="button"] {
-  /* Base styles */
-}
-
-[data-component="button"][data-variant="primary"] {
-  /* Variant styles */
+// Entity types
+export interface Todo {
+  id: string;
+  title: string;
+  description?: string;
+  state: TodoState;
+  priority: TodoPriority;
+  createdAt: number;
+  updatedAt: number;
 }
 ```
 
-### Global Styles
-Global styles in `styles/` directory
+---
 
-### Tailwind
-Tailwind configuration in `styles/tailwind/`
+## Quick Reference
+
+| Question                      | Answer                                           |
+| ----------------------------- | ------------------------------------------------ |
+| Where do IPC handlers go?     | `src/main/ipc/`                                  |
+| Where do shared types go?     | `src/shared/types/`                              |
+| Where do component styles go? | `src/renderer/src/styles/components/`            |
+| Where do hooks go?            | In `hooks/` folder of relevant module or feature |
+| Where do global hooks go?     | `src/renderer/src/hooks/`                        |
 
 ---
 
-## Import Patterns
-
-### Relative Imports
-Use relative imports within the same package:
-```typescript
-import { Button } from "./button"
-import { Icon } from "./icon"
-import { useData } from "../context"
-```
-
-### Package Imports
-Use package imports for cross-package dependencies:
-```typescript
-import { Message, Part } from "@opencode-ai/sdk/v2"
-import { getFilename } from "@opencode-ai/util/path"
-```
-
----
-
-## Examples from Codebase
-
-### Component File Structure
-```
-packages/ui/src/components/
-├── button.tsx          # Button component
-├── button.css          # Button styles
-├── card.tsx            # Card component
-├── card.css            # Card styles
-├── message-part.tsx    # Complex component with subcomponents
-└── message-part.css    # Message part styles
-```
-
-### Context File Structure
-```
-packages/ui/src/context/
-├── index.ts            # Re-exports all contexts
-├── data.tsx            # Data context
-├── dialog.tsx          # Dialog context
-└── i18n.tsx            # i18n context
-```
-
-### Hook File Structure
-```
-packages/ui/src/hooks/
-├── index.ts                    # Re-exports all hooks
-├── create-auto-scroll.tsx      # Auto-scroll hook
-└── use-filtered-list.tsx       # Filtered list hook
-```
-
----
-
-## Anti-Patterns
-
-### ❌ Don't
-- Don't use default exports
-- Don't mix multiple unrelated components in one file
-- Don't use `index.tsx` for components (use named files)
-- Don't nest component directories deeply
-
-### ✅ Do
-- Use named exports for all components
-- Keep one component per file (unless subcomponents)
-- Use `index.ts` only for re-exports
-- Keep directory structure flat and organized by type
-
----
-
-## Key Takeaways
-
-1. **Flat structure** - Components, hooks, and contexts in separate directories
-2. **Kebab-case naming** - All files use kebab-case
-3. **Co-located styles** - Each component has a corresponding CSS file
-4. **Named exports** - No default exports
-5. **Type-safe** - TypeScript with strict mode enabled
+**Language**: All documentation must be written in **English**.
