@@ -23,15 +23,16 @@ export interface TaskPromptOps {
 
 const id = "task"
 const BACKGROUND_DESCRIPTION = [
-  "",
-  "",
-  [
-    "Background mode: background=true launches the subagent asynchronously and returns immediately.",
-    "Foreground is the default; use it when you need the result before continuing.",
-    "Use background only for independent work that can run while you continue elsewhere.",
-    "You will be notified automatically when it finishes.",
-  ].join(" "),
+  "Background mode: background=true launches the subagent asynchronously and returns immediately.",
+  "Foreground is the default; use it when you need the result before continuing.",
+  "Use background only for independent work that can run while you continue elsewhere.",
+  "You will be notified automatically when it finishes.",
+].join(" ")
+const BACKGROUND_STARTED = [
+  "Background task started. You will be notified automatically when it finishes; do not poll for progress.",
+  "Do not duplicate its work. Continue only with non-overlapping work, or stop if there is nothing else useful to do.",
 ].join("\n")
+const BACKGROUND_UPDATED = "Additional context sent to the background task."
 
 const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
@@ -53,47 +54,16 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-function output(sessionID: SessionID, text: string) {
-  return [`<task id="${sessionID}" state="completed">`, "<task_result>", text, "</task_result>", "</task>"].join("\n")
-}
-
-function backgroundOutput(sessionID: SessionID) {
-  return [
-    `<task id="${sessionID}" state="running">`,
-    "<summary>Background task started</summary>",
-    "<task_result>",
-    "Background task started. You will be notified automatically when it finishes; do not poll for progress.",
-    "Do not duplicate its work. Continue only with non-overlapping work, or stop if there is nothing else useful to do.",
-    "</task_result>",
-    "</task>",
-  ].join("\n")
-}
-
-function backgroundUpdateOutput(sessionID: SessionID) {
-  return [
-    `<task id="${sessionID}" state="running">`,
-    "<summary>Background task updated</summary>",
-    "<task_result>",
-    "Additional context sent to the background task.",
-    "</task_result>",
-    "</task>",
-  ].join("\n")
-}
-
-function backgroundMessage(input: {
+function renderOutput(input: {
   sessionID: SessionID
-  description: string
-  state: "completed" | "error"
+  state: "running" | "completed" | "error"
+  summary?: string
   text: string
 }) {
-  const tag = input.state === "completed" ? "task_result" : "task_error"
-  const title =
-    input.state === "completed"
-      ? `Background task completed: ${input.description}`
-      : `Background task failed: ${input.description}`
+  const tag = input.state === "error" ? "task_error" : "task_result"
   return [
     `<task id="${input.sessionID}" state="${input.state}">`,
-    `<summary>${title}</summary>`,
+    ...(input.summary ? [`<summary>${input.summary}</summary>`] : []),
     `<${tag}>`,
     input.text,
     `</${tag}>`,
@@ -228,10 +198,13 @@ export const TaskTool = Tool.define(
               {
                 type: "text",
                 synthetic: true,
-                text: backgroundMessage({
+                text: renderOutput({
                   sessionID: nextSession.id,
-                  description: params.description,
                   state,
+                  summary:
+                    state === "completed"
+                      ? `Background task completed: ${params.description}`
+                      : `Background task failed: ${params.description}`,
                   text,
                 }),
               },
@@ -248,7 +221,12 @@ export const TaskTool = Tool.define(
             background: true,
             jobId: nextSession.id,
           },
-          output: backgroundUpdateOutput(nextSession.id),
+          output: renderOutput({
+            sessionID: nextSession.id,
+            state: "running",
+            summary: "Background task updated",
+            text: BACKGROUND_UPDATED,
+          }),
         }
       }
 
@@ -275,7 +253,12 @@ export const TaskTool = Tool.define(
             ...metadata,
             jobId: info.id,
           },
-          output: backgroundOutput(nextSession.id),
+          output: renderOutput({
+            sessionID: nextSession.id,
+            state: "running",
+            summary: "Background task started",
+            text: BACKGROUND_STARTED,
+          }),
         }
       }
 
@@ -296,7 +279,7 @@ export const TaskTool = Tool.define(
             return {
               title: params.description,
               metadata,
-              output: output(nextSession.id, text),
+              output: renderOutput({ sessionID: nextSession.id, state: "completed", text }),
             }
           }),
         (_, exit) =>
@@ -313,7 +296,9 @@ export const TaskTool = Tool.define(
     })
 
     return {
-      description: flags.experimentalBackgroundSubagents ? DESCRIPTION + BACKGROUND_DESCRIPTION : DESCRIPTION,
+      description: flags.experimentalBackgroundSubagents
+        ? [DESCRIPTION, BACKGROUND_DESCRIPTION].join("\n\n")
+        : DESCRIPTION,
       parameters: Parameters,
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
