@@ -212,6 +212,66 @@
         ]
       }
     },
+    "/experimental/control-plane/move-session": {
+      "post": {
+        "tags": ["controlPlane"],
+        "operationId": "experimental.controlPlane.moveSession",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "Session moved"
+          },
+          "400": {
+            "description": "MoveSessionError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MoveSessionError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Move a session to another project directory, optionally transferring local changes.",
+        "summary": "Move session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/MoveSessionDestination"
+                  },
+                  "moveChanges": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["sessionID", "destination"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.controlPlane.moveSession({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/global/health": {
       "get": {
         "tags": ["global"],
@@ -3775,14 +3835,6 @@
             "required": true
           },
           {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
             "name": "workspace",
             "in": "query",
             "schema": {
@@ -3803,13 +3855,13 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "ProjectCopyError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/ProjectCopyError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -3833,6 +3885,12 @@
                     "enum": ["git_worktree"]
                   },
                   "directory": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "context": {
                     "type": "string"
                   }
                 },
@@ -3883,13 +3941,13 @@
             "description": "Project copy removed"
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "ProjectCopyError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/ProjectCopyError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -3961,13 +4019,13 @@
             "description": "Project copies refreshed"
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "ProjectCopyError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/ProjectCopyError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -11954,6 +12012,9 @@
             "$ref": "#/components/schemas/EventSessionNextModelSwitched"
           },
           {
+            "$ref": "#/components/schemas/EventSessionNextMoved"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionNextPrompted"
           },
           {
@@ -12310,6 +12371,27 @@
           }
         },
         "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "MoveSessionError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["MoveSessionError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "SnapshotFileDiff": {
@@ -14350,6 +14432,40 @@
                       }
                     },
                     "required": ["timestamp", "sessionID", "model"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.moved"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "location": {
+                        "$ref": "#/components/schemas/LocationRef"
+                      },
+                      "subdirectory": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "location"],
                     "additionalProperties": false
                   }
                 },
@@ -16783,6 +16899,9 @@
                 "$ref": "#/components/schemas/SyncEventSessionNextModelSwitched"
               },
               {
+                "$ref": "#/components/schemas/SyncEventSessionNextMoved"
+              },
+              {
                 "$ref": "#/components/schemas/SyncEventSessionNextPrompted"
               },
               {
@@ -19094,6 +19213,27 @@
         "required": ["_tag", "projectID", "message"],
         "additionalProperties": false
       },
+      "ProjectCopyError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["ProjectCopyError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "PtyNotFoundError": {
         "type": "object",
         "properties": {
@@ -20117,6 +20257,16 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "MoveSessionDestination": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"],
+        "additionalProperties": false
+      },
       "ModelV2Info": {
         "type": "object",
         "properties": {
@@ -20353,6 +20503,20 @@
           "enabled",
           "limit"
         ],
+        "additionalProperties": false
+      },
+      "LocationRef": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "workspaceID": {
+            "type": "string",
+            "pattern": "^wrk"
+          }
+        },
+        "required": ["directory"],
         "additionalProperties": false
       },
       "PromptSource": {
@@ -21190,6 +21354,60 @@
                   }
                 },
                 "required": ["timestamp", "sessionID", "model"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextMoved": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.moved.1"]
+              },
+              "id": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "location": {
+                    "$ref": "#/components/schemas/LocationRef"
+                  },
+                  "subdirectory": {
+                    "type": "string"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "location"],
                 "additionalProperties": false
               }
             },
@@ -22651,20 +22869,6 @@
           }
         },
         "required": ["id", "request", "mode", "hidden", "permissions"],
-        "additionalProperties": false
-      },
-      "LocationRef": {
-        "type": "object",
-        "properties": {
-          "directory": {
-            "type": "string"
-          },
-          "workspaceID": {
-            "type": "string",
-            "pattern": "^wrk"
-          }
-        },
-        "required": ["directory"],
         "additionalProperties": false
       },
       "SessionV2Info": {
@@ -24273,6 +24477,40 @@
               }
             },
             "required": ["timestamp", "sessionID", "model"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextMoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.moved"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "location": {
+                "$ref": "#/components/schemas/LocationRef"
+              },
+              "subdirectory": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "location"],
             "additionalProperties": false
           }
         },
@@ -26563,6 +26801,10 @@
     {
       "name": "control",
       "description": "Control plane routes."
+    },
+    {
+      "name": "controlPlane",
+      "description": "Control-plane orchestration routes."
     },
     {
       "name": "global",

@@ -253,6 +253,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
+        case "session.next.moved": {
+          const result = Binary.search(store.session, event.properties.sessionID, (s) => s.id)
+          if (!result.found) break
+          setStore(
+            "session",
+            result.index,
+            produce((session) => {
+              session.directory = event.properties.location.directory
+              session.path = event.properties.subdirectory
+              session.workspaceID = event.properties.location.workspaceID
+              session.time.updated = event.properties.timestamp
+            }),
+          )
+          break
+        }
+
         case "session.status": {
           setStore("session_status", event.properties.sessionID, event.properties.status)
           break

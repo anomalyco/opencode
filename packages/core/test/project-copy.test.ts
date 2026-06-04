@@ -97,9 +97,11 @@ describe("ProjectCopy", () => {
       const input = yield* setup()
       const copy = yield* ProjectCopy.Service
       const events = yield* EventV2.Service
-      const target = abs(`${input.root.path}-copy-created`)
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-copy-created"))
+      const target = abs(path.join(parent, "copy"))
       yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(target, { recursive: true, force: true })).pipe(Effect.ignore),
+        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
       )
       const fiber = yield* events
         .subscribe(ProjectCopy.Event.Updated)
@@ -110,8 +112,10 @@ describe("ProjectCopy", () => {
         projectID: input.projectID,
         strategy: "git_worktree",
         sourceDirectory: input.sourceDirectory,
-        directory: target,
+        directory: parent,
+        name: "copy",
       })
+      expect(created.directory).toBe(target)
       expect(yield* stored(input.projectID)).toEqual(
         [
           { directory: input.sourceDirectory, type: "main" as const },
@@ -124,6 +128,71 @@ describe("ProjectCopy", () => {
 
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, type: "main" as const }])
       expect(yield* Effect.promise(() => Bun.file(target).exists())).toBe(false)
+    }),
+  )
+
+  it.live("adds a numeric suffix when a copy directory already exists", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const copy = yield* ProjectCopy.Service
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-copy-suffix"))
+      const target = abs(path.join(parent, "copy-3"))
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => fs.mkdir(path.join(parent, "copy"), { recursive: true }))
+      yield* Effect.promise(() => fs.mkdir(path.join(parent, "copy-2")))
+
+      const created = yield* copy.create({
+        projectID: input.projectID,
+        strategy: "git_worktree",
+        sourceDirectory: input.sourceDirectory,
+        directory: parent,
+        name: "copy",
+      })
+
+      expect(created.directory).toBe(target)
+      expect(yield* Effect.promise(() => fs.stat(path.join(parent, "copy")).then((item) => item.isDirectory()))).toBe(
+        true,
+      )
+      expect(yield* Effect.promise(() => fs.stat(path.join(parent, "copy-2")).then((item) => item.isDirectory()))).toBe(
+        true,
+      )
+
+      yield* copy.remove({ projectID: input.projectID, directory: created.directory })
+    }),
+  )
+
+  it.live("fails after ten copy directory conflicts", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const copy = yield* ProjectCopy.Service
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-copy-conflicts"))
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() =>
+        Promise.all(
+          Array.from({ length: 10 }, (_, index) =>
+            fs.mkdir(path.join(parent, index === 0 ? "copy" : `copy-${index + 1}`), { recursive: true }),
+          ),
+        ),
+      )
+
+      const error = yield* copy
+        .create({
+          projectID: input.projectID,
+          strategy: "git_worktree",
+          sourceDirectory: input.sourceDirectory,
+          directory: parent,
+          name: "copy",
+        })
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ProjectCopy.DestinationExistsError)
+      expect(error.directory).toBe(abs(path.join(parent, "copy-10")))
     }),
   )
 
@@ -178,6 +247,31 @@ describe("ProjectCopy", () => {
       yield* Effect.promise(() => $`git worktree remove --force ${target}`.cwd(input.root.path).quiet())
       yield* copy.refresh({ projectID: input.projectID })
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, type: "main" as const }])
+    }),
+  )
+
+  it.live("refresh ignores stale git worktree registrations", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const copy = yield* ProjectCopy.Service
+      const stale = abs(`${input.root.path}-copy-stale`)
+      const target = abs(`${input.root.path}-copy-after-stale`)
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(target, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => $`git worktree add --detach ${stale} HEAD`.cwd(input.root.path).quiet())
+      yield* Effect.promise(() => fs.rm(stale, { recursive: true, force: true }))
+      yield* Effect.promise(() => $`git worktree add --detach ${target} HEAD`.cwd(input.root.path).quiet())
+
+      yield* copy.refresh({ projectID: input.projectID })
+
+      const discovered = abs(yield* Effect.promise(() => fs.realpath(target)))
+      expect(yield* stored(input.projectID)).toEqual(
+        [
+          { directory: input.sourceDirectory, type: "main" as const },
+          { directory: discovered, type: "git_worktree" as const },
+        ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
+      )
     }),
   )
 

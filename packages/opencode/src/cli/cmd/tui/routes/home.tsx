@@ -11,6 +11,7 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
+import { HomeSessionDestinationProvider } from "./home/session-destination"
 
 let once = false
 const placeholder = {
@@ -66,7 +67,7 @@ export function Home() {
   })
 
   return (
-    <>
+    <HomeSessionDestinationProvider>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
         <box flexGrow={1} minHeight={0} />
         <box height={4} minHeight={0} flexShrink={1} />
@@ -88,6 +89,6 @@ export function Home() {
       <box width="100%" flexShrink={0}>
         <TuiPluginRuntime.Slot name="home_footer" mode="single_winner" />
       </box>
-    </>
+    </HomeSessionDestinationProvider>
   )
 }

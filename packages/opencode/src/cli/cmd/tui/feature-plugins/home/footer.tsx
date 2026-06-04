@@ -2,12 +2,17 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { Global } from "@opencode-ai/core/global"
+import { useHomeSessionDestination } from "../../routes/home/session-destination"
 
 const id = "internal:home-footer"
 
 function Directory(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
+  const destination = useHomeSessionDestination()
   const dir = createMemo(() => {
+    const selected = destination?.destination()
+    if (selected?.type === "new") return
+    if (selected?.type === "directory") return selected.directory.replace(Global.Path.home, "~")
     const dir = props.api.state.path.directory || process.cwd()
     const out = dir.replace(Global.Path.home, "~")
     const branch = props.api.state.vcs?.branch
@@ -15,7 +20,7 @@ function Directory(props: { api: TuiPluginApi }) {
     return out
   })
 
-  return <text fg={theme().textMuted}>{dir()}</text>
+  return <Show when={dir()}>{(value) => <text fg={theme().textMuted}>{value()}</text>}</Show>
 }
 
 function Mcp(props: { api: TuiPluginApi }) {

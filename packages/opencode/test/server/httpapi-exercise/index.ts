@@ -507,6 +507,14 @@ const scenarios: Scenario[] = [
     }))
     .status(400),
   http.protected
+    .post("/experimental/control-plane/move-session", "experimental.controlPlane.moveSession")
+    .global()
+    .at(() => ({
+      path: "/experimental/control-plane/move-session",
+      body: {},
+    }))
+    .status(400),
+  http.protected
     .get("/experimental/tool", "tool.list")
     .at((ctx) => ({
       path: `/experimental/tool?${new URLSearchParams({ provider: "opencode", model: "test" })}`,
