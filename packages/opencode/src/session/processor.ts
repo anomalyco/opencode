@@ -909,6 +909,13 @@ export const layer = Layer.effect(
         const error = parse(e)
         yield* flushV2Fragments()
         if (SessionV1.ContextOverflowError.isInstance(error)) {
+          if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
+            ctx.assistantMessage.error = error
+            ctx.assistantMessage.finish = "error"
+            yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+            yield* status.set(ctx.sessionID, { type: "idle" })
+            return
+          }
           ctx.needsCompaction = true
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
