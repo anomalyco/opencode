@@ -1,17 +1,21 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { V2Schema } from "@opencode-ai/core/v2-schema"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const locationLayer = Layer.succeed(
   Location.Service,
-  Location.Service.of(location({ directory: AbsolutePath.make("project"), workspaceID: "workspace" })),
+  Location.Service.of(
+    location({ directory: AbsolutePath.make("project"), workspaceID: WorkspaceV2.ID.make("wrk_test") }),
+  ),
 )
 const eventLayer = Layer.mergeAll(EventV2.defaultLayer, Database.defaultLayer)
 const it = testEffect(eventLayer.pipe(Layer.provideMerge(locationLayer)))
@@ -67,7 +71,32 @@ const VersionedMessage = EventV2.define({
   },
 })
 
+const SyncTimestamp = EventV2.define({
+  type: "test.timestamp",
+  sync: {
+    version: 1,
+    aggregate: "id",
+  },
+  schema: {
+    id: Schema.String,
+    timestamp: V2Schema.DateTimeUtcFromMillis,
+  },
+})
+
 describe("EventV2", () => {
+  it.effect("derives stable namespaced external IDs", () =>
+    Effect.sync(() => {
+      const input = { namespace: "opencord.agent-input", key: "input-1" }
+
+      expect(EventV2.ID.fromExternal(input)).toBe(EventV2.ID.fromExternal(input))
+      expect(EventV2.ID.fromExternal(input)).toMatch(/^evt_[a-f0-9]{64}$/)
+      expect(EventV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(EventV2.ID.fromExternal(input))
+      expect(EventV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(
+        EventV2.ID.fromExternal({ namespace: "a", key: "b:c" }),
+      )
+    }),
+  )
+
   it.effect("publishes events with the current location", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -80,7 +109,10 @@ describe("EventV2", () => {
       expect(event.type).toBe("test.message")
       expect(event).not.toHaveProperty("version")
       expect(event.data).toEqual({ text: "hello" })
-      expect(event.location).toEqual({ directory: AbsolutePath.make("project"), workspaceID: "workspace" })
+      expect(event.location).toEqual({
+        directory: AbsolutePath.make("project"),
+        workspaceID: WorkspaceV2.ID.make("wrk_test"),
+      })
     }),
   )
 
@@ -204,6 +236,24 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("does not synchronize live-only events", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const synchronized = new Array<string>()
+      const unsubscribe = yield* events.sync((event) =>
+        Effect.sync(() => {
+          synchronized.push(event.type)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      yield* events.publish(Message, { text: "live only" })
+      yield* events.publish(SyncMessage, { id: "one", text: "durable" })
+
+      expect(synchronized).toEqual([SyncMessage.type])
+    }),
+  )
+
   it.effect("inserts sync event rows on publish", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -240,6 +290,120 @@ describe("EventV2", () => {
         .pipe(Effect.orDie)
 
       expect(rows.map((row) => row.seq)).toEqual([0, 1])
+    }),
+  )
+
+  it.effect("replays durable aggregate events after a cursor and tails new events", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
+      const fiber = yield* events
+        .aggregateEvents({ aggregateID, after: EventV2.Cursor.make(0) })
+        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "two" })
+
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual([
+        [EventV2.Cursor.make(1), { id: aggregateID, text: "one" }],
+        [EventV2.Cursor.make(2), { id: aggregateID, text: "two" }],
+      ])
+    }),
+  )
+
+  it.effect("catches durable aggregate events published during replay handoff", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
+      const fiber = yield* events
+        .aggregateEvents({ aggregateID })
+        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
+
+      expect(
+        Array.from(yield* Fiber.join(fiber)).map((event) => [
+          event.cursor,
+          (event.event.data as { text: string }).text,
+        ]),
+      ).toEqual([
+        [EventV2.Cursor.make(0), "zero"],
+        [EventV2.Cursor.make(1), "one"],
+      ])
+    }),
+  )
+
+  it.effect("retains a durable wake committed while historical replay is paused", () =>
+    Effect.gen(function* () {
+      const readStarted = yield* Deferred.make<void>()
+      const continueRead = yield* Deferred.make<void>()
+      let pause = true
+      const database = Database.layerFromPath(":memory:")
+      const eventLayer = EventV2.layerWith({
+        beforeAggregateRead: () =>
+          pause
+            ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
+            : Effect.void,
+      }).pipe(Layer.provide(database))
+
+      yield* Effect.gen(function* () {
+        const events = yield* EventV2.Service
+        const aggregateID = EventV2.ID.create()
+        const fiber = yield* events
+          .aggregateEvents({ aggregateID })
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        yield* Deferred.await(readStarted)
+
+        pause = false
+        yield* events.publish(SyncMessage, { id: aggregateID, text: "during handoff" })
+        yield* Deferred.succeed(continueRead, undefined)
+
+        expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual([
+          [EventV2.Cursor.make(0), { id: aggregateID, text: "during handoff" }],
+        ])
+      }).pipe(Effect.provide(Layer.mergeAll(database, eventLayer)))
+    }),
+  )
+
+  it.effect("coalesces durable aggregate wakes while draining every committed event", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const count = 64
+      const fiber = yield* events
+        .aggregateEvents({ aggregateID })
+        .pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      for (let index = 0; index < count; index++) {
+        yield* events.publish(SyncMessage, { id: aggregateID, text: String(index) })
+      }
+
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual(
+        Array.from({ length: count }, (_, index) => [
+          EventV2.Cursor.make(index),
+          { id: aggregateID, text: String(index) },
+        ]),
+      )
+    }),
+  )
+
+  it.effect("omits live-only events from durable aggregate streams", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const fiber = yield* events
+        .aggregateEvents({ aggregateID })
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* events.publish(Message, { text: "live only" })
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "durable" })
+
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => event.event.type)).toEqual([SyncMessage.type])
     }),
   )
 
@@ -311,6 +475,51 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect(
+    "replay rejects an envelope aggregate that differs from its payload without mutating the payload aggregate",
+    () =>
+      Effect.gen(function* () {
+        const events = yield* EventV2.Service
+        const { db } = yield* Database.Service
+        const envelopeAggregateID = EventV2.ID.create()
+        const payloadAggregateID = EventV2.ID.create()
+        const received = new Array<EventV2.Payload>()
+        yield* events.publish(SyncMessage, { id: payloadAggregateID, text: "seed" })
+        yield* events.project(SyncMessage, (event) =>
+          Effect.sync(() => {
+            received.push(event)
+          }),
+        )
+
+        const exit = yield* events
+          .replay({
+            id: EventV2.ID.create(),
+            type: EventV2.versionedType(SyncMessage.type, 1),
+            seq: 1,
+            aggregateID: envelopeAggregateID,
+            data: { id: payloadAggregateID, text: "replayed" },
+          })
+          .pipe(Effect.exit)
+        const rows = yield* db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, payloadAggregateID))
+          .all()
+          .pipe(Effect.orDie)
+        const sequence = yield* db
+          .select({ seq: EventSequenceTable.seq })
+          .from(EventSequenceTable)
+          .where(eq(EventSequenceTable.aggregate_id, payloadAggregateID))
+          .get()
+          .pipe(Effect.orDie)
+
+        expect(String(exit)).toContain("Aggregate mismatch")
+        expect(received).toHaveLength(0)
+        expect(rows).toHaveLength(1)
+        expect(sequence).toEqual({ seq: 0 })
+      }),
+  )
+
   it.effect("replay defects on sequence mismatch", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -334,6 +543,29 @@ describe("EventV2", () => {
         .pipe(Effect.exit)
 
       expect(String(exit)).toContain("Sequence mismatch")
+    }),
+  )
+
+  it.effect("replay decodes synchronized transformed values before projection", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const received = new Array<typeof SyncTimestamp.Type>()
+      yield* events.project(SyncTimestamp, (event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+
+      yield* events.replay({
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType(SyncTimestamp.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, timestamp: 0 },
+      })
+
+      expect(received[0]?.data.timestamp).toEqual(DateTime.makeUnsafe(0))
     }),
   )
 
@@ -485,11 +717,111 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("replay claims an existing unowned sequence before fencing a different owner", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "local" })
+
+      yield* events.replay(
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 1,
+          aggregateID,
+          data: { id: aggregateID, text: "claimed" },
+        },
+        { ownerID: "owner-1" },
+      )
+      yield* events.replay(
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 2,
+          aggregateID,
+          data: { id: aggregateID, text: "fenced" },
+        },
+        { ownerID: "owner-2" },
+      )
+      const rows = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, aggregateID))
+        .all()
+        .pipe(Effect.orDie)
+      const sequence = yield* db
+        .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(rows.map((row) => row.seq)).toEqual([0, 1])
+      expect(sequence).toEqual({ seq: 1, ownerID: "owner-1" })
+    }),
+  )
+
+  it.effect("strict replay rejects an owner conflict instead of silently skipping it", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      yield* events.replay(
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 0,
+          aggregateID,
+          data: { id: aggregateID, text: "claimed" },
+        },
+        { ownerID: "owner-1" },
+      )
+
+      const exit = yield* events
+        .replay(
+          {
+            id: EventV2.ID.create(),
+            type: EventV2.versionedType(SyncMessage.type, 1),
+            seq: 1,
+            aggregateID,
+            data: { id: aggregateID, text: "conflict" },
+          },
+          { ownerID: "owner-2", strictOwner: true },
+        )
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay owner mismatch")
+    }),
+  )
+
+  it.effect("publishes accepted replay with its durable sequence and suppresses stale replay", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<EventV2.Payload>()
+      const aggregateID = EventV2.ID.create()
+      yield* events.listen((event) => Effect.sync(() => received.push(event)))
+      const replayed = {
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "replayed" },
+      }
+
+      yield* events.replay(replayed, { publish: true })
+      yield* events.replay(replayed, { publish: true })
+
+      expect(received).toMatchObject([{ id: replayed.id, seq: 0, data: replayed.data }])
+    }),
+  )
+
   it.effect("replay from a different owner leaves claimed sequence unchanged", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
       const aggregateID = EventV2.ID.create()
+      const received = new Array<EventV2.Payload>()
+      yield* events.listen((event) => Effect.sync(() => received.push(event)))
 
       yield* events.replay(
         {
@@ -509,7 +841,7 @@ describe("EventV2", () => {
           aggregateID,
           data: { id: aggregateID, text: "ignored" },
         },
-        { ownerID: "owner-2" },
+        { ownerID: "owner-2", publish: true },
       )
       const rows = yield* db
         .select()
@@ -526,6 +858,7 @@ describe("EventV2", () => {
 
       expect(rows).toHaveLength(1)
       expect(sequence).toEqual({ seq: 0, ownerID: "owner-1" })
+      expect(received).toHaveLength(0)
     }),
   )
 

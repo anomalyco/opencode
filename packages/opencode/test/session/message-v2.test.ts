@@ -8,11 +8,12 @@ import type { Provider } from "@/provider/provider"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderV2.ID.make("test")
 const model: Provider.Model = {
-  id: ProviderV2.ModelID.make("test-model"),
+  id: ModelV2.ID.make("test-model"),
   providerID,
   api: {
     id: "test-model",
@@ -67,7 +68,7 @@ function userInfo(id: string): SessionV1.User {
     role: "user",
     time: { created: 0 },
     agent: "user",
-    model: { providerID, modelID: ProviderV2.ModelID.make("test") },
+    model: { providerID, modelID: ModelV2.ID.make("test") },
     tools: {},
     mode: "",
   } as unknown as SessionV1.User
@@ -413,7 +414,7 @@ describe("session.message-v2.toModelMessage", () => {
   test("preserves jpeg tool-result media for anthropic models", async () => {
     const anthropicModel: Provider.Model = {
       ...model,
-      id: ProviderV2.ModelID.make("anthropic/claude-opus-4-7"),
+      id: ModelV2.ID.make("anthropic/claude-opus-4-7"),
       providerID: ProviderV2.ID.make("anthropic"),
       api: {
         id: "claude-opus-4-7-20250805",
@@ -496,7 +497,7 @@ describe("session.message-v2.toModelMessage", () => {
   test("moves bedrock pdf tool-result media into a separate user message", async () => {
     const bedrockModel: Provider.Model = {
       ...model,
-      id: ProviderV2.ModelID.make("amazon-bedrock/anthropic.claude-sonnet-4-6"),
+      id: ModelV2.ID.make("amazon-bedrock/anthropic.claude-sonnet-4-6"),
       providerID: ProviderV2.ID.make("amazon-bedrock"),
       api: {
         id: "anthropic.claude-sonnet-4-6",
@@ -1044,7 +1045,7 @@ describe("session.message-v2.toModelMessage", () => {
     const assistantID = "m-assistant"
     const openrouterModel: Provider.Model = {
       ...model,
-      id: ProviderV2.ModelID.make("deepseek/deepseek-v4-pro"),
+      id: ModelV2.ID.make("deepseek/deepseek-v4-pro"),
       providerID: ProviderV2.ID.make("openrouter"),
       api: {
         id: "deepseek/deepseek-v4-pro",
