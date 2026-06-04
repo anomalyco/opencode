@@ -32,7 +32,7 @@ const EventSchema = Schema.Union([
     .values()
     .map((definition) =>
       Schema.Struct({
-        id: Schema.String,
+        id: EventV2.ID,
         type: Schema.Literal(definition.type),
         properties: definition.data,
       }).annotate({ identifier: `Event.${definition.type}` }),

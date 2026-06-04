@@ -10122,7 +10122,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionMessageUser"
+                      "$ref": "#/components/schemas/SessionInputAdmitted"
                     }
                   },
                   "required": ["data"],
@@ -10181,7 +10181,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "prompt": {
                     "$ref": "#/components/schemas/Prompt"
@@ -12016,6 +12017,12 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionNextPrompted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextPromptAdmitted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextPromptPromoted"
           },
           {
             "$ref": "#/components/schemas/EventSessionNextSynthetic"
@@ -14383,11 +14390,15 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "agent": {
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "agent"],
+                    "required": ["timestamp", "sessionID", "messageID", "agent"],
                     "additionalProperties": false
                   }
                 },
@@ -14414,6 +14425,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "model": {
                         "type": "object",
                         "properties": {
@@ -14431,7 +14446,7 @@
                         "additionalProperties": false
                       }
                     },
-                    "required": ["timestamp", "sessionID", "model"],
+                    "required": ["timestamp", "sessionID", "messageID", "model"],
                     "additionalProperties": false
                   }
                 },
@@ -14492,6 +14507,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "prompt": {
                         "$ref": "#/components/schemas/Prompt"
                       },
@@ -14500,7 +14519,84 @@
                         "enum": ["steer", "queue"]
                       }
                     },
-                    "required": ["timestamp", "sessionID", "prompt", "delivery"],
+                    "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.prompt.admitted"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "prompt": {
+                        "$ref": "#/components/schemas/Prompt"
+                      },
+                      "delivery": {
+                        "type": "string",
+                        "enum": ["steer", "queue"]
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.prompt.promoted"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "prompt": {
+                        "$ref": "#/components/schemas/Prompt"
+                      },
+                      "timeCreated": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
                     "additionalProperties": false
                   }
                 },
@@ -14527,11 +14623,15 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "text": {
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "text"],
+                    "required": ["timestamp", "sessionID", "messageID", "text"],
                     "additionalProperties": false
                   }
                 },
@@ -14558,6 +14658,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "callID": {
                         "type": "string"
                       },
@@ -14565,7 +14669,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "callID", "command"],
+                    "required": ["timestamp", "sessionID", "messageID", "callID", "command"],
                     "additionalProperties": false
                   }
                 },
@@ -14626,6 +14730,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "agent": {
                         "type": "string"
                       },
@@ -14649,7 +14757,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "agent", "model"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "agent", "model"],
                     "additionalProperties": false
                   }
                 },
@@ -14677,7 +14785,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "finish": {
                         "type": "string"
@@ -14746,7 +14855,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "error": {
                         "$ref": "#/components/schemas/SessionErrorUnknown"
@@ -14779,11 +14889,15 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "textID": {
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "textID"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "textID"],
                     "additionalProperties": false
                   }
                 },
@@ -14810,6 +14924,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "textID": {
                         "type": "string"
                       },
@@ -14817,7 +14935,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "textID", "delta"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "delta"],
                     "additionalProperties": false
                   }
                 },
@@ -14844,6 +14962,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "textID": {
                         "type": "string"
                       },
@@ -14851,7 +14973,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "textID", "text"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "text"],
                     "additionalProperties": false
                   }
                 },
@@ -14878,6 +15000,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "reasoningID": {
                         "type": "string"
                       },
@@ -14888,7 +15014,7 @@
                         }
                       }
                     },
-                    "required": ["timestamp", "sessionID", "reasoningID"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
                     "additionalProperties": false
                   }
                 },
@@ -14915,6 +15041,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "reasoningID": {
                         "type": "string"
                       },
@@ -14922,7 +15052,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "reasoningID", "delta"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "delta"],
                     "additionalProperties": false
                   }
                 },
@@ -14949,6 +15079,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "reasoningID": {
                         "type": "string"
                       },
@@ -14962,7 +15096,7 @@
                         }
                       }
                     },
-                    "required": ["timestamp", "sessionID", "reasoningID", "text"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
                     "additionalProperties": false
                   }
                 },
@@ -14990,7 +15124,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15027,7 +15162,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15064,7 +15200,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15101,7 +15238,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15157,7 +15295,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15207,7 +15346,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15282,7 +15422,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15369,12 +15510,16 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "reason": {
                         "type": "string",
                         "enum": ["auto", "manual"]
                       }
                     },
-                    "required": ["timestamp", "sessionID", "reason"],
+                    "required": ["timestamp", "sessionID", "messageID", "reason"],
                     "additionalProperties": false
                   }
                 },
@@ -16903,6 +17048,12 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextPrompted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextPromptAdmitted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextPromptPromoted"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextSynthetic"
@@ -21285,11 +21436,15 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "agent": {
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "agent"],
+                "required": ["timestamp", "sessionID", "messageID", "agent"],
                 "additionalProperties": false
               }
             },
@@ -21336,6 +21491,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "model": {
                     "type": "object",
                     "properties": {
@@ -21353,7 +21512,7 @@
                     "additionalProperties": false
                   }
                 },
-                "required": ["timestamp", "sessionID", "model"],
+                "required": ["timestamp", "sessionID", "messageID", "model"],
                 "additionalProperties": false
               }
             },
@@ -21454,6 +21613,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "prompt": {
                     "$ref": "#/components/schemas/Prompt"
                   },
@@ -21462,7 +21625,124 @@
                     "enum": ["steer", "queue"]
                   }
                 },
-                "required": ["timestamp", "sessionID", "prompt", "delivery"],
+                "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextPromptAdmitted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.prompt.admitted.1"]
+              },
+              "id": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "prompt": {
+                    "$ref": "#/components/schemas/Prompt"
+                  },
+                  "delivery": {
+                    "type": "string",
+                    "enum": ["steer", "queue"]
+                  }
+                },
+                "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextPromptPromoted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.prompt.promoted.1"]
+              },
+              "id": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "prompt": {
+                    "$ref": "#/components/schemas/Prompt"
+                  },
+                  "timeCreated": {
+                    "type": "number"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
                 "additionalProperties": false
               }
             },
@@ -21509,11 +21789,15 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "text": {
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "text"],
+                "required": ["timestamp", "sessionID", "messageID", "text"],
                 "additionalProperties": false
               }
             },
@@ -21560,6 +21844,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "callID": {
                     "type": "string"
                   },
@@ -21567,7 +21855,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "callID", "command"],
+                "required": ["timestamp", "sessionID", "messageID", "callID", "command"],
                 "additionalProperties": false
               }
             },
@@ -21668,6 +21956,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "agent": {
                     "type": "string"
                   },
@@ -21691,7 +21983,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "agent", "model"],
+                "required": ["timestamp", "sessionID", "assistantMessageID", "agent", "model"],
                 "additionalProperties": false
               }
             },
@@ -21739,7 +22031,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "finish": {
                     "type": "string"
@@ -21828,7 +22121,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "error": {
                     "$ref": "#/components/schemas/SessionErrorUnknown"
@@ -21881,11 +22175,15 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "textID": {
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "textID"],
+                "required": ["timestamp", "sessionID", "assistantMessageID", "textID"],
                 "additionalProperties": false
               }
             },
@@ -21932,6 +22230,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "textID": {
                     "type": "string"
                   },
@@ -21939,7 +22241,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "textID", "text"],
+                "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "text"],
                 "additionalProperties": false
               }
             },
@@ -21986,6 +22288,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "reasoningID": {
                     "type": "string"
                   },
@@ -21996,7 +22302,7 @@
                     }
                   }
                 },
-                "required": ["timestamp", "sessionID", "reasoningID"],
+                "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
                 "additionalProperties": false
               }
             },
@@ -22043,6 +22349,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "reasoningID": {
                     "type": "string"
                   },
@@ -22056,7 +22366,7 @@
                     }
                   }
                 },
-                "required": ["timestamp", "sessionID", "reasoningID", "text"],
+                "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
                 "additionalProperties": false
               }
             },
@@ -22104,7 +22414,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22161,7 +22472,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22218,7 +22530,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22294,7 +22607,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22364,7 +22678,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22459,7 +22774,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22586,12 +22902,16 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "reason": {
                     "type": "string",
                     "enum": ["auto", "manual"]
                   }
                 },
-                "required": ["timestamp", "sessionID", "reason"],
+                "required": ["timestamp", "sessionID", "messageID", "reason"],
                 "additionalProperties": false
               }
             },
@@ -22965,11 +23285,120 @@
         "required": ["id", "projectID", "cost", "tokens", "time", "title", "location"],
         "additionalProperties": false
       },
+      "SessionInputAdmitted": {
+        "type": "object",
+        "properties": {
+          "admittedSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "prompt": {
+            "$ref": "#/components/schemas/Prompt"
+          },
+          "delivery": {
+            "type": "string",
+            "enum": ["steer", "queue"]
+          },
+          "timeCreated": {
+            "type": "number"
+          },
+          "promotedSeq": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["admittedSeq", "id", "sessionID", "prompt", "delivery", "timeCreated"],
+        "additionalProperties": false
+      },
+      "SessionMessageAgentSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["agent-switched"]
+          },
+          "agent": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "time", "type", "agent"],
+        "additionalProperties": false
+      },
+      "SessionMessageModelSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["model-switched"]
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "providerID": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "providerID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "time", "type", "model"],
+        "additionalProperties": false
+      },
       "SessionMessageUser": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -23013,84 +23442,12 @@
         "required": ["id", "time", "text", "type"],
         "additionalProperties": false
       },
-      "SessionMessageAgentSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              }
-            },
-            "required": ["created"],
-            "additionalProperties": false
-          },
-          "type": {
-            "type": "string",
-            "enum": ["agent-switched"]
-          },
-          "agent": {
-            "type": "string"
-          }
-        },
-        "required": ["id", "time", "type", "agent"],
-        "additionalProperties": false
-      },
-      "SessionMessageModelSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              }
-            },
-            "required": ["created"],
-            "additionalProperties": false
-          },
-          "type": {
-            "type": "string",
-            "enum": ["model-switched"]
-          },
-          "model": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "providerID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "time", "type", "model"],
-        "additionalProperties": false
-      },
       "SessionMessageSynthetic": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -23124,7 +23481,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -23392,7 +23750,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -23521,7 +23880,8 @@
             "type": "string"
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -24428,11 +24788,15 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "agent": {
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "agent"],
+            "required": ["timestamp", "sessionID", "messageID", "agent"],
             "additionalProperties": false
           }
         },
@@ -24459,6 +24823,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "model": {
                 "type": "object",
                 "properties": {
@@ -24476,7 +24844,7 @@
                 "additionalProperties": false
               }
             },
-            "required": ["timestamp", "sessionID", "model"],
+            "required": ["timestamp", "sessionID", "messageID", "model"],
             "additionalProperties": false
           }
         },
@@ -24537,6 +24905,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "prompt": {
                 "$ref": "#/components/schemas/Prompt"
               },
@@ -24545,7 +24917,84 @@
                 "enum": ["steer", "queue"]
               }
             },
-            "required": ["timestamp", "sessionID", "prompt", "delivery"],
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextPromptAdmitted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompt.admitted"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": ["steer", "queue"]
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextPromptPromoted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompt.promoted"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "timeCreated": {
+                "type": "number"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
             "additionalProperties": false
           }
         },
@@ -24572,11 +25021,15 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "text": {
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "text"],
+            "required": ["timestamp", "sessionID", "messageID", "text"],
             "additionalProperties": false
           }
         },
@@ -24603,6 +25056,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "callID": {
                 "type": "string"
               },
@@ -24610,7 +25067,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "callID", "command"],
+            "required": ["timestamp", "sessionID", "messageID", "callID", "command"],
             "additionalProperties": false
           }
         },
@@ -24671,6 +25128,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "agent": {
                 "type": "string"
               },
@@ -24694,7 +25155,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "agent", "model"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "agent", "model"],
             "additionalProperties": false
           }
         },
@@ -24722,7 +25183,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "finish": {
                 "type": "string"
@@ -24791,7 +25253,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "error": {
                 "$ref": "#/components/schemas/SessionErrorUnknown"
@@ -24824,11 +25287,15 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "textID": {
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "textID"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID"],
             "additionalProperties": false
           }
         },
@@ -24855,6 +25322,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "textID": {
                 "type": "string"
               },
@@ -24862,7 +25333,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "textID", "delta"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "delta"],
             "additionalProperties": false
           }
         },
@@ -24889,6 +25360,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "textID": {
                 "type": "string"
               },
@@ -24896,7 +25371,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "textID", "text"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "text"],
             "additionalProperties": false
           }
         },
@@ -24923,6 +25398,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "reasoningID": {
                 "type": "string"
               },
@@ -24933,7 +25412,7 @@
                 }
               }
             },
-            "required": ["timestamp", "sessionID", "reasoningID"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
             "additionalProperties": false
           }
         },
@@ -24960,6 +25439,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "reasoningID": {
                 "type": "string"
               },
@@ -24967,7 +25450,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "reasoningID", "delta"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "delta"],
             "additionalProperties": false
           }
         },
@@ -24994,6 +25477,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "reasoningID": {
                 "type": "string"
               },
@@ -25007,7 +25494,7 @@
                 }
               }
             },
-            "required": ["timestamp", "sessionID", "reasoningID", "text"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
             "additionalProperties": false
           }
         },
@@ -25035,7 +25522,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25072,7 +25560,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25109,7 +25598,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25146,7 +25636,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25202,7 +25693,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25252,7 +25744,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25319,7 +25812,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25406,12 +25900,16 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "reason": {
                 "type": "string",
                 "enum": ["auto", "manual"]
               }
             },
-            "required": ["timestamp", "sessionID", "reason"],
+            "required": ["timestamp", "sessionID", "messageID", "reason"],
             "additionalProperties": false
           }
         },

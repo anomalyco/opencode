@@ -36,7 +36,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
 
     const replay = Effect.fn("SyncHttpApi.replay")(function* (ctx: { payload: typeof ReplayPayload.Type }) {
       const payload: EventV2.SerializedEvent[] = ctx.payload.events.map((event) => ({
-        id: EventV2.ID.make(event.id),
+        id: event.id,
         aggregateID: event.aggregateID,
         seq: event.seq,
         type: event.type,

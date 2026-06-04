@@ -4,6 +4,28 @@ Record V2 database, durable-event, projected-message, HTTP, and generated SDK sc
 
 This document covers meaningful contract changes introduced on the `feat/opencode-embedded-api` branch since its divergence from `origin/dev`. Mechanical file moves and internal refactors are omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.
 
+## 2026-06-04 Event-Sourced Session Input Cutover
+
+Affected schema:
+
+- `session_input`, `session_message`, `event`, `event_sequence`, and disposable workspace beta storage.
+- New synchronized `session.next.prompt.admitted.1` and `session.next.prompt.promoted.1` events.
+- Experimental `SessionV2.prompt(...)`, HTTP, and generated SDK admission receipt.
+
+Change:
+
+- Replace inbox-local admission sequence with event-sourced prompt admission and promotion sequences.
+- Give projected Session messages stable `msg_*` resource IDs distinct from `evt_*` creator event IDs.
+- Give every event that creates a projected transcript resource an explicit `msg_*` resource ID. Assistant steps propagate one `assistantMessageID` through assistant-owned events.
+- Reset incompatible unreleased beta event history, derived Session projections, workspace rows, and Session workspace links.
+
+Compatibility:
+
+- The reset preserves canonical V1 `session`, `message`, and `part` rows.
+- Existing synchronized workspaces are disposable beta state and are removed by the reset.
+- Before starting the new build, discard adapter-managed external workspace resources created by unreleased builds. The SQL migration cannot remove external resources through runtime adapters, and rediscovering retained resources after startup can replay incompatible beta history.
+- Exact prompt retries reconcile one stable `msg_*` identity when Session, prompt, and delivery mode match.
+
 ## Earlier Branch History
 
 ### Replayable Session Event Refinement And Cursor Stream
@@ -60,7 +82,7 @@ Affected schema:
 
 Change:
 
-- Bind step settlement to an explicit `assistantMessageID`.
+- Bind step settlement to an explicit assistant message ID.
 
 Reason:
 
@@ -409,7 +431,7 @@ Affected schema:
 Change:
 
 - Preserve stable IDs on projected assistant text parts.
-- Route durable tool projection updates through explicit owning `assistantMessageID` values rather than provider-local call IDs alone.
+- Route durable tool projection updates through explicit owning assistant message IDs rather than provider-local call IDs alone.
 - Replay full-value text and tool-input end checkpoints while keeping fragment deltas ephemeral.
 
 Reason:

@@ -26,7 +26,7 @@ function migrations() {
 }
 
 describe("workspace time migration", () => {
-  test("migrates existing workspace rows", () => {
+  test("discards existing workspace rows during the beta reset", () => {
     const sqlite = new Database(":memory:")
     const db = drizzle({ client: sqlite })
     const entries = migrations()
@@ -45,6 +45,6 @@ describe("workspace time migration", () => {
     )
 
     expect(() => migrate(db, entries.slice(index))).not.toThrow()
-    expect(sqlite.query("SELECT time_used FROM workspace WHERE id = ?").get("workspace_1")).toEqual({ time_used: 0 })
+    expect(sqlite.query("SELECT time_used FROM workspace WHERE id = ?").get("workspace_1")).toBeNull()
   })
 })

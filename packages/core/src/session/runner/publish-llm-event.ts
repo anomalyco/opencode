@@ -10,6 +10,7 @@ import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 
 type Input = {
@@ -60,7 +61,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const tools = new Map<
     string,
     {
-      readonly assistantMessageID: EventV2.ID
+      readonly assistantMessageID: SessionMessage.ID
       readonly name: string
       inputEnded: boolean
       called: boolean
@@ -70,13 +71,17 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   >()
   const timestamp = DateTime.now
-  let assistantMessageID: EventV2.ID | undefined
+  let assistantMessageID: SessionMessage.ID | undefined
   let providerFailed = false
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
-    assistantMessageID = (yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp }))
-      .id
+    assistantMessageID = SessionMessage.ID.create()
+    yield* events.publish(SessionEvent.Step.Started, {
+      ...input,
+      assistantMessageID,
+      timestamp: yield* timestamp,
+    })
     return assistantMessageID
   })
   const currentAssistantMessageID = () =>
@@ -118,6 +123,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     Effect.gen(function* () {
       yield* events.publish(SessionEvent.Text.Ended, {
         sessionID: input.sessionID,
+        assistantMessageID: yield* currentAssistantMessageID(),
         timestamp: yield* timestamp,
         textID,
         text: value,
@@ -128,6 +134,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     Effect.gen(function* () {
       yield* events.publish(SessionEvent.Reasoning.Ended, {
         sessionID: input.sessionID,
+        assistantMessageID: yield* currentAssistantMessageID(),
         timestamp: yield* timestamp,
         reasoningID,
         text: value,
@@ -220,6 +227,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* text.start(event.id)
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
+          assistantMessageID: yield* startAssistant(),
           timestamp: yield* timestamp,
           textID: event.id,
         })
@@ -228,6 +236,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* text.append(event.id, event.text)
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
           timestamp: yield* timestamp,
           textID: event.id,
           delta: event.text,
@@ -240,6 +249,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* reasoning.start(event.id)
         yield* events.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
+          assistantMessageID: yield* startAssistant(),
           timestamp: yield* timestamp,
           reasoningID: event.id,
           providerMetadata: event.providerMetadata,
@@ -249,6 +259,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* reasoning.append(event.id, event.text)
         yield* events.publish(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
           timestamp: yield* timestamp,
           reasoningID: event.id,
           delta: event.text,

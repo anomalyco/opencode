@@ -19,6 +19,8 @@ export type Event =
   | EventSessionNextModelSwitched
   | EventSessionNextMoved
   | EventSessionNextPrompted
+  | EventSessionNextPromptAdmitted
+  | EventSessionNextPromptPromoted
   | EventSessionNextSynthetic
   | EventSessionNextShellStarted
   | EventSessionNextShellEnded
@@ -804,6 +806,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           agent: string
         }
       }
@@ -813,6 +816,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           model: {
             id: string
             providerID: string
@@ -836,8 +840,31 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           prompt: Prompt
           delivery: "steer" | "queue"
+        }
+      }
+    | {
+        id: string
+        type: "session.next.prompt.admitted"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          prompt: Prompt
+          delivery: "steer" | "queue"
+        }
+      }
+    | {
+        id: string
+        type: "session.next.prompt.promoted"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          prompt: Prompt
+          timeCreated: number
         }
       }
     | {
@@ -846,6 +873,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           text: string
         }
       }
@@ -855,6 +883,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           callID: string
           command: string
         }
@@ -875,6 +904,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           agent: string
           model: {
             id: string
@@ -921,6 +951,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           textID: string
         }
       }
@@ -930,6 +961,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           textID: string
           delta: string
         }
@@ -940,6 +972,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           textID: string
           text: string
         }
@@ -950,6 +983,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           reasoningID: string
           providerMetadata?: {
             [key: string]: {
@@ -964,6 +998,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           reasoningID: string
           delta: string
         }
@@ -974,6 +1009,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           reasoningID: string
           text: string
           providerMetadata?: {
@@ -1111,6 +1147,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           reason: "auto" | "manual"
         }
       }
@@ -1576,6 +1613,8 @@ export type GlobalEvent = {
     | SyncEventSessionNextModelSwitched
     | SyncEventSessionNextMoved
     | SyncEventSessionNextPrompted
+    | SyncEventSessionNextPromptAdmitted
+    | SyncEventSessionNextPromptPromoted
     | SyncEventSessionNextSynthetic
     | SyncEventSessionNextShellStarted
     | SyncEventSessionNextShellEnded
@@ -3122,6 +3161,7 @@ export type SyncEventSessionNextAgentSwitched = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       agent: string
     }
   }
@@ -3138,6 +3178,7 @@ export type SyncEventSessionNextModelSwitched = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       model: {
         id: string
         providerID: string
@@ -3175,8 +3216,45 @@ export type SyncEventSessionNextPrompted = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       prompt: Prompt
       delivery: "steer" | "queue"
+    }
+  }
+}
+
+export type SyncEventSessionNextPromptAdmitted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.prompt.admitted.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+      prompt: Prompt
+      delivery: "steer" | "queue"
+    }
+  }
+}
+
+export type SyncEventSessionNextPromptPromoted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.prompt.promoted.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+      prompt: Prompt
+      timeCreated: number
     }
   }
 }
@@ -3192,6 +3270,7 @@ export type SyncEventSessionNextSynthetic = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       text: string
     }
   }
@@ -3208,6 +3287,7 @@ export type SyncEventSessionNextShellStarted = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       callID: string
       command: string
     }
@@ -3242,6 +3322,7 @@ export type SyncEventSessionNextStepStarted = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       agent: string
       model: {
         id: string
@@ -3309,6 +3390,7 @@ export type SyncEventSessionNextTextStarted = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       textID: string
     }
   }
@@ -3325,6 +3407,7 @@ export type SyncEventSessionNextTextEnded = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       textID: string
       text: string
     }
@@ -3342,6 +3425,7 @@ export type SyncEventSessionNextReasoningStarted = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       reasoningID: string
       providerMetadata?: {
         [key: string]: {
@@ -3363,6 +3447,7 @@ export type SyncEventSessionNextReasoningEnded = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       reasoningID: string
       text: string
       providerMetadata?: {
@@ -3545,6 +3630,7 @@ export type SyncEventSessionNextCompactionStarted = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       reason: "auto" | "manual"
     }
   }
@@ -3670,19 +3756,14 @@ export type SessionV2Info = {
   subpath?: string
 }
 
-export type SessionMessageUser = {
+export type SessionInputAdmitted = {
+  admittedSeq: number
   id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  text: string
-  files?: Array<PromptFileAttachment>
-  agents?: Array<PromptAgentAttachment>
-  references?: Array<PromptReferenceAttachment>
-  type: "user"
+  sessionID: string
+  prompt: Prompt
+  delivery: "steer" | "queue"
+  timeCreated: number
+  promotedSeq?: number
 }
 
 export type SessionMessageAgentSwitched = {
@@ -3711,6 +3792,21 @@ export type SessionMessageModelSwitched = {
     providerID: string
     variant?: string
   }
+}
+
+export type SessionMessageUser = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  references?: Array<PromptReferenceAttachment>
+  type: "user"
 }
 
 export type SessionMessageSynthetic = {
@@ -4176,6 +4272,7 @@ export type EventSessionNextAgentSwitched = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     agent: string
   }
 }
@@ -4186,6 +4283,7 @@ export type EventSessionNextModelSwitched = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     model: {
       id: string
       providerID: string
@@ -4211,8 +4309,33 @@ export type EventSessionNextPrompted = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
+  }
+}
+
+export type EventSessionNextPromptAdmitted = {
+  id: string
+  type: "session.next.prompt.admitted"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    prompt: Prompt
+    delivery: "steer" | "queue"
+  }
+}
+
+export type EventSessionNextPromptPromoted = {
+  id: string
+  type: "session.next.prompt.promoted"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    prompt: Prompt
+    timeCreated: number
   }
 }
 
@@ -4222,6 +4345,7 @@ export type EventSessionNextSynthetic = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     text: string
   }
 }
@@ -4232,6 +4356,7 @@ export type EventSessionNextShellStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     callID: string
     command: string
   }
@@ -4254,6 +4379,7 @@ export type EventSessionNextStepStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     agent: string
     model: {
       id: string
@@ -4303,6 +4429,7 @@ export type EventSessionNextTextStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     textID: string
   }
 }
@@ -4313,6 +4440,7 @@ export type EventSessionNextTextDelta = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     textID: string
     delta: string
   }
@@ -4324,6 +4452,7 @@ export type EventSessionNextTextEnded = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     textID: string
     text: string
   }
@@ -4335,6 +4464,7 @@ export type EventSessionNextReasoningStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     reasoningID: string
     providerMetadata?: {
       [key: string]: {
@@ -4350,6 +4480,7 @@ export type EventSessionNextReasoningDelta = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     reasoningID: string
     delta: string
   }
@@ -4361,6 +4492,7 @@ export type EventSessionNextReasoningEnded = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     reasoningID: string
     text: string
     providerMetadata?: {
@@ -4507,6 +4639,7 @@ export type EventSessionNextCompactionStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     reason: "auto" | "manual"
   }
 }
@@ -9263,7 +9396,7 @@ export type V2SessionPromptResponses = {
    * Success
    */
   200: {
-    data: SessionMessageUser
+    data: SessionInputAdmitted
   }
 }
 

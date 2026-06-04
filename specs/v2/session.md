@@ -13,14 +13,14 @@ sessions.create({ id?, location, ... })
 sessions.prompt({ id?, sessionID, prompt, delivery?, resume? })
   -> omitted ID generates one internal message ID
   -> supplied ID admits one durable Session input when absent
-  -> exact reuse returns the same admitted user-shaped message
+  -> exact reuse returns the same admitted lifecycle receipt
   -> reusing one message ID for another Session, prompt, or delivery mode fails
   -> exact retry schedules another wake unless resume is false
   -> resume omitted or true schedules execution after admission
   -> resume false admits only
 ```
 
-`session_input` is the durable admission inbox. Admitted inputs remain outside model-visible Session history until the serialized runner promotes them by publishing ordinary `Prompted` events. The existing projector atomically writes the visible user message and marks its inbox row promoted in the same event transaction.
+`session_input` is the durable admission inbox. Admitted inputs remain outside model-visible Session history until the serialized runner publishes `PromptLifecycle.Promoted`. The projector atomically writes the visible user message and marks its inbox row promoted in the same event transaction. The legacy V1-to-V2 shadow bridge continues publishing ordinary `Prompted` events for already-visible V1 prompts.
 
 Execution routing starts from only the Session ID:
 
@@ -33,7 +33,7 @@ SessionExecution.resume(sessionID)
 
 `SessionExecution` and the read-side `SessionStore` are process-global. `SessionRunner`, catalog, model resolver, tool registry, permission state, and filesystem are cached per Location. No layer takes a Session ID. An omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.
 
-The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started tool fiber after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant-message ID because provider-local call IDs may repeat across turns. Before assembling a provider request, the runner durably fails any local tool still projected as `running` from a previous process with `Tool execution interrupted`; abandoned side effects are never silently replayed.
+The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started tool fiber after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant message ID because provider-local call IDs may repeat across turns. Before assembling a provider request, the runner durably fails any local tool still projected as `running` from a previous process with `Tool execution interrupted`; abandoned side effects are never silently replayed.
 
 Projected hosted tools preserve call-side and settlement-side provider metadata separately so settlement and interruption recovery cannot erase continuation identifiers. Provider-native reasoning and provider metadata replay only while the historical assistant model matches the selected continuation model; after a model switch, visible reasoning text remains ordinary assistant text and provider-native metadata is omitted.
 

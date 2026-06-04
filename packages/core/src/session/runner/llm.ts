@@ -132,10 +132,13 @@ export const layer = Layer.effect(
       const model = yield* models.resolve(session)
       const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
-      if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id)
-      if (promotion === "queue") {
-        yield* SessionInput.promoteNextQueued(db, events, session.id)
-        yield* SessionInput.promoteSteers(db, events, session.id)
+      if (promotion) {
+        const cutoff = yield* SessionInput.latestSeq(db, session.id)
+        if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        if (promotion === "queue") {
+          yield* SessionInput.promoteNextQueued(db, events, session.id)
+          yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        }
       }
       yield* failInterruptedTools(session.id)
       const context = yield* getContext(session.id)
@@ -233,8 +236,8 @@ export const layer = Layer.effect(
       readonly force?: boolean
     }) {
       const session = yield* getSession(input.sessionID)
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
-      const hasQueue = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+      const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (input.force !== true && !hasSteer && !hasQueue) return
       let promotion: "steer" | "queue" | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
@@ -243,12 +246,12 @@ export const layer = Layer.effect(
         for (let step = 0; step < MAX_STEPS; step++) {
           needsContinuation = yield* runTurn(session, promotion)
           promotion = "steer"
-          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
+          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break
         }
         if (needsContinuation)
           return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
-        openActivity = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+        openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }
     })

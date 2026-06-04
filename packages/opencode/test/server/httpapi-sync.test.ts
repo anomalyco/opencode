@@ -106,6 +106,13 @@ describe("sync HttpApi", () => {
               events: [{ id: "event", aggregateID: "session", seq: 1.5, type: "session.created", data: {} }],
             },
           },
+          {
+            path: SyncPaths.replay,
+            body: {
+              directory: tmp.directory,
+              events: [{ id: "event", aggregateID: "session", seq: 0, type: "session.created", data: {} }],
+            },
+          },
         ]
 
         for (const item of cases) {

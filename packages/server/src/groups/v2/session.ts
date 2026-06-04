@@ -114,7 +114,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
         delivery: SessionInput.Delivery.pipe(Schema.optional),
         resume: Schema.Boolean.pipe(Schema.optional),
       }),
-      success: Schema.Struct({ data: SessionMessage.User }),
+      success: Schema.Struct({ data: SessionInput.Admitted }),
       error: [ConflictError, SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({

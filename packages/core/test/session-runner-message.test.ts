@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Message, Model } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
-import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -12,7 +11,7 @@ import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
-const id = (value: string) => EventV2.ID.make(`evt_${value}`)
+const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
 
 describe("toLLMMessages", () => {
