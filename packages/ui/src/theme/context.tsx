@@ -138,7 +138,7 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   const v2 = themeV2ToCss(resolveThemeVariantV2(variant, isDark))
 
   if (themeId !== "oc-2") {
-    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
+    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, `${css}\n  ${v2}`)
   }
 
   const fullCss = `:root {
@@ -165,7 +165,8 @@ function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
     const variant = isDark ? theme.dark : theme.light
     const tokens = resolveThemeVariant(variant, isDark)
     const css = themeToCss(tokens)
-    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
+    const v2 = themeV2ToCss(resolveThemeVariantV2(variant, isDark))
+    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, `${css}\n  ${v2}`)
   }
 }
 
