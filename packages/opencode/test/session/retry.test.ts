@@ -170,51 +170,15 @@ describe("session.retry.retryable", () => {
     })
   })
 
-  test("retries websocket transport errors before the first event", () => {
+  test("retries websocket stream transport errors", () => {
     const request = MessageV2.fromError(
-      new ProviderError.ResponseStreamError(
-        "WebSocket closed before response.completed (code 1006: Connection ended)",
-        {
-          transport: "websocket",
-          phase: "before_first_event",
-          autoReplaySafe: true,
-        },
-      ),
+      new ProviderError.ResponseStreamError("WebSocket closed before response.completed (code 1006: Connection ended)"),
       { providerID },
     )
     expect(SessionLegacy.APIError.isInstance(request)).toBe(true)
     expect(SessionRetry.retryable(request, retryProvider)).toEqual({
       message: "WebSocket closed before response.completed (code 1006: Connection ended)",
     })
-  })
-
-  test("does not retry websocket transport errors after output has started", () => {
-    const request = MessageV2.fromError(
-      new ProviderError.ResponseStreamError(
-        "WebSocket closed before response.completed (code 1006: Connection ended)",
-        {
-          transport: "websocket",
-          phase: "after_first_event",
-          autoReplaySafe: false,
-        },
-      ),
-      { providerID },
-    )
-    expect(MessageV2.APIError.isInstance(request)).toBe(true)
-    expect(SessionRetry.retryable(request, retryProvider)).toBeUndefined()
-  })
-
-  test("does not retry SSE transport errors after output has started", () => {
-    const request = MessageV2.fromError(
-      new ProviderError.ResponseStreamError("SSE read timed out", {
-        transport: "sse",
-        phase: "after_first_event",
-        autoReplaySafe: false,
-      }),
-      { providerID },
-    )
-    expect(MessageV2.APIError.isInstance(request)).toBe(true)
-    expect(SessionRetry.retryable(request, retryProvider)).toBeUndefined()
   })
 
   test("does not retry context overflow errors", () => {

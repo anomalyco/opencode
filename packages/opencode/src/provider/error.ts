@@ -11,24 +11,10 @@ export class HeaderTimeoutError extends Error {
   }
 }
 
-export type ResponseStreamTransport = "websocket" | "sse"
-export type ResponseStreamPhase = "before_first_event" | "after_first_event"
-
-export interface ResponseStreamInfo {
-  transport: ResponseStreamTransport
-  phase: ResponseStreamPhase
-  autoReplaySafe: boolean
-  terminalEvent?: string
-}
-
 export class ResponseStreamError extends Error {
   public override readonly name = "ProviderResponseStreamError"
 
-  constructor(
-    message: string,
-    public readonly info: ResponseStreamInfo,
-    options?: ErrorOptions,
-  ) {
+  constructor(message: string, options?: ErrorOptions) {
     super(message, options)
   }
 }

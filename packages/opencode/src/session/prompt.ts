@@ -1478,7 +1478,6 @@ export const layer = Layer.effect(
             }
 
             if (result === "stop") return "break" as const
-            if (result === "resume") return "continue" as const
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,

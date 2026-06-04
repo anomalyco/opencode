@@ -16,7 +16,6 @@ import {
   SubtaskPart,
   User,
   WithParts,
-  type TextPart,
   type ToolPart,
 } from "@opencode-ai/core/session/legacy"
 
@@ -49,8 +48,6 @@ interface FetchDecompressionError extends Error {
 
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
-export { APIError, ContextOverflowError }
-export type { Assistant, Part, TextPart, ToolPart, User }
 
 function truncateToolOutput(text: string, maxChars?: number) {
   if (!maxChars || text.length <= maxChars) return text
@@ -680,13 +677,9 @@ export function fromError(
       return new APIError(
         {
           message: e.message,
-          isRetryable: e.info.autoReplaySafe,
+          isRetryable: true,
           metadata: {
             code: e.name,
-            transport: e.info.transport,
-            phase: e.info.phase,
-            autoReplaySafe: String(e.info.autoReplaySafe),
-            ...(e.info.terminalEvent ? { terminalEvent: e.info.terminalEvent } : {}),
           },
         },
         { cause: e },

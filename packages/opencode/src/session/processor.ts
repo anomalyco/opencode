@@ -13,12 +13,9 @@ import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
-import { SessionAttempt } from "./attempt"
 import { SessionRetry } from "./retry"
-import { SessionStreamRecovery } from "./stream-recovery"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import { ProviderError } from "@/provider/error"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
@@ -35,53 +32,8 @@ import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
-const textChunks = new WeakMap<{ text: string }, string[]>()
 
-function installChunkedText(part: { text: string }) {
-  textChunks.set(part, [part.text])
-  Object.defineProperty(part, "text", {
-    get() {
-      const chunks = textChunks.get(part)
-      if (!chunks) return ""
-      if (chunks.length === 1) return chunks[0]
-      const text = chunks.join("")
-      textChunks.set(part, [text])
-      return text
-    },
-    set(value: string) {
-      textChunks.set(part, [value])
-    },
-    enumerable: true,
-    configurable: true,
-  })
-}
-
-function appendChunkedText(part: { text: string }, text: string) {
-  const chunks = textChunks.get(part)
-  if (!chunks) {
-    part.text += text
-    return
-  }
-  chunks.push(text)
-}
-
-export type Result = "compact" | "stop" | "continue" | "resume"
-
-class ResumeFromPromptLoop extends Error {
-  public override readonly name = "SessionProcessorResumeFromPromptLoop"
-}
-
-class StopAfterBlockedToolBoundary extends Error {
-  public override readonly name = "SessionProcessorStopAfterBlockedToolBoundary"
-}
-
-class StopAfterUnsafeToolActivity extends Error {
-  public override readonly name = "SessionProcessorStopAfterUnsafeToolActivity"
-}
-
-class StopAfterRollbackFailure extends Error {
-  public override readonly name = "SessionProcessorStopAfterRollbackFailure"
-}
+export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
   readonly message: SessionLegacy.Assistant
@@ -207,13 +159,6 @@ export const layer = Layer.effect(
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
-      const attempt = SessionAttempt.create({
-        target: ctx,
-        resetOpenParts: () => {
-          ctx.currentText = undefined
-          ctx.reasoningMap = {}
-        },
-      })
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -281,7 +226,6 @@ export const layer = Layer.effect(
             attachments: output.attachments,
           },
         })
-        attempt.commitToolBoundary()
         yield* settleToolCall(toolCallID)
       })
 
@@ -300,7 +244,6 @@ export const layer = Layer.effect(
         if (error instanceof Permission.RejectedError || error instanceof Question.RejectedError) {
           ctx.blocked = ctx.shouldBreak
         }
-        attempt.commitToolBoundary()
         yield* settleToolCall(toolCallID)
         return true
       })
@@ -392,7 +335,6 @@ export const layer = Layer.effect(
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "reasoning-start":
-            attempt.resetIfNeeded()
             if (value.id in ctx.reasoningMap) return
             yield* events.publish(SessionEvent.Reasoning.Started, {
               sessionID: ctx.sessionID,
@@ -408,16 +350,13 @@ export const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
-            installChunkedText(ctx.reasoningMap[value.id])
             yield* session.updatePart(ctx.reasoningMap[value.id])
-            attempt.rememberPart(ctx.reasoningMap[value.id].id)
             return
 
           case "reasoning-delta":
-            attempt.resetIfNeeded()
             // Match dev: silently drop orphan deltas (no preceding reasoning-start).
             if (!(value.id in ctx.reasoningMap)) return
-            appendChunkedText(ctx.reasoningMap[value.id], value.text)
+            ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             yield* session.updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
@@ -439,7 +378,6 @@ export const layer = Layer.effect(
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
-            attempt.markToolActivity()
             yield* ensureToolCall(value)
             return
 
@@ -449,7 +387,6 @@ export const layer = Layer.effect(
             return
 
           case "tool-input-end": {
-            attempt.markToolActivity()
             const toolCall = yield* ensureToolCall(value)
             yield* events.publish(SessionEvent.Tool.Input.Ended, {
               sessionID: ctx.sessionID,
@@ -465,7 +402,6 @@ export const layer = Layer.effect(
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
-            attempt.markToolActivity()
             const toolCall = yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
             if (!toolCall.call.inputEnded) {
@@ -534,7 +470,6 @@ export const layer = Layer.effect(
           }
 
           case "tool-result": {
-            attempt.markToolActivity()
             const toolCall = yield* readToolCall(value.id)
             const rawOutput = toolResultOutput(value)
             const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
@@ -584,7 +519,6 @@ export const layer = Layer.effect(
           }
 
           case "tool-error": {
-            attempt.markToolActivity()
             const toolCall = yield* readToolCall(value.id)
             yield* events.publish(SessionEvent.Tool.Failed, {
               sessionID: ctx.sessionID,
@@ -606,7 +540,6 @@ export const layer = Layer.effect(
             throw new Error(value.message)
 
           case "step-start":
-            attempt.resetIfNeeded()
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             if (!ctx.assistantMessage.summary) {
               yield* events.publish(SessionEvent.Step.Started, {
@@ -621,19 +554,16 @@ export const layer = Layer.effect(
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
-            const stepStartID = PartID.ascending()
             yield* session.updatePart({
-              id: stepStartID,
+              id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.sessionID,
               snapshot: ctx.snapshot,
               type: "step-start",
             })
-            attempt.rememberPart(stepStartID)
             return
 
           case "step-finish": {
-            attempt.markCommitted()
             const completedSnapshot = yield* snapshot.track()
             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             const usage = Session.getUsage({
@@ -654,9 +584,8 @@ export const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
-            const stepFinishID = PartID.ascending()
             yield* session.updatePart({
-              id: stepFinishID,
+              id: PartID.ascending(),
               reason: value.reason,
               snapshot: completedSnapshot,
               messageID: ctx.assistantMessage.id,
@@ -665,21 +594,18 @@ export const layer = Layer.effect(
               tokens: usage.tokens,
               cost: usage.cost,
             })
-            attempt.rememberPart(stepFinishID)
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
               const patch = yield* snapshot.patch(ctx.snapshot)
               if (patch.files.length) {
-                const patchPartID = PartID.ascending()
                 yield* session.updatePart({
-                  id: patchPartID,
+                  id: PartID.ascending(),
                   messageID: ctx.assistantMessage.id,
                   sessionID: ctx.sessionID,
                   type: "patch",
                   hash: patch.hash,
                   files: patch.files,
                 })
-                attempt.rememberPart(patchPartID)
               }
               ctx.snapshot = undefined
             }
@@ -695,12 +621,10 @@ export const layer = Layer.effect(
             ) {
               ctx.needsCompaction = true
             }
-            attempt.deferReset()
             return
           }
 
           case "text-start":
-            attempt.resetIfNeeded()
             if (!ctx.assistantMessage.summary) {
               yield* events.publish(SessionEvent.Text.Started, {
                 sessionID: ctx.sessionID,
@@ -716,15 +640,12 @@ export const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
-            installChunkedText(ctx.currentText)
             yield* session.updatePart(ctx.currentText)
-            attempt.rememberPart(ctx.currentText.id)
             return
 
           case "text-delta":
-            attempt.resetIfNeeded()
             if (!ctx.currentText) return
-            appendChunkedText(ctx.currentText, value.text)
+            ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePartDelta({
               sessionID: ctx.currentText.sessionID,
@@ -831,8 +752,7 @@ export const layer = Layer.effect(
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
         slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
-        const source = e instanceof StopAfterUnsafeToolActivity ? (e.cause ?? e) : e
-        const error = parse(source)
+        const error = parse(e)
         if (SessionLegacy.ContextOverflowError.isInstance(error)) {
           ctx.needsCompaction = true
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
@@ -853,59 +773,15 @@ export const layer = Layer.effect(
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
-      const recoverRetryableError = (error: unknown) =>
-        Effect.gen(function* () {
-          const retryable =
-            error instanceof ProviderError.ResponseStreamError
-              ? { message: error.message }
-              : SessionRetry.retryable(parse(error), input.model.providerID)
-
-          const plan = SessionStreamRecovery.plan({
-            error,
-            retryable,
-            blocked: ctx.blocked,
-            ...attempt.recoveryState(),
-          })
-
-          switch (plan.type) {
-            case "fail":
-              return plan.error
-            case "stop-blocked":
-              return new StopAfterBlockedToolBoundary(plan.message, { cause: plan.cause })
-            case "stop-unsafe-tool":
-              return new StopAfterUnsafeToolActivity(plan.message, { cause: plan.cause })
-            case "rollback-resume":
-              yield* attempt.rollbackCurrent(session)
-              return new ResumeFromPromptLoop(plan.message, { cause: plan.cause })
-            case "rollback-stream-retry":
-              yield* attempt.rollbackCurrent(session)
-              return SessionStreamRecovery.markAutoReplaySafe(plan.error)
-          }
-        }).pipe(
-          Effect.catchCause((cause) => {
-            const rollbackError = Cause.squash(cause)
-            slog.warn("rollback retryable stream error failed", {
-              error: errorMessage(rollbackError),
-            })
-            if (attempt.hasCommittedToolBoundary()) {
-              return Effect.succeed(
-                new StopAfterRollbackFailure(errorMessage(rollbackError), {
-                  cause: rollbackError,
-                }),
-              )
-            }
-            return Effect.succeed(error)
-          }),
-        )
-
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         slog.info("process")
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
         return yield* Effect.gen(function* () {
-          const outcome = yield* Effect.gen(function* () {
-            attempt.reset()
+          yield* Effect.gen(function* () {
+            ctx.currentText = undefined
+            ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
@@ -926,27 +802,6 @@ export const layer = Layer.effect(
             Effect.catchCauseIf(
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
-            ),
-            Effect.catchIf(() => true, (error) =>
-              Effect.gen(function* () {
-                return yield* Effect.fail(yield* recoverRetryableError(error))
-              }),
-            ),
-            Effect.catchIf(
-              (error) => error instanceof ResumeFromPromptLoop,
-              () => Effect.succeed("resume" as const),
-            ),
-            Effect.catchIf(
-              (error) => error instanceof StopAfterBlockedToolBoundary,
-              () => Effect.succeed("stop" as const),
-            ),
-            Effect.catchIf(
-              (error) => error instanceof StopAfterUnsafeToolActivity,
-              (error) => halt(error.cause ?? error).pipe(Effect.as("stop" as const)),
-            ),
-            Effect.catchIf(
-              (error) => error instanceof StopAfterRollbackFailure,
-              (error) => halt(error.cause ?? error).pipe(Effect.as("stop" as const)),
             ),
             Effect.retry(
               SessionRetry.policy({
@@ -977,12 +832,10 @@ export const layer = Layer.effect(
                 },
               }),
             ),
-            Effect.map((outcome) => outcome ?? ("continue" as const)),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
           )
 
-          if (outcome === "resume") return "resume"
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
           return "continue"

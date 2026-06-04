@@ -561,8 +561,7 @@ export const layer = Layer.effect(
       }
 
       if (processor.message.error) return "stop"
-      const outcome = result === "resume" ? "continue" : result
-      if (outcome === "continue") {
+      if (result === "continue") {
         const summary = summaryText(
           (yield* session.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
             (item) => item.info.id === msg.id,
@@ -579,7 +578,7 @@ export const layer = Layer.effect(
         })
         yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
       }
-      return outcome
+      return result
     })
 
     const create = Effect.fn("SessionCompaction.create")(function* (input: {

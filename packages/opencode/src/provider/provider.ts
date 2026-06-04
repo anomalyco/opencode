@@ -39,22 +39,11 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
   const reader = res.body.getReader()
-  let started = false
-  const streamError = (message: string, cause?: unknown) =>
-    new ProviderError.ResponseStreamError(
-      message,
-      {
-        transport: "sse",
-        phase: started ? "after_first_event" : "before_first_event",
-        autoReplaySafe: !started,
-      },
-      cause === undefined ? undefined : { cause },
-    )
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {
       const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
         const id = setTimeout(() => {
-          const err = streamError("SSE read timed out")
+          const err = new ProviderError.ResponseStreamError("SSE read timed out")
           ctl.abort(err)
           void reader.cancel(err)
           reject(err)
@@ -67,11 +56,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
           },
           (err) => {
             clearTimeout(id)
-            if (err instanceof DOMException && err.name === "AbortError") {
-              reject(err)
-              return
-            }
-            reject(streamError(err instanceof Error ? err.message : String(err), err))
+            reject(err)
           },
         )
       })
@@ -82,7 +67,6 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
       }
 
       ctrl.enqueue(part.value)
-      started = true
     },
     async cancel(reason) {
       ctl.abort(reason)
