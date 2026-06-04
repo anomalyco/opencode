@@ -130,8 +130,6 @@ function LoadedReadBeforeSubagentFixture() {
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
-  await Bun.sleep(25)
-  await testSetup.renderOnce()
 
   return testSetup
     .captureCharFrame()
