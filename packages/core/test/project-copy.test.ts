@@ -153,7 +153,9 @@ describe("ProjectCopy", () => {
       })
 
       expect(created.directory).toBe(target)
-      expect(yield* Effect.promise(() => fs.stat(path.join(parent, "copy")).then((item) => item.isDirectory()))).toBe(true)
+      expect(yield* Effect.promise(() => fs.stat(path.join(parent, "copy")).then((item) => item.isDirectory()))).toBe(
+        true,
+      )
       expect(yield* Effect.promise(() => fs.stat(path.join(parent, "copy-2")).then((item) => item.isDirectory()))).toBe(
         true,
       )

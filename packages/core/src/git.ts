@@ -171,7 +171,10 @@ export const layer = Layer.effect(
     )
 
     const patch = Effect.fn("Git.patch")(function* (directory: AbsolutePath) {
-      const root = yield* execute(directory, proc)(["rev-parse", "--show-toplevel"]).pipe(
+      const root = yield* execute(
+        directory,
+        proc,
+      )(["rev-parse", "--show-toplevel"]).pipe(
         Effect.mapError((cause) => new PatchError({ operation: "capture", directory, message: cause.message, cause })),
       )
       if (root.exitCode !== 0) {

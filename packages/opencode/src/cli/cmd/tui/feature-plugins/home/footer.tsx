@@ -20,11 +20,7 @@ function Directory(props: { api: TuiPluginApi }) {
     return out
   })
 
-  return (
-    <Show when={dir()}>
-      {(value) => <text fg={theme().textMuted}>{value()}</text>}
-    </Show>
-  )
+  return <Show when={dir()}>{(value) => <text fg={theme().textMuted}>{value()}</text>}</Show>
 }
 
 function Mcp(props: { api: TuiPluginApi }) {
