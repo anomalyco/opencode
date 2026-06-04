@@ -3,7 +3,7 @@ import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
-import { batch, type Accessor } from "solid-js"
+import { batch, createEffect, createSignal, type Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -222,6 +222,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     return language.t("common.requestFailed")
   }
 
+  const [aborting, setAborting] = createSignal(false)
+  createEffect(() => {
+    if (!input.working()) setAborting(false)
+  })
+
   const abort = async () => {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
@@ -239,6 +244,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       pending.delete(sessionID)
       return Promise.resolve()
     }
+
+    setAborting(true)
     return sdk.client.session
       .abort({
         sessionID,
@@ -579,6 +586,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
   return {
     abort,
+    aborting,
     handleSubmit,
   }
 }

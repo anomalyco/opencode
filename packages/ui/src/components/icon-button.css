@@ -179,3 +179,19 @@
 [data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"]:hover:not(:disabled) {
   background-color: var(--surface-raised-base-active);
 }
+
+[data-component="icon-button"] [data-component="spinner"] {
+  width: 16px;
+}
+[data-component="icon-button"][data-size="large"] [data-component="spinner"] {
+  width: 20px;
+}
+[data-component="icon-button"][data-variant="primary"] [data-component="spinner"] {
+  color: var(--icon-invert-base);
+}
+[data-component="icon-button"][data-variant="secondary"] [data-component="spinner"] {
+  color: var(--icon-strong-base);
+}
+[data-component="icon-button"][data-variant="ghost"] [data-component="spinner"] {
+  color: var(--icon-base);
+}
