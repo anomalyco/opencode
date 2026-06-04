@@ -1,0 +1,23 @@
+Read, edit, and execute Jupyter notebook (.ipynb) cells.
+
+## Operations
+
+### read
+Display all cells with their current outputs. Use this to inspect a notebook before modifying or running it.
+
+### edit
+Replace the source of a single cell by zero-based index. Clears that cell's outputs and execution count so the state stays consistent. Use this to update code or markdown without running the notebook.
+
+### execute
+Run cells via the local Jupyter installation and capture outputs back into the notebook file.
+- Omit `cellIndex` to execute all cells in order (uses `jupyter nbconvert --execute --inplace`).
+- Provide `cellIndex` to execute a single cell in isolation via a temporary notebook.
+
+Requires `jupyter` to be installed and on PATH. If execution fails, the error output from Jupyter is returned so you can diagnose the problem.
+
+## Parameters
+- `filePath` – absolute path to the `.ipynb` file
+- `operation` – `read`, `edit`, or `execute`
+- `cellIndex` – zero-based cell index (required for `edit`; optional for `execute`)
+- `newSource` – replacement source text (required for `edit`)
+- `timeout` – execution timeout in seconds, default 60 (only for `execute`)

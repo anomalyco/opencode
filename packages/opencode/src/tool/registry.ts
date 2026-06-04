@@ -1,3 +1,4 @@
+import { NotebookTool } from "./notebook"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
@@ -132,6 +133,7 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const notebooktool = yield* NotebookTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -236,6 +238,7 @@ export const layer: Layer.Layer<
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
+          notebook: Tool.init(notebooktool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -258,6 +261,7 @@ export const layer: Layer.Layer<
             tool.search,
             tool.skill,
             tool.patch,
+            tool.notebook,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
