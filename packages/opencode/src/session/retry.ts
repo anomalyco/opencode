@@ -69,6 +69,12 @@ export function retryable(error: Err, provider: string) {
   // context overflow errors should not be retried
   if (SessionLegacy.ContextOverflowError.isInstance(error)) return undefined
   if (SessionLegacy.APIError.isInstance(error)) {
+    const transport = error.data.metadata?.transport
+    if (transport === "websocket" || transport === "sse") {
+      if (error.data.metadata?.autoReplaySafe !== "true") return undefined
+      return { message: error.data.message }
+    }
+
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
     // even when the provider SDK doesn't explicitly mark them as retryable.

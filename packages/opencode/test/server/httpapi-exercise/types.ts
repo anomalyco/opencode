@@ -62,6 +62,7 @@ export type ScenarioContext = {
   todos: (sessionID: SessionID, todos: TodoInfo[]) => Effect.Effect<void>
   worktree: (input?: { name?: string }) => Effect.Effect<Worktree.Info>
   worktreeRemove: (directory: string) => Effect.Effect<void>
+  api: (request: RequestSpec & { method: Method }) => Effect.Effect<CallResult>
   llmText: (value: string) => Effect.Effect<void>
   llmWait: (count: number) => Effect.Effect<void>
   tuiRequest: (request: { path: string; body: unknown }) => Effect.Effect<void>

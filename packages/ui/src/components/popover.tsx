@@ -16,6 +16,9 @@ export interface PopoverProps<T extends ValidComponent = "div">
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   style?: ComponentProps<"div">["style"]
+  contentProps?: Pick<ComponentProps<"div">, "onPointerEnter" | "onPointerLeave">
+  onOpenAutoFocus?: (event: Event) => void
+  onCloseAutoFocus?: (event: Event) => void
   portal?: boolean
 }
 
@@ -30,6 +33,9 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
     "class",
     "classList",
     "style",
+    "contentProps",
+    "onOpenAutoFocus",
+    "onCloseAutoFocus",
     "children",
     "portal",
     "open",
@@ -103,6 +109,7 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
 
   const content = () => (
     <Kobalte.Content
+      {...local.contentProps}
       ref={(el: HTMLElement | undefined) => setState("contentRef", el)}
       data-component="popover-content"
       classList={{
@@ -110,7 +117,9 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
         [local.class ?? ""]: !!local.class,
       }}
       style={local.style}
+      onOpenAutoFocus={local.onOpenAutoFocus}
       onCloseAutoFocus={(event: Event) => {
+        if (local.onCloseAutoFocus) local.onCloseAutoFocus(event)
         if (state.dismiss === "outside") event.preventDefault()
         setState("dismiss", null)
       }}

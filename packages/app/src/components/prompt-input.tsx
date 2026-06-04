@@ -1363,7 +1363,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
     layout.projects.open(worktree)
-    server.projects.touch(worktree)
+    layout.projects.touch(worktree)
     navigate(`/${base64Encode(worktree)}/session`)
   }
   const addProject = async () => {

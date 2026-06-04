@@ -49,6 +49,7 @@ import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/ut
 import { checksum } from "@opencode-ai/core/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
+import { Popover } from "./popover"
 import { Spinner } from "./spinner"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
@@ -259,6 +260,208 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   })
 
   return value
+}
+
+type MessageMetricRow = {
+  label: string
+  value: string
+  emphasis?: boolean
+}
+
+type MessageMetrics = {
+  summary: MessageMetricRow[]
+  tokens: MessageMetricRow[]
+  metadata: MessageMetricRow[]
+}
+
+function buildMessageMetrics(input: {
+  message: AssistantMessage
+  parts: PartType[]
+  now: number
+  model: string
+  provider: string
+  duration: string
+  interrupted: boolean
+  numfmt: Intl.NumberFormat
+  costfmt: Intl.NumberFormat
+}) {
+  const firstStart = input.parts
+    .filter((item): item is TextPart | ReasoningPart => item.type === "text" || item.type === "reasoning")
+    .map((item) => item.time?.start)
+    .filter((start): start is number => typeof start === "number")
+    .sort((a, b) => a - b)[0]
+  const end = typeof input.message.time.completed === "number" ? input.message.time.completed : input.now
+  const generationMs = typeof firstStart === "number" ? end - firstStart : -1
+  const firstTokenMs = typeof firstStart === "number" ? firstStart - input.message.time.created : -1
+  const generatedTokens = input.message.tokens.output + input.message.tokens.reasoning
+  const tps = generatedTokens > 0 && generationMs > 0 ? generatedTokens / (generationMs / 1000) : 0
+  const latencyMs = typeof input.message.time.completed === "number" ? input.message.time.completed - input.message.time.created : input.now - input.message.time.created
+  const tokenTotal = input.message.tokens.total ?? input.message.tokens.input + generatedTokens
+
+  return {
+    summary: [
+      tps > 0
+        ? {
+            label: "Average TPS",
+            value: `${input.numfmt.format(Math.round(tps * 10) / 10)}/s`,
+            emphasis: true,
+          }
+        : undefined,
+      latencyMs >= 0 ? { label: "Latency", value: formatMetricDuration(latencyMs, input.numfmt) } : undefined,
+      firstTokenMs >= 0
+        ? { label: "Time to first token", value: formatMetricDuration(firstTokenMs, input.numfmt) }
+        : undefined,
+      generationMs >= 0 ? { label: "Generation", value: formatMetricDuration(generationMs, input.numfmt) } : undefined,
+      input.duration ? { label: "Displayed duration", value: input.duration } : undefined,
+    ].filter((item): item is MessageMetricRow => !!item),
+    tokens: [
+      input.message.tokens.input > 0 ? { label: "Input", value: input.numfmt.format(input.message.tokens.input) } : undefined,
+      input.message.tokens.output > 0 ? { label: "Output", value: input.numfmt.format(input.message.tokens.output) } : undefined,
+      input.message.tokens.reasoning > 0
+        ? { label: "Reasoning", value: input.numfmt.format(input.message.tokens.reasoning) }
+        : undefined,
+      input.message.tokens.cache.read > 0
+        ? { label: "Cache read", value: input.numfmt.format(input.message.tokens.cache.read) }
+        : undefined,
+      input.message.tokens.cache.write > 0
+        ? { label: "Cache write", value: input.numfmt.format(input.message.tokens.cache.write) }
+        : undefined,
+      tokenTotal > 0 ? { label: "Total", value: input.numfmt.format(tokenTotal), emphasis: true } : undefined,
+    ].filter((item): item is MessageMetricRow => !!item),
+    metadata: [
+      input.message.cost > 0 ? { label: "Cost", value: input.costfmt.format(input.message.cost) } : undefined,
+      input.provider ? { label: "Provider", value: input.provider } : undefined,
+      input.model ? { label: "Model", value: input.model } : undefined,
+      input.message.agent ? { label: "Agent", value: input.message.agent } : undefined,
+      input.message.finish ? { label: "Finish", value: input.message.finish } : undefined,
+      input.interrupted ? { label: "State", value: "Interrupted" } : undefined,
+    ].filter((item): item is MessageMetricRow => !!item),
+  } satisfies MessageMetrics
+}
+
+function formatMetricDuration(ms: number, numfmt: Intl.NumberFormat) {
+  if (!(ms >= 0)) return ""
+  if (ms < 1000) return `${numfmt.format(Math.round(ms))}ms`
+  if (ms < 60000) {
+    const seconds = ms / 1000
+    return `${numfmt.format(seconds < 10 ? Math.round(seconds * 10) / 10 : Math.round(seconds))}s`
+  }
+  const total = Math.round(ms / 1000)
+  return `${numfmt.format(Math.floor(total / 60))}m ${numfmt.format(total % 60)}s`
+}
+
+function MessageMetricsPopover(props: { metrics: MessageMetrics }) {
+  const [open, setOpen] = createSignal(false)
+  let closeTimeout: ReturnType<typeof setTimeout> | undefined
+  let pointerResetTimeout: ReturnType<typeof setTimeout> | undefined
+  let lastPointerType: string | undefined
+
+  const clearClose = () => {
+    if (!closeTimeout) return
+    clearTimeout(closeTimeout)
+    closeTimeout = undefined
+  }
+
+  const openPopover = () => {
+    clearClose()
+    setOpen(true)
+  }
+
+  const closePopover = () => {
+    clearClose()
+    closeTimeout = setTimeout(() => {
+      closeTimeout = undefined
+      setOpen(false)
+    }, 120)
+  }
+
+  const trackPointer = (pointerType: string) => {
+    lastPointerType = pointerType
+    if (pointerResetTimeout) clearTimeout(pointerResetTimeout)
+    pointerResetTimeout = setTimeout(() => {
+      pointerResetTimeout = undefined
+      lastPointerType = undefined
+    }, 500)
+  }
+
+  onCleanup(() => {
+    clearClose()
+    if (pointerResetTimeout) clearTimeout(pointerResetTimeout)
+  })
+
+  const rows = () => [...props.metrics.summary, ...props.metrics.tokens, ...props.metrics.metadata]
+  return (
+    <Show when={rows().length > 0}>
+      <Popover
+        class="message-metrics-popover"
+        open={open()}
+        onOpenChange={setOpen}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        contentProps={{
+          onPointerEnter: (event) => {
+            if (event.pointerType !== "mouse") return
+            openPopover()
+          },
+          onPointerLeave: (event) => {
+            if (event.pointerType !== "mouse") return
+            closePopover()
+          },
+        }}
+        placement="top-start"
+        triggerAs={IconButton}
+        triggerProps={{
+          icon: "help",
+          size: "small",
+          variant: "ghost",
+          "aria-label": "Show response metrics",
+          onPointerEnter: (event) => {
+            if (event.pointerType !== "mouse") return
+            openPopover()
+          },
+          onPointerDown: (event) => trackPointer(event.pointerType),
+          onPointerLeave: (event) => {
+            if (event.pointerType !== "mouse") return
+            closePopover()
+          },
+          onFocus: () => {
+            if (lastPointerType && lastPointerType !== "mouse") return
+            openPopover()
+          },
+          onBlur: closePopover,
+        }}
+      >
+        <div data-component="message-metrics-popover">
+          <div data-slot="message-metrics-title">Response metrics</div>
+          <MetricSection rows={props.metrics.summary} />
+          <MetricSection title="Tokens" rows={props.metrics.tokens} />
+          <MetricSection title="Message" rows={props.metrics.metadata} />
+        </div>
+      </Popover>
+    </Show>
+  )
+}
+
+function MetricSection(props: { title?: string; rows: MessageMetricRow[] }) {
+  return (
+    <Show when={props.rows.length > 0}>
+      <div data-slot="message-metrics-section">
+        <Show when={props.title}>
+          <div data-slot="message-metrics-section-title">{props.title}</div>
+        </Show>
+        <For each={props.rows}>
+          {(row) => (
+            <div data-slot="message-metrics-row">
+              <span data-slot="message-metrics-label">{row.label}</span>
+              <span data-slot="message-metrics-value" data-emphasis={row.emphasis ? "" : undefined}>
+                {row.value}
+              </span>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  )
 }
 
 function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
@@ -1469,11 +1672,44 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
+  const costfmt = createMemo(
+    () => new Intl.NumberFormat(i18n.locale(), { style: "currency", currency: "USD", maximumFractionDigits: 6 }),
+  )
   const part = () => props.part as TextPart
+  const [now, setNow] = createSignal(Date.now())
   const interrupted = createMemo(
     () =>
       props.message.role === "assistant" && (props.message as AssistantMessage).error?.name === "MessageAbortedError",
   )
+  const text = () => readPartText(data.store.part_text_accum_delta, part())
+  const isLastTextPart = createMemo(() => {
+    const last = (data.store.part?.[props.message.id] ?? [])
+      .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
+      .at(-1)
+    return last?.id === part().id
+  })
+  const showCopy = createMemo(() => {
+    if (props.message.role !== "assistant") return isLastTextPart()
+    if (props.showAssistantCopyPartID === null) return false
+    if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part().id
+    return isLastTextPart()
+  })
+
+  createEffect(() => {
+    if (props.message.role !== "assistant") return
+    if (!showCopy()) return
+    const message = props.message as AssistantMessage
+    if (typeof message.time.completed === "number") return
+    setNow(Date.now())
+    const interval = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  const provider = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    const message = props.message as AssistantMessage
+    return data.store.provider?.all?.get(message.providerID)?.name ?? message.providerID
+  })
 
   const model = createMemo(() => {
     if (props.message.role !== "assistant") return ""
@@ -1515,22 +1751,24 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return items.filter((x) => !!x).join(" \u00B7 ")
   })
 
+  const metrics = createMemo(() => {
+    if (props.message.role !== "assistant") return undefined
+    return buildMessageMetrics({
+      message: props.message as AssistantMessage,
+      parts: data.store.part?.[props.message.id] ?? [part()],
+      now: now(),
+      model: model(),
+      provider: provider(),
+      duration: duration(),
+      interrupted: interrupted(),
+      numfmt: numfmt(),
+      costfmt: costfmt(),
+    })
+  })
+
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => readPartText(data.store.part_text_accum_delta, part())
-  const isLastTextPart = createMemo(() => {
-    const last = (data.store.part?.[props.message.id] ?? [])
-      .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
-      .at(-1)
-    return last?.id === part().id
-  })
-  const showCopy = createMemo(() => {
-    if (props.message.role !== "assistant") return isLastTextPart()
-    if (props.showAssistantCopyPartID === null) return false
-    if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part().id
-    return isLastTextPart()
-  })
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
@@ -1571,6 +1809,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                 {meta()}
               </span>
             </Show>
+            <Show when={metrics()}>{(value) => <MessageMetricsPopover metrics={value()} />}</Show>
           </div>
         </Show>
       </div>

@@ -3,6 +3,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Project } from "@/project/project"
 import * as Log from "@opencode-ai/core/util/log"
 import { $ } from "bun"
+import fs from "fs/promises"
 import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
@@ -33,6 +34,18 @@ const it = testEffect(layer)
 
 function remoteProjectID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
+}
+
+function localProjectID(store: string) {
+  return ProjectV2.ID.make(Hash.fast(`git-local:${store}`))
+}
+
+function localDirectoryProjectID(directory: string) {
+  return ProjectV2.ID.make(Hash.fast(`local-directory:${path.resolve(directory)}`))
+}
+
+function realLocalProjectID(store: string) {
+  return Effect.promise(() => fs.realpath(store)).pipe(Effect.map(localProjectID))
 }
 
 /**
@@ -121,14 +134,15 @@ describe("Project.fromDirectory", () => {
       yield* Effect.promise(() => $`git init`.cwd(tmp).quiet())
 
       const result = yield* project.fromDirectory(tmp)
+      const opencodeFile = path.join(tmp, ".git", "opencode")
 
       expect(result.project).toBeDefined()
-      expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.id).toBe(yield* realLocalProjectID(path.join(tmp, ".git")))
+      expect(result.project.id).not.toBe(ProjectV2.ID.global)
       expect(result.project.vcs).toBe("git")
       expect(result.project.worktree).toBe(tmp)
 
-      const opencodeFile = path.join(tmp, ".git", "opencode")
-      expect(yield* Effect.promise(() => Bun.file(opencodeFile).exists())).toBe(false)
+      expect(yield* Effect.promise(() => Bun.file(opencodeFile).text())).toBe(result.project.id)
     }),
   )
 
@@ -146,12 +160,31 @@ describe("Project.fromDirectory", () => {
     }),
   )
 
-  it.live("returns global for non-git directory", () =>
+  it.live("returns stable local project for non-git directory", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const tmp = yield* tmpdirScoped()
       const result = yield* project.fromDirectory(tmp)
+      const next = yield* project.fromDirectory(tmp)
+
+      expect(result.project.id).toBe(localDirectoryProjectID(tmp))
+      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.vcs).toBeUndefined()
+      expect(result.project.worktree).toBe(tmp)
+      expect(next.project.id).toBe(result.project.id)
+      expect(next.project.worktree).toBe(tmp)
+    }),
+  )
+
+  it.live("keeps filesystem root as global project", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const root = path.parse(process.cwd()).root
+      const result = yield* project.fromDirectory(root)
+
       expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.vcs).toBeUndefined()
+      expect(result.project.worktree).toBe(root)
     }),
   )
 
@@ -162,6 +195,24 @@ describe("Project.fromDirectory", () => {
       const result = yield* project.fromDirectory(tmp)
       const next = yield* project.fromDirectory(tmp)
       expect(next.project.id).toBe(result.project.id)
+    }),
+  )
+
+  it.live("keeps cached local project ID after a later root commit", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => $`git init`.cwd(tmp).quiet())
+      yield* Effect.promise(() => $`git config user.name "Test"`.cwd(tmp).quiet())
+      yield* Effect.promise(() => $`git config user.email "test@opencode.test"`.cwd(tmp).quiet())
+      yield* Effect.promise(() => $`git config commit.gpgsign false`.cwd(tmp).quiet())
+
+      const empty = yield* project.fromDirectory(tmp)
+      yield* Effect.promise(() => $`git commit --allow-empty -m "root"`.cwd(tmp).quiet())
+      const committed = yield* project.fromDirectory(tmp)
+
+      expect(empty.project.id).toBe(yield* realLocalProjectID(path.join(tmp, ".git")))
+      expect(committed.project.id).toBe(empty.project.id)
     }),
   )
 
@@ -271,7 +322,8 @@ describe("Project.fromDirectory git failure paths", () => {
       // rev-list fails because HEAD doesn't exist yet: this is the natural scenario.
       const result = yield* project.fromDirectory(tmp)
       expect(result.project.vcs).toBe("git")
-      expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.id).toBe(yield* realLocalProjectID(path.join(tmp, ".git")))
+      expect(result.project.id).not.toBe(ProjectV2.ID.global)
       expect(result.project.worktree).toBe(tmp)
     }),
   )

@@ -39,11 +39,22 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
   const reader = res.body.getReader()
+  let started = false
+  const streamError = (message: string, cause?: unknown) =>
+    new ProviderError.ResponseStreamError(
+      message,
+      {
+        transport: "sse",
+        phase: started ? "after_first_event" : "before_first_event",
+        autoReplaySafe: !started,
+      },
+      cause === undefined ? undefined : { cause },
+    )
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {
       const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
         const id = setTimeout(() => {
-          const err = new ProviderError.ResponseStreamError("SSE read timed out")
+          const err = streamError("SSE read timed out")
           ctl.abort(err)
           void reader.cancel(err)
           reject(err)
@@ -56,7 +67,11 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
           },
           (err) => {
             clearTimeout(id)
-            reject(err)
+            if (err instanceof DOMException && err.name === "AbortError") {
+              reject(err)
+              return
+            }
+            reject(streamError(err instanceof Error ? err.message : String(err), err))
           },
         )
       })
@@ -67,6 +82,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
       }
 
       ctrl.enqueue(part.value)
+      started = true
     },
     async cancel(reason) {
       ctl.abort(reason)
@@ -196,6 +212,37 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           return sdk.responses(modelID)
         },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
+      }),
+    bifrost: (input) =>
+      Effect.succeed({
+        autoload: Boolean(normalizeBifrostBaseURL(input.options?.baseURL)),
+        options: {},
+        async discoverModels(): Promise<Record<string, Model>> {
+          const baseURL = normalizeBifrostBaseURL(input.options?.baseURL)
+          if (!baseURL) return {}
+
+          try {
+            const headers = new Headers()
+            if (typeof input.options?.apiKey === "string" && input.options.apiKey.length > 0) {
+              headers.set("Authorization", `Bearer ${input.options.apiKey}`)
+            }
+            const response = await fetch(`${baseURL}/models`, { headers })
+            if (!response.ok) throw new Error(`Bifrost model discovery failed with HTTP ${response.status}`)
+
+            const payload: unknown = await response.json()
+            if (!isRecord(payload) || !Array.isArray(payload.data)) return {}
+
+            return Object.fromEntries(
+              payload.data
+                .filter((item): item is { id: string } => isRecord(item) && typeof item.id === "string")
+                .filter((item) => !input.models[item.id])
+                .map((item) => [item.id, bifrostModel(item.id, baseURL)]),
+            )
+          } catch (e) {
+            log.warn("bifrost model discovery failed", { error: e })
+            return {}
+          }
+        },
       }),
     xai: () =>
       Effect.succeed({
@@ -1117,6 +1164,60 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
   }
 }
 
+function bifrostModel(modelID: string, baseURL: string): Model {
+  return {
+    id: ProviderV2.ModelID.make(modelID),
+    providerID: ProviderV2.ID.make("bifrost"),
+    name: modelID,
+    family: "",
+    api: {
+      id: modelID,
+      url: baseURL,
+      npm: "@ai-sdk/openai",
+    },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 0, output: 0 },
+    capabilities: {
+      temperature: false,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: {
+        text: true,
+        audio: false,
+        image: false,
+        video: false,
+        pdf: false,
+      },
+      output: {
+        text: true,
+        audio: false,
+        image: false,
+        video: false,
+        pdf: false,
+      },
+      interleaved: false,
+    },
+    release_date: "",
+    variants: {},
+  }
+}
+
+function normalizeBifrostBaseURL(value: unknown) {
+  if (typeof value !== "string") return
+  return value.replace(/\/+$/, "") || undefined
+}
+
+function normalizeBifrostOptions(providerID: string, options: Record<string, any> | undefined) {
+  if (providerID !== "bifrost") return options ?? {}
+  const baseURL = normalizeBifrostBaseURL(options?.baseURL)
+  if (!baseURL) return options ?? {}
+  return { ...options, baseURL }
+}
+
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   const models: Record<string, Model> = {}
   for (const [key, model] of Object.entries(provider.models)) {
@@ -1178,6 +1279,15 @@ function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelI
   )
     .slice(0, 3)
     .map((item) => item.id)
+}
+
+function modelIDMatches(pattern: string, modelID: string) {
+  if (!pattern.includes("*")) return pattern === modelID
+  return new RegExp(`^${pattern.replace(/[|\\{}()[\]^$+?.]/g, "\\$&").replace(/\*/g, ".*")}$`).test(modelID)
+}
+
+function modelIDMatchesAny(patterns: readonly string[] | undefined, modelID: string) {
+  return patterns?.some((pattern) => modelIDMatches(pattern, modelID)) ?? false
 }
 
 export const layer = Layer.effect(
@@ -1282,7 +1392,7 @@ export const layer = Layer.effect(
             id: ProviderV2.ID.make(providerID),
             name: provider.name ?? existing?.name ?? providerID,
             env: provider.env ?? existing?.env ?? [],
-            options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+            options: mergeDeep(existing?.options ?? {}, normalizeBifrostOptions(providerID, provider.options)),
             source: "config",
             models: existing?.models ?? {},
           }
@@ -1421,6 +1531,7 @@ export const layer = Layer.effect(
           if (disabled.has(providerID)) continue
           const data = database[providerID]
           if (!data) {
+            if (providerID === ProviderV2.ID.bifrost) continue
             log.error("Provider does not exist in model list " + providerID)
             continue
           }
@@ -1441,22 +1552,21 @@ export const layer = Layer.effect(
           const partial: Partial<Info> = { source: "config" }
           if (provider.env) partial.env = provider.env
           if (provider.name) partial.name = provider.name
-          if (provider.options) partial.options = provider.options
+          if (provider.options) partial.options = normalizeBifrostOptions(id, provider.options)
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [id, discoverModels] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderV2.ID.make(id)
+          if (!providers[providerID] || !isProviderAllowed(providerID)) continue
           yield* Effect.promise(async () => {
             try {
-              const discovered = await discoveryLoaders[gitlab]()
+              const discovered = await discoverModels()
               for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
-                }
+                if (!providers[providerID].models[modelID]) providers[providerID].models[modelID] = model
               }
             } catch (e) {
-              log.warn("state discovery error", { id: "gitlab", error: e })
+              log.warn("state discovery error", { id, error: e })
             }
           })
         }
@@ -1485,8 +1595,8 @@ export const layer = Layer.effect(
             if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) delete provider.models[modelID]
             if (model.status === "deprecated") delete provider.models[modelID]
             if (
-              (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-              (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+              modelIDMatchesAny(configProvider?.blacklist, modelID) ||
+              (configProvider?.whitelist && !modelIDMatchesAny(configProvider.whitelist, modelID))
             )
               delete provider.models[modelID]
 

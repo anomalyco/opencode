@@ -555,6 +555,8 @@ export const dict = {
   "session.header.open.ariaLabel": "Abrir en {{app}}",
   "session.header.open.menu": "Opciones de apertura",
   "session.header.open.copyPath": "Copiar ruta",
+  "session.header.agent.label": "Agente",
+  "session.header.agent.active": "Agente activo: @{{agent}}",
 
   "status.popover.trigger": "Estado",
   "status.popover.ariaLabel": "Configuraciones del servidor",

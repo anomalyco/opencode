@@ -131,6 +131,7 @@ const sessionBindingCommands = [
   "session.toggle.conceal",
   "session.toggle.timestamps",
   "session.toggle.thinking",
+  "session.toggle.tps",
   "session.toggle.actions",
   "session.toggle.scrollbar",
   "session.toggle.generic_tool_output",
@@ -230,6 +231,7 @@ export function Session() {
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
+  const [showTps, setShowTps] = kv.signal("tps_display_visibility", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
@@ -706,6 +708,19 @@ export function Session() {
       },
       run: () => {
         thinking.set(nextThinkingMode(thinkingMode()))
+        dialog.clear()
+      },
+    },
+    {
+      title: showTps() ? "Hide TPS display" : "Show TPS display",
+      value: "session.toggle.tps",
+      category: "Session",
+      slash: {
+        name: "tps",
+        aliases: ["tokens-per-second"],
+      },
+      run: () => {
+        setShowTps((prev) => !prev)
         dialog.clear()
       },
     },
@@ -1279,6 +1294,7 @@ export function Session() {
                         toBottom()
                       }}
                       sessionID={route.sessionID}
+                      showTps={showTps()}
                       right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                     />
                   </TuiPluginRuntime.Slot>

@@ -83,6 +83,17 @@ function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, fl
   )
 }
 
+function failingNativeClientLayer(reason: string) {
+  return Layer.succeed(
+    LLMClient.Service,
+    LLMClient.Service.of({
+      prepare: () => Effect.die(new Error(reason)),
+      stream: () => Stream.die(new Error(reason)),
+      generate: () => Effect.die(new Error(reason)),
+    }),
+  )
+}
+
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
     expect(LLM.hasToolCalls([])).toBe(false)
@@ -1056,13 +1067,8 @@ describe("session.llm.stream", () => {
             true,
           ),
         )
-        const failingNativeClient = Layer.succeed(
-          LLMClient.Service,
-          LLMClient.Service.of({
-            prepare: () => Effect.die(new Error("native LLM client should not be used when the flag is off")),
-            stream: () => Stream.die(new Error("native LLM client should not be used when the flag is off")),
-            generate: () => Effect.die(new Error("native LLM client should not be used when the flag is off")),
-          }),
+        const failingNativeClient = failingNativeClientLayer(
+          "native LLM client should not be used when the flag is off",
         )
 
         const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ProviderV2.ModelID.make(model.id))
@@ -1081,7 +1087,7 @@ describe("session.llm.stream", () => {
             Layer.provide(Provider.defaultLayer),
             Layer.provide(Plugin.defaultLayer),
             Layer.provide(failingNativeClient),
-            Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: false })),
+            Layer.provide(RuntimeFlags.layer({ nativeLlm: false })),
           ),
           {
             user: {
@@ -1109,7 +1115,82 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
-    "streams OpenAI through native runtime when opted in",
+    "falls back to AI SDK for unsupported native providers while native is on by default",
+    () =>
+      Effect.gen(function* () {
+        const fixture = { providerID: "google", modelID: "gemini-2.5-flash" }
+        const model = loadFixture(fixture.providerID, fixture.modelID).model
+        const pathSuffix = `/v1beta/models/${model.id}:streamGenerateContent`
+        const request = waitRequest(
+          pathSuffix,
+          createEventResponse([
+            {
+              candidates: [{ content: { parts: [{ text: "Hello" }] }, finishReason: "STOP" }],
+              usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+            },
+          ]),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(fixture.providerID),
+          ProviderV2.ModelID.make(model.id),
+        )
+        const sessionID = SessionID.make("session-test-native-unsupported-provider")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.3,
+        } satisfies Agent.Info
+
+        yield* drainWith(
+          LLM.layer.pipe(
+            Layer.provide(Auth.defaultLayer),
+            Layer.provide(Config.defaultLayer),
+            Layer.provide(Provider.defaultLayer),
+            Layer.provide(Plugin.defaultLayer),
+            Layer.provide(failingNativeClientLayer("native LLM client should not be used for unsupported providers")),
+            Layer.provide(RuntimeFlags.layer({})),
+          ),
+          {
+            user: {
+              id: MessageID.make("msg_user-native-unsupported-provider"),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: agent.name,
+              model: { providerID: ProviderV2.ID.make(fixture.providerID), modelID: resolved.id },
+            } satisfies SessionLegacy.User,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          },
+        )
+
+        const capture = yield* Effect.promise(() => request)
+        const config = capture.body.generationConfig as { temperature?: number; maxOutputTokens?: number } | undefined
+        expect(capture.url.pathname).toBe(pathSuffix)
+        expect(config?.temperature).toBe(0.3)
+        expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))
+      }),
+    {
+      config: () => ({
+        enabled_providers: ["google"],
+        provider: {
+          google: {
+            options: { apiKey: "test-google-key", baseURL: `${state.server!.url.origin}/v1beta` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "streams OpenAI through native runtime by default",
     () =>
       Effect.gen(function* () {
         const model = loadFixture("openai", "gpt-5.2").model
@@ -1145,7 +1226,7 @@ describe("session.llm.stream", () => {
           temperature: 0.2,
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(RequestExecutor.defaultLayer, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor(RequestExecutor.defaultLayer, { nativeLlm: true }), {
           user: {
             id: MessageID.make("msg_user-native"),
             sessionID,
@@ -1228,7 +1309,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(executor, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor(executor, { nativeLlm: true }), {
           user: {
             id: MessageID.make("msg_user-native-injected-tool"),
             sessionID,
@@ -1316,7 +1397,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(RequestExecutor.defaultLayer, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor(RequestExecutor.defaultLayer, { nativeLlm: true }), {
           user: {
             id: MessageID.make("msg_user-native-tool"),
             sessionID,

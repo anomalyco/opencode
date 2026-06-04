@@ -209,7 +209,7 @@ const OpenAIResponsesEvent = Schema.Struct({
   delta: Schema.optional(Schema.String),
   item_id: Schema.optional(Schema.String),
   summary_index: Schema.optional(Schema.Number),
-  item: Schema.optional(OpenAIResponsesStreamItem),
+  item: optionalNull(OpenAIResponsesStreamItem),
   response: Schema.optional(
     Schema.StructWithRest(
       Schema.Struct({

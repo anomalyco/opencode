@@ -4,9 +4,9 @@
 
 This folder contains adapters behind that service boundary:
 
-- `ai-sdk.ts` converts AI SDK `fullStream` parts into `@opencode-ai/llm` `LLMEvent`s. This is the default runtime path.
+- `ai-sdk.ts` converts AI SDK `fullStream` parts into `@opencode-ai/llm` `LLMEvent`s. This is the fallback runtime path for unsupported native requests.
 - `native-request.ts` converts opencode's normalized session input into a native `@opencode-ai/llm` `LLMRequest`. It does not execute requests.
-- `native-runtime.ts` is the opt-in native runtime adapter. It decides whether a selected model is supported, builds the native request, bridges opencode tools into native executable tools, and delegates transport to `LLMClient` / `RequestExecutor`.
+- `native-runtime.ts` is the default runtime adapter. It decides whether a selected model is supported, builds the native request, bridges opencode tools into native executable tools, and delegates transport to `LLMClient` / `RequestExecutor`.
 
 ## File Structure
 
@@ -84,7 +84,7 @@ Both runtimes converge on the same `LLMEvent` stream consumed by the session pro
 
 Safety boundary:
 
-- AI SDK remains the default.
-- `OPENCODE_EXPERIMENTAL_NATIVE_LLM=true` or the umbrella `OPENCODE_EXPERIMENTAL=true` opts in. Native is not a global replacement.
+- Native LLM is default-on. Set `OPENCODE_DISABLE_NATIVE_LLM=true` to opt out.
+- The legacy `OPENCODE_EXPERIMENTAL_NATIVE_LLM` flag is no longer read.
 - Native execution currently supports OpenAI, opencode-managed OpenAI-compatible, and Anthropic API-key paths backed by `@ai-sdk/openai`, `@ai-sdk/openai-compatible`, or `@ai-sdk/anthropic` catalog entries.
-- Unsupported providers, OpenAI OAuth, and missing API-key cases fall back to AI SDK.
+- Unsupported providers, unsupported packages, OpenAI OAuth, and missing API-key cases fall back to AI SDK.

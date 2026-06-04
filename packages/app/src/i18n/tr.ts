@@ -559,6 +559,8 @@ export const dict = {
   "session.header.open.ariaLabel": "{{app}} ile aç",
   "session.header.open.menu": "Açma seçenekleri",
   "session.header.open.copyPath": "Yolu kopyala",
+  "session.header.agent.label": "Aracı",
+  "session.header.agent.active": "Etkin aracı: @{{agent}}",
 
   "status.popover.trigger": "Durum",
   "status.popover.ariaLabel": "Sunucu yapılandırmaları",

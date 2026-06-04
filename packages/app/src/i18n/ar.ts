@@ -493,6 +493,8 @@ export const dict = {
   "session.header.open.ariaLabel": "فتح في {{app}}",
   "session.header.open.menu": "خيارات الفتح",
   "session.header.open.copyPath": "نسخ المسار",
+  "session.header.agent.label": "الوكيل",
+  "session.header.agent.active": "الوكيل النشط: @{{agent}}",
   "status.popover.trigger": "الحالة",
   "status.popover.ariaLabel": "إعدادات الخوادم",
   "status.popover.tab.servers": "الخوادم",

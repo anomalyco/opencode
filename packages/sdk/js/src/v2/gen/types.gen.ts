@@ -85,6 +85,8 @@ export type Event =
   | EventPtyDeleted
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventUiProjectViewUpdated
+  | EventUiSettingsUpdated
   | EventServerConnected
   | EventGlobalDisposed
   | EventAccountAdded
@@ -1572,6 +1574,20 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "ui.project_view.updated"
+        properties: {
+          viewID: string
+        }
+      }
+    | {
+        id: string
+        type: "ui.settings.updated"
+        properties: {
+          profileID: string
+        }
+      }
+    | {
+        id: string
         type: "server.connected"
         properties: {
           [key: string]: unknown
@@ -2742,6 +2758,176 @@ export type EventTuiSessionSelect = {
      */
     sessionID: string
   }
+}
+
+export type UiProjectViewEntry = {
+  project: Project
+  position: number
+  expanded: boolean
+}
+
+export type UiProjectView = {
+  projects: Array<UiProjectViewEntry>
+  lastProject?: Project
+}
+
+export type UiProjectViewReplaceOpenProjectsInput = {
+  projects: Array<{
+    projectID: string
+    expanded?: boolean
+  }>
+}
+
+export type UiProjectViewOpenProjectInput = {
+  projectID?: string
+  directory?: string
+  position?: number
+  expanded?: boolean
+}
+
+export type UiProjectViewUpdateOpenProjectInput = {
+  expanded?: boolean
+  position?: number
+}
+
+export type UiProjectViewLastProjectInput = {
+  projectID?: string
+  directory?: string
+}
+
+export type UiSettingsSettings = {
+  general: {
+    autoSave: boolean
+    releaseNotes: boolean
+    followup: "queue" | "steer"
+    showFileTree: boolean
+    showNavigation: boolean
+    showSearch: boolean
+    showStatus: boolean
+    showTerminal: boolean
+    showReasoningSummaries: boolean
+    shellToolPartsExpanded: boolean
+    editToolPartsExpanded: boolean
+    showSessionProgressBar: boolean
+    showCustomAgents: boolean
+    newLayoutDesigns: boolean
+  }
+  updates: {
+    startup: boolean
+  }
+  appearance: {
+    fontSize: number
+    mono: string
+    sans: string
+    terminal: string
+  }
+  permissions: {
+    autoApprove: boolean
+  }
+  notifications: {
+    agent: boolean
+    permissions: boolean
+    errors: boolean
+  }
+  sounds: {
+    agentEnabled: boolean
+    agent: string
+    permissionsEnabled: boolean
+    permissions: string
+    errorsEnabled: boolean
+    errors: string
+  }
+  keybinds: {
+    [key: string]: string
+  }
+}
+
+export type UiSettingsModelPreference = {
+  providerID: string
+  modelID: string
+  visibility: "show" | "hide"
+  favorite?: boolean
+}
+
+export type UiSettingsModelKey = {
+  providerID: string
+  modelID: string
+}
+
+export type UiSettingsModelSettings = {
+  user: Array<UiSettingsModelPreference>
+  recent: Array<UiSettingsModelKey>
+  variant: {
+    [key: string]: string
+  }
+}
+
+export type UiSettings = {
+  settings: UiSettingsSettings
+  model: UiSettingsModelSettings
+}
+
+export type UiSettingsAppSettings = {
+  general: {
+    autoSave: boolean
+    releaseNotes: boolean
+    followup: "queue" | "steer"
+    showFileTree: boolean
+    showNavigation: boolean
+    showSearch: boolean
+    showStatus: boolean
+    showTerminal: boolean
+    showReasoningSummaries: boolean
+    shellToolPartsExpanded: boolean
+    editToolPartsExpanded: boolean
+    showSessionProgressBar: boolean
+    showCustomAgents: boolean
+    newLayoutDesigns: boolean
+  }
+  updates: {
+    startup: boolean
+  }
+  appearance: {
+    fontSize: number
+    mono: string
+    sans: string
+    terminal: string
+  }
+  permissions: {
+    autoApprove: boolean
+  }
+  notifications: {
+    agent: boolean
+    permissions: boolean
+    errors: boolean
+  }
+  sounds: {
+    agentEnabled: boolean
+    agent: string
+    permissionsEnabled: boolean
+    permissions: string
+    errorsEnabled: boolean
+    errors: string
+  }
+}
+
+export type UiSettingsKeybindsInput = {
+  keybinds: {
+    [key: string]: string
+  }
+}
+
+export type UiSettingsModelPreferenceInput = {
+  visibility?: "show" | "hide"
+  favorite?: boolean
+}
+
+export type UiSettingsRecentModelsInput = {
+  models: Array<UiSettingsModelKey>
+}
+
+export type UiSettingsModelVariantInput = {
+  variant?: string
 }
 
 export type Workspace = {
@@ -4982,6 +5168,22 @@ export type EventInstallationUpdateAvailable = {
   type: "installation.update-available"
   properties: {
     version: string
+  }
+}
+
+export type EventUiProjectViewUpdated = {
+  id: string
+  type: "ui.project_view.updated"
+  properties: {
+    viewID: string
+  }
+}
+
+export type EventUiSettingsUpdated = {
+  id: string
+  type: "ui.settings.updated"
+  properties: {
+    profileID: string
   }
 }
 
@@ -9174,6 +9376,383 @@ export type TuiControlResponseResponses = {
 }
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
+export type UiProjectViewGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view"
+}
+
+export type UiProjectViewGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type UiProjectViewGetError = UiProjectViewGetErrors[keyof UiProjectViewGetErrors]
+
+export type UiProjectViewGetResponses = {
+  /**
+   * UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewGetResponse = UiProjectViewGetResponses[keyof UiProjectViewGetResponses]
+
+export type UiProjectViewOpenProjectsOpenData = {
+  body?: UiProjectViewOpenProjectInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/open-projects"
+}
+
+export type UiProjectViewOpenProjectsOpenErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type UiProjectViewOpenProjectsOpenError =
+  UiProjectViewOpenProjectsOpenErrors[keyof UiProjectViewOpenProjectsOpenErrors]
+
+export type UiProjectViewOpenProjectsOpenResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewOpenProjectsOpenResponse =
+  UiProjectViewOpenProjectsOpenResponses[keyof UiProjectViewOpenProjectsOpenResponses]
+
+export type UiProjectViewOpenProjectsReplaceData = {
+  body?: UiProjectViewReplaceOpenProjectsInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/open-projects"
+}
+
+export type UiProjectViewOpenProjectsReplaceErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type UiProjectViewOpenProjectsReplaceError =
+  UiProjectViewOpenProjectsReplaceErrors[keyof UiProjectViewOpenProjectsReplaceErrors]
+
+export type UiProjectViewOpenProjectsReplaceResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewOpenProjectsReplaceResponse =
+  UiProjectViewOpenProjectsReplaceResponses[keyof UiProjectViewOpenProjectsReplaceResponses]
+
+export type UiProjectViewOpenProjectsCloseData = {
+  body?: never
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/open-projects/{projectID}"
+}
+
+export type UiProjectViewOpenProjectsCloseErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type UiProjectViewOpenProjectsCloseError =
+  UiProjectViewOpenProjectsCloseErrors[keyof UiProjectViewOpenProjectsCloseErrors]
+
+export type UiProjectViewOpenProjectsCloseResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewOpenProjectsCloseResponse =
+  UiProjectViewOpenProjectsCloseResponses[keyof UiProjectViewOpenProjectsCloseResponses]
+
+export type UiProjectViewOpenProjectsUpdateData = {
+  body?: UiProjectViewUpdateOpenProjectInput
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/open-projects/{projectID}"
+}
+
+export type UiProjectViewOpenProjectsUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type UiProjectViewOpenProjectsUpdateError =
+  UiProjectViewOpenProjectsUpdateErrors[keyof UiProjectViewOpenProjectsUpdateErrors]
+
+export type UiProjectViewOpenProjectsUpdateResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewOpenProjectsUpdateResponse =
+  UiProjectViewOpenProjectsUpdateResponses[keyof UiProjectViewOpenProjectsUpdateResponses]
+
+export type UiProjectViewLastProjectSetData = {
+  body?: UiProjectViewLastProjectInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/last-project"
+}
+
+export type UiProjectViewLastProjectSetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type UiProjectViewLastProjectSetError =
+  UiProjectViewLastProjectSetErrors[keyof UiProjectViewLastProjectSetErrors]
+
+export type UiProjectViewLastProjectSetResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewLastProjectSetResponse =
+  UiProjectViewLastProjectSetResponses[keyof UiProjectViewLastProjectSetResponses]
+
+export type UiSettingsGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/settings"
+}
+
+export type UiSettingsGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type UiSettingsGetError = UiSettingsGetErrors[keyof UiSettingsGetErrors]
+
+export type UiSettingsGetResponses = {
+  /**
+   * UI settings
+   */
+  200: UiSettings
+}
+
+export type UiSettingsGetResponse = UiSettingsGetResponses[keyof UiSettingsGetResponses]
+
+export type UiSettingsAppUpdateData = {
+  body?: UiSettingsAppSettings
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/settings/app"
+}
+
+export type UiSettingsAppUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type UiSettingsAppUpdateError = UiSettingsAppUpdateErrors[keyof UiSettingsAppUpdateErrors]
+
+export type UiSettingsAppUpdateResponses = {
+  /**
+   * Updated UI settings
+   */
+  200: UiSettings
+}
+
+export type UiSettingsAppUpdateResponse = UiSettingsAppUpdateResponses[keyof UiSettingsAppUpdateResponses]
+
+export type UiSettingsKeybindsReplaceData = {
+  body?: UiSettingsKeybindsInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/settings/keybinds"
+}
+
+export type UiSettingsKeybindsReplaceErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type UiSettingsKeybindsReplaceError = UiSettingsKeybindsReplaceErrors[keyof UiSettingsKeybindsReplaceErrors]
+
+export type UiSettingsKeybindsReplaceResponses = {
+  /**
+   * Updated UI settings
+   */
+  200: UiSettings
+}
+
+export type UiSettingsKeybindsReplaceResponse =
+  UiSettingsKeybindsReplaceResponses[keyof UiSettingsKeybindsReplaceResponses]
+
+export type UiSettingsModelsUpdateData = {
+  body?: UiSettingsModelPreferenceInput
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/settings/models/{providerID}/{modelID}"
+}
+
+export type UiSettingsModelsUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type UiSettingsModelsUpdateError = UiSettingsModelsUpdateErrors[keyof UiSettingsModelsUpdateErrors]
+
+export type UiSettingsModelsUpdateResponses = {
+  /**
+   * Updated UI settings
+   */
+  200: UiSettings
+}
+
+export type UiSettingsModelsUpdateResponse = UiSettingsModelsUpdateResponses[keyof UiSettingsModelsUpdateResponses]
+
+export type UiSettingsModelsRecentReplaceData = {
+  body?: UiSettingsRecentModelsInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/settings/models/recent"
+}
+
+export type UiSettingsModelsRecentReplaceErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type UiSettingsModelsRecentReplaceError =
+  UiSettingsModelsRecentReplaceErrors[keyof UiSettingsModelsRecentReplaceErrors]
+
+export type UiSettingsModelsRecentReplaceResponses = {
+  /**
+   * Updated UI settings
+   */
+  200: UiSettings
+}
+
+export type UiSettingsModelsRecentReplaceResponse =
+  UiSettingsModelsRecentReplaceResponses[keyof UiSettingsModelsRecentReplaceResponses]
+
+export type UiSettingsModelsVariantUpdateData = {
+  body?: UiSettingsModelVariantInput
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/settings/models/{providerID}/{modelID}/variant"
+}
+
+export type UiSettingsModelsVariantUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type UiSettingsModelsVariantUpdateError =
+  UiSettingsModelsVariantUpdateErrors[keyof UiSettingsModelsVariantUpdateErrors]
+
+export type UiSettingsModelsVariantUpdateResponses = {
+  /**
+   * Updated UI settings
+   */
+  200: UiSettings
+}
+
+export type UiSettingsModelsVariantUpdateResponse =
+  UiSettingsModelsVariantUpdateResponses[keyof UiSettingsModelsVariantUpdateResponses]
 
 export type ExperimentalWorkspaceAdapterListData = {
   body?: never

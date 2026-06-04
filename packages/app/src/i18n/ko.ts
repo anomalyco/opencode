@@ -492,6 +492,8 @@ export const dict = {
   "session.header.open.ariaLabel": "{{app}}에서 열기",
   "session.header.open.menu": "열기 옵션",
   "session.header.open.copyPath": "경로 복사",
+  "session.header.agent.label": "에이전트",
+  "session.header.agent.active": "활성 에이전트: @{{agent}}",
   "status.popover.trigger": "상태",
   "status.popover.ariaLabel": "서버 구성",
   "status.popover.tab.servers": "서버",

@@ -309,7 +309,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
       Layer.provide(
         HttpRecorder.Cassette.fileSystem({ directory: FIXTURES_DIR }).pipe(Layer.provide(NodeFileSystem.layer)),
       ),
-      Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: true })),
+      Layer.provide(RuntimeFlags.layer({ nativeLlm: true })),
     ),
   )
 }

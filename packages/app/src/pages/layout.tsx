@@ -561,7 +561,7 @@ export default function Layout(props: ParentProps) {
     if (!untrack(() => state.autoselect)) return
 
     const list = layout.projects.list()
-    const last = server.projects.last()
+    const last = layout.projects.last()
 
     if (list.length === 0) {
       if (!last) return
@@ -1292,7 +1292,7 @@ export default function Layout(props: ParentProps) {
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
     const root = projectRoot(directory)
-    server.projects.touch(root)
+    layout.projects.touch(root)
     const project = layout.projects.list().find((item) => item.worktree === root)
     let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
@@ -1797,7 +1797,7 @@ export default function Layout(props: ParentProps) {
         if (!id) {
           if (root) {
             layout.projects.open(root)
-            if (server.projects.last() !== root) server.projects.touch(root)
+            if (layout.projects.last() !== root) layout.projects.touch(root)
           }
           activeRoute.session = ""
           activeRoute.sessionProject = ""
@@ -1820,7 +1820,7 @@ export default function Layout(props: ParentProps) {
         }
 
         layout.projects.open(root)
-        if (server.projects.last() !== root) server.projects.touch(root)
+        if (layout.projects.last() !== root) layout.projects.touch(root)
 
         const changed = session !== activeRoute.session || dir !== activeRoute.directory
         if (changed) {

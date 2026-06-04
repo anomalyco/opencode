@@ -94,6 +94,27 @@ export type Request = Omit<WireRequest, "metadata"> & {
   metadata: Readonly<Record<string, unknown>>
 }
 
+function normalizeMetadata(input: unknown): Record<string, unknown> {
+  if (input === undefined || input === null) return {}
+  if (Array.isArray(input)) {
+    return input.length > 0 && input.every(isPatchFileMetadata) ? { files: input } : { value: input }
+  }
+  if (isRecord(input)) return input
+  return { value: input }
+}
+
+function isPatchFileMetadata(input: unknown) {
+  if (!isRecord(input)) return false
+  if (typeof input.filePath !== "string") return false
+  if (typeof input.relativePath !== "string") return false
+  if (typeof input.type !== "string") return false
+  return typeof input.patch === "string" || typeof input.diff === "string"
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+}
+
 export const Reply = Schema.Literals(["once", "always", "reject"])
 export type Reply = Schema.Schema.Type<typeof Reply>
 
@@ -168,11 +189,11 @@ export type ReplyInput = Schema.Schema.Type<typeof ReplyInput>
 export interface Interface {
   readonly ask: (input: AskInput) => Effect.Effect<void, Error>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
-  readonly list: () => Effect.Effect<ReadonlyArray<WireRequest>>
+  readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
 interface PendingEntry {
-  info: WireRequest
+  info: Request
   deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
 
@@ -238,7 +259,7 @@ export const layer = Layer.effect(
       if (!needsAsk) return
 
       const id = request.id ?? PermissionID.ascending()
-      const info: WireRequest = {
+      const info: Request = {
         id,
         sessionID: request.sessionID,
         permission: request.permission,
@@ -247,11 +268,15 @@ export const layer = Layer.effect(
         always: request.always,
         tool: request.tool,
       }
+      const wireInfo: WireRequest = {
+        ...info,
+        metadata: normalizeWireMetadata(info.metadata),
+      }
       log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
       pending.set(id, { info, deferred })
-      yield* events.publish(Event.Asked, info)
+      yield* events.publish(Event.Asked, wireInfo)
       return yield* Effect.ensuring(
         Deferred.await(deferred),
         Effect.sync(() => {
@@ -335,7 +360,7 @@ function expand(pattern: string): string {
   return pattern
 }
 
-function normalizeMetadata(metadata: Readonly<Record<string, unknown>>): Metadata {
+function normalizeWireMetadata(metadata: Readonly<Record<string, unknown>>): Metadata {
   const filepath = decodeStringMetadata(metadata.filepath)
   const diff = decodeStringMetadata(metadata.diff)
   const files = decodeFilesMetadata(metadata.files)
