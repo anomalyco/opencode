@@ -42,6 +42,7 @@ import { useSettings } from "@/context/settings"
 import { useGlobal } from "@/context/global"
 
 const HOME_SESSION_LIMIT = 15
+const HOME_RECENT_PROJECT_LIMIT = 24
 const HOME_ROW =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] border-0 bg-transparent text-left text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
 const HOME_PROJECT_NAV_ROW = `${HOME_ROW} h-7 gap-2 px-1.5 [&>span]:min-w-0 [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap`
@@ -88,7 +89,32 @@ function HomeDesign() {
     return Array.isArray(raw) ? raw[0] : raw
   })
   const selectedDirectory = createMemo(() => decode64(rawProjectParam()))
-  const projects = createMemo(() => layout.projects.list())
+  const openedProjects = createMemo(() => layout.projects.list())
+  const recentProjects = createMemo(() => {
+    const recentProjectKeys = new Set<string>()
+    return sync.data.project
+      .filter((project) => project.id !== "global")
+      .slice()
+      .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+      .filter((project) => {
+        const key = pathKey(project.worktree)
+        if (recentProjectKeys.has(key)) return false
+        recentProjectKeys.add(key)
+        return true
+      })
+      .slice(0, HOME_RECENT_PROJECT_LIMIT)
+      .map((project) => ({ ...project, expanded: false } satisfies LocalProject))
+  })
+  const projects = createMemo(() => {
+    const opened = openedProjects()
+    const openedKeys = new Set(opened.map((project) => pathKey(project.worktree)))
+    return [
+      ...opened,
+      ...recentProjects()
+        .filter((project) => !openedKeys.has(pathKey(project.worktree)))
+        .slice(0, HOME_RECENT_PROJECT_LIMIT),
+    ]
+  })
   const selectedRoot = createMemo(() => {
     const directory = selectedDirectory()
     if (!directory) return
@@ -171,7 +197,7 @@ function HomeDesign() {
   function canonicalProjectRoot(directory: string) {
     return routeProjectRoot({
       directory,
-      opened: projects(),
+      opened: openedProjects(),
       projects: sync.data.project,
       workspaceOrder: {},
     })
@@ -183,7 +209,7 @@ function HomeDesign() {
 
   function selectProject(directory: string) {
     const root = canonicalProjectRoot(directory)
-    if (!root || !projects().some((project) => pathKey(project.worktree) === pathKey(root))) return
+    if (!root) return
     layout.projects.open(root)
     server.projects.touch(root)
     setSelectedDirectory(root)
@@ -280,8 +306,8 @@ function HomeDesign() {
         // Mobile is a master -> detail flow: the projects list is the master screen and
         // collapses once a project is selected. Desktop always shows both columns.
         class={projectSelected() ? "hidden lg:flex" : "flex"}
-        hasProjects={projects().length > 0}
         selectedProject={selectedDirectory()}
+        projects={projects()}
         selectProject={selectProject}
         openNewSession={openProjectNewSession}
         chooseProject={() => void chooseProject()}
@@ -421,8 +447,8 @@ function HomeDesign() {
 
 function HomeProjectColumn(props: {
   class?: string
-  hasProjects: boolean
   selectedProject?: string
+  projects: LocalProject[]
   selectProject: (directory: string) => void
   openNewSession: (directory: string) => void
   chooseProject: () => void
@@ -435,8 +461,6 @@ function HomeProjectColumn(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   const global = useGlobal()
-  const layout = useLayout()
-  const projects = createMemo(() => layout.projects.list())
   return (
     <aside
       class={`min-w-0 flex-col lg:flex lg:pt-[52px] gap-4 ${props.class ?? "flex"}`}
@@ -444,26 +468,24 @@ function HomeProjectColumn(props: {
     >
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
-        <Show when={props.hasProjects}>
-          <IconButtonV2
-            data-action="home-add-project"
-            variant="ghost-muted"
-            size="large"
-            class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-            icon={<IconV2 name="folder-add-left" />}
-            onClick={props.chooseProject}
-            aria-label={props.language.t("home.project.add")}
-          />
-        </Show>
+        <IconButtonV2
+          data-action="home-add-project"
+          variant="ghost-muted"
+          size="large"
+          class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+          icon={<IconV2 name="folder-add-left" />}
+          onClick={props.chooseProject}
+          aria-label={props.language.t("home.project.add")}
+        />
       </div>
       <Show
         when={global.servers.list().length > 1}
         fallback={
           <HomeProjectListViewport>
             <ProjectList
-              projects={projects()}
+              projects={props.projects}
               selectedProject={props.selectedProject}
-              showEmptyFallback={false}
+              showEmptyFallback={true}
               onSelectedProjectChange={props.selectProject}
               onChooseProject={props.chooseProject}
               openNewSession={props.openNewSession}
@@ -516,7 +538,7 @@ function HomeProjectColumn(props: {
                   <div class="h-px bg-v2-border-border-base mx-3 my-1" />
                   <HomeProjectListViewport>
                     <ProjectList
-                      projects={projects()}
+                      projects={props.projects}
                       selectedProject={props.selectedProject}
                       showEmptyFallback={true}
                       onSelectedProjectChange={props.selectProject}
@@ -1093,6 +1115,7 @@ function ProjectList(props: {
             type="button"
             class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-base [&>[data-slot=icon-svg]]:text-v2-icon-icon-base`}
             onClick={() => props.onChooseProject?.()}
+            aria-label={props.language.t("home.project.add")}
           >
             <IconV2 name="folder-add-left" size="small" />
             <span>{props.language.t("home.project.add")}</span>
