@@ -35,8 +35,9 @@ const BACKGROUND_STARTED = [
 ].join("\n")
 const BACKGROUND_UPDATED = [
   "Additional context sent to the running background task.",
-  "The task is still running; wait for the automatic completion notification.",
-  "Do not poll for progress or duplicate its work.",
+  "The task is still working in the background. You will be notified automatically when it finishes.",
+  "Do not duplicate this task's work — avoid working with the same files or topics it is using.",
+  "Work on non-overlapping tasks, or briefly tell the user what you sent and end your response.",
 ].join("\n")
 
 const BaseParameterFields = {
