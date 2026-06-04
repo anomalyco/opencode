@@ -6,6 +6,7 @@ import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { DynamicProviderPlugin } from "@opencode-ai/core/plugin/provider/dynamic"
@@ -13,7 +14,9 @@ import { testEffect } from "../lib/effect"
 import { fixtureProvider, it, model, npmLayer } from "./provider-helper"
 
 const fixtureProviderPath = fileURLToPath(fixtureProvider)
-const itWithAISDK = testEffect(AISDK.layer.pipe(Layer.provideMerge(PluginV2.defaultLayer)))
+const itWithAISDK = testEffect(
+  AISDK.layer.pipe(Layer.provideMerge(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))),
+)
 
 function npmEntrypointLayer(entrypoint: Option.Option<string>) {
   return Layer.succeed(

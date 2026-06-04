@@ -6,20 +6,21 @@
 // strict `NonNegativeInt` schema then made every load of the message list
 // fail to encode, killing Desktop boot for every user with such a row.
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { eq } from "drizzle-orm"
-import { ModelID, ProviderID } from "../../src/provider/schema"
-import { Server } from "../../src/server/server"
+
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID } from "../../src/session/schema"
-import * as Database from "@/storage/db"
-import { PartTable } from "@/session/session.sql"
+import { Database } from "@opencode-ai/core/database/database"
+import { PartTable } from "@opencode-ai/core/session/sql"
 import { resetDatabase } from "../fixture/db"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-const it = testEffect(Session.defaultLayer)
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer, httpApiLayer))
 
 function seedNegativeTokenSession() {
   return Effect.gen(function* () {
@@ -30,7 +31,7 @@ function seedNegativeTokenSession() {
       role: "user",
       sessionID: info.id,
       agent: "build",
-      model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
       time: { created: Date.now() },
     })
     const partID = PartID.ascending()
@@ -46,20 +47,20 @@ function seedNegativeTokenSession() {
 
     // Bypass the schema with a direct SQL update to install the
     // negative `output` value we want to test loading.
-    Database.use((db) =>
-      db
-        .update(PartTable)
-        .set({
-          data: {
-            type: "step-finish",
-            reason: "stop",
-            cost: 0,
-            tokens: { input: 0, output: -42, reasoning: 0, cache: { read: 0, write: 0 } },
-          } as never,
-        })
-        .where(eq(PartTable.id, partID))
-        .run(),
-    )
+    const { db } = yield* Database.Service
+    yield* db
+      .update(PartTable)
+      .set({
+        data: {
+          type: "step-finish",
+          reason: "stop",
+          cost: 0,
+          tokens: { input: 0, output: -42, reasoning: 0, cache: { read: 0, write: 0 } },
+        } as never,
+      })
+      .where(eq(PartTable.id, partID))
+      .run()
+      .pipe(Effect.orDie)
 
     return info.id
   })
@@ -73,7 +74,7 @@ describe("messages endpoint tolerates legacy negative token counts", () => {
       const test = yield* TestInstance
       const sessionID = yield* seedNegativeTokenSession()
       const url = `${SessionPaths.messages.replace(":sessionID", sessionID)}?limit=80&directory=${encodeURIComponent(test.directory)}`
-      const res = yield* Effect.promise(async () => Server.Default().app.request(url))
+      const res = yield* requestInDirectory(url, test.directory)
       expect(res.status, "messages endpoint 400'd on legacy negative tokens").not.toBe(400)
     }),
     { git: true, config: { formatter: false, lsp: false } },

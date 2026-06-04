@@ -1,7 +1,8 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { Permission } from "@/permission"
-import { PermissionID } from "@/permission/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { PermissionNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
@@ -9,7 +10,7 @@ import { described } from "./metadata"
 
 const root = "/permission"
 const ReplyPayload = Schema.Struct({
-  reply: Permission.Reply,
+  reply: PermissionLegacy.Reply,
   message: Schema.optional(Schema.String),
 })
 
@@ -19,7 +20,7 @@ export const PermissionApi = HttpApi.make("permission")
       .add(
         HttpApiEndpoint.get("list", root, {
           query: WorkspaceRoutingQuery,
-          success: described(Schema.Array(Permission.Request), "List of pending permissions"),
+          success: described(Schema.Array(PermissionLegacy.Request), "List of pending permissions"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.list",
@@ -28,11 +29,11 @@ export const PermissionApi = HttpApi.make("permission")
           }),
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {
-          params: { requestID: PermissionID },
+          params: { requestID: PermissionLegacy.ID },
           query: WorkspaceRoutingQuery,
           payload: ReplyPayload,
           success: described(Schema.Boolean, "Permission processed successfully"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, PermissionNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.reply",

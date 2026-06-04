@@ -177,10 +177,6 @@ export function RunQuestionBody(props: {
         return
       }
 
-      if (event.name === "return" && !event.shift && !event.ctrl && !event.meta) {
-        saveCustom()
-        event.preventDefault()
-      }
       return
     }
 
@@ -416,7 +412,7 @@ export function RunQuestionBody(props: {
                               </text>
                             </box>
                             <Show when={!info()?.multiple}>
-                              <text fg={props.theme.success}>{hit() ? "✓" : ""}</text>
+                              <text fg={props.theme.success}>{hit() ? " ✓" : ""}</text>
                             </Show>
                           </box>
                           <box paddingLeft={3}>
@@ -466,7 +462,7 @@ export function RunQuestionBody(props: {
                           </text>
                         </box>
                         <Show when={!info()?.multiple}>
-                          <text fg={props.theme.success}>{picked() ? "✓" : ""}</text>
+                          <text fg={props.theme.success}>{picked() ? " ✓" : ""}</text>
                         </Show>
                       </box>
                       <Show
@@ -496,6 +492,7 @@ export function RunQuestionBody(props: {
                             focusedBackgroundColor={props.theme.surface}
                             cursorColor={props.theme.text}
                             focused={!disabled()}
+                            onSubmit={saveCustom}
                             onContentChange={() => {
                               if (!area || area.isDestroyed || disabled()) {
                                 return

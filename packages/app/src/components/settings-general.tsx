@@ -7,13 +7,14 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
-import { showToast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { showToast } from "@/utils/toast"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
-import { useGlobalSync } from "@/context/global-sync"
-import { useGlobalSDK } from "@/context/global-sdk"
+import { useServerSync } from "@/context/server-sync"
+import { useServerSDK } from "@/context/server-sdk"
 import {
   monoDefault,
   monoFontFamily,
@@ -86,6 +87,7 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const permission = usePermission()
   const platform = usePlatform()
+  const dialog = useDialog()
   const params = useParams()
   const settings = useSettings()
 
@@ -175,8 +177,8 @@ export const SettingsGeneral: Component = () => {
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
-  const globalSync = useGlobalSync()
-  const globalSdk = useGlobalSDK()
+  const serverSync = useServerSync()
+  const globalSdk = useServerSDK()
 
   const [shells] = createResource(
     () =>
@@ -193,16 +195,22 @@ export const SettingsGeneral: Component = () => {
     { initialValue: null as DisplayBackend | null },
   )
 
+  const [pinchZoom, { mutate: setPinchZoom }] = createResource(
+    () => (desktop() && platform.getPinchZoomEnabled ? true : false),
+    () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
+    { initialValue: false },
+  )
+
   onMount(() => {
     void theme.loadThemes()
   })
 
   const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
-  const currentShell = createMemo(() => globalSync.data.config.shell ?? "")
+  const currentShell = createMemo(() => serverSync.data.config.shell ?? "")
 
   const shellOptions = createMemo<ShellSelectOption[]>(() => {
     const list = shells.latest
-    const current = globalSync.data.config.shell
+    const current = serverSync.data.config.shell
 
     const nameCounts = new Map<string, number>()
     for (const s of list) {
@@ -237,6 +245,13 @@ export const SettingsGeneral: Component = () => {
     void update.finally(() => {
       void refetchDisplayBackend()
     })
+  }
+
+  const onPinchZoomChange = (checked: boolean) => {
+    setPinchZoom(checked)
+    const update = platform.setPinchZoomEnabled?.(checked)
+    if (!update) return
+    void update.catch(() => setPinchZoom(!checked))
   }
 
   const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
@@ -330,7 +345,7 @@ export const SettingsGeneral: Component = () => {
             onSelect={(option) => {
               if (!option) return
               if (option.value === currentShell()) return
-              globalSync.updateConfig({ shell: option.value })
+              serverSync.updateConfig({ shell: option.value })
             }}
             variant="secondary"
             size="small"
@@ -386,6 +401,24 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.newLayoutDesigns.title")}
+          description={language.t("settings.general.row.newLayoutDesigns.description")}
+        >
+          <div data-action="settings-new-layout-designs">
+            <Switch
+              checked={settings.general.newLayoutDesigns()}
+              onChange={(checked) => {
+                settings.general.setNewLayoutDesigns(checked)
+                if (!checked) return
+                void import("@/components/settings-v2").then((module) => {
+                  dialog.show(() => <module.DialogSettings />)
+                })
+              }}
+            />
+          </div>
+        </SettingsRow>
       </SettingsList>
     </div>
   )
@@ -432,18 +465,6 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.showTerminal.title")}
-          description={language.t("settings.general.row.showTerminal.description")}
-        >
-          <div data-action="settings-show-terminal">
-            <Switch
-              checked={settings.general.showTerminal()}
-              onChange={(checked) => settings.general.setShowTerminal(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
           title={language.t("settings.general.row.showStatus.title")}
           description={language.t("settings.general.row.showStatus.description")}
         >
@@ -451,6 +472,18 @@ export const SettingsGeneral: Component = () => {
             <Switch
               checked={settings.general.showStatus()}
               onChange={(checked) => settings.general.setShowStatus(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showCustomAgents.title")}
+          description={language.t("settings.general.row.showCustomAgents.description")}
+        >
+          <div data-action="settings-show-custom-agents">
+            <Switch
+              checked={settings.general.showCustomAgents()}
+              onChange={(checked) => settings.general.setShowCustomAgents(checked)}
             />
           </div>
         </SettingsRow>
@@ -729,7 +762,45 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
-  console.log(import.meta.env)
+  const DisplaySection = () => (
+    <Show when={desktop()}>
+      <div class="flex flex-col gap-1">
+        <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
+
+        <SettingsList>
+          <SettingsRow
+            title={language.t("settings.general.row.pinchZoom.title")}
+            description={language.t("settings.general.row.pinchZoom.description")}
+          >
+            <div data-action="settings-pinch-zoom">
+              <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
+            </div>
+          </SettingsRow>
+
+          <Show when={linux()}>
+            <SettingsRow
+              title={
+                <div class="flex items-center gap-2">
+                  <span>{language.t("settings.general.row.wayland.title")}</span>
+                  <Tooltip value={language.t("settings.general.row.wayland.tooltip")} placement="top">
+                    <span class="text-text-weak">
+                      <Icon name="help" size="small" />
+                    </span>
+                  </Tooltip>
+                </div>
+              }
+              description={language.t("settings.general.row.wayland.description")}
+            >
+              <div data-action="settings-wayland">
+                <Switch checked={displayBackend.latest === "wayland"} onChange={onDisplayBackendChange} />
+              </div>
+            </SettingsRow>
+          </Show>
+        </SettingsList>
+      </div>
+    </Show>
+  )
+
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -749,33 +820,9 @@ export const SettingsGeneral: Component = () => {
 
         <UpdatesSection />
 
-        <Show when={linux()}>
-          <div class="flex flex-col gap-1">
-            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
+        <DisplaySection />
 
-            <SettingsList>
-              <SettingsRow
-                title={
-                  <div class="flex items-center gap-2">
-                    <span>{language.t("settings.general.row.wayland.title")}</span>
-                    <Tooltip value={language.t("settings.general.row.wayland.tooltip")} placement="top">
-                      <span class="text-text-weak">
-                        <Icon name="help" size="small" />
-                      </span>
-                    </Tooltip>
-                  </div>
-                }
-                description={language.t("settings.general.row.wayland.description")}
-              >
-                <div data-action="settings-wayland">
-                  <Switch checked={displayBackend.latest === "wayland"} onChange={onDisplayBackendChange} />
-                </div>
-              </SettingsRow>
-            </SettingsList>
-          </div>
-        </Show>
-
-        <Show when={desktop() && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"}>
+        <Show when={desktop()}>
           <AdvancedSection />
         </Show>
       </div>
