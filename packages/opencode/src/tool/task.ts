@@ -123,11 +123,33 @@ export const TaskTool = Tool.define(
       const parentAgent = parent.agent
         ? yield* agent.get(parent.agent).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
+
+      // Hoisted above sessions.create() so model context is available at row-creation time.
+      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.orDie,
+      )
+      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      const variant = msg.info.variant
+
+      // Session.Model shape ({ id, providerID }) for sessions.create() row attribution.
+      // Agent config model uses { modelID }, while Session.Model uses { id } — convert here.
+      const sessionModel = next.model
+        ? { id: next.model.modelID, providerID: next.model.providerID }
+        : { id: msg.info.modelID, providerID: msg.info.providerID }
+      // Prompt-invocation shape ({ modelID, providerID }) — same as agent config model shape.
+      const model = {
+        modelID: next.model?.modelID ?? msg.info.modelID,
+        providerID: next.model?.providerID ?? msg.info.providerID,
+      }
+
       const nextSession =
         session ??
         (yield* sessions.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${next.name} subagent)`,
+          agent: next.name,
+          model: sessionModel,
           permission: [
             ...deriveSubagentSessionPermission({
               parentSessionPermission: parent.permission ?? [],
@@ -141,18 +163,6 @@ export const TaskTool = Tool.define(
             })) ?? []),
           ],
         }))
-
-      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
-        Effect.provideService(Database.Service, database),
-        Effect.orDie,
-      )
-      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-      const variant = msg.info.variant
-
-      const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
