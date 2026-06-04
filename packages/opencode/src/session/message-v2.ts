@@ -1,11 +1,27 @@
-import { BusEvent } from "@/bus/bus-event"
+import { EventV2 } from "@opencode-ai/core/event"
 import { SessionID, MessageID, PartID } from "./schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import {
+  APIError,
+  AbortedError,
+  Assistant,
+  AuthError,
+  CompactionPart,
+  ContextOverflowError,
+  Info,
+  OutputLengthError,
+  Part,
+  StructuredOutputError,
+  SubtaskPart,
+  User,
+  WithParts,
+  type ToolPart,
+} from "@opencode-ai/core/v1/session"
+
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
-import { LSP } from "@/lsp/lsp"
-import { Snapshot } from "@/snapshot"
-import { SyncEvent } from "../sync"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { NotFoundError } from "@/storage/storage"
 import { and } from "drizzle-orm"
 import { desc } from "drizzle-orm"
@@ -13,20 +29,15 @@ import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
-import { MessageTable, PartTable, SessionTable } from "./session.sql"
-import * as ProviderError from "@/provider/error"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Schema, Types } from "effect"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { Effect, Schema } from "effect"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
-import { MessageError } from "./message-error"
-import { AuthError, OutputLengthError } from "./message-error"
-export { AuthError, OutputLengthError } from "./message-error"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -38,526 +49,27 @@ interface FetchDecompressionError extends Error {
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
 
-export const AbortedError = NamedError.create("MessageAbortedError", { message: Schema.String })
-export const StructuredOutputError = NamedError.create("StructuredOutputError", {
-  message: Schema.String,
-  retries: NonNegativeInt,
-})
-export const APIError = NamedError.create("APIError", {
-  message: Schema.String,
-  statusCode: Schema.optional(NonNegativeInt),
-  isRetryable: Schema.Boolean,
-  responseHeaders: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  responseBody: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-})
-export type APIError = Schema.Schema.Type<typeof APIError.Schema>
-export const ContextOverflowError = NamedError.create("ContextOverflowError", {
-  message: Schema.String,
-  responseBody: Schema.optional(Schema.String),
-})
-
-export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
-  type: Schema.Literal("text"),
-}) {}
-
-export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
-  type: Schema.Literal("json_schema"),
-  schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
-  retryCount: NonNegativeInt.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
-}) {}
-
-export const Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
-  discriminator: "type",
-  identifier: "OutputFormat",
-})
-export type OutputFormat = Schema.Schema.Type<typeof Format>
-
-const partBase = {
-  id: PartID,
-  sessionID: SessionID,
-  messageID: MessageID,
-}
-
-export const SnapshotPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("snapshot"),
-  snapshot: Schema.String,
-}).annotate({ identifier: "SnapshotPart" })
-export type SnapshotPart = Types.DeepMutable<Schema.Schema.Type<typeof SnapshotPart>>
-
-export const PatchPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("patch"),
-  hash: Schema.String,
-  files: Schema.Array(Schema.String),
-}).annotate({ identifier: "PatchPart" })
-export type PatchPart = Types.DeepMutable<Schema.Schema.Type<typeof PatchPart>>
-
-export const TextPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("text"),
-  text: Schema.String,
-  synthetic: Schema.optional(Schema.Boolean),
-  ignored: Schema.optional(Schema.Boolean),
-  time: Schema.optional(
-    Schema.Struct({
-      start: NonNegativeInt,
-      end: Schema.optional(NonNegativeInt),
-    }),
-  ),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-}).annotate({ identifier: "TextPart" })
-export type TextPart = Types.DeepMutable<Schema.Schema.Type<typeof TextPart>>
-
-export const ReasoningPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("reasoning"),
-  text: Schema.String,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-  time: Schema.Struct({
-    start: NonNegativeInt,
-    end: Schema.optional(NonNegativeInt),
-  }),
-}).annotate({ identifier: "ReasoningPart" })
-export type ReasoningPart = Types.DeepMutable<Schema.Schema.Type<typeof ReasoningPart>>
-
-const filePartSourceBase = {
-  text: Schema.Struct({
-    value: Schema.String,
-    start: Schema.Finite,
-    end: Schema.Finite,
-  }).annotate({ identifier: "FilePartSourceText" }),
-}
-
-export const FileSource = Schema.Struct({
-  ...filePartSourceBase,
-  type: Schema.Literal("file"),
-  path: Schema.String,
-}).annotate({ identifier: "FileSource" })
-
-export const SymbolSource = Schema.Struct({
-  ...filePartSourceBase,
-  type: Schema.Literal("symbol"),
-  path: Schema.String,
-  range: LSP.Range,
-  name: Schema.String,
-  kind: NonNegativeInt,
-}).annotate({ identifier: "SymbolSource" })
-
-export const ResourceSource = Schema.Struct({
-  ...filePartSourceBase,
-  type: Schema.Literal("resource"),
-  clientName: Schema.String,
-  uri: Schema.String,
-}).annotate({ identifier: "ResourceSource" })
-
-export const FilePartSource = Schema.Union([FileSource, SymbolSource, ResourceSource]).annotate({
-  discriminator: "type",
-  identifier: "FilePartSource",
-})
-
-export const FilePart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("file"),
-  mime: Schema.String,
-  filename: Schema.optional(Schema.String),
-  url: Schema.String,
-  source: Schema.optional(FilePartSource),
-}).annotate({ identifier: "FilePart" })
-export type FilePart = Types.DeepMutable<Schema.Schema.Type<typeof FilePart>>
-
-export const AgentPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("agent"),
-  name: Schema.String,
-  source: Schema.optional(
-    Schema.Struct({
-      value: Schema.String,
-      start: NonNegativeInt,
-      end: NonNegativeInt,
-    }),
-  ),
-}).annotate({ identifier: "AgentPart" })
-export type AgentPart = Types.DeepMutable<Schema.Schema.Type<typeof AgentPart>>
-
-export const CompactionPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("compaction"),
-  auto: Schema.Boolean,
-  overflow: Schema.optional(Schema.Boolean),
-  tail_start_id: Schema.optional(MessageID),
-}).annotate({ identifier: "CompactionPart" })
-export type CompactionPart = Types.DeepMutable<Schema.Schema.Type<typeof CompactionPart>>
-
-export const SubtaskPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("subtask"),
-  prompt: Schema.String,
-  description: Schema.String,
-  agent: Schema.String,
-  model: Schema.optional(
-    Schema.Struct({
-      providerID: ProviderID,
-      modelID: ModelID,
-    }),
-  ),
-  command: Schema.optional(Schema.String),
-}).annotate({ identifier: "SubtaskPart" })
-export type SubtaskPart = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPart>>
-
-export const RetryPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("retry"),
-  attempt: NonNegativeInt,
-  error: APIError.EffectSchema,
-  time: Schema.Struct({
-    created: NonNegativeInt,
-  }),
-}).annotate({ identifier: "RetryPart" })
-export type RetryPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof RetryPart>>, "error"> & {
-  error: APIError
-}
-
-export const StepStartPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("step-start"),
-  snapshot: Schema.optional(Schema.String),
-}).annotate({ identifier: "StepStartPart" })
-export type StepStartPart = Types.DeepMutable<Schema.Schema.Type<typeof StepStartPart>>
-
-export const StepFinishPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("step-finish"),
-  reason: Schema.String,
-  snapshot: Schema.optional(Schema.String),
-  cost: Schema.Finite,
-  tokens: Schema.Struct({
-    total: Schema.optional(Schema.Finite),
-    input: Schema.Finite,
-    output: Schema.Finite,
-    reasoning: Schema.Finite,
-    cache: Schema.Struct({
-      read: Schema.Finite,
-      write: Schema.Finite,
-    }),
-  }),
-}).annotate({ identifier: "StepFinishPart" })
-export type StepFinishPart = Types.DeepMutable<Schema.Schema.Type<typeof StepFinishPart>>
-
-export const ToolStatePending = Schema.Struct({
-  status: Schema.Literal("pending"),
-  input: Schema.Record(Schema.String, Schema.Any),
-  raw: Schema.String,
-}).annotate({ identifier: "ToolStatePending" })
-export type ToolStatePending = Types.DeepMutable<Schema.Schema.Type<typeof ToolStatePending>>
-
-export const ToolStateRunning = Schema.Struct({
-  status: Schema.Literal("running"),
-  input: Schema.Record(Schema.String, Schema.Any),
-  title: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-  time: Schema.Struct({
-    start: NonNegativeInt,
-  }),
-}).annotate({ identifier: "ToolStateRunning" })
-export type ToolStateRunning = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateRunning>>
-
-export const ToolStateCompleted = Schema.Struct({
-  status: Schema.Literal("completed"),
-  input: Schema.Record(Schema.String, Schema.Any),
-  output: Schema.String,
-  title: Schema.String,
-  metadata: Schema.Record(Schema.String, Schema.Any),
-  time: Schema.Struct({
-    start: NonNegativeInt,
-    end: NonNegativeInt,
-    compacted: Schema.optional(NonNegativeInt),
-  }),
-  attachments: Schema.optional(Schema.Array(FilePart)),
-}).annotate({ identifier: "ToolStateCompleted" })
-export type ToolStateCompleted = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateCompleted>>
-
 function truncateToolOutput(text: string, maxChars?: number) {
   if (!maxChars || text.length <= maxChars) return text
   const omitted = text.length - maxChars
   return `${text.slice(0, maxChars)}\n[Tool output truncated for compaction: omitted ${omitted} chars]`
 }
 
-export const ToolStateError = Schema.Struct({
-  status: Schema.Literal("error"),
-  input: Schema.Record(Schema.String, Schema.Any),
-  error: Schema.String,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-  time: Schema.Struct({
-    start: NonNegativeInt,
-    end: NonNegativeInt,
-  }),
-}).annotate({ identifier: "ToolStateError" })
-export type ToolStateError = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateError>>
-
-export const ToolState = Schema.Union([
-  ToolStatePending,
-  ToolStateRunning,
-  ToolStateCompleted,
-  ToolStateError,
-]).annotate({
-  discriminator: "status",
-  identifier: "ToolState",
-})
-export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
-
-export const ToolPart = Schema.Struct({
-  ...partBase,
-  type: Schema.Literal("tool"),
-  callID: Schema.String,
-  tool: Schema.String,
-  state: ToolState,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-}).annotate({ identifier: "ToolPart" })
-export type ToolPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof ToolPart>>, "state"> & {
-  state: ToolState
-}
-
-const messageBase = {
-  id: MessageID,
-  sessionID: SessionID,
-}
-
-export const User = Schema.Struct({
-  ...messageBase,
-  role: Schema.Literal("user"),
-  time: Schema.Struct({
-    created: NonNegativeInt,
-  }),
-  format: Schema.optional(Format),
-  summary: Schema.optional(
-    Schema.Struct({
-      title: Schema.optional(Schema.String),
-      body: Schema.optional(Schema.String),
-      diffs: Schema.Array(Snapshot.FileDiff),
-    }),
-  ),
-  agent: Schema.String,
-  model: Schema.Struct({
-    providerID: ProviderID,
-    modelID: ModelID,
-    variant: Schema.optional(Schema.String),
-  }),
-  system: Schema.optional(Schema.String),
-  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
-}).annotate({ identifier: "UserMessage" })
-export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
-
-export const Part = Schema.Union([
-  TextPart,
-  SubtaskPart,
-  ReasoningPart,
-  FilePart,
-  ToolPart,
-  StepStartPart,
-  StepFinishPart,
-  SnapshotPart,
-  PatchPart,
-  AgentPart,
-  RetryPart,
-  CompactionPart,
-]).annotate({ discriminator: "type", identifier: "Part" })
-export type Part =
-  | TextPart
-  | SubtaskPart
-  | ReasoningPart
-  | FilePart
-  | ToolPart
-  | StepStartPart
-  | StepFinishPart
-  | SnapshotPart
-  | PatchPart
-  | AgentPart
-  | RetryPart
-  | CompactionPart
-
-const AssistantErrorSchema = Schema.Union([
-  ...MessageError.Shared,
-  AbortedError.EffectSchema,
-  StructuredOutputError.EffectSchema,
-  ContextOverflowError.EffectSchema,
-  APIError.EffectSchema,
-]).annotate({ discriminator: "name" })
-type AssistantError = Schema.Schema.Type<typeof AssistantErrorSchema>
-
-// ── Prompt input schemas ─────────────────────────────────────────────────────
-//
-// Consumers of `SessionPrompt.PromptInput.parts` send part drafts without the
-// ambient IDs (`messageID`, `sessionID`) that live on stored parts, and may
-// omit `id` to let the server allocate one.  These Schema-Struct variants
-// carry that shape so prompt decoding can accept drafts without stored IDs.
-
-export const TextPartInput = Schema.Struct({
-  id: Schema.optional(PartID),
-  type: Schema.Literal("text"),
-  text: Schema.String,
-  synthetic: Schema.optional(Schema.Boolean),
-  ignored: Schema.optional(Schema.Boolean),
-  time: Schema.optional(
-    Schema.Struct({
-      start: NonNegativeInt,
-      end: Schema.optional(NonNegativeInt),
-    }),
-  ),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-}).annotate({ identifier: "TextPartInput" })
-export type TextPartInput = Types.DeepMutable<Schema.Schema.Type<typeof TextPartInput>>
-
-export const FilePartInput = Schema.Struct({
-  id: Schema.optional(PartID),
-  type: Schema.Literal("file"),
-  mime: Schema.String,
-  filename: Schema.optional(Schema.String),
-  url: Schema.String,
-  source: Schema.optional(FilePartSource),
-}).annotate({ identifier: "FilePartInput" })
-export type FilePartInput = Types.DeepMutable<Schema.Schema.Type<typeof FilePartInput>>
-
-export const AgentPartInput = Schema.Struct({
-  id: Schema.optional(PartID),
-  type: Schema.Literal("agent"),
-  name: Schema.String,
-  source: Schema.optional(
-    Schema.Struct({
-      value: Schema.String,
-      start: NonNegativeInt,
-      end: NonNegativeInt,
-    }),
-  ),
-}).annotate({ identifier: "AgentPartInput" })
-export type AgentPartInput = Types.DeepMutable<Schema.Schema.Type<typeof AgentPartInput>>
-
-export const SubtaskPartInput = Schema.Struct({
-  id: Schema.optional(PartID),
-  type: Schema.Literal("subtask"),
-  prompt: Schema.String,
-  description: Schema.String,
-  agent: Schema.String,
-  model: Schema.optional(
-    Schema.Struct({
-      providerID: ProviderID,
-      modelID: ModelID,
-    }),
-  ),
-  command: Schema.optional(Schema.String),
-}).annotate({ identifier: "SubtaskPartInput" })
-export type SubtaskPartInput = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPartInput>>
-
-export const Assistant = Schema.Struct({
-  ...messageBase,
-  role: Schema.Literal("assistant"),
-  time: Schema.Struct({
-    created: NonNegativeInt,
-    completed: Schema.optional(NonNegativeInt),
-  }),
-  error: Schema.optional(AssistantErrorSchema),
-  parentID: MessageID,
-  modelID: ModelID,
-  providerID: ProviderID,
-  /**
-   * @deprecated
-   */
-  mode: Schema.String,
-  agent: Schema.String,
-  path: Schema.Struct({
-    cwd: Schema.String,
-    root: Schema.String,
-  }),
-  summary: Schema.optional(Schema.Boolean),
-  cost: Schema.Finite,
-  tokens: Schema.Struct({
-    total: Schema.optional(Schema.Finite),
-    input: Schema.Finite,
-    output: Schema.Finite,
-    reasoning: Schema.Finite,
-    cache: Schema.Struct({
-      read: Schema.Finite,
-      write: Schema.Finite,
-    }),
-  }),
-  structured: Schema.optional(Schema.Any),
-  variant: Schema.optional(Schema.String),
-  finish: Schema.optional(Schema.String),
-}).annotate({ identifier: "AssistantMessage" })
-export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {
-  error?: AssistantError
-}
-
-export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
-export type Info = User | Assistant
-
-const UpdatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  info: Info,
-})
-
-const RemovedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  messageID: MessageID,
-})
-
-const PartUpdatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  part: Part,
-  time: NonNegativeInt,
-})
-
-const PartRemovedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  messageID: MessageID,
-  partID: PartID,
-})
-
 export const Event = {
-  Updated: SyncEvent.define({
-    type: "message.updated",
-    version: 1,
-    aggregate: "sessionID",
-    schema: UpdatedEventSchema,
-  }),
-  Removed: SyncEvent.define({
-    type: "message.removed",
-    version: 1,
-    aggregate: "sessionID",
-    schema: RemovedEventSchema,
-  }),
-  PartUpdated: SyncEvent.define({
-    type: "message.part.updated",
-    version: 1,
-    aggregate: "sessionID",
-    schema: PartUpdatedEventSchema,
-  }),
-  PartDelta: BusEvent.define(
-    "message.part.delta",
-    Schema.Struct({
+  Updated: SessionV1.Event.MessageUpdated,
+  Removed: SessionV1.Event.MessageRemoved,
+  PartUpdated: SessionV1.Event.PartUpdated,
+  PartDelta: EventV2.define({
+    type: "message.part.delta",
+    schema: {
       sessionID: SessionID,
       messageID: MessageID,
       partID: PartID,
       field: Schema.String,
       delta: Schema.String,
-    }),
-  ),
-  PartRemoved: SyncEvent.define({
-    type: "message.part.removed",
-    version: 1,
-    aggregate: "sessionID",
-    schema: PartRemovedEventSchema,
+    },
   }),
-}
-
-export const WithParts = Schema.Struct({
-  info: Info,
-  parts: Schema.Array(Part),
-})
-export type WithParts = {
-  info: Info
-  parts: Part[]
+  PartRemoved: SessionV1.Event.PartRemoved,
 }
 
 const Cursor = Schema.Struct({
@@ -595,30 +107,31 @@ const part = (row: typeof PartTable.$inferSelect) =>
 const older = (row: Cursor) =>
   or(lt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)))
 
-function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
+function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$inferSelect)[]) {
   const ids = rows.map((row) => row.id)
   const partByMessage = new Map<string, Part[]>()
-  if (ids.length > 0) {
-    const partRows = Database.use((db) =>
-      db
+  return Effect.gen(function* () {
+    if (ids.length > 0) {
+      const partRows = yield* db
         .select()
         .from(PartTable)
         .where(inArray(PartTable.message_id, ids))
         .orderBy(PartTable.message_id, PartTable.id)
-        .all(),
-    )
-    for (const row of partRows) {
-      const next = part(row)
-      const list = partByMessage.get(row.message_id)
-      if (list) list.push(next)
-      else partByMessage.set(row.message_id, [next])
+        .all()
+        .pipe(Effect.orDie)
+      for (const row of partRows) {
+        const next = part(row)
+        const list = partByMessage.get(row.message_id)
+        if (list) list.push(next)
+        else partByMessage.set(row.message_id, [next])
+      }
     }
-  }
 
-  return rows.map((row) => ({
-    info: info(row),
-    parts: partByMessage.get(row.id) ?? [],
-  }))
+    return rows.map((row) => ({
+      info: info(row),
+      parts: partByMessage.get(row.id) ?? [],
+    }))
+  })
 }
 
 function providerMeta(metadata: Record<string, any> | undefined) {
@@ -646,6 +159,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
+    if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
@@ -925,23 +439,26 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
   limit: number
   before?: string
 }) {
+  const { db } = yield* Database.Service
   const before = input.before ? cursor.decode(input.before) : undefined
   const where = before
     ? and(eq(MessageTable.session_id, input.sessionID), older(before))
     : eq(MessageTable.session_id, input.sessionID)
-  const rows = Database.use((db) =>
-    db
-      .select()
-      .from(MessageTable)
-      .where(where)
-      .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
-      .limit(input.limit + 1)
-      .all(),
-  )
+  const rows = yield* db
+    .select()
+    .from(MessageTable)
+    .where(where)
+    .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+    .limit(input.limit + 1)
+    .all()
+    .pipe(Effect.orDie)
   if (rows.length === 0) {
-    const row = Database.use((db) =>
-      db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
-    )
+    const row = yield* db
+      .select({ id: SessionTable.id })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, input.sessionID))
+      .get()
+      .pipe(Effect.orDie)
     if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     return {
       items: [] as WithParts[],
@@ -951,7 +468,7 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
 
   const more = rows.length > input.limit
   const slice = more ? rows.slice(0, input.limit) : rows
-  const items = hydrate(slice)
+  const items = yield* hydrate(db, slice)
   items.reverse()
   const tail = slice.at(-1)
   return {
@@ -961,53 +478,55 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
   }
 })
 
-export function* stream(sessionID: SessionID) {
+export function stream(sessionID: SessionID) {
   const size = 50
-  let before: string | undefined
-  while (true) {
-    const next = Effect.runSync(
-      page({ sessionID, limit: size, before }).pipe(
+  return Effect.gen(function* () {
+    const result = [] as WithParts[]
+    let before: string | undefined
+    while (true) {
+      const next = yield* page({ sessionID, limit: size, before }).pipe(
         Effect.catchIf(NotFoundError.isInstance, () =>
           Effect.succeed({ items: [] as WithParts[], more: false, cursor: undefined }),
         ),
-      ),
-    )
-    if (next.items.length === 0) break
-    for (let i = next.items.length - 1; i >= 0; i--) {
-      yield next.items[i]
+      )
+      if (next.items.length === 0) break
+      for (let i = next.items.length - 1; i >= 0; i--) {
+        const item = next.items[i]
+        if (item) result.push(item)
+      }
+      if (!next.more || !next.cursor) break
+      before = next.cursor
     }
-    if (!next.more || !next.cursor) break
-    before = next.cursor
-  }
+    return result
+  })
 }
 
-export function parts(message_id: MessageID) {
-  const rows = Database.use((db) =>
-    db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
-  )
-  return rows.map(
-    (row) =>
-      ({
-        ...row.data,
-        id: row.id,
-        sessionID: row.session_id,
-        messageID: row.message_id,
-      }) as Part,
-  )
+export function parts(messageID: MessageID) {
+  return Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const rows = yield* db
+      .select()
+      .from(PartTable)
+      .where(eq(PartTable.message_id, messageID))
+      .orderBy(PartTable.id)
+      .all()
+      .pipe(Effect.orDie)
+    return rows.map(part)
+  })
 }
 
 export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: SessionID; messageID: MessageID }) {
-  const row = Database.use((db) =>
-    db
-      .select()
-      .from(MessageTable)
-      .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
-      .get(),
-  )
+  const { db } = yield* Database.Service
+  const row = yield* db
+    .select()
+    .from(MessageTable)
+    .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+    .get()
+    .pipe(Effect.orDie)
   if (!row) return yield* new NotFoundError({ message: `Message not found: ${input.messageID}` })
   return {
     info: info(row),
-    parts: parts(input.messageID),
+    parts: yield* parts(input.messageID),
   }
 })
 
@@ -1065,7 +584,7 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
 }
 
 export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
-  return filterCompacted(stream(sessionID))
+  return filterCompacted(yield* stream(sessionID))
 })
 
 // filterCompacted reorders messages for model consumption
@@ -1095,7 +614,7 @@ export function latest(msgs: WithParts[]) {
 
 export function fromError(
   e: unknown,
-  ctx: { providerID: ProviderID; aborted?: boolean },
+  ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
   switch (true) {
     case e instanceof DOMException && e.name === "AbortError":

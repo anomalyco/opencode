@@ -386,6 +386,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   return (
     <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
       <List
+        class="px-3"
         search={{
           placeholder: filesOnly()
             ? language.t("session.header.searchFiles")

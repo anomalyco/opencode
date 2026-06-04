@@ -1,9 +1,10 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -15,7 +16,13 @@ import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
-import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import {
+  disposeAllInstances,
+  provideInstance,
+  testInstanceStoreLayer,
+  TestInstance,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
 import { RepositoryCache } from "@/reference/repository-cache"
@@ -47,7 +54,7 @@ const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
@@ -55,8 +62,8 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Truncate.defaultLayer,
   )
 
-const it = testEffect(readLayer())
-const scout = testEffect(readLayer({ experimentalScout: true }))
+const it = testEffect(Layer.mergeAll(readLayer(), testInstanceStoreLayer))
+const references = testEffect(Layer.mergeAll(readLayer({ experimentalReferences: true }), testInstanceStoreLayer))
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
@@ -126,20 +133,20 @@ const git = Effect.fn("ReadToolTest.git")(function* (cwd: string, args: string[]
   })
 })
 const put = Effect.fn("ReadToolTest.put")(function* (p: string, content: string | Buffer | Uint8Array) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(p, content)
 })
 const load = Effect.fn("ReadToolTest.load")(function* (p: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   return yield* fs.readFileString(p)
 })
 const asks = () => {
-  const items: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  const items: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
   return {
     items,
     next: {
       ...ctx,
-      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+      ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
         }),
@@ -257,9 +264,9 @@ describe("tool.read external_directory permission", () => {
     }),
   )
 
-  scout.live("does not ask for external_directory permission when reading configured references", () =>
+  references.live("does not ask for external_directory permission when reading configured references", () =>
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const cache = path.join(Global.Path.repos, "github.com", "opencode-read-reference", "repo")
       yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
       yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
@@ -322,7 +329,7 @@ describe("tool.read env file permissions", () => {
                 let asked = false
                 const next = {
                   ...ctx,
-                  ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+                  ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
                     Effect.sync(() => {
                       for (const pattern of req.patterns) {
                         const rule = Permission.evaluate(req.permission, pattern, info.permission)
@@ -330,7 +337,7 @@ describe("tool.read env file permissions", () => {
                           asked = true
                         }
                         if (rule.action === "deny") {
-                          throw new Permission.DeniedError({ ruleset: info.permission })
+                          throw new PermissionV1.DeniedError({ ruleset: info.permission })
                         }
                       }
                     }),
@@ -372,12 +379,12 @@ describe("tool.read truncation", () => {
       const content = `${"x".repeat(80)}\n`.repeat(50_000)
       yield* put(filepath, content)
 
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const counter = { bytes: 0 }
       const result = yield* run({ filePath: filepath }).pipe(
         Effect.provideService(
-          AppFileSystem.Service,
-          AppFileSystem.Service.of({
+          FSUtil.Service,
+          FSUtil.Service.of({
             ...fs,
             stream: (file, options) =>
               fs.stream(file, options).pipe(
@@ -421,6 +428,15 @@ describe("tool.read truncation", () => {
       const result = yield* run({ filePath: path.join(test.directory, "small.txt") })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file")
+      expect(result.metadata.display).toMatchObject({
+        type: "file",
+        path: path.join(test.directory, "small.txt"),
+        text: "hello world",
+        lineStart: 1,
+        lineEnd: 1,
+        totalLines: 1,
+        truncated: false,
+      })
     }),
   )
 
@@ -488,6 +504,14 @@ describe("tool.read truncation", () => {
       const result = yield* exec(dir, { filePath: path.join(dir, "dir"), offset: 6, limit: 5 })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).not.toContain("Showing 5 of 10 entries")
+      expect(result.metadata.display).toMatchObject({
+        type: "directory",
+        path: path.join(dir, "dir"),
+        entries: ["file-5.txt", "file-6.txt", "file-7.txt", "file-8.txt", "file-9.txt"],
+        offset: 6,
+        totalEntries: 10,
+        truncated: false,
+      })
     }),
   )
 
