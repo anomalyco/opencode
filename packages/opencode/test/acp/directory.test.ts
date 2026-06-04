@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Directory } from "@/acp/directory"
 import { Command } from "@/command"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
 import { Effect, Layer } from "effect"
 import { it } from "../lib/effect"
@@ -14,7 +15,7 @@ const command = (name: string): Command.Info => ({
 })
 
 const model = (providerID: ProviderV2.ID, id: string, variants?: Directory.ModelVariants): Provider.Model => ({
-  id: ProviderV2.ModelID.make(id),
+  id: ModelV2.ID.make(id),
   providerID,
   api: {
     id,
@@ -50,7 +51,7 @@ const model = (providerID: ProviderV2.ID, id: string, variants?: Directory.Model
 
 const snapshot = (directory: string) => {
   const providerID = ProviderV2.ID.make(`provider-${directory}`)
-  const modelID = ProviderV2.ModelID.make(`model-${directory}`)
+  const modelID = ModelV2.ID.make(`model-${directory}`)
   const providers = {
     [providerID]: {
       id: providerID,
@@ -63,7 +64,7 @@ const snapshot = (directory: string) => {
           low: { reasoningEffort: "low" },
           high: { reasoningEffort: "high" },
         }),
-        [ProviderV2.ModelID.make(`plain-${directory}`)]: model(providerID, `plain-${directory}`),
+        [ModelV2.ID.make(`plain-${directory}`)]: model(providerID, `plain-${directory}`),
       },
     },
   } satisfies Record<ProviderV2.ID, Provider.Info>
@@ -148,7 +149,7 @@ describe("ACP directory snapshot", () => {
         low: { reasoningEffort: "low" },
         high: { reasoningEffort: "high" },
       })
-      expect(directory.variants(alpha, { ...model, modelID: ProviderV2.ModelID.make("missing") })).toBeUndefined()
+      expect(directory.variants(alpha, { ...model, modelID: ModelV2.ID.make("missing") })).toBeUndefined()
     }).pipe(Effect.provide(fakeLayer([]))),
   )
 

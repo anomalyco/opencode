@@ -19,7 +19,7 @@ export const Color = Schema.Union([
 export class Info extends Schema.Class<Info>("AgentV2.Info")({
   id: ID,
   model: ModelV2.Ref.pipe(Schema.optional),
-  options: ProviderV2.Options,
+  request: ProviderV2.Request,
   system: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
   mode: Schema.Literals(["subagent", "primary", "all"]),
@@ -31,13 +31,9 @@ export class Info extends Schema.Class<Info>("AgentV2.Info")({
   static empty(id: ID) {
     return new Info({
       id,
-      options: {
+      request: {
         headers: {},
         body: {},
-        aisdk: {
-          provider: {},
-          request: {},
-        },
       },
       mode: "all",
       hidden: false,
