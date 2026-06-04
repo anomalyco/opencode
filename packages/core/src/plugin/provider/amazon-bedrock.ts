@@ -65,15 +65,15 @@ export const AmazonBedrockPlugin = PluginV2.define({
     return {
       "catalog.transform": Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
-          if (item.provider.endpoint.type !== "aisdk") continue
-          if (item.provider.endpoint.package !== "@ai-sdk/amazon-bedrock") continue
+          if (item.provider.api.type !== "aisdk") continue
+          if (item.provider.api.package !== "@ai-sdk/amazon-bedrock") continue
           evt.provider.update(item.provider.id, (provider) => {
-            if (provider.endpoint.type !== "aisdk") return
-            if (typeof provider.options.aisdk.provider.endpoint !== "string") return
+            if (provider.api.type !== "aisdk") return
+            if (typeof provider.request.body.endpoint !== "string") return
             // The AI SDK expects a base URL, but users configure Bedrock private/VPC
             // endpoints as `endpoint`; move it into the catalog endpoint URL once.
-            provider.endpoint.url = provider.options.aisdk.provider.endpoint
-            delete provider.options.aisdk.provider.endpoint
+            provider.api.url = provider.request.body.endpoint
+            delete provider.request.body.endpoint
           })
         }
       }),
@@ -115,7 +115,7 @@ export const AmazonBedrockPlugin = PluginV2.define({
           return
         }
         const region = typeof evt.options.region === "string" ? evt.options.region : process.env.AWS_REGION
-        evt.language = evt.sdk.languageModel(resolveModelID(evt.model.apiID, region))
+        evt.language = evt.sdk.languageModel(resolveModelID(evt.model.api.id, region))
       }),
     }
   }),

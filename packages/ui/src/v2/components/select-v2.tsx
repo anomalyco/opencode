@@ -53,8 +53,8 @@ export type SelectV2Props<T> = Omit<
   groupBy?: (x: T) => string
   onSelect?: (value: T | null) => void
   onHighlight?: (value: T | undefined) => void | (() => void)
-  /** Match TextInput v2 height. */
-  appearance?: "base" | "large"
+  /** `base` / `large` match text-input-v2; `inline` is a compact settings-row trigger. */
+  appearance?: "base" | "large" | "inline"
   invalid?: boolean
   numeric?: boolean
   children?: (item: T) => JSX.Element
@@ -80,7 +80,15 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
     "numeric",
     "disabled",
     "valueClass",
+    "placement",
+    "gutter",
+    "sameWidth",
+    "flip",
+    "slide",
+    "fitViewport",
   ])
+
+  const inline = () => (local.appearance ?? "base") === "inline"
 
   const state: { key?: string; cleanup?: void | (() => void) } = {}
 
@@ -115,8 +123,12 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
       multiple={false}
       disabled={local.disabled}
       data-component="select-v2-root"
-      gutter={6}
-      placement="bottom-start"
+      placement={local.placement ?? (inline() ? "bottom-end" : "bottom-start")}
+      gutter={local.gutter ?? 4}
+      sameWidth={local.sameWidth ?? !inline()}
+      flip={local.flip ?? true}
+      slide={local.slide ?? true}
+      fitViewport={local.fitViewport ?? false}
       value={local.current}
       options={grouped()}
       optionValue={(x) => (local.value ? local.value(x) : String(x as string))}

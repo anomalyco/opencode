@@ -467,8 +467,6 @@ export default function Page() {
     return {
       queryKey: [...vcsKey(), mode] as const,
       enabled,
-      staleTime: Number.POSITIVE_INFINITY,
-      gcTime: 60 * 1000,
       queryFn: mode
         ? () =>
             sdk.client.vcs
@@ -1747,7 +1745,7 @@ export default function Page() {
             "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
             "transition-[width]": !isV2NewSessionPage(),
-            "rounded-[10px] shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns(),
+            "rounded-[10px] shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
           }}
           style={{
             width: sessionPanelWidth(),

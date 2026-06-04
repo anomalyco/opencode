@@ -34,6 +34,12 @@ import type {
   ExperimentalConsoleListOrgsErrors,
   ExperimentalConsoleListOrgsResponses,
   ExperimentalConsoleSwitchOrgResponses,
+  ExperimentalProjectCopyCreateErrors,
+  ExperimentalProjectCopyCreateResponses,
+  ExperimentalProjectCopyRefreshErrors,
+  ExperimentalProjectCopyRefreshResponses,
+  ExperimentalProjectCopyRemoveErrors,
+  ExperimentalProjectCopyRemoveResponses,
   ExperimentalResourceListErrors,
   ExperimentalResourceListResponses,
   ExperimentalSessionListErrors,
@@ -120,6 +126,8 @@ import type {
   PermissionV2Reply,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
+  ProjectDirectoriesErrors,
+  ProjectDirectoriesResponses,
   ProjectInitGitErrors,
   ProjectInitGitResponses,
   ProjectListErrors,
@@ -158,6 +166,7 @@ import type {
   QuestionRejectResponses,
   QuestionReplyErrors,
   QuestionReplyResponses,
+  QuestionV2Reply,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -170,7 +179,6 @@ import type {
   SessionDeleteMessageErrors,
   SessionDeleteMessageResponses,
   SessionDeleteResponses,
-  SessionDelivery,
   SessionDiffErrors,
   SessionDiffResponses,
   SessionForkErrors,
@@ -263,6 +271,8 @@ import type {
   V2ProviderGetResponses,
   V2ProviderListErrors,
   V2ProviderListResponses,
+  V2QuestionRequestListErrors,
+  V2QuestionRequestListResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
@@ -277,6 +287,10 @@ import type {
   V2SessionPermissionReplyResponses,
   V2SessionPromptErrors,
   V2SessionPromptResponses,
+  V2SessionQuestionRejectErrors,
+  V2SessionQuestionRejectResponses,
+  V2SessionQuestionReplyErrors,
+  V2SessionQuestionReplyResponses,
   V2SessionWaitErrors,
   V2SessionWaitResponses,
   VcsApplyErrors,
@@ -937,6 +951,148 @@ export class Resource extends HeyApiClient {
   }
 }
 
+export class ProjectCopy extends HeyApiClient {
+  /**
+   * Remove project copy
+   *
+   * Remove a local physical copy of a project using the selected strategy.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ExperimentalProjectCopyRemoveResponses,
+      ExperimentalProjectCopyRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/project/{projectID}/copy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Create project copy
+   *
+   * Create a local physical copy of a project using the selected strategy.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      query_directory?: string
+      workspace?: string
+      strategy?: "git_worktree"
+      body_directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "strategy" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalProjectCopyCreateResponses,
+      ExperimentalProjectCopyCreateErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/project/{projectID}/copy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Refresh project copies
+   *
+   * Discover local project copies using one or all configured strategies.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalProjectCopyRefreshResponses,
+      ExperimentalProjectCopyRefreshErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/project/{projectID}/copy/refresh",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Adapter extends HeyApiClient {
   /**
    * List workspace adapters
@@ -1224,6 +1380,11 @@ export class Experimental extends HeyApiClient {
   private _resource?: Resource
   get resource(): Resource {
     return (this._resource ??= new Resource({ client: this.client }))
+  }
+
+  private _projectCopy?: ProjectCopy
+  get projectCopy(): ProjectCopy {
+    return (this._projectCopy ??= new ProjectCopy({ client: this.client }))
   }
 
   private _workspace?: Workspace
@@ -2386,6 +2547,38 @@ export class Project extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List project directories
+   *
+   * List known local absolute directories for a project.
+   */
+  public directories<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProjectDirectoriesResponses, ProjectDirectoriesErrors, ThrowOnError>({
+      url: "/project/{projectID}/directories",
+      ...options,
+      ...params,
     })
   }
 }
@@ -4338,6 +4531,83 @@ export class Permission2 extends HeyApiClient {
   }
 }
 
+export class Question2 extends HeyApiClient {
+  /**
+   * Reply to pending question request
+   *
+   * Answer a pending question request owned by a session.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      requestID: string
+      questionV2Reply: QuestionV2Reply
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "requestID" },
+            { key: "questionV2Reply", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionQuestionReplyResponses,
+      V2SessionQuestionReplyErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/question/request/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject pending question request
+   *
+   * Reject a pending question request owned by a session.
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      requestID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "requestID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2SessionQuestionRejectResponses,
+      V2SessionQuestionRejectErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/question/request/{requestID}/reject",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Session3 extends HeyApiClient {
   /**
    * List v2 sessions
@@ -4384,15 +4654,17 @@ export class Session3 extends HeyApiClient {
   /**
    * Send v2 message
    *
-   * Create a v2 session message and queue it for the agent loop.
+   * Durably admit one v2 session input and schedule agent-loop execution unless resume is false.
    */
   public prompt<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
       directory?: string
       workspace?: string
+      id?: string
       prompt?: Prompt
-      delivery?: SessionDelivery
+      delivery?: "steer" | "queue"
+      resume?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4404,8 +4676,10 @@ export class Session3 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "id" },
             { in: "body", key: "prompt" },
             { in: "body", key: "delivery" },
+            { in: "body", key: "resume" },
           ],
         },
       ],
@@ -4559,6 +4833,11 @@ export class Session3 extends HeyApiClient {
   private _permission?: Permission2
   get permission(): Permission2 {
     return (this._permission ??= new Permission2({ client: this.client }))
+  }
+
+  private _question?: Question2
+  get question(): Question2 {
+    return (this._question ??= new Question2({ client: this.client }))
   }
 }
 
@@ -4803,6 +5082,41 @@ export class Fs extends HeyApiClient {
   }
 }
 
+export class Request2 extends HeyApiClient {
+  /**
+   * List pending question requests
+   *
+   * Retrieve pending question requests for a location.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<
+      V2QuestionRequestListResponses,
+      V2QuestionRequestListErrors,
+      ThrowOnError
+    >({
+      url: "/api/question/request",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Question3 extends HeyApiClient {
+  private _request?: Request2
+  get request(): Request2 {
+    return (this._request ??= new Request2({ client: this.client }))
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _session?: Session3
   get session(): Session3 {
@@ -4827,6 +5141,11 @@ export class V2 extends HeyApiClient {
   private _fs?: Fs
   get fs(): Fs {
     return (this._fs ??= new Fs({ client: this.client }))
+  }
+
+  private _question?: Question3
+  get question(): Question3 {
+    return (this._question ??= new Question3({ client: this.client }))
   }
 }
 

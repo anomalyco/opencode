@@ -1,11 +1,13 @@
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { LocationFileSystem } from "@opencode-ai/core/location-filesystem"
+import { FileSystem } from "@opencode-ai/core/filesystem"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { QuestionV2 } from "@opencode-ai/core/question"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
@@ -42,17 +44,19 @@ export class V2LocationMiddleware extends HttpApiMiddleware.Service<
       | PluginBoot.Service
       | PermissionV2.Service
       | ProjectReference.Service
-      | LocationFileSystem.Service
+      | FileSystem.Service
+      | QuestionV2.Service
   }
 >()("@opencode/ExperimentalHttpApiV2Location") {}
 
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
+  const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
   return {
     directory: AbsolutePath.make(
       query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
     ),
-    workspaceID: query.get("location[workspace]") || request.headers["x-opencode-workspace"],
+    workspaceID: workspaceID ? WorkspaceV2.ID.make(workspaceID) : undefined,
   }
 }
 

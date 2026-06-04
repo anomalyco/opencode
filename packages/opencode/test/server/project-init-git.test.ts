@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Layer } from "effect"
 import { HttpClientResponse } from "effect/unstable/http"
 import path from "path"
@@ -24,9 +24,7 @@ afterEach(async () => {
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const testInstanceStore = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
 
-const it = testEffect(
-  Layer.mergeAll(AppFileSystem.defaultLayer, Snapshot.defaultLayer, testInstanceStore, httpApiLayer),
-)
+const it = testEffect(Layer.mergeAll(FSUtil.defaultLayer, Snapshot.defaultLayer, testInstanceStore, httpApiLayer))
 
 function request(directory: string, url: string, init: RequestInit = {}) {
   return requestInDirectory(url, directory, init)
@@ -57,7 +55,7 @@ describe("project.initGit endpoint", () => {
   it.instance("initializes git and reloads immediately", () =>
     Effect.gen(function* () {
       const tmp = yield* TestInstance
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const events = yield* collectGlobalEvents()
 
       const init = yield* request(tmp.directory, "/project/git/init", {

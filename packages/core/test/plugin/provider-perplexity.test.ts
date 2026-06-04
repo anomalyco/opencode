@@ -94,7 +94,7 @@ describe("PerplexityPlugin", () => {
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("perplexity", "alias", { apiID: ModelV2.ID.make("sonar") }),
+          model: model("perplexity", "alias", { api: { id: ModelV2.ID.make("sonar") } }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },

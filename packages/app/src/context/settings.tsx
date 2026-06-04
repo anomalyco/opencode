@@ -160,6 +160,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
 
     createEffect(() => {
+      console.log("settings", { ready: ready() })
+    })
+
+    createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
       root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))

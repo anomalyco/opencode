@@ -25,59 +25,41 @@ export type ID = typeof ID.Type
 export const ModelID = Schema.String.pipe(Schema.brand("ModelID"))
 export type ModelID = typeof ModelID.Type
 
-const OpenAIResponses = Schema.Struct({
-  type: Schema.Literal("openai/responses"),
-  url: Schema.String,
-  websocket: Schema.optional(Schema.Boolean),
+export const AISDK = Schema.Struct({
+  type: Schema.Literal("aisdk"),
+  package: Schema.String,
+  url: Schema.String.pipe(Schema.optional),
+  settings: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 })
 
-const OpenAICompletions = Schema.Struct({
-  type: Schema.Literal("openai/completions"),
-  url: Schema.String,
-  reasoning: Schema.Union([
-    Schema.Struct({
-      type: Schema.Literal("reasoning_content"),
-    }),
-    Schema.Struct({
-      type: Schema.Literal("reasoning_details"),
-    }),
-  ]).pipe(Schema.optional),
+export const Native = Schema.Struct({
+  type: Schema.Literal("native"),
+  url: Schema.String.pipe(Schema.optional),
+  settings: Schema.Record(Schema.String, Schema.Unknown),
 })
-export type OpenAICompletions = typeof OpenAICompletions.Type
 
-const AISDK = Schema.Struct({
+export const Api = Schema.Union([AISDK, Native]).pipe(Schema.toTaggedUnion("type"))
+export type Api = typeof Api.Type
+
+export const PublicAISDK = Schema.Struct({
   type: Schema.Literal("aisdk"),
   package: Schema.String,
   url: Schema.String.pipe(Schema.optional),
 })
 
-const AnthropicMessages = Schema.Struct({
-  type: Schema.Literal("anthropic/messages"),
-  url: Schema.String,
+export const PublicNative = Schema.Struct({
+  type: Schema.Literal("native"),
+  url: Schema.String.pipe(Schema.optional),
 })
 
-const UnknownEndpoint = Schema.Struct({
-  type: Schema.Literal("unknown"),
-})
+export const PublicApi = Schema.Union([PublicAISDK, PublicNative]).pipe(Schema.toTaggedUnion("type"))
+export type PublicApi = typeof PublicApi.Type
 
-export const Endpoint = Schema.Union([
-  UnknownEndpoint,
-  OpenAIResponses,
-  OpenAICompletions,
-  AnthropicMessages,
-  AISDK,
-]).pipe(Schema.toTaggedUnion("type"))
-export type Endpoint = typeof Endpoint.Type
-
-export const Options = Schema.Struct({
+export const Request = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.Record(Schema.String, Schema.Any),
-  aisdk: Schema.Struct({
-    provider: Schema.Record(Schema.String, Schema.Any),
-    request: Schema.Record(Schema.String, Schema.Any),
-  }),
 })
-export type Options = typeof Options.Type
+export type Request = typeof Request.Type
 
 export class Info extends Schema.Class<Info>("ProviderV2.Info")({
   id: ID,
@@ -98,26 +80,69 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
     }),
   ]),
   env: Schema.String.pipe(Schema.Array),
-  endpoint: Endpoint,
-  options: Options,
+  api: Api,
+  request: Request,
 }) {
   static empty(providerID: ID): Info {
-    return {
+    return new Info({
       id: providerID,
       name: providerID,
       enabled: false,
       env: [],
-      endpoint: {
-        type: "unknown",
+      api: {
+        type: "native",
+        settings: {},
       },
-      options: {
+      request: {
         headers: {},
         body: {},
-        aisdk: {
-          provider: {},
-          request: {},
-        },
       },
-    }
+    })
   }
+}
+
+export class PublicInfo extends Schema.Class<PublicInfo>("ProviderV2.PublicInfo")({
+  id: ID,
+  name: Schema.String,
+  enabled: Schema.Union([
+    Schema.Literal(false),
+    Schema.Struct({
+      via: Schema.Literal("env"),
+      name: Schema.String,
+    }),
+    Schema.Struct({
+      via: Schema.Literal("account"),
+      service: Schema.String,
+    }),
+    Schema.Struct({
+      via: Schema.Literal("custom"),
+    }),
+  ]),
+  env: Schema.String.pipe(Schema.Array),
+  api: PublicApi,
+}) {}
+
+export function sanitizePublicUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    const url = new URL(value)
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function toPublic(info: Info): PublicInfo {
+  const enabled = info.enabled === false || info.enabled.via !== "custom" ? info.enabled : { via: "custom" as const }
+  const api =
+    info.api.type === "aisdk"
+      ? { type: info.api.type, package: info.api.package, url: sanitizePublicUrl(info.api.url) }
+      : { type: info.api.type, url: sanitizePublicUrl(info.api.url) }
+  return new PublicInfo({
+    id: info.id,
+    name: info.name,
+    enabled,
+    env: [...info.env],
+    api,
+  })
 }

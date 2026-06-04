@@ -4,7 +4,7 @@ import path from "path"
 import { Deferred, Effect, Layer, Schema } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigReference } from "@opencode-ai/core/config/reference"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
@@ -214,7 +214,7 @@ describe("ProjectReference", () => {
 })
 
 function document(references: ConfigReference.Info) {
-  return new Config.Loaded({ source: { type: "memory" }, info: Schema.decodeUnknownSync(Config.Info)({ references }) })
+  return new Config.Document({ type: "document", info: Schema.decodeUnknownSync(Config.Info)({ references }) })
 }
 
 function result(
@@ -237,13 +237,13 @@ function testLayer(input: {
   directory: string
   project: string
   repos: string
-  documents: Config.Loaded[]
+  documents: Config.Document[]
   ensure: RepositoryCache.Interface["ensure"]
 }) {
   return ProjectReference.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
-        AppFileSystem.defaultLayer,
+        FSUtil.defaultLayer,
         Global.layerWith({ home: path.join(input.directory, "home"), repos: input.repos }),
         Layer.succeed(
           Location.Service,
@@ -254,10 +254,7 @@ function testLayer(input: {
             ),
           ),
         ),
-        Layer.succeed(
-          Config.Service,
-          Config.Service.of({ directories: () => Effect.succeed([]), get: () => Effect.succeed(input.documents) }),
-        ),
+        Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(input.documents) })),
         Layer.succeed(RepositoryCache.Service, RepositoryCache.Service.of({ ensure: input.ensure })),
       ),
     ),
