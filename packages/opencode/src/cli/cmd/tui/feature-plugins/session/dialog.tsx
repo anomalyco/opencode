@@ -8,7 +8,8 @@ import { useSDK } from "@tui/context/sdk"
 import { useLocal } from "@tui/context/local"
 import { useToast } from "@tui/ui/toast"
 import { useCommandShortcut } from "@tui/keymap"
-import { createEffect, createMemo, createResource, createSignal, on, onMount, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, on, Show, untrack } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
 import { Spinner } from "@tui/component/spinner"
 import { DialogSessionRename } from "@tui/component/dialog-session-rename"
 import { DialogSessionDeleteFailed } from "@tui/component/dialog-session-delete-failed"
@@ -31,6 +32,7 @@ export function SessionSwitcherDialog() {
   const sdk = useSDK()
   const local = useLocal()
   const toast = useToast()
+  const dimensions = useTerminalDimensions()
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
@@ -151,11 +153,6 @@ export function SessionSwitcherDialog() {
     if (!first || !last) return undefined
     return quickSwitchRange(first, last)
   })
-  const quickSwitchFooterHints = createMemo(() => {
-    const hint = quickSwitchHint()
-    return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
-  })
-
   const options = createMemo<DialogSelectOption<string>[]>(() => {
     const today = new Date().toDateString()
     const sessionMap = new Map(
@@ -183,10 +180,18 @@ export function SessionSwitcherDialog() {
       const status = sync.data.session_status?.[x.id]
       const isWorking = status?.type === "busy" || status?.type === "retry"
       const slot = slotByID.get(x.id)
-      const gutter = isWorking
-        ? () => <Spinner />
-        : slot !== undefined
-          ? () => <text fg={theme.accent}>{slot}</text>
+      const gutter =
+        slot !== undefined || isWorking
+          ? () => (
+              <box flexDirection="row" gap={1}>
+                <Show when={slot !== undefined}>
+                  <text fg={theme.accent}>{slot}</text>
+                </Show>
+                <Show when={isWorking}>
+                  <Spinner />
+                </Show>
+              </box>
+            )
           : undefined
       const titleText = isDeleting ? `Press ${deleteHint()} again to confirm` : isWorktree ? `⎇ ${x.title}` : x.title
       return {
@@ -194,6 +199,17 @@ export function SessionSwitcherDialog() {
         bg: isDeleting ? theme.error : undefined,
         value: x.id,
         category,
+        categoryView:
+          category === "Pinned" ? (
+            <text>
+              <span style={{ fg: theme.accent }}>
+                <b>Pinned</b>
+              </span>
+              <Show when={quickSwitchHint()}>
+                {(hint) => <span style={{ fg: theme.textMuted }}> · switch {hint()}</span>}
+              </Show>
+            </text>
+          ) : undefined,
         footer,
         gutter,
       }
@@ -224,8 +240,11 @@ export function SessionSwitcherDialog() {
     }),
   )
 
-  onMount(() => {
-    dialog.setSize("xlarge")
+  const showPreview = createMemo(() => dimensions().width >= 100)
+  const height = createMemo(() => Math.max(8, Math.floor(dimensions().height / 2) - 4))
+
+  createEffect(() => {
+    dialog.setSize(showPreview() ? "xlarge" : "large")
   })
 
   const list = (
@@ -253,6 +272,7 @@ export function SessionSwitcherDialog() {
           title: "pin/unpin",
           onTrigger: (option: { value: string }) => {
             local.session.togglePin(option.value)
+            queueMicrotask(() => select?.moveTo(option.value))
           },
         },
         {
@@ -311,19 +331,20 @@ export function SessionSwitcherDialog() {
           },
         },
       ]}
-      footerHints={quickSwitchFooterHints()}
     />
   )
 
   return (
-    <box flexDirection="row" width="100%">
-      <box flexBasis={68} flexShrink={0}>
+    <box flexDirection="row" width="100%" height={height()}>
+      <box flexBasis={showPreview() ? 68 : undefined} flexGrow={showPreview() ? 0 : 1} flexShrink={0}>
         {list}
       </box>
-      <box width={1} flexShrink={0} border={["left"]} borderColor={theme.borderSubtle} />
-      <box flexGrow={1} flexShrink={1} flexDirection="column">
-        <SessionPreviewPane sessionID={focusedSession} session={focusedSessionInfo} />
-      </box>
+      <Show when={showPreview()}>
+        <box width={1} height={height() - 1} flexShrink={0} border={["left"]} borderColor={theme.borderSubtle} />
+        <box flexGrow={1} flexShrink={1} flexDirection="column">
+          <SessionPreviewPane sessionID={focusedSession} session={focusedSessionInfo} />
+        </box>
+      </Show>
     </box>
   )
 }

@@ -61,6 +61,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
       buffer: info.compaction.reserved,
     },
     skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
+    commands: info.command,
     instructions: info.instructions,
     references: info.reference,
     plugins: info.plugin?.map((plugin) =>
@@ -103,7 +104,7 @@ function agents(info: typeof ConfigV1.Info.Type) {
   return Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
 }
 
-function migrateAgent(info: ConfigAgentV1.Info) {
+export function migrateAgent(info: ConfigAgentV1.Info) {
   const body = {
     ...info.options,
     ...(info.temperature === undefined ? {} : { temperature: info.temperature }),
