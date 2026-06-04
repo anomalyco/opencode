@@ -16,6 +16,7 @@ import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Dialog } from "@opencode-ai/ui/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -132,6 +133,70 @@ type CustomState = FormState & {
 
 const CUSTOM_NEW = "provider:_new_custom"
 const SKILL_NEW = "skill:_new_custom"
+
+type SkillMarketRepo = {
+  id: string
+  label: string
+  repo: string
+  description: string
+  url: string
+  branch?: string
+}
+
+type SkillMarketItem = {
+  id: string
+  name: string
+  description: string
+  path: string
+  repo: string
+  repoLabel: string
+  content: string
+  sourceUrl: string
+  folder: string
+}
+
+type SkillMarketLoadResult = {
+  skills: SkillMarketItem[]
+  error?: string
+}
+
+const SKILL_MARKET_REPOS: SkillMarketRepo[] = [
+  {
+    id: "anthropics-skills",
+    label: "Anthropic Skills",
+    repo: "anthropics/skills",
+    description: "Official Claude Skills examples and reusable workflows.",
+    url: "https://github.com/anthropics/skills",
+  },
+  {
+    id: "openai-skills",
+    label: "OpenAI Skills",
+    repo: "openai/skills",
+    description: "OpenAI skill packages and examples for Codex-style workflows.",
+    url: "https://github.com/openai/skills",
+  },
+  {
+    id: "mattpocock-skills",
+    label: "Matt Pocock Skills",
+    repo: "mattpocock/skills",
+    description: "TypeScript-focused skills and development workflows.",
+    url: "https://github.com/mattpocock/skills",
+  },
+  {
+    id: "composio-skills",
+    label: "Composio Awesome Claude Skills",
+    repo: "ComposioHQ/awesome-claude-skills",
+    description: "Community-curated Claude skills for common automation tasks.",
+    url: "https://github.com/ComposioHQ/awesome-claude-skills",
+  },
+  {
+    id: "opencode-power-pack",
+    label: "OpenCode Power Pack",
+    repo: "waybarrios/opencode-power-pack",
+    description: "Community OpenCode skills, agents, and workflow packages.",
+    url: "https://github.com/waybarrios/opencode-power-pack",
+  },
+]
 
 type PluginItem = {
   id: string
@@ -277,6 +342,84 @@ function skillMeta(text: string, path: string) {
     description: data.description || "Skill metadata is incomplete.",
     warn: miss.length ? `Incomplete metadata. Add ${miss.join(" and ")} to the frontmatter.` : undefined,
   }
+}
+
+function skillFolder(value: string, fallback: string) {
+  const next = (value.trim() || fallback.trim() || "skill")
+    .replace(/[/\\:*?"<>|]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  if (!next || next === "." || next === "..") return "skill"
+  return next
+}
+
+function cdnPath(path: string) {
+  return path.split("/").map(encodeURIComponent).join("/")
+}
+
+async function marketJSON<T>(fetcher: typeof fetch, url: string): Promise<T> {
+  const resp = await fetcher(url)
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`)
+  return resp.json() as Promise<T>
+}
+
+async function marketRepoFiles(fetcher: typeof fetch, repo: SkillMarketRepo) {
+  const branches = repo.branch ? [repo.branch] : ["main", "master"]
+  let lastErr: unknown
+
+  for (const branch of branches) {
+    try {
+      const data = await marketJSON<{ files?: Array<{ name?: string; type?: string }> }>(
+        fetcher,
+        `https://data.jsdelivr.com/v1/package/gh/${repo.repo}@${encodeURIComponent(branch)}/flat`,
+      )
+      return {
+        branch,
+        paths: (data.files ?? [])
+          .filter((item) => (!item.type || item.type === "file") && item.name && /(^|\/)SKILL\.md$/i.test(item.name))
+          .map((item) => item.name!.replace(/^\/+/, ""))
+          .slice(0, 80),
+      }
+    } catch (err) {
+      lastErr = err
+    }
+  }
+
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
+}
+
+async function loadMarketSkills(repo: SkillMarketRepo, fetcher: typeof fetch): Promise<SkillMarketItem[]> {
+  const { branch, paths } = await marketRepoFiles(fetcher, repo)
+
+  const list = await Promise.all(
+    paths.map(async (path) => {
+      const sourceUrl = `https://cdn.jsdelivr.net/gh/${repo.repo}@${encodeURIComponent(branch)}/${cdnPath(path)}`
+      try {
+        const resp = await fetcher(sourceUrl)
+        if (!resp.ok) return
+        const content = await resp.text()
+        const meta = skillMeta(content, path)
+        const folder = skillFolder(meta.name, name(dir(path)))
+        return {
+          id: `${repo.repo}:${path}`,
+          name: meta.name,
+          description: meta.description,
+          path,
+          repo: repo.repo,
+          repoLabel: repo.label,
+          content,
+          sourceUrl,
+          folder,
+        }
+      } catch {
+        return
+      }
+    }),
+  )
+
+  return list
+    .filter((item): item is SkillMarketItem => !!item)
+    .sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path))
 }
 
 const key = new Set([
@@ -2022,6 +2165,9 @@ export default function ConfigPage() {
     skillNote: "",
     skillWarn: "",
     skillSaving: false,
+    skillPanel: "editor" as "editor" | "market",
+    skillMarketRepo: SKILL_MARKET_REPOS[0]?.id ?? "",
+    skillMarketInstalling: "",
     treeClosed: {} as Record<string, boolean>,
     busy: false,
     bootstrapping: false,
@@ -2112,6 +2258,45 @@ export default function ConfigPage() {
   const cfg = createMemo(() => globalSync.data.config)
   const mainProviders = createMemo(() => globalSync.data.rootByDomain[mainDomain]?.provider ?? globalSync.data.provider)
   const t = language.t
+  const [marketSkills, setMarketSkills] = createSignal<SkillMarketLoadResult>({ skills: [] })
+  const [marketSkillsLoading, setMarketSkillsLoading] = createSignal(false)
+  let marketLoadRun = 0
+
+  function loadSelectedMarketRepo() {
+    const repo = SKILL_MARKET_REPOS.find((item) => item.id === state.skillMarketRepo)
+    if (!repo) {
+      setMarketSkills({ skills: [] })
+      setMarketSkillsLoading(false)
+      return
+    }
+
+    const run = ++marketLoadRun
+    setMarketSkillsLoading(true)
+    void loadMarketSkills(repo, platform.fetchExternal ?? platform.fetch ?? fetch)
+      .then((skills) => {
+        if (marketLoadRun !== run) return
+        setMarketSkills({ skills })
+      })
+      .catch((err: unknown) => {
+        if (marketLoadRun !== run) return
+        const message = err instanceof Error ? err.message : String(err)
+        setMarketSkills({ skills: [], error: message })
+      })
+      .finally(() => {
+        if (marketLoadRun !== run) return
+        setMarketSkillsLoading(false)
+      })
+  }
+
+  createEffect(
+    on(
+      () => (state.section === "skills" && state.skillPanel === "market" ? state.skillMarketRepo : undefined),
+      (repoID) => {
+        if (!repoID) return
+        loadSelectedMarketRepo()
+      },
+    ),
+  )
 
   const setMainProviders = (provider: ProviderListResponse) => {
     const root = globalSync.data.rootByDomain[mainDomain]
@@ -2548,6 +2733,15 @@ export default function ConfigPage() {
   const skillClaude = createMemo(() => skillDocs().filter((item) => item.group === "claude"))
   const skillProject = createMemo(() => skillDocs().filter((item) => item.group === "project"))
   const skillExternal = createMemo(() => skillDocs().filter((item) => item.group === "external"))
+  const installedSkillFolders = createMemo(() => {
+    const folders = new Set<string>()
+    const add = (location: string) => folders.add(name(dir(local(location))).toLowerCase())
+    for (const item of rawSkills.latest ?? []) add(item.location)
+    for (const item of diskOpenCode.latest ?? []) add(item.location)
+    for (const item of diskClaude.latest ?? []) add(item.location)
+    for (const item of diskProject.latest ?? []) add(item.location)
+    return folders
+  })
   const projectSkills = createMemo(() => {
     const map = new Map<string, { label: string; path?: string; items: DocItem[] }>()
 
@@ -2935,6 +3129,7 @@ export default function ConfigPage() {
   const skillWait = createMemo(
     () =>
       state.section === "skills" &&
+      state.skillPanel !== "market" &&
       state.pick !== SKILL_NEW &&
       (rawSkills.loading || diskClaude.loading || diskOpenCode.loading || diskProject.loading) &&
       skillDocs().length === 0,
@@ -3051,6 +3246,7 @@ export default function ConfigPage() {
     if (section === "claws" && !clawsSectionEnabled()) return
     batch(() => {
       setState("section", section)
+      if (section === "skills") setState("skillPanel", "editor")
       if (typeof pick === "string") setState("pick", pick)
     })
   })
@@ -3115,6 +3311,7 @@ export default function ConfigPage() {
     on(
       () => [
         state.section,
+        state.skillPanel,
         agentsMd().length,
         providerVisible().length,
         agents().length,
@@ -3123,6 +3320,7 @@ export default function ConfigPage() {
         plugins()?.length ?? 0,
       ],
       () => {
+        if (state.section === "skills" && state.skillPanel === "market") return
         const list = picks(state.section)
         if (list.includes(state.pick)) return
         if (list.length === 0 && (agentWait() || skillWait() || pluginWait())) {
@@ -3179,6 +3377,7 @@ export default function ConfigPage() {
 
   async function open(item: DocItem) {
     const run = ++openRun
+    if (item.id.startsWith("skill:")) setState("skillPanel", "editor")
     setState("pick", item.id)
     const cached = item.content ?? cache.get(item.path)
     if (cached !== undefined) {
@@ -3742,6 +3941,7 @@ export default function ConfigPage() {
 
   function createSkill() {
     const text = skillTemplate("")
+    setState("skillPanel", "editor")
     setState("pick", SKILL_NEW)
     setState("doc", SKILL_NEW)
     setState("text", text)
@@ -3753,6 +3953,17 @@ export default function ConfigPage() {
     setState("skillNote", "")
     setState("skillWarn", "")
     setState("skillSaving", false)
+  }
+
+  function openSkillMarket() {
+    batch(() => {
+      setState("skillPanel", "market")
+      setState("busy", false)
+    })
+  }
+
+  function selectSkillMarketRepo(id: string) {
+    setState("skillMarketRepo", id)
   }
 
   function setSkillTitle(value: string) {
@@ -3817,6 +4028,45 @@ export default function ConfigPage() {
         })
       })
       .finally(() => setState("skillSaving", false))
+  }
+
+  async function installMarketSkill(item: SkillMarketItem) {
+    const root = space()?.skillsRoot
+    if (!root || !platform.createConfigFile) {
+      showToast({ title: t("common.requestFailed"), description: t("config.error.globalConfigUnavailable") })
+      return
+    }
+    const path = join(root, item.folder, "SKILL.md")
+    setState("skillMarketInstalling", item.id)
+    await platform
+      .createConfigFile(path, item.content)
+      .then(async () => {
+        const meta = skillMeta(item.content, path)
+        cache.set(path, item.content)
+        bump("skillRev")
+        showToast({
+          variant: "success",
+          title: t("config.skills.market.install.success"),
+          description: meta.name,
+        })
+        await open({
+          id: `skill:${path}`,
+          label: meta.name,
+          path,
+          editable: true,
+          source: "opencode",
+          note: meta.description,
+          warn: meta.warn,
+          group: "opencode",
+        })
+      })
+      .catch((err: unknown) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => setState("skillMarketInstalling", ""))
   }
 
   function toggleCustomSecret() {
@@ -4134,7 +4384,7 @@ export default function ConfigPage() {
                   <Match when={state.section === "skills"}>
                     <div class="text-15-medium text-text-strong">{t("config.skills.title")}</div>
                     <div class="mt-1 text-12-regular text-text-weak">{t("config.skills.header")}</div>
-                    <div class="mt-3">
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
                       <Button
                         size="small"
                         variant="ghost"
@@ -4144,6 +4394,15 @@ export default function ConfigPage() {
                         disabled={!space()?.skillsRoot || !platform.createConfigFile}
                       >
                         {t("config.skills.create.action")}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        icon="fork"
+                        class="h-8 rounded-lg border border-border-weak-base bg-background-base px-2.5 pr-3 text-12-medium text-text-base shadow-none transition-colors hover:border-border-strong hover:bg-surface-base-hover active:border-border-base active:bg-surface-base-active focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
+                        onClick={openSkillMarket}
+                      >
+                        {t("config.skills.market.action")}
                       </Button>
                     </div>
                   </Match>
@@ -4876,9 +5135,35 @@ export default function ConfigPage() {
                 <Show
                   when={skillWait()}
                   fallback={
-                    <Show
-                      when={state.pick === SKILL_NEW}
-                      fallback={
+                    <Switch>
+                      <Match when={state.skillPanel === "market"}>
+                        <SkillMarket
+                          repos={SKILL_MARKET_REPOS}
+                          selected={state.skillMarketRepo}
+                          skills={marketSkills().skills}
+                          loading={marketSkillsLoading()}
+                          error={marketSkills().error}
+                          installing={state.skillMarketInstalling}
+                          installed={installedSkillFolders()}
+                          root={space()?.skillsRoot}
+                          onSelect={selectSkillMarketRepo}
+                          onInstall={(item) => void installMarketSkill(item)}
+                          onReload={loadSelectedMarketRepo}
+                        />
+                      </Match>
+                      <Match when={state.pick === SKILL_NEW}>
+                        <SkillCreator
+                          root={space()?.skillsRoot}
+                          title={state.skillTitle}
+                          text={state.text}
+                          busy={state.skillSaving}
+                          err={state.skillErr || undefined}
+                          onTitle={setSkillTitle}
+                          onInput={(value) => setState("text", value)}
+                          onSave={() => void saveSkill()}
+                        />
+                      </Match>
+                      <Match when={true}>
                         <Editor
                           item={currentDoc()}
                           text={state.text}
@@ -4899,19 +5184,8 @@ export default function ConfigPage() {
                           empty={t("config.skills.empty")}
                           markdown
                         />
-                      }
-                    >
-                      <SkillCreator
-                        root={space()?.skillsRoot}
-                        title={state.skillTitle}
-                        text={state.text}
-                        busy={state.skillSaving}
-                        err={state.skillErr || undefined}
-                        onTitle={setSkillTitle}
-                        onInput={(value) => setState("text", value)}
-                        onSave={() => void saveSkill()}
-                      />
-                    </Show>
+                      </Match>
+                    </Switch>
                   }
                 >
                   <Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />
@@ -5045,6 +5319,257 @@ function SkillCreator(props: {
             {language.t("config.editor.structure")}
           </div>
           <div class="text-12-regular text-text-weak">{language.t("config.skills.create.structure")}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SkillMarket(props: {
+  repos: SkillMarketRepo[]
+  selected: string
+  skills: SkillMarketItem[]
+  loading: boolean
+  error?: unknown
+  installing: string
+  installed: Set<string>
+  root?: string
+  onSelect: (id: string) => void
+  onInstall: (item: SkillMarketItem) => void
+  onReload: () => void
+}) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  const platform = usePlatform()
+  const selectedRepo = () => props.repos.find((item) => item.id === props.selected)
+  const errorText = () => {
+    const err = props.error
+    if (!err) return ""
+    return err instanceof Error ? err.message : String(err)
+  }
+  const installed = (item: SkillMarketItem) => props.installed.has(item.folder.toLowerCase())
+  const marketDescription = () => {
+    const root = props.root?.trim()
+    if (!root) return language.t("config.skills.market.description")
+    return language.t("config.skills.market.descriptionWithRoot", { root })
+  }
+  const openDetail = (item: SkillMarketItem) => {
+    const repo = props.repos.find((entry) => entry.repo === item.repo)
+    dialog.show(
+      () => (
+        <Dialog title={item.name} description={item.repoLabel} class="w-full max-w-[720px] mx-auto" fit transition>
+          <div class="flex flex-col gap-4">
+            <div class="rounded-xl border border-border-weak-base bg-background-base p-4">
+              <div class="mt-2 whitespace-pre-wrap break-words text-13-regular leading-6 text-text-base">
+                {item.description}
+              </div>
+            </div>
+            <div class="grid gap-2 rounded-xl border border-border-weak-base bg-background-base p-4 text-12-regular text-text-weak">
+              <div class="break-all font-mono">{item.path}</div>
+              <div class="break-all">{item.repo}</div>
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                size="small"
+                variant="ghost"
+                disabled={!repo?.url}
+                onClick={() => repo?.url && platform.openLink(repo.url)}
+              >
+                {language.t("config.skills.market.openRepo")}
+              </Button>
+              <Button
+                size="small"
+                variant="secondary"
+                disabled={!props.root || !!props.installing || installed(item)}
+                onClick={() => props.onInstall(item)}
+              >
+                {props.installing === item.id
+                  ? language.t("config.skills.market.installing")
+                  : installed(item)
+                    ? language.t("config.skills.market.installed")
+                    : language.t("config.skills.market.install")}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      ),
+      undefined,
+      { modal: true, preventScroll: true },
+    )
+  }
+
+  return (
+    <div class="flex h-full min-h-0 flex-col">
+      <div class="border-b border-border-weak-base px-5 py-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <div class="truncate text-15-medium text-text-strong">{language.t("config.skills.market.title")}</div>
+              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                {language.t("config.skills.market.badge")}
+              </span>
+            </div>
+            <div class="mt-1 text-12-regular text-text-weak">{marketDescription()}</div>
+          </div>
+          <Button
+            size="small"
+            variant="ghost"
+            icon="refresh"
+            class="h-8 rounded-lg border border-border-weak-base bg-background-base px-2.5 pr-3 text-12-medium text-text-base shadow-none transition-colors hover:border-border-strong hover:bg-surface-base-hover active:border-border-base active:bg-surface-base-active focus-visible:border-border-strong focus-visible:bg-surface-base-hover disabled:border-border-weak-base disabled:bg-background-base disabled:text-text-weaker"
+            disabled={props.loading}
+            onClick={props.onReload}
+          >
+            {language.t("config.skills.market.reload")}
+          </Button>
+        </div>
+      </div>
+      <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <div class="flex min-h-0 flex-col gap-3">
+            <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+              {language.t("config.skills.market.repositories")}
+            </div>
+            <div class="flex flex-col gap-2">
+              <For each={props.repos}>
+                {(repo) => (
+                  <div
+                    class="rounded-xl border px-3 py-3 text-left transition-colors"
+                    classList={{
+                      "border-border-base bg-surface-base-active": props.selected === repo.id,
+                      "border-border-weak-base bg-background-base hover:border-border-strong hover:bg-surface-base-hover":
+                        props.selected !== repo.id,
+                    }}
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <button
+                        type="button"
+                        class="min-w-0 flex-1 text-left"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          props.onSelect(repo.id)
+                        }}
+                      >
+                        <div class="truncate text-13-medium text-text-strong">{repo.label}</div>
+                        <div class="mt-1 line-clamp-2 text-12-regular text-text-weak">{repo.description}</div>
+                        <div class="mt-2 break-all font-mono text-[11px] leading-5 text-text-weak">{repo.repo}</div>
+                      </button>
+                      <button
+                        type="button"
+                        class="shrink-0 text-text-weak transition-colors hover:text-text-base"
+                        aria-label={language.t("config.skills.market.openRepo")}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          platform.openLink(repo.url)
+                        }}
+                      >
+                        <Icon name="link" size="small" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+
+          <div class="min-w-0">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                  {selectedRepo()?.label ?? language.t("config.skills.market.skills")}
+                </div>
+              </div>
+              <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                {props.skills.length}
+              </div>
+            </div>
+
+            <Show
+              when={!props.loading}
+              fallback={<Wait text={`${language.t("common.loading")}${language.t("common.loading.ellipsis")}`} />}
+            >
+              <Show
+                when={!errorText()}
+                fallback={
+                  <div class="rounded-xl border border-border-danger-base/50 bg-surface-danger-base/10 p-4">
+                    <div class="text-13-medium text-text-danger-base">
+                      {language.t("config.skills.market.loadFailed")}
+                    </div>
+                    <div class="mt-2 break-all text-12-regular text-text-weak">{errorText()}</div>
+                    <div class="mt-3">
+                      <Button size="small" variant="secondary" onClick={props.onReload}>
+                        {language.t("config.skills.market.reload")}
+                      </Button>
+                    </div>
+                  </div>
+                }
+              >
+                <Show
+                  when={props.skills.length > 0}
+                  fallback={
+                    <div class="rounded-xl border border-border-weak-base bg-background-base p-4 text-13-regular text-text-weak">
+                      {language.t("config.skills.market.empty")}
+                    </div>
+                  }
+                >
+                  <div class="grid gap-3 lg:grid-cols-2">
+                    <For each={props.skills}>
+                      {(item) => {
+                        const isInstalled = () => installed(item)
+                        const busy = () => props.installing === item.id
+                        return (
+                          <div
+                            class="flex min-h-[180px] flex-col rounded-xl border border-border-weak-base bg-background-base p-4 transition-colors hover:border-border-strong hover:bg-surface-base-hover"
+                            role="button"
+                            tabindex="0"
+                            onClick={() => openDetail(item)}
+                            onKeyDown={(event: KeyboardEvent) => {
+                              if (event.key !== "Enter" && event.key !== " ") return
+                              event.preventDefault()
+                              openDetail(item)
+                            }}
+                          >
+                            <div class="flex min-w-0 items-start justify-between gap-3">
+                              <div class="min-w-0">
+                                <div class="truncate text-14-medium text-text-strong">{item.name}</div>
+                                <div class="mt-1 line-clamp-3 text-12-regular text-text-weak">{item.description}</div>
+                              </div>
+                              <Show when={isInstalled()}>
+                                <span class="shrink-0 rounded-full bg-surface-success-base px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-on-success-base">
+                                  {language.t("config.skills.market.installed")}
+                                </span>
+                              </Show>
+                            </div>
+                            <div class="mt-3 break-all font-mono text-[11px] leading-5 text-text-weak">{item.path}</div>
+                            <div class="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4">
+                              <div class="text-[11px] text-text-weak">{item.repoLabel}</div>
+                              <Button
+                                size="small"
+                                variant="secondary"
+                                disabled={!props.root || !!props.installing || isInstalled()}
+                                onClick={(event: MouseEvent) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  props.onInstall(item)
+                                }}
+                              >
+                                {busy()
+                                  ? language.t("config.skills.market.installing")
+                                  : isInstalled()
+                                    ? language.t("config.skills.market.installed")
+                                    : language.t("config.skills.market.install")}
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </Show>
+            </Show>
+          </div>
         </div>
       </div>
     </div>
