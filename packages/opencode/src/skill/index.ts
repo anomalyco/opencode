@@ -58,6 +58,12 @@ function isSkillFrontmatter(data: unknown): data is { name: string; description?
   )
 }
 
+function normalizeDescription(description: string | undefined) {
+  if (description === undefined) return undefined
+  const normalized = description.replace(/\s+/g, " ").trim()
+  return normalized.length > 0 ? normalized : undefined
+}
+
 export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("SkillInvalidError", {
   path: Schema.String,
   message: Schema.optional(Schema.String),
@@ -133,7 +139,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   state.dirs.add(path.dirname(match))
   state.skills[md.data.name] = {
     name: md.data.name,
-    description: md.data.description,
+    description: normalizeDescription(md.data.description),
     location: match,
     content: md.content,
   }

@@ -108,6 +108,36 @@ Instructions here.
     ),
   )
 
+  it.live("normalizes multiline YAML descriptions in SKILL.md frontmatter", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "multiline-desc", "SKILL.md"),
+              `---
+name: multiline-desc
+description: |
+  This is a multiline description
+  that spans multiple lines
+  using YAML pipe syntax
+---
+
+# Multiline Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          const item = list.find((x) => x.name === "multiline-desc")
+          expect(item).toBeDefined()
+          expect(item!.description).toBe("This is a multiline description that spans multiple lines using YAML pipe syntax")
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("returns skill directories from Skill.dirs", () =>
     provideTmpdirInstance(
       (dir) =>
