@@ -3,7 +3,7 @@ import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plug
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { TextAttributes, type BorderSides, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import { useBindings, useCommandShortcut } from "@tui/keymap"
+import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "@tui/keymap"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
@@ -649,6 +649,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   }
 
   useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
     commands,
     bindings: [
       { key: "j,down", cmd: "diff.down", desc: "Move diff viewer down" },
