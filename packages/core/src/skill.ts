@@ -21,17 +21,27 @@ export class UrlSource extends Schema.Class<UrlSource>("SkillV2.UrlSource")({
   url: Schema.String,
 }) {}
 
-export const Source = Schema.Union([DirectorySource, UrlSource]).pipe(
+export class EmbeddedSource extends Schema.Class<EmbeddedSource>("SkillV2.EmbeddedSource")({
+  type: Schema.Literal("embedded"),
+  skill: Schema.suspend(() => Info),
+}) {}
+
+export const Source = Schema.Union([DirectorySource, UrlSource, EmbeddedSource]).pipe(
   Schema.toTaggedUnion("type"),
   withStatics(() => ({
-    equals: (a: DirectorySource | UrlSource, b: DirectorySource | UrlSource) => {
+    equals: (a: DirectorySource | UrlSource | EmbeddedSource, b: DirectorySource | UrlSource | EmbeddedSource) => {
       if (a.type !== b.type) return false
       if (a.type === "directory" && b.type === "directory") return a.path === b.path
       if (a.type === "url" && b.type === "url") return a.url === b.url
+      if (a.type === "embedded" && b.type === "embedded") return a.skill.name === b.skill.name
       return false
     },
-    key: (source: DirectorySource | UrlSource) =>
-      source.type === "directory" ? `directory:${source.path}` : `url:${source.url}`,
+    key: (source: DirectorySource | UrlSource | EmbeddedSource) =>
+      source.type === "directory"
+        ? `directory:${source.path}`
+        : source.type === "url"
+          ? `url:${source.url}`
+          : `embedded:${source.skill.name}`,
   })),
 )
 export type Source = typeof Source.Type
@@ -89,6 +99,7 @@ export const layer = Layer.effect(
 
     const load = Effect.fn("SkillV2.load")(function* (source: Source) {
       const skills: Info[] = []
+      if (source.type === "embedded") return [source.skill]
       const directories = source.type === "directory" ? [source.path] : yield* discovery.pull(source.url)
       for (const directory of directories) {
         const files = yield* fs
@@ -122,6 +133,8 @@ export const layer = Layer.effect(
       return skills
     })
 
+    // QUESTION(Dax): Should local skill sources invalidate on filesystem watch
+    // events, following the reload policy chosen for other context sources?
     const cache = new Map<string, Info[]>()
     const list = Effect.fn("SkillV2.list")(function* () {
       const skills = new Map<string, Info>()
