@@ -1,4 +1,5 @@
 import { useMarked } from "../context/marked"
+import { useLocalImageResolver } from "../context/local-image"
 import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
@@ -245,9 +246,10 @@ export function Markdown(
     streaming?: boolean
     class?: string
     classList?: Record<string, boolean>
+    directory?: string
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList", "directory"])
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -330,6 +332,19 @@ export function Markdown(
         copy: i18n.t("ui.message.copy"),
         copied: i18n.t("ui.message.copied"),
       }))
+
+    const resolver = useLocalImageResolver()
+    if (resolver && local.directory) {
+      for (const img of container.querySelectorAll<HTMLImageElement>("[data-local-image]")) {
+        const path = img.getAttribute("data-local-image")
+        if (!path || img.src) continue
+        resolver(path, local.directory)
+          .then((dataUri) => {
+            if (dataUri) img.src = dataUri
+          })
+          .catch(() => {})
+      }
+    }
   })
 
   onCleanup(() => {

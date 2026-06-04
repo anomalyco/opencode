@@ -475,6 +475,13 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
             const titleAttr = title ? ` title="${title}"` : ""
             return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
           },
+          image({ href, title, text }) {
+            const titleAttr = title ? ` title="${title}"` : ""
+            if (href && !/^(https?:|data:|#|\/\/)/.test(href)) {
+              return `<img data-local-image="${href}" alt="${text}"${titleAttr}>`
+            }
+            return `<img src="${href ?? ""}" alt="${text}"${titleAttr}>`
+          },
         },
       },
       markedKatex({

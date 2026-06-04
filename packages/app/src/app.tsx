@@ -31,7 +31,7 @@ import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
 import { ServerSyncProvider } from "@/context/server-sync"
 import { GlobalProvider } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
@@ -48,6 +48,7 @@ import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
+import { LocalImageProvider, type LocalImageResolver } from "@opencode-ai/ui/context/local-image"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -64,6 +65,22 @@ const SessionRoute = Object.assign(
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
+}
+
+function LocalImageResolverProvider(props: ParentProps) {
+  const serverSDK = useServerSDK()
+  const resolver: LocalImageResolver = async (rawPath, directory) => {
+    try {
+      if (!directory) return undefined
+      const client = serverSDK.createClient({ directory, throwOnError: true })
+      const resp = await client.file.read({ path: rawPath })
+      if (resp.data?.type === "binary" && resp.data.encoding === "base64" && resp.data.mimeType) {
+        return `data:${resp.data.mimeType};base64,${resp.data.content}`
+      }
+    } catch {}
+    return undefined
+  }
+  return <LocalImageProvider value={resolver}>{props.children}</LocalImageProvider>
 }
 
 declare global {
@@ -322,16 +339,18 @@ export function AppInterface(props: {
             <QueryProvider>
               <ServerSDKProvider>
                 <ServerSyncProvider>
-                  <Dynamic
-                    component={props.router ?? Router}
-                    root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-                  >
-                    <Route path="/" component={HomeRoute} />
-                    <Route path="/:dir" component={DirectoryLayout}>
-                      <Route path="/" component={() => <Navigate href="session" />} />
-                      <Route path="/session/:id?" component={SessionRoute} />
-                    </Route>
-                  </Dynamic>
+                  <LocalImageResolverProvider>
+                    <Dynamic
+                      component={props.router ?? Router}
+                      root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+                    >
+                      <Route path="/" component={HomeRoute} />
+                      <Route path="/:dir" component={DirectoryLayout}>
+                        <Route path="/" component={() => <Navigate href="session" />} />
+                        <Route path="/session/:id?" component={SessionRoute} />
+                      </Route>
+                    </Dynamic>
+                  </LocalImageResolverProvider>
                 </ServerSyncProvider>
               </ServerSDKProvider>
             </QueryProvider>
