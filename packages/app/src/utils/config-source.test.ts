@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Project } from "@opencode-ai/sdk/v2/client"
-import { classifyPluginSource, classifySkillSource } from "./config-source"
+import { classifyPluginSource, classifySkillSource, isFilePath } from "./config-source"
 
 describe("config source classification", () => {
   const projects = [
@@ -64,5 +64,12 @@ describe("config source classification", () => {
       root: "/Users/me/math-physics",
       origin: ".opencode",
     })
+  })
+
+  test("detects local absolute file paths", () => {
+    expect(isFilePath("/Users/me/project")).toBe(true)
+    expect(isFilePath("C:\\Users\\me\\project")).toBe(true)
+    expect(isFilePath("relative/project")).toBe(false)
+    expect(isFilePath("")).toBe(false)
   })
 })

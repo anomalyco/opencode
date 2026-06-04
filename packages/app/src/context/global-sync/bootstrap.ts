@@ -109,21 +109,6 @@ export async function bootstrapGlobal(input: {
       retry(() =>
         input.globalSDK.provider.list().then((x) => {
           const data = normalizeProviderList(x.data!)
-          // [DEBUG] Temporary visibility probe for native openai in the global provider response.
-          const openaiProvider = data.all.find((p) => p.id === "openai")
-          const configured = openaiProvider?.models["gpt-5.5"]
-          if (openaiProvider) {
-            console.debug("[DEBUG] globalSync bootstrap provider openai/gpt-5.5", {
-              modelCount: Object.keys(openaiProvider.models).length,
-              hasGpt55: !!configured,
-              gpt55ReleaseDate: configured?.release_date ?? null,
-              isOpenaiConnected: data.connected.includes("openai"),
-            })
-          } else {
-            console.debug("[DEBUG] globalSync bootstrap provider openai missing", {
-              isOpenaiConnected: data.connected.includes("openai"),
-            })
-          }
           input.setGlobalStore("provider", data)
         }),
       ),
@@ -276,23 +261,6 @@ export async function bootstrapDirectory(input: {
       retry(() =>
         input.sdk.provider.list().then((x) => {
           const data = normalizeProviderList(x.data!)
-          // [DEBUG] Temporary visibility probe for native openai in the directory provider response.
-          const openaiProvider = data.all.find((p) => p.id === "openai")
-          const configured = openaiProvider?.models["gpt-5.5"]
-          if (openaiProvider) {
-            console.debug("[DEBUG] dirSync bootstrap provider openai/gpt-5.5", {
-              dir: input.directory,
-              modelCount: Object.keys(openaiProvider.models).length,
-              hasGpt55: !!configured,
-              gpt55ReleaseDate: configured?.release_date ?? null,
-              isOpenaiConnected: data.connected.includes("openai"),
-            })
-          } else {
-            console.debug("[DEBUG] dirSync bootstrap provider openai missing", {
-              dir: input.directory,
-              isOpenaiConnected: data.connected.includes("openai"),
-            })
-          }
           input.setStore("provider", data)
         }),
       ),

@@ -2,6 +2,7 @@ import { Binary } from "@opencode-ai/core/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
   SnapshotFileDiff as FileDiff,
+  Config,
   Message,
   Part,
   PermissionRequest,
@@ -13,6 +14,12 @@ import type {
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 import { dropSessionCaches } from "./session-cache"
+import {
+  markQuestionProfileAsked,
+  markQuestionProfileDelta,
+  markQuestionProfileText,
+  markQuestionProfileTool,
+} from "@/pages/session/composer/session-question-profile"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -22,10 +29,16 @@ export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
   setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
+  setGlobalConfig: (next: Config) => void
   refresh: () => void
 }) {
   if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
     input.refresh()
+    return
+  }
+
+  if (input.event.type === "global.config.updated") {
+    input.setGlobalConfig(input.event.properties as Config)
     return
   }
 
@@ -105,7 +118,6 @@ export function applyDirectoryEvent(input: {
           draft.question = {}
         }),
       )
-      console.debug(`[question-sync] instance disposed: cleared pending requests directory=${input.directory}`)
       input.push(input.directory)
       return
     }
@@ -249,6 +261,8 @@ export function applyDirectoryEvent(input: {
     case "message.part.updated": {
       const part = (event.properties as { part: Part }).part
       if (SKIP_PARTS.has(part.type)) break
+      markQuestionProfileText(part, "updated")
+      markQuestionProfileTool(part, "updated")
       const parts = input.store.part[part.messageID]
       if (!parts) {
         input.setStore("part", part.messageID, [part])
@@ -303,7 +317,13 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "message.part.delta": {
-      const props = event.properties as { messageID: string; partID: string; field: string; delta: string }
+      const props = event.properties as {
+        sessionID?: string
+        messageID: string
+        partID: string
+        field: string
+        delta: string
+      }
       const parts = input.store.part[props.messageID]
       if (!parts) {
         console.warn("[sync] delta without parts", {
@@ -327,6 +347,14 @@ export function applyDirectoryEvent(input: {
         break
       }
       const hit = parts[result.index]
+      if (hit.type === "text" && props.field === "text") {
+        markQuestionProfileDelta({
+          sessionID: props.sessionID ?? hit.sessionID,
+          messageID: props.messageID,
+          partID: props.partID,
+          length: hit.text.length + props.delta.length,
+        })
+      }
       input.setStore(
         "part",
         props.messageID,
@@ -388,6 +416,7 @@ export function applyDirectoryEvent(input: {
     }
     case "question.asked": {
       const question = event.properties as QuestionRequest
+      markQuestionProfileAsked(question, "event")
       const questions = input.store.question[question.sessionID]
       if (!questions) {
         input.setStore("question", question.sessionID, [question])

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type { Config, Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
@@ -97,6 +97,7 @@ describe("applyGlobalEvent", () => {
       setGlobalProject(next) {
         if (typeof next === "function") next(project)
       },
+      setGlobalConfig() {},
     })
 
     expect(project.map((x) => x.id)).toEqual(["a", "b", "c"])
@@ -112,6 +113,7 @@ describe("applyGlobalEvent", () => {
         refreshCount += 1
       },
       setGlobalProject() {},
+      setGlobalConfig() {},
     })
 
     expect(refreshCount).toBe(1)
@@ -126,9 +128,31 @@ describe("applyGlobalEvent", () => {
         refreshCount += 1
       },
       setGlobalProject() {},
+      setGlobalConfig() {},
     })
 
     expect(refreshCount).toBe(1)
+  })
+
+  test("handles global.config.updated by updating config without refreshing", () => {
+    const nextConfig: Config = { disabled_providers: ["anthropic"] }
+    let refreshCount = 0
+    let config: Config = {}
+
+    applyGlobalEvent({
+      event: { type: "global.config.updated", properties: nextConfig },
+      project: [],
+      refresh: () => {
+        refreshCount += 1
+      },
+      setGlobalProject() {},
+      setGlobalConfig(next) {
+        config = next
+      },
+    })
+
+    expect(config).toEqual(nextConfig)
+    expect(refreshCount).toBe(0)
   })
 })
 

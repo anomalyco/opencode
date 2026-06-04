@@ -11,6 +11,7 @@ export type Event =
   | EventTuiSessionSelect
   | EventServerConnected
   | EventGlobalDisposed
+  | EventGlobalConfigUpdated
   | EventServerInstanceDisposed
   | EventFileEdited
   | EventFileWatcherUpdated
@@ -822,6 +823,7 @@ export type GlobalEvent = {
     | EventTuiSessionSelect
     | EventServerConnected
     | EventGlobalDisposed
+    | EventGlobalConfigUpdated
     | EventServerInstanceDisposed
     | EventFileEdited
     | EventFileWatcherUpdated
@@ -2533,6 +2535,12 @@ export type EventGlobalDisposed = {
   properties: {
     [key: string]: unknown
   }
+}
+
+export type EventGlobalConfigUpdated = {
+  id: string
+  type: "global.config.updated"
+  properties: Config
 }
 
 export type EventServerInstanceDisposed = {

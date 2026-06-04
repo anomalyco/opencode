@@ -321,7 +321,7 @@ export function DialogConnectProvider(props: { provider: string }) {
   })
 
   async function complete() {
-    await globalSDK.client.global.dispose()
+    await globalSync.provider.refresh()
     dialog.close()
     showToast({
       variant: "success",

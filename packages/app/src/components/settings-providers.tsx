@@ -112,7 +112,7 @@ export const SettingsProviders: Component = () => {
     await globalSDK.client.auth
       .remove({ providerID })
       .then(async () => {
-        await globalSDK.client.global.dispose()
+        await globalSync.provider.refresh()
         showToast({
           variant: "success",
           icon: "circle-check",

@@ -19,9 +19,16 @@ import { useSDK } from "@/context/sdk"
 import { useSkills } from "@/context/skills"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
+import { isFilePath } from "@/utils/config-source"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
+
+function configPath(root: string | undefined, file: string) {
+  if (!root || !isFilePath(root)) return
+  const sep = root.includes("\\") && !root.includes("/") ? "\\" : "/"
+  return `${root.replace(/[\\/]+$/, "")}${sep}${file.replace(/^[\\/]+/, "")}`
+}
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -214,14 +221,17 @@ export function StatusPopover() {
           ?? files.find((item) => item.id === "project-opencode-json" && item.exists)
         const projectDir = files.find((item) => item.id === "project-dir-opencode-jsonc" && item.exists)
           ?? files.find((item) => item.id === "project-dir-opencode-json" && item.exists)
+        const claudePath = configPath(global.data.path.home, ".claude.json")
+        const omoJsonPath = configPath(global.data.path.config, "oh-my-openagent.json")
+        const omoJsoncPath = configPath(global.data.path.config, "oh-my-openagent.jsonc")
 
         const [nextProject, nextProjectDir, nextClaude, nextOmo] = await Promise.all([
           project?.path ? read(project.path).catch(() => null) : Promise.resolve(null),
           projectDir?.path ? read(projectDir.path).catch(() => null) : Promise.resolve(null),
-          read(`${global.data.path.home}/.claude.json`).catch(() => null),
-          read(`${global.data.path.config}/oh-my-openagent.json`).catch(() =>
-            read(`${global.data.path.config}/oh-my-openagent.jsonc`).catch(() => null),
-          ),
+          claudePath ? read(claudePath).catch(() => null) : Promise.resolve(null),
+          omoJsonPath
+            ? read(omoJsonPath).catch(() => (omoJsoncPath ? read(omoJsoncPath).catch(() => null) : null))
+            : Promise.resolve(null),
         ])
         if (dead) return
         setCfg({

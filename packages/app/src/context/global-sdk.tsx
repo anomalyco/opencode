@@ -159,11 +159,15 @@ export function GlobalSDKProvider(props: ParentProps) {
 
       type Queued = { directory: string; payload: GlobalEvent["payload"] }
       const FLUSH_FRAME_MS = 16
+      const FLUSH_BUDGET_MS = 6
       const STREAM_YIELD_MS = 8
       const RECONNECT_DELAY_MS = 250
       const HEARTBEAT_TIMEOUT_MS = 15_000
       let queue: Queued[] = []
       let buffer: Queued[] = []
+      let flushing: Queued[] | undefined
+      let flushIndex = 0
+      let flushSkip: Set<string> | undefined
       const coalesced = new Map<string, number>()
       const stale = new Set<string>()
       let timer: ReturnType<typeof setTimeout> | undefined
@@ -191,49 +195,80 @@ export function GlobalSDKProvider(props: ParentProps) {
           return `message.part.updated:${directory}:${part.messageID}:${part.id}`
         }
       }
-      const flush = () => {
+      const urgent = (payload: GlobalEvent["payload"]) =>
+        payload.type === "question.asked" || payload.type === "permission.asked"
+      const prioritize = (events: Queued[]) => {
+        if (events.length < 2) return events
+        let found = false
+        for (const event of events) {
+          if (urgent(event.payload)) {
+            found = true
+            break
+          }
+        }
+        if (!found) return events
+        const next: Queued[] = []
+        for (const event of events) {
+          if (urgent(event.payload)) next.push(event)
+        }
+        for (const event of events) {
+          if (!urgent(event.payload)) next.push(event)
+        }
+        return next
+      }
+      const dispatch = (event: Queued) => {
+        if (flushSkip && event.payload.type === "message.part.delta") {
+          const props = event.payload.properties
+          if (flushSkip.has(deltaKey(event.directory, props.messageID, props.partID))) {
+            return
+          }
+        }
+        // The per-domain emitter's `emit` drives `.on(key)` subscribers
+        // (see `SDKProvider`, `quick-assistant.tsx`). `listenAll`
+        // subscribers are dispatched directly below because the emitter's
+        // global `.listen` callback was observed to go silent for
+        // extra-agent domains (even though `emit` ran), which would drop
+        // every message/part update for those domains.
+        domainEmitter.emit(event.directory, event.payload)
+        for (const entry of listenAllEntries) {
+          try {
+            entry.cb({ name: event.directory, details: event.payload, domain })
+          } catch (err) {
+            console.error(`[global-sdk] listenAll cb failed error=${err instanceof Error ? err.message : String(err)}`)
+          }
+        }
+      }
+      const flush = (drain = false) => {
         if (timer) clearTimeout(timer)
         timer = undefined
-        if (queue.length === 0) return
-        const events = queue
-        const skip = stale.size > 0 ? new Set(stale) : undefined
-        queue = buffer
-        buffer = events
-        queue.length = 0
-        coalesced.clear()
-        stale.clear()
+        if (!flushing) {
+          if (queue.length === 0) return
+          const events = queue
+          flushSkip = stale.size > 0 ? new Set(stale) : undefined
+          queue = buffer
+          buffer = events
+          queue.length = 0
+          coalesced.clear()
+          stale.clear()
+          flushing = prioritize(events)
+          flushIndex = 0
+        }
+
         last = Date.now()
-        for (const event of events) {
-          if (skip && event.payload.type === "message.part.delta") {
-            const props = event.payload.properties
-            if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) {
-              console.warn("[global-sdk] stale delta skipped", {
-                dir: event.directory,
-                msg: props.messageID,
-                part: props.partID,
-                field: props.field,
-                len: props.delta.length,
-                tail: props.delta.slice(-40),
-              })
-              continue
-            }
-          }
-          // The per-domain emitter's `emit` drives `.on(key)` subscribers
-          // (see `SDKProvider`, `quick-assistant.tsx`). `listenAll`
-          // subscribers are dispatched directly below because the emitter's
-          // global `.listen` callback was observed to go silent for
-          // extra-agent domains (even though `emit` ran), which would drop
-          // every message/part update for those domains.
-          domainEmitter.emit(event.directory, event.payload)
-          for (const entry of listenAllEntries) {
-            try {
-              entry.cb({ name: event.directory, details: event.payload, domain })
-            } catch (err) {
-              console.error("[global-sdk] listenAll cb failed", err)
-            }
+        const start = performance.now()
+        while (flushing && flushIndex < flushing.length) {
+          dispatch(flushing[flushIndex]!)
+          flushIndex++
+          if (!drain && performance.now() - start >= FLUSH_BUDGET_MS) {
+            timer = setTimeout(() => flush(), 0)
+            return
           }
         }
         buffer.length = 0
+        flushing = undefined
+        flushIndex = 0
+        flushSkip = undefined
+        if (queue.length > 0) schedule()
       }
       const schedule = () => {
         if (timer) return
@@ -317,14 +352,14 @@ export function GlobalSDKProvider(props: ParentProps) {
           if (abort.signal.aborted) return
           await wait(RECONNECT_DELAY_MS)
         }
-      })().finally(flush)
+      })().finally(() => flush(true))
 
       streams.set(domain, {
         url,
         stop: () => {
           if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility)
           abort.abort()
-          flush()
+          flush(true)
         },
       })
     }

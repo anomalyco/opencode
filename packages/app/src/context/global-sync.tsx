@@ -31,7 +31,7 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
 import { loadRootSessions } from "./global-sync/session-load"
 import type { ProjectMeta } from "./global-sync/types"
-import { sanitizeProject, stripProvider } from "./global-sync/utils"
+import { normalizeProviderList, sanitizeProject, stripProvider } from "./global-sync/utils"
 import { formatServerError, permissionNotice } from "@/utils/server-errors"
 import { useServer } from "./server"
 import {
@@ -76,6 +76,7 @@ function createGlobalSync() {
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionLoaded = new Set<string>()
+  const providerRefreshes = new Map<DomainId, Promise<ProviderListResponse>>()
   const revs = new Map<string, number>()
   const queues = new Map<DomainId, ReturnType<typeof createRefreshQueue>>()
   const bootedAt = new Map<DomainId, number>()
@@ -204,6 +205,13 @@ function createGlobalSync() {
     if (domain !== currentDomain()) return
     ;(setGlobalStore as (...args: unknown[]) => unknown)(key, value)
   }
+
+  const updateGlobalConfig = (domain: DomainId, config: Config) => {
+    setRoot(domain, "config", config)
+  }
+
+  const configAffectsProviders = (config: Config) =>
+    "provider" in config || "disabled_providers" in config || "enabled_providers" in config
 
   const bootStoreFor = (domain: DomainId) =>
     ((...input: unknown[]) => {
@@ -447,6 +455,39 @@ function createGlobalSync() {
     return promise
   }
 
+  async function refreshProviders(domain = currentDomain()) {
+    const pending = providerRefreshes.get(domain)
+    if (pending) return pending
+
+    const promise = (async () => {
+      const result = await runtime(domain).client.provider.list()
+      const data = normalizeProviderList(result.data!)
+      setRoot(domain, "provider", data)
+
+      const manager = managers.get(domain)
+      if (manager) {
+        await Promise.allSettled(
+          Object.keys(manager.children).map(async (directory) => {
+            if (isolated(directory)) return
+            const next = await sdkFor(directory).provider.list()
+            const child = manager.children[directory]
+            if (!child) return
+            child[1]("provider", normalizeProviderList(next.data!))
+          }),
+        )
+      }
+
+      return data
+    })()
+
+    providerRefreshes.set(domain, promise)
+    void promise.then(
+      () => providerRefreshes.delete(domain),
+      () => providerRefreshes.delete(domain),
+    )
+    return promise
+  }
+
   async function bootstrapInstance(directory: string) {
     if (!directory) return
     if (isolated(directory)) {
@@ -517,12 +558,23 @@ function createGlobalSync() {
           queueFor(emittingDomain).refresh()
         },
         setGlobalProject: (next) => setProjectsFor(emittingDomain, next),
+        setGlobalConfig: (config) => updateGlobalConfig(emittingDomain, config),
       })
+      if (event.type === "global.config.updated") {
+        void refreshProviders(emittingDomain).catch((err) => {
+          console.error(`[global-sync] provider refresh failed error=${err instanceof Error ? err.message : String(err)}`)
+        })
+        return
+      }
       if (event.type === "server.connected" || event.type === "global.disposed") {
         if (recent) return
-        for (const directory of directoriesInDomain(emittingDomain)) {
-          if (!loaded.dir[directory]) continue
-          queueFor(emittingDomain).push(directory)
+        // For the main domain, refresh() already calls bootstrap() which handles all directories.
+        // Only push individual directories for extra-agent domains where refresh() is skipped.
+        if (emittingDomain !== mainDomain) {
+          for (const directory of directoriesInDomain(emittingDomain)) {
+            if (!loaded.dir[directory]) continue
+            queueFor(emittingDomain).push(directory)
+          }
         }
       }
       return
@@ -651,6 +703,7 @@ function createGlobalSync() {
   }
 
   const providerApi = {
+    refresh: refreshProviders,
     remove(id: string) {
       if (!id) return
       setGlobalStore("provider", (prev) => stripProvider(prev, id))
@@ -662,19 +715,22 @@ function createGlobalSync() {
     },
   }
 
-  const updateConfig = async (config: Config) => {
-    setGlobalStore("reload", "pending")
-    return runtime()
+  const updateConfig = async (config: Config, options?: { refreshProviders?: boolean }) => {
+    const domain = currentDomain()
+    const refreshProviderState = options?.refreshProviders ?? configAffectsProviders(config)
+    setRoot(domain, "reload", "pending")
+    return runtime(domain)
       .client.global.config.update({ config })
-      .then(() => bootstrap())
-      .then(() => {
-        queueFor().refresh()
-        setGlobalStore("reload", undefined)
-        queueFor().refresh()
+      .then(async (result) => {
+        const next = result.data!
+        updateGlobalConfig(domain, next)
+        if (refreshProviderState) {
+          await refreshProviders(domain)
+        }
+        return next
       })
-      .catch((error) => {
-        setGlobalStore("reload", undefined)
-        throw error
+      .finally(() => {
+        setRoot(domain, "reload", undefined)
       })
   }
 

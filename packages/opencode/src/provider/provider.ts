@@ -1025,12 +1025,27 @@ export interface Interface {
 }
 
 interface State {
+  key: string
   models: Map<string, LanguageModelV3>
   providers: Record<ProviderID, Info>
   catalog: Record<ProviderID, Info>
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
+}
+
+function stateKey(cfg: Config.Info, auths: Record<string, Auth.Info>) {
+  const authKey = Object.fromEntries(
+    Object.entries(auths)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([id, info]) => [id, info.type]),
+  )
+  return JSON.stringify({
+    provider: cfg.provider ?? {},
+    disabled_providers: [...(cfg.disabled_providers ?? [])].sort(),
+    enabled_providers: cfg.enabled_providers ? [...cfg.enabled_providers].sort() : undefined,
+    auth: authKey,
+  })
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
@@ -1389,8 +1404,10 @@ export const layer = Layer.effect(
           })
         }
 
-        // load apikeys
         const auths = yield* auth.all().pipe(Effect.orDie)
+        const key = stateKey(cfg, auths)
+
+        // load apikeys
         for (const [id, provider] of Object.entries(auths)) {
           const providerID = ProviderID.make(id)
           if (disabled.has(providerID)) continue
@@ -1520,6 +1537,7 @@ export const layer = Layer.effect(
         }
 
         return {
+          key,
           models: languages,
           providers,
           catalog,
@@ -1530,7 +1548,14 @@ export const layer = Layer.effect(
       }),
     )
 
-    const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+    const list = Effect.fn("Provider.list")(function* () {
+      const [cfg, auths] = yield* Effect.all([config.get(), auth.all().pipe(Effect.orDie)], { concurrency: 2 })
+      const key = stateKey(cfg, auths)
+      const current = yield* InstanceState.get(state)
+      if (current.key === key) return current.providers
+      const refreshed = yield* InstanceState.refresh(state)
+      return refreshed.providers
+    })
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {

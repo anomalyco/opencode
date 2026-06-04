@@ -40,7 +40,7 @@ export function normalizePath(value: string) {
 }
 
 export function isFilePath(value: string) {
-  const next = localPath(value)
+  const next = normalizePath(value)
   if (!next) return false
   if (next.startsWith("/") || next.startsWith("//")) return true
   return /^[A-Za-z]:\//.test(next)
