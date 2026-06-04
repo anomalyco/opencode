@@ -87,7 +87,9 @@ export class Subscription {
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
       if (part.type === "tool") {
-        await this.handleToolPart(message.info.sessionID, part)
+        const session = await Effect.runPromise(this.input.session.tryGet(message.info.sessionID))
+        const cwd = message.info.role === "assistant" ? message.info.path?.cwd : undefined
+        await this.handleToolPart(message.info.sessionID, part, cwd ?? session?.cwd ?? process.cwd())
         continue
       }
       await this.replayContentPart(message, part)
@@ -152,7 +154,7 @@ export class Subscription {
       }),
     )
     if (part.type === "tool") {
-      await this.handleToolPart(session.id, part)
+      await this.handleToolPart(session.id, part, session.cwd)
     }
   }
 
@@ -240,8 +242,8 @@ export class Subscription {
     )
   }
 
-  private async handleToolPart(sessionId: string, part: ToolPart) {
-    await this.toolStart(sessionId, part)
+  private async handleToolPart(sessionId: string, part: ToolPart, cwd: string) {
+    await this.toolStart(sessionId, part, cwd)
 
     switch (part.state.status) {
       case "pending":
@@ -249,7 +251,7 @@ export class Subscription {
         return
 
       case "running":
-        await this.runningTool(sessionId, part)
+        await this.runningTool(sessionId, part, cwd)
         return
 
       case "completed":
@@ -262,6 +264,7 @@ export class Subscription {
               toolCallId: part.callID,
               toolName: part.tool,
               state: part.state,
+              cwd,
             }),
           },
         })
@@ -277,6 +280,7 @@ export class Subscription {
               toolCallId: part.callID,
               toolName: part.tool,
               state: part.state,
+              cwd,
             }),
           },
         })
@@ -284,7 +288,7 @@ export class Subscription {
     }
   }
 
-  private async runningTool(sessionId: string, part: ToolPart) {
+  private async runningTool(sessionId: string, part: ToolPart, cwd: string) {
     if (part.state.status !== "running") return
 
     const output = part.tool === "bash" ? shellOutputSnapshot(part.state) : undefined
@@ -298,6 +302,7 @@ export class Subscription {
               toolCallId: part.callID,
               toolName: part.tool,
               state: part.state,
+              cwd,
             }),
           },
         })
@@ -315,12 +320,13 @@ export class Subscription {
           toolName: part.tool,
           state: part.state,
           output,
+          cwd,
         }),
       },
     })
   }
 
-  private async toolStart(sessionId: string, part: ToolPart) {
+  private async toolStart(sessionId: string, part: ToolPart, cwd: string) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
     await this.input.connection.sessionUpdate({
@@ -330,6 +336,8 @@ export class Subscription {
         ...pendingToolCall({
           toolCallId: part.callID,
           toolName: part.tool,
+          state: part.state,
+          cwd,
         }),
       },
     })

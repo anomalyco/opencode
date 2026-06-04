@@ -1,4 +1,12 @@
-import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
+import { isAbsolute, resolve } from "path"
+import type {
+  ToolCall,
+  ToolCallContent,
+  ToolCallLocation,
+  ToolCallStatus,
+  ToolCallUpdate,
+  ToolKind,
+} from "@agentclientprotocol/sdk"
 
 export type ToolInput = Record<string, unknown>
 
@@ -29,10 +37,25 @@ export type ErrorToolState = {
   readonly metadata?: unknown
 }
 
+type ToolState =
+  | { readonly status: "pending"; readonly input: ToolInput; readonly title?: string }
+  | RunningToolState
+  | (CompletedToolState & { readonly title?: string })
+  | ErrorToolState
+
 export type ImageAttachment = {
   readonly mimeType: string
   readonly data: string
 }
+
+const TOOL_STATUS_MAP = {
+  pending: "pending",
+  running: "in_progress",
+  completed: "completed",
+  error: "failed",
+} as const satisfies Record<ToolState["status"], ToolCallStatus>
+
+const FENCE_RE = /^`{3,}/gm
 
 export function toToolKind(toolName: string): ToolKind {
   const tool = toolName.toLocaleLowerCase()
@@ -40,7 +63,7 @@ export function toToolKind(toolName: string): ToolKind {
   switch (tool) {
     case "bash":
     case "shell":
-      return "execute"
+      return "other"
 
     case "webfetch":
       return "fetch"
@@ -69,10 +92,14 @@ export function toToolKind(toolName: string): ToolKind {
   }
 }
 
-export function toLocations(toolName: string, input: ToolInput): ToolCallLocation[] {
+export function toLocations(toolName: string, input: ToolInput, cwd?: string): ToolCallLocation[] {
   const tool = toolName.toLocaleLowerCase()
 
   switch (tool) {
+    case "bash":
+    case "shell":
+      return shellLocation(input, cwd)
+
     case "read":
     case "edit":
     case "write":
@@ -88,10 +115,6 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
     case "context7_get_library_docs":
       return locationFrom(input.path)
 
-    case "bash":
-    case "shell":
-      return []
-
     default:
       return []
   }
@@ -99,7 +122,11 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
 
 export function completedToolContent(toolName: string, state: CompletedToolState): ToolCallContent[] {
   const text =
-    toolName.toLocaleLowerCase() === "read" ? (readDisplayText(state.metadata) ?? state.output) : state.output
+    toolName.toLocaleLowerCase() === "read"
+      ? (readDisplayText(state.metadata) ?? state.output)
+      : isShell(toolName)
+        ? fenceWith(state.output, "sh")
+        : state.output
   const content: ToolCallContent[] = [
     {
       type: "content",
@@ -118,7 +145,23 @@ export function completedToolContent(toolName: string, state: CompletedToolState
   return content
 }
 
-export function pendingToolCall(input: { readonly toolCallId: string; readonly toolName: string }): ToolCall {
+export function pendingToolCall(input: {
+  readonly toolCallId: string
+  readonly toolName: string
+  readonly state?: ToolState
+  readonly cwd?: string
+}): ToolCall {
+  if (input.state) {
+    return {
+      toolCallId: input.toolCallId,
+      title: toolTitle(input.toolName, input.state),
+      kind: toToolKind(input.toolName),
+      status: TOOL_STATUS_MAP[input.state.status],
+      locations: toLocations(input.toolName, input.state.input, input.cwd),
+      rawInput: rawInput(input.toolName, input.state.input, input.cwd),
+    }
+  }
+
   return {
     toolCallId: input.toolCallId,
     title: input.toolName,
@@ -134,6 +177,7 @@ export function runningToolUpdate(input: {
   readonly toolName: string
   readonly state: RunningToolState
   readonly output?: string
+  readonly cwd?: string
 }): ToolCallUpdate {
   const content = input.output
     ? [
@@ -141,7 +185,7 @@ export function runningToolUpdate(input: {
           type: "content" as const,
           content: {
             type: "text" as const,
-            text: input.output,
+            text: isShell(input.toolName) ? fenceWith(input.output, "sh") : input.output,
           },
         },
       ]
@@ -151,9 +195,9 @@ export function runningToolUpdate(input: {
     toolCallId: input.toolCallId,
     status: "in_progress",
     kind: toToolKind(input.toolName),
-    title: input.state.title ?? input.toolName,
-    locations: toLocations(input.toolName, input.state.input),
-    rawInput: input.state.input,
+    title: toolTitle(input.toolName, input.state),
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
     ...(content ? { content } : {}),
   }
 }
@@ -162,30 +206,33 @@ export function duplicateRunningToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly state: RunningToolState
+  readonly cwd?: string
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
     status: "in_progress",
     kind: toToolKind(input.toolName),
-    title: input.state.title ?? input.toolName,
-    locations: toLocations(input.toolName, input.state.input),
-    rawInput: input.state.input,
+    title: toolTitle(input.toolName, input.state),
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
   }
 }
 
 export function completedToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
-  readonly state: CompletedToolState & { readonly title: string }
+  readonly state: CompletedToolState & { readonly title?: string }
+  readonly cwd?: string
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
     status: "completed",
     kind: toToolKind(input.toolName),
-    title: input.state.title,
+    title: toolTitle(input.toolName, input.state),
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
     content: completedToolContent(input.toolName, input.state),
-    rawInput: input.state.input,
-    rawOutput: completedToolRawOutput(input.state),
+    rawOutput: completedToolRawOutputForTool(input.toolName, input.state),
   }
 }
 
@@ -193,26 +240,25 @@ export function errorToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly state: ErrorToolState
+  readonly cwd?: string
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
     status: "failed",
     kind: toToolKind(input.toolName),
-    title: input.toolName,
-    rawInput: input.state.input,
+    title: toolTitle(input.toolName, input.state),
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
     content: [
       {
         type: "content",
         content: {
           type: "text",
-          text: input.state.error,
+          text: isShell(input.toolName) ? fenceWith(input.state.error, "sh") : input.state.error,
         },
       },
     ],
-    rawOutput: {
-      error: input.state.error,
-      metadata: input.state.metadata,
-    },
+    rawOutput: errorToolRawOutputForTool(input.toolName, input.state),
   }
 }
 
@@ -247,6 +293,76 @@ export function extractImageAttachments(attachments: ReadonlyArray<ToolAttachmen
 export function shellOutputSnapshot(state: { readonly metadata?: unknown }) {
   if (!state.metadata || typeof state.metadata !== "object") return undefined
   return stringValue((state.metadata as Record<string, unknown>).output)
+}
+
+function completedToolRawOutputForTool(toolName: string, state: CompletedToolState) {
+  if (!isShell(toolName)) return completedToolRawOutput(state)
+  return {
+    stdout: state.output,
+    ...(state.metadata !== undefined ? { metadata: state.metadata } : {}),
+    ...(state.attachments?.length ? { attachments: state.attachments } : {}),
+  }
+}
+
+function errorToolRawOutputForTool(toolName: string, state: ErrorToolState) {
+  if (!isShell(toolName)) {
+    return {
+      error: state.error,
+      metadata: state.metadata,
+    }
+  }
+  return {
+    stderr: state.error,
+    ...(state.metadata !== undefined ? { metadata: state.metadata } : {}),
+  }
+}
+
+function toolTitle(toolName: string, state: ToolState) {
+  if (isShell(toolName)) return stringValue(state.input.description) ?? shellCommand(state.input) ?? "Terminal"
+  return ("title" in state && state.title) || toolName
+}
+
+function rawInput(toolName: string, input: ToolInput, cwd?: string) {
+  if (!isShell(toolName)) return input
+  const workdir = shellWorkdir(input, cwd)
+  if (!workdir || input.cwd || input.workdir || input.workingDir || input.directory) return input
+  return { ...input, cwd: workdir }
+}
+
+function shellLocation(input: ToolInput, cwd?: string): ToolCallLocation[] {
+  const workdir = shellWorkdir(input, cwd)
+  if (!workdir || (!shellCommand(input) && !input.workdir && !input.cwd && !input.workingDir && !input.directory)) return []
+  return [{ path: workdir }]
+}
+
+function shellCommand(input: ToolInput) {
+  return stringValue(input.command) ?? stringValue(input.cmd)
+}
+
+function shellWorkdir(input: ToolInput, cwd?: string) {
+  const workdir =
+    stringValue(input.workdir) ?? stringValue(input.cwd) ?? stringValue(input.workingDir) ?? stringValue(input.directory)
+  return resolvePath(workdir, cwd) ?? cwd
+}
+
+function resolvePath(value: string | undefined, cwd?: string) {
+  if (!value) return undefined
+  if (isAbsolute(value)) return value
+  return resolve(cwd ?? process.cwd(), value)
+}
+
+function isShell(toolName: string) {
+  const tool = toolName.toLocaleLowerCase()
+  return tool === "bash" || tool === "shell"
+}
+
+function fenceWith(text: string, lang: string) {
+  if (!text) return text
+  let fence = "```"
+  for (const match of text.matchAll(FENCE_RE)) {
+    while (match[0].length >= fence.length) fence += "`"
+  }
+  return `${fence}${lang}\n${text.replace(/\n+$/, "")}\n${fence}`
 }
 
 export const mapToolKind = toToolKind

@@ -11,8 +11,8 @@ import {
 
 describe("acp tool conversion", () => {
   test("maps OpenCode tool ids to ACP tool kinds", () => {
-    expect(toToolKind("bash")).toBe("execute")
-    expect(toToolKind("shell")).toBe("execute")
+    expect(toToolKind("bash")).toBe("other")
+    expect(toToolKind("shell")).toBe("other")
     expect(toToolKind("webfetch")).toBe("fetch")
     expect(toToolKind("edit")).toBe("edit")
     expect(toToolKind("apply_patch")).toBe("edit")
@@ -36,6 +36,10 @@ describe("acp tool conversion", () => {
     expect(toLocations("context7_get_library_docs", { path: "/docs" })).toEqual([{ path: "/docs" }])
     expect(toLocations("external_directory", { directories: ["/tmp/outside"], patterns: ["/tmp/outside/*"] })).toEqual([
       { path: "/tmp/outside" },
+    ])
+    expect(toLocations("bash", { cmd: "pwd" }, "/workspace")).toEqual([{ path: "/workspace" }])
+    expect(toLocations("bash", { command: "pwd", workdir: "subdir" }, "/workspace")).toEqual([
+      { path: "/workspace/subdir" },
     ])
     expect(toLocations("bash", { filePath: "/tmp/nope.ts", path: "/tmp" })).toEqual([])
     expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([])

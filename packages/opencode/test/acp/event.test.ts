@@ -517,7 +517,7 @@ describe("acp event routing", () => {
     expect(harness.updates).toHaveLength(0)
   })
 
-  it("emits synthetic pending before the first running tool update", async () => {
+  it("emits first running tool call with raw input before the first running tool update", async () => {
     const harness = createHarness()
     await Effect.runPromise(harness.session.create({ id: "ses_tool", cwd: "/workspace" }))
 
@@ -527,7 +527,14 @@ describe("acp event routing", () => {
       "tool_call",
       "tool_call_update",
     ])
-    expect(harness.updates[0]?.update).toMatchObject({ status: "pending", toolCallId: "call_1" })
+    expect(harness.updates[0]?.update).toMatchObject({
+      status: "in_progress",
+      toolCallId: "call_1",
+      title: "printf hello",
+      kind: "other",
+      locations: [{ path: "/workspace" }],
+      rawInput: { cmd: "printf hello", cwd: "/workspace" },
+    })
     expect(harness.updates[1]?.update).toMatchObject({ status: "in_progress", toolCallId: "call_1" })
   })
 
@@ -557,7 +564,7 @@ describe("acp event routing", () => {
     expect(updates).toHaveLength(3)
     expect(updates[1]?.update).toMatchObject({
       sessionUpdate: "tool_call_update",
-      content: [{ type: "content", content: { type: "text", text: "same" } }],
+      content: [{ type: "content", content: { type: "text", text: "```sh\nsame\n```" } }],
     })
     expect(updates[2]?.update).toMatchObject({ sessionUpdate: "tool_call_update", status: "in_progress" })
     expect("content" in updates[2]!.update).toBe(false)
@@ -590,8 +597,8 @@ describe("acp event routing", () => {
         .filter((item) => item.update.sessionUpdate === "tool_call_update")
         .map((item) => ("content" in item.update ? item.update.content : undefined)),
     ).toEqual([
-      [{ type: "content", content: { type: "text", text: "repeat" } }],
-      [{ type: "content", content: { type: "text", text: "repeat" } }],
+      [{ type: "content", content: { type: "text", text: "```sh\nrepeat\n```" } }],
+      [{ type: "content", content: { type: "text", text: "```sh\nrepeat\n```" } }],
     ])
   })
 
@@ -605,8 +612,8 @@ describe("acp event routing", () => {
       sessionUpdate: "tool_call_update",
       toolCallId: "call_done",
       status: "completed",
-      content: [{ type: "content", content: { type: "text", text: "finished" } }],
-      rawOutput: { output: "finished", metadata: { exit: 0 } },
+      content: [{ type: "content", content: { type: "text", text: "```sh\nfinished\n```" } }],
+      rawOutput: { stdout: "finished", metadata: { exit: 0 } },
     })
   })
 
@@ -669,8 +676,8 @@ describe("acp event routing", () => {
       sessionUpdate: "tool_call_update",
       toolCallId: "call_error",
       status: "failed",
-      content: [{ type: "content", content: { type: "text", text: "failed hard" } }],
-      rawOutput: { error: "failed hard", metadata: { exit: 1 } },
+      content: [{ type: "content", content: { type: "text", text: "```sh\nfailed hard\n```" } }],
+      rawOutput: { stderr: "failed hard", metadata: { exit: 1 } },
     })
   })
 
@@ -696,14 +703,14 @@ describe("acp event routing", () => {
     expect(
       toolUpdates(harness.updates)
         .filter((item) => item.update.sessionUpdate === "tool_call_update" && item.update.status === "completed")
-        .map((item) => ("content" in item.update ? item.update.content : [])),
+      .map((item) => ("content" in item.update ? item.update.content : [])),
     ).toEqual([
       [
-        { type: "content", content: { type: "text", text: "live" } },
+        { type: "content", content: { type: "text", text: "```sh\nlive\n```" } },
         { type: "content", content: { type: "image", mimeType: "image/png", data: image } },
       ],
       [
-        { type: "content", content: { type: "text", text: "replayed" } },
+        { type: "content", content: { type: "text", text: "```sh\nreplayed\n```" } },
         { type: "content", content: { type: "image", mimeType: "image/png", data: image } },
       ],
     ])
