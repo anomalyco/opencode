@@ -6,6 +6,7 @@ import { PositiveInt } from "../schema"
 export class Local extends Schema.Class<Local>("ConfigV2.MCP.Local")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
+  cwd: Schema.String.pipe(Schema.optional),
   environment: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),
   timeout: PositiveInt.pipe(Schema.optional),
