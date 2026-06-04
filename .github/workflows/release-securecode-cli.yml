@@ -1,22 +1,17 @@
 name: release-securecode-cli
 
-# Builds SecureCode CLI binaries once and dual-publishes them as Release
-# assets to:
-#   1. The source repo `acompany-develop/securecode` (always, using the
-#      workflow's default GITHUB_TOKEN). This is the channel internal users
-#      currently install from via the Notion onboarding doc.
-#   2. The public-facing distribution repo
-#      `acompany-develop/securecode-release` (only when the
-#      `SECURECODE_RELEASE_TOKEN` secret is set). This is being staged for
-#      the eventual public flip.
+# Builds SecureCode CLI binaries once and publishes them as Release
+# assets to the source repo `acompany-develop/securecode` (always, using
+# the workflow's default GITHUB_TOKEN). This is the channel internal users
+# currently install from via the Notion onboarding doc.
 #
-# `SECURECODE_RELEASE_TOKEN` is a fine-grained PAT (or GitHub App
-# installation token) with `contents:write` on
-# `acompany-develop/securecode-release`. Until it is registered, the
-# release-repo steps are skipped and only the source repo gets new assets,
-# so the existing engineer install flow keeps working.
+# NOTE (#290): Public distribution to `acompany-develop/securecode-release`
+# is temporarily disabled while we re-evaluate the "binary-only =
+# code-secret" assumption (see Issue #290). The release-repo steps and the
+# `SECURECODE_RELEASE_TOKEN` token detection are commented out below; the
+# engineer install flow via the source repo is unaffected.
 #
-# Refs #159, follow-up to #164.
+# Refs #159, follow-up to #164. Disabled per #290.
 
 on:
   release:
@@ -32,8 +27,9 @@ on:
 permissions:
   contents: write
 
-env:
-  RELEASE_REPO: acompany-develop/securecode-release
+# env:
+#   # Disabled per #290 — re-enable together with the release-repo steps below.
+#   RELEASE_REPO: acompany-develop/securecode-release
 
 jobs:
   cli:
@@ -64,19 +60,20 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      # Secrets cannot be referenced directly in step-level `if:` conditions,
-      # so we surface a boolean output here and key subsequent steps off it.
-      - name: Detect release-repo token
-        id: token
-        env:
-          RELEASE_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
-        run: |
-          if [ -n "$RELEASE_TOKEN" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::SECURECODE_RELEASE_TOKEN is not set; skipping upload to ${RELEASE_REPO}. Engineer install flow via ${GITHUB_REPOSITORY} is unaffected."
-          fi
+      # Disabled per #290 — re-enable together with the release-repo steps below.
+      # # Secrets cannot be referenced directly in step-level `if:` conditions,
+      # # so we surface a boolean output here and key subsequent steps off it.
+      # - name: Detect release-repo token
+      #   id: token
+      #   env:
+      #     RELEASE_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
+      #   run: |
+      #     if [ -n "$RELEASE_TOKEN" ]; then
+      #       echo "available=true" >> "$GITHUB_OUTPUT"
+      #     else
+      #       echo "available=false" >> "$GITHUB_OUTPUT"
+      #       echo "::notice::SECURECODE_RELEASE_TOKEN is not set; skipping upload to ${RELEASE_REPO}. Engineer install flow via ${GITHUB_REPOSITORY} is unaffected."
+      #     fi
 
       - name: Ensure release exists on source repo
         env:
@@ -95,23 +92,25 @@ jobs:
             --notes "Acompany SecureCode CLI release." \
             --repo "$GITHUB_REPOSITORY"
 
-      - name: Ensure release exists on release repo
-        if: steps.token.outputs.available == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
-          TAG: ${{ steps.vars.outputs.tag }}
-        run: |
-          if gh release view "$TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
-            gh release edit "$TAG" \
-              --title "Acompany SecureCode ${TAG}" \
-              --repo "$RELEASE_REPO"
-            exit 0
-          fi
-
-          gh release create "$TAG" \
-            --title "Acompany SecureCode ${TAG}" \
-            --notes "Acompany SecureCode CLI release." \
-            --repo "$RELEASE_REPO"
+      # Disabled per #290 — public distribution paused while we revisit the
+      # "binary-only = code-secret" assumption.
+      # - name: Ensure release exists on release repo
+      #   if: steps.token.outputs.available == 'true'
+      #   env:
+      #     GH_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
+      #     TAG: ${{ steps.vars.outputs.tag }}
+      #   run: |
+      #     if gh release view "$TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+      #       gh release edit "$TAG" \
+      #         --title "Acompany SecureCode ${TAG}" \
+      #         --repo "$RELEASE_REPO"
+      #       exit 0
+      #     fi
+      #
+      #     gh release create "$TAG" \
+      #       --title "Acompany SecureCode ${TAG}" \
+      #       --notes "Acompany SecureCode CLI release." \
+      #       --repo "$RELEASE_REPO"
 
       - name: Build CLI binaries
         env:
@@ -126,11 +125,13 @@ jobs:
           SECURECODE_TAG: ${{ steps.vars.outputs.tag }}
         run: bun ./script/release-securecode.ts
 
-      - name: Upload release assets to release repo
-        if: steps.token.outputs.available == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
-          GH_REPO: ${{ env.RELEASE_REPO }}
-          OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
-          SECURECODE_TAG: ${{ steps.vars.outputs.tag }}
-        run: bun ./script/release-securecode.ts
+      # Disabled per #290 — public distribution paused while we revisit the
+      # "binary-only = code-secret" assumption.
+      # - name: Upload release assets to release repo
+      #   if: steps.token.outputs.available == 'true'
+      #   env:
+      #     GH_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
+      #     GH_REPO: ${{ env.RELEASE_REPO }}
+      #     OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
+      #     SECURECODE_TAG: ${{ steps.vars.outputs.tag }}
+      #   run: bun ./script/release-securecode.ts
