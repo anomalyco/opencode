@@ -691,10 +691,7 @@ async function highlightCodeBlocks(html: string): Promise<string> {
         return output
       })(),
       new Promise<string>((resolve) =>
-        setTimeout(() => {
-          console.warn(`[blank-diag] highlightCodeBlocks timeout after ${timeoutMs}ms, returning unhighlighted HTML`)
-          resolve(html)
-        }, timeoutMs),
+        setTimeout(() => resolve(html), timeoutMs),
       ),
     ])
     return result

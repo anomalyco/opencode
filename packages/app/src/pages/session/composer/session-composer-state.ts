@@ -11,6 +11,7 @@ import { useSync } from "@/context/sync"
 import { composerDriver, composerEnabled, composerEvent } from "@/testing/session-composer"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 import { working as sessionWorking } from "../session-working"
+import { markQuestionProfileUi } from "./session-question-profile"
 
 export const todoState = (input: {
   count: number
@@ -35,6 +36,16 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
     return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
+  })
+
+  createEffect(() => {
+    const request = questionRequest()
+    if (!request) return
+    markQuestionProfileUi("composer-request", request, {
+      route: params.id ?? "none",
+      sessions: sync.data.session.length,
+      pending: sync.data.question[request.sessionID]?.length ?? 0,
+    })
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {

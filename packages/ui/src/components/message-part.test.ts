@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { AssistantMessage, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
 import { groupParts, reasoningPartStreaming } from "./message-part-order"
 import { skillText } from "./message-skill"
-import { hold, streamsplit } from "./message-part-stream"
+import { activeStreamingAssistantMessageID, hold, streamsplit } from "./message-part-stream"
 
 function text(part: Partial<TextPart> = {}): TextPart {
   return {
@@ -189,5 +189,21 @@ describe("message-part streamsplit", () => {
       head: "Alpha $$x^2$$",
       tail: "Beta with enough text",
     })
+  })
+})
+
+describe("message-part activeStreamingAssistantMessageID", () => {
+  test("returns only the latest incomplete assistant message", () => {
+    expect(
+      activeStreamingAssistantMessageID([
+        assistant(2),
+        { ...assistant(), id: "msg_active_1", time: { created: 3 } },
+        { ...assistant(), id: "msg_active_2", time: { created: 4 } },
+      ]),
+    ).toBe("msg_active_2")
+  })
+
+  test("returns undefined when all assistant messages are completed", () => {
+    expect(activeStreamingAssistantMessageID([assistant(2), { ...assistant(3), id: "msg_2" }])).toBeUndefined()
   })
 })

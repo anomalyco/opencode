@@ -23,6 +23,7 @@ import {
   questionRequestNotFound,
   type QuestionImage as Image,
 } from "./session-question-dock-helpers"
+import { markQuestionProfileUi } from "./session-question-profile"
 
 function textPart(part: QuestionAnswer[number]): part is string {
   return typeof part === "string"
@@ -123,6 +124,40 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   onMount(() => {
+    const viewport = document.querySelector(".scroll-view__viewport") as HTMLElement | null
+    markQuestionProfileUi("question-dock-mount", props.request, {
+      questions: total(),
+      options: options().length,
+      cached: cached ? 1 : 0,
+      dockHeight: root ? Math.round(root.getBoundingClientRect().height) : "none",
+      viewportClient: viewport ? Math.round(viewport.clientHeight) : "none",
+      viewportScroll: viewport ? Math.round(viewport.scrollHeight) : "none",
+      viewportTop: viewport ? Math.round(viewport.scrollTop) : "none",
+    })
+    const mountAt = performance.now()
+    requestAnimationFrame(() => {
+      const nextViewport = document.querySelector(".scroll-view__viewport") as HTMLElement | null
+      markQuestionProfileUi("question-dock-raf1", props.request, {
+        mountToRafMs: Math.round(performance.now() - mountAt),
+        height: root ? Math.round(root.getBoundingClientRect().height) : "none",
+        dockHeight: root ? Math.round(root.getBoundingClientRect().height) : "none",
+        viewportClient: nextViewport ? Math.round(nextViewport.clientHeight) : "none",
+        viewportScroll: nextViewport ? Math.round(nextViewport.scrollHeight) : "none",
+        viewportTop: nextViewport ? Math.round(nextViewport.scrollTop) : "none",
+      })
+      requestAnimationFrame(() => {
+        const finalViewport = document.querySelector(".scroll-view__viewport") as HTMLElement | null
+        markQuestionProfileUi("question-dock-raf2", props.request, {
+          mountToRafMs: Math.round(performance.now() - mountAt),
+          height: root ? Math.round(root.getBoundingClientRect().height) : "none",
+          dockHeight: root ? Math.round(root.getBoundingClientRect().height) : "none",
+          viewportClient: finalViewport ? Math.round(finalViewport.clientHeight) : "none",
+          viewportScroll: finalViewport ? Math.round(finalViewport.scrollHeight) : "none",
+          viewportTop: finalViewport ? Math.round(finalViewport.scrollTop) : "none",
+        })
+      })
+    })
+
     let raf: number | undefined
     const update = () => {
       if (raf !== undefined) cancelAnimationFrame(raf)

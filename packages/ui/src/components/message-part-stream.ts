@@ -1,3 +1,15 @@
+import type { Message } from "@opencode-ai/sdk/v2"
+
+export function activeStreamingAssistantMessageID(messages: readonly Message[] | undefined) {
+  let active: string | undefined
+  for (const message of messages ?? []) {
+    if (message.role !== "assistant") continue
+    if (typeof message.time.completed === "number") continue
+    active = message.id
+  }
+  return active
+}
+
 function fence(line: string) {
   const match = line.match(/^( {0,3})(`{3,}|~{3,})/)
   if (!match) return

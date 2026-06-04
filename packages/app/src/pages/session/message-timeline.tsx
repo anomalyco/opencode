@@ -42,6 +42,8 @@ import { messageAgentColor } from "@/utils/agent"
 import { makeTimer } from "@solid-primitives/timer"
 import { Persist, persisted } from "@/utils/persist"
 import { apps, editor, getOpenPlan, manager, type OpenApp, type OS } from "@/components/session/open-app"
+import { markQuestionProfileTimeline } from "./composer/session-question-profile"
+import { sessionQuestionRequest } from "./composer/session-request-tree"
 import { active, working } from "./session-working"
 
 type MessageComment = {
@@ -73,7 +75,10 @@ const SPACER_SHIFT_WARN = 400
 const FOLLOW_SNAP_DISTANCE = 900
 const FOLLOW_MAX_STEP = 180
 const FOLLOW_EASE = 0.32
-const ANCHOR_WARN_COOLDOWN_MS = 3_000
+const VIEWPORT_SHRINK_SNAP = 120
+const VISIBLE_SHRINK_CONFIRM_MS = 80
+const QUESTION_SCROLL_SNAP_MS = 700
+const QUESTION_SHRINK_RELEASE_MS = QUESTION_SCROLL_SNAP_MS + 32
 
 const heightCacheKey = (sessionId: string, msgId: string, stage: string, signature: string) =>
   `opencode.h2.${signature}.${sessionId}.${msgId}.${stage}`
@@ -172,6 +177,16 @@ type Estimate = {
   math: number
   part: number
   tool: number
+}
+
+type PendingShrink = {
+  height: number
+  at: number
+}
+
+type RecentQuestionState = {
+  id: string
+  at: number
 }
 
 function mathMode(): MathMode {
@@ -365,12 +380,16 @@ export function MessageTimeline(props: {
   let lagMax = 0
   let mdWasDebug = false
   let windowAdjustVersion = 0
+  let lastFollowClientHeight = 0
   const turnHeights = new Map<string, number>()
   const [revision, setRevision] = createSignal(0)
   const [stageMark, setStageMark] = createSignal(0)
   const stageByTurn = new Map<string, Map<string, MarkdownStage>>()
   const upgraded = new Set<string>()
   const stageById = new Map<string, MarkdownStage>()
+  const pendingShrinkById = new Map<string, PendingShrink>()
+  const pendingShrinkReleaseById = new Map<string, ReturnType<typeof setTimeout>>()
+  let recentQuestion: RecentQuestionState | undefined
   let seq = 0
   let skipped = 0
   const sessionID = createMemo(() => params.id)
@@ -379,6 +398,7 @@ export function MessageTimeline(props: {
     if (!id) return emptyMessages
     return sync.data.message[id] ?? emptyMessages
   })
+  const questionRequest = createMemo(() => sessionQuestionRequest(sync.data.session, sync.data.question, sessionID()))
   const pref = createMemo(() => settings.general.shellToolPartsExpanded())
   const shell = createMemo(() => (platform.platform === "desktop" ? false : pref()))
   const heightSignature = createMemo(() =>
@@ -447,6 +467,28 @@ export function MessageTimeline(props: {
     return map
   })
 
+  createEffect(() => {
+    const request = questionRequest()
+    if (!request) {
+      recentQuestion = undefined
+      return
+    }
+    if (recentQuestion?.id === request.id) return
+    recentQuestion = { id: request.id, at: performance.now() }
+    markQuestionProfileTimeline("question-open", {
+      request: request.id,
+      questions: request.questions.length,
+    })
+  })
+
+  const questionSettling = () => {
+    const request = questionRequest()
+    if (!request) return false
+    const recent = recentQuestion
+    if (!recent || recent.id !== request.id) return true
+    return performance.now() - recent.at < QUESTION_SCROLL_SNAP_MS
+  }
+
   const follow = (root: HTMLDivElement, src: string, mode: "smooth" | "auto" = "smooth") => {
     if (props.hasScrollGesture()) {
       const now = Date.now()
@@ -459,22 +501,79 @@ export function MessageTimeline(props: {
 
     const top = Math.max(0, root.scrollHeight - root.clientHeight)
     const dist = top - root.scrollTop
+    const clientDelta = lastFollowClientHeight ? root.clientHeight - lastFollowClientHeight : 0
+    lastFollowClientHeight = root.clientHeight
+    const viewportShrank = clientDelta <= -VIEWPORT_SHRINK_SNAP
+    const settlingForQuestion = questionSettling()
+    const snapForQuestion = settlingForQuestion && mode === "smooth"
     if (Math.abs(dist) <= 1) {
       root.scrollTop = top
+      if (settlingForQuestion && src === "frame") return
       props.onScheduleScrollState(root)
+      markQuestionProfileTimeline("follow-settle", {
+        source: src,
+        mode,
+        top: Math.round(top),
+        scrollTop: Math.round(root.scrollTop),
+        scrollHeight: Math.round(root.scrollHeight),
+        clientHeight: Math.round(root.clientHeight),
+        dist: Math.round(dist),
+      })
       return
     }
 
-    if (mode === "auto" || Math.abs(dist) > FOLLOW_SNAP_DISTANCE) {
+    if (mode === "auto" || snapForQuestion || viewportShrank || Math.abs(dist) > FOLLOW_SNAP_DISTANCE) {
       root.scrollTop = top
       props.onScheduleScrollState(root)
+      markQuestionProfileTimeline(
+        snapForQuestion ? "follow-question-snap" : viewportShrank ? "follow-snap-viewport-shrink" : "follow-snap",
+        {
+          source: src,
+          mode,
+          top: Math.round(top),
+          scrollTop: Math.round(root.scrollTop),
+          scrollHeight: Math.round(root.scrollHeight),
+          clientHeight: Math.round(root.clientHeight),
+          clientDelta: Math.round(clientDelta),
+          dist: Math.round(dist),
+        },
+      )
       return
     }
 
     const step = Math.sign(dist) * Math.min(Math.max(Math.abs(dist) * FOLLOW_EASE, 1), FOLLOW_MAX_STEP)
     root.scrollTop += step
     props.onScheduleScrollState(root)
+    markQuestionProfileTimeline("follow-step", {
+      source: src,
+      mode,
+      top: Math.round(top),
+      scrollTop: Math.round(root.scrollTop),
+      scrollHeight: Math.round(root.scrollHeight),
+      clientHeight: Math.round(root.clientHeight),
+      clientDelta: Math.round(clientDelta),
+      dist: Math.round(dist),
+      step: Math.round(step),
+    })
   }
+
+  let snappedQuestionId: string | undefined
+  createEffect(() => {
+    const request = questionRequest()
+    if (!request) {
+      snappedQuestionId = undefined
+      return
+    }
+    if (snappedQuestionId === request.id) return
+    snappedQuestionId = request.id
+    requestAnimationFrame(() => {
+      if (questionRequest()?.id !== request.id) return
+      const root = viewport
+      if (!root) return
+      follow(root, "question-open", "auto")
+    })
+  })
+
   const estimateTurnHeight = (id: string) => {
     const runtime = turnHeights.get(id)
     const sid = sessionID()
@@ -774,7 +873,6 @@ export function MessageTimeline(props: {
   })
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
-  const anchorWarnAt = new Map<string, number>()
 
   const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
     if (isWorking()) return "showing"
@@ -788,17 +886,6 @@ export function MessageTimeline(props: {
     setTimeoutDone(false)
     makeTimer(() => setTimeoutDone(true), 260, setTimeout)
   })
-
-  const warnAbnormalAnchor = (kind: "window" | "message", id: string, top: number, threshold: number) => {
-    const key = `${kind}:${id}`
-    const now = performance.now()
-    const prev = anchorWarnAt.get(key) ?? 0
-    if (now - prev < ANCHOR_WARN_COOLDOWN_MS) return
-    anchorWarnAt.set(key, now)
-    console.warn(
-      `[capture${kind === "window" ? "Window" : "Message"}Anchor] ABNORMAL anchor position: id=${id} top=${top.toFixed(2)} threshold=${threshold.toFixed(2)} - DOM may not be ready, skipping anchor`,
-    )
-  }
 
   const captureWindowAnchor = () => {
     const root = viewport
@@ -815,7 +902,6 @@ export function MessageTimeline(props: {
     // Detect abnormal anchor position (likely DOM not ready after session switch)
     const abnormalThreshold = root.clientHeight * 10 // 10x viewport height
     if (Math.abs(anchorTop) > abnormalThreshold) {
-      warnAbnormalAnchor("window", visible.dataset.messageId, anchorTop, abnormalThreshold)
       return undefined
     }
 
@@ -836,7 +922,6 @@ export function MessageTimeline(props: {
 
     const abnormalThreshold = root.clientHeight * 10
     if (Math.abs(anchorTop) > abnormalThreshold) {
-      warnAbnormalAnchor("message", id, anchorTop, abnormalThreshold)
       return undefined
     }
 
@@ -1061,11 +1146,6 @@ export function MessageTimeline(props: {
     const pinned = streaming && !props.seekingMessageId && !!before && before.gap <= 16
     const jumping = props.jumpToBottomIntent()
 
-    if (isWorking() && !streaming && !seek) {
-      console.warn(
-        `[blank-diag] applyWindow during working (user scrolled): live=${props.live} canWindow=${canWindow()} deferredWorking=${deferredWorking()} gesture=${props.hasScrollGesture()} scrollTop=${before?.top ?? "none"} gap=${before?.gap ?? "none"} window=[${windowed.start},${windowed.end}] visible=${visibleRendered().length} rendered=${rendered().length} time=${performance.now().toFixed(1)}`,
-      )
-    }
     const viewportAnchor = (pinned || jumping) ? undefined : captureWindowAnchor()
     const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
     const targetAnchor = captureMessageAnchor(targetId)
@@ -1121,6 +1201,15 @@ export function MessageTimeline(props: {
         follow(root, "window:streaming", "smooth")
         const after = snap(root)
         seq += 1
+        markQuestionProfileTimeline("stream-follow", {
+          pinned,
+          beforeGap: before.gap,
+          afterGap: after.gap,
+          beforeTop: before.top,
+          afterTop: after.top,
+          clientHeight: before.client,
+          scrollHeight: before.height,
+        })
         console.debug(
           `[timeline] streaming window bottom follow before=${before.gap} after=${after.gap} pinned=${pinned}`,
         )
@@ -1209,20 +1298,6 @@ export function MessageTimeline(props: {
     const ids = rendered()
     if (!canWindow()) return ids
     return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
-  })
-
-  let prevVisibleCount = 0
-  createEffect(() => {
-    const count = visibleRendered().length
-    const total = rendered().length
-    if (prevVisibleCount !== 0 && count !== prevVisibleCount && isWorking()) {
-      const root = viewport
-      const data = root ? snap(root) : undefined
-      console.warn(
-        `[blank-diag] visibleRendered changed during streaming: ${prevVisibleCount}→${count} total=${total} canWindow=${canWindow()} deferredWorking=${deferredWorking()} live=${props.live} window=[${windowed.start},${windowed.end}] scrollTop=${data?.top ?? "none"} gap=${data?.gap ?? "none"} gesture=${props.hasScrollGesture()} time=${performance.now().toFixed(1)}`,
-      )
-    }
-    prevVisibleCount = count
   })
 
   const turnStage = (id: string): MarkdownStage => {
@@ -1314,6 +1389,13 @@ export function MessageTimeline(props: {
     }
 
     follow(root, source, "smooth")
+    markQuestionProfileTimeline("pin", {
+      source,
+      dist: Math.round(dist),
+      top: Math.round(root.scrollTop),
+      scrollHeight: Math.round(root.scrollHeight),
+      clientHeight: Math.round(root.clientHeight),
+    })
     console.debug(
       `[timeline] bottom pin: source=${source} dist=${Math.round(dist)} top=${Math.round(root.scrollTop)} scrollHeight=${Math.round(root.scrollHeight)} clientHeight=${Math.round(root.clientHeight)}`,
     )
@@ -1335,6 +1417,12 @@ export function MessageTimeline(props: {
       for (const id of turnHeights.keys()) {
         if (!ids.has(id)) {
           turnHeights.delete(id)
+          pendingShrinkById.delete(id)
+          const release = pendingShrinkReleaseById.get(id)
+          if (release !== undefined) {
+            clearTimeout(release)
+            pendingShrinkReleaseById.delete(id)
+          }
           changed = true
         }
       }
@@ -1390,6 +1478,7 @@ export function MessageTimeline(props: {
     if (!isWorking()) return
     if (props.seekingMessageId) return
     if (!props.live) return
+    if (questionRequest()) return
 
     const step = () => {
       bottomFrame = undefined
@@ -1398,6 +1487,7 @@ export function MessageTimeline(props: {
       if (!isWorking()) return
       if (props.seekingMessageId) return
       if (!props.live) return
+      if (questionRequest()) return
       follow(root, "frame")
       bottomFrame = requestAnimationFrame(step)
     }
@@ -1417,6 +1507,8 @@ export function MessageTimeline(props: {
     if (pinFrame !== undefined) cancelAnimationFrame(pinFrame)
     if (blank !== undefined) cancelAnimationFrame(blank)
     if (idleTimer !== undefined) clearTimeout(idleTimer)
+    for (const release of pendingShrinkReleaseById.values()) clearTimeout(release)
+    pendingShrinkReleaseById.clear()
   })
 
   createEffect(() => {
@@ -1440,6 +1532,7 @@ export function MessageTimeline(props: {
     if (!isWorking()) return
     if (props.seekingMessageId) return
     if (!props.live) return
+    if (questionRequest()) return
 
     let queued = false
     const flush = () => {
@@ -1450,6 +1543,7 @@ export function MessageTimeline(props: {
       if (!isWorking()) return
       if (props.seekingMessageId) return
       if (!props.live) return
+      if (questionRequest()) return
       follow(root, "mutation")
     }
     const schedule = () => {
@@ -2284,12 +2378,6 @@ export function MessageTimeline(props: {
             props.onScheduleScrollState(e.currentTarget)
             audit("scroll")
             const gesture = props.hasScrollGesture()
-            if (gesture && isWorking() && !props.live && (windowed.top > 0 || windowed.bottom > 0)) {
-              const data = snap(root)
-              console.warn(
-                `[blank-diag] scroll during streaming with spacers: canWindow=${canWindow()} shouldWin=${shouldWin} visible=${visibleRendered().length} rendered=${rendered().length} scrollTop=${data.top} gap=${data.gap} spacerTop=${windowed.top} spacerBottom=${windowed.bottom} window=[${windowed.start},${windowed.end}]`,
-              )
-            }
             // Programmatic scroll corrections also emit scroll events. Only let
             // real user gestures drive the auto-scroll state machine, otherwise
             // streaming or anchor correction gets misclassified as manual exit
@@ -2423,13 +2511,66 @@ export function MessageTimeline(props: {
         return
       }
       if (prev !== undefined && Math.abs(prev - next) <= 1) return
+      const isVisible = visible(node)
+      const delta = prev === undefined ? 0 : Math.round(next - prev)
+      if (prev !== undefined && isVisible && isWorking() && !seek() && delta < -HEIGHT_SHIFT_WARN) {
+        if (questionSettling()) {
+          node.style.minHeight = `${Math.round(prev)}px`
+          pendingShrinkById.set(item.messageID, { height: next, at: time })
+          const existingRelease = pendingShrinkReleaseById.get(item.messageID)
+          if (existingRelease !== undefined) clearTimeout(existingRelease)
+          const release = setTimeout(() => {
+            pendingShrinkReleaseById.delete(item.messageID)
+            if (rootRef) rootRef.style.minHeight = ""
+          }, QUESTION_SHRINK_RELEASE_MS)
+          pendingShrinkReleaseById.set(item.messageID, release)
+          markQuestionProfileTimeline("measure-shrink-freeze-question", {
+            message: item.messageID,
+            prev: Math.round(prev),
+            next: Math.round(next),
+            delta,
+            visible: true,
+          })
+          return
+        }
+        const existingRelease = pendingShrinkReleaseById.get(item.messageID)
+        if (existingRelease !== undefined) {
+          clearTimeout(existingRelease)
+          pendingShrinkReleaseById.delete(item.messageID)
+        }
+        const pending = pendingShrinkById.get(item.messageID)
+        if (!pending || Math.abs(pending.height - next) > 1) {
+          pendingShrinkById.set(item.messageID, { height: next, at: time })
+          markQuestionProfileTimeline("measure-shrink-pending", {
+            message: item.messageID,
+            prev: Math.round(prev),
+            next: Math.round(next),
+            delta,
+            visible: true,
+          })
+          return
+        }
+        if (time - pending.at < VISIBLE_SHRINK_CONFIRM_MS) {
+          markQuestionProfileTimeline("measure-shrink-wait", {
+            message: item.messageID,
+            prev: Math.round(prev),
+            next: Math.round(next),
+            delta,
+            waitMs: Math.round(time - pending.at),
+            visible: true,
+          })
+          return
+        }
+        pendingShrinkById.delete(item.messageID)
+      } else {
+        pendingShrinkById.delete(item.messageID)
+      }
       turnHeights.set(item.messageID, next)
       if (rootRef && rootRef.style.minHeight) rootRef.style.minHeight = ""
       const sid = sessionID()
       const bucket = stageOf(item.messageID)
       if (sid) writeHeightCache(sid, item.messageID, bucket, heightSignature(), next)
       setRevision((value) => value + 1)
-      const delta = prev === undefined ? 0 : Math.round(next - prev)
       seq += 1
 
       // Compensate scroll when a turn above the viewport grows (e.g. KaTeX
@@ -2453,6 +2594,14 @@ export function MessageTimeline(props: {
       }
       scheduleWindow()
       schedulePin("turn-measure")
+      markQuestionProfileTimeline("measure", {
+        message: item.messageID,
+        prev: prev === undefined ? "none" : Math.round(prev),
+        next: Math.round(next),
+        delta,
+        took: Math.round(performance.now() - time),
+        visible: isVisible,
+      })
       const took = performance.now() - time
       if (seek() && took > MEASURE_WARN_MS) {
         trace("measure-slow", item.messageID, `height=${Math.round(next)} took=${Math.round(took)}`)

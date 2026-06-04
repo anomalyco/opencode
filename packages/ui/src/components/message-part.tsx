@@ -65,12 +65,77 @@ import {
   reasoningPartStreaming,
   type PartGroup,
 } from "./message-part-order"
+import { activeStreamingAssistantMessageID } from "./message-part-stream"
 export type { PartGroup } from "./message-part-order"
 
 type ProviderSummary = {
   id?: string
   name?: string
   models?: Record<string, { name?: string } | undefined>
+}
+
+type QuestionProfileTextMark = {
+  at: number
+  messageID: string
+  partID: string
+  length: number
+  source: string
+}
+
+function questionProfileEnabled() {
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem("opencode.question.profile") === "1"
+  } catch {
+    return false
+  }
+}
+
+function questionProfileNow() {
+  if (typeof performance === "undefined") return Date.now()
+  return performance.now()
+}
+
+function questionProfileGlobal() {
+  if (typeof window === "undefined") return
+  return (
+    window as Window & {
+      __opencodeQuestionProfile?: {
+        lastTextBySession?: Record<string, QuestionProfileTextMark | undefined>
+        seen?: Record<string, boolean | undefined>
+      }
+    }
+  ).__opencodeQuestionProfile
+}
+
+function questionProfileEmit(
+  phase: string,
+  part: ToolPart,
+  fields: Record<string, string | number | boolean | undefined> = {},
+) {
+  if (!questionProfileEnabled()) return
+  const global = questionProfileGlobal()
+  const text = global?.lastTextBySession?.[part.sessionID]
+  const key = `ui:${phase}:${part.id}:${part.state.status}`
+  if (global?.seen?.[key]) return
+  if (global?.seen) global.seen[key] = true
+  const line = Object.entries({
+    session: part.sessionID,
+    message: part.messageID,
+    part: part.id,
+    call: part.callID,
+    status: part.state.status,
+    sinceTextMs: text ? Math.round(questionProfileNow() - text.at) : "none",
+    textMsg: text?.messageID ?? "none",
+    textPart: text?.partID ?? "none",
+    textLen: text?.length ?? "none",
+    textSource: text?.source ?? "none",
+    ...fields,
+  })
+    .filter((entry) => entry[1] !== undefined)
+    .map(([name, value]) => `${name}=${String(value)}`)
+    .join(" ")
+  console.warn(`[question-profile] phase=ui:${phase} t=${questionProfileNow().toFixed(1)} ${line}`)
 }
 
 function providerByID(all: unknown, providerID: string): ProviderSummary | undefined {
@@ -1469,6 +1534,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   if (tool === "todowrite" || tool === "todoread") return null
 
   const hideQuestion = createMemo(() => tool === "question" && part().state.status === "pending")
+  createEffect(() => {
+    if (tool !== "question") return
+    const current = part()
+    questionProfileEmit(hideQuestion() ? "tool-hidden" : "tool-visible", current, {
+      hidden: hideQuestion(),
+      hasQuestions: Array.isArray(current.state.input.questions),
+      questions: Array.isArray(current.state.input.questions) ? current.state.input.questions.length : "none",
+    })
+  })
 
   const emptyMetadata: Record<string, any> = {}
 
@@ -1642,6 +1716,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
       .at(-1)
     return last?.id === part.id
   })
+  const activeStreaming = createMemo(() => {
+    if (!streaming()) return false
+    const messages = data.store.message?.[props.message.sessionID]
+    const active = activeStreamingAssistantMessageID(messages)
+    return !messages || active === undefined || active === props.message.id
+  })
   const end = createMemo(() => {
     const parts = data.store.part?.[props.message.id] ?? []
     const index = parts.findIndex((item) => item.id === part.id)
@@ -1654,29 +1734,21 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     }
     return true
   })
-  const renderText = createLiveText(displayText, () => streaming() && isLastTextPart())
+  const liveText = createMemo(() => streaming() && activeStreaming() && isLastTextPart())
+  const renderText = createLiveText(displayText, liveText)
   let prev = displayText().length
   let last = isLastTextPart()
   let live = streaming()
 
   createEffect(() => {
     const len = displayText().length
-    const tail = clip(displayText())
     if (len < prev) {
-      console.warn(`[text-part] text rollback msg=${props.message.id} part=${part.id} prev=${prev} next=${len} tail=${tail}`)
-    }
-
-    const nextLast = isLastTextPart()
-    const nextLive = streaming()
-    if (nextLast !== last || nextLive !== live) {
-      console.debug(
-        `[text-part] stream mode msg=${props.message.id} part=${part.id} len=${len} last=${nextLast} streaming=${nextLive} tail=${tail}`,
-      )
+      console.warn(`[text-part] text rollback msg=${props.message.id} part=${part.id} prev=${prev} next=${len} tail=${clip(displayText())}`)
     }
 
     prev = len
-    last = nextLast
-    live = nextLive
+    last = isLastTextPart()
+    live = streaming()
   })
 
   const body = createMemo(() => renderText())
@@ -1685,7 +1757,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return parseGenericAgentToolText(body())
   })
   const hasGenericAgentToolSegments = createMemo(() => genericAgentSegments().some((segment) => segment.type === "tool"))
-  const plain = createMemo(() => streaming() && isLastTextPart() && end())
+  const plain = createMemo(() => liveText() && end())
   const showCopy = createMemo(() => {
     if (props.message.role !== "assistant") return isLastTextPart()
     if (props.showAssistantCopyPartID === null) return false
@@ -1716,7 +1788,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                 onStage={props.onMarkdownStage}
                 plain={plain()}
                 streaming={plain()}
-                instant={streaming()}
+                instant={liveText()}
                 eager={props.markdownEager}
                 viewport={props.markdownViewport}
                 highlight={props.markdownHighlight}

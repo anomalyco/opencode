@@ -782,9 +782,6 @@ export function Markdown(
       if (key && input.hash) {
         const hit = cache.get(key)
         if (hit && hit.hash === input.hash) {
-          if (!hit.html) {
-            console.warn(`[blank-diag] markdown cache hit with empty html: key=${key} text=${input.markdown.length}`)
-          }
           touch(key, hit)
           mark("cache-hit", {
             key: input.cacheKey ?? input.key,
@@ -821,12 +818,7 @@ export function Markdown(
         rendered = await Promise.race([
           renderPromise,
           new Promise<string>((resolve) =>
-            setTimeout(() => {
-              console.warn(
-                `[blank-diag] markdown parse timeout: key=${input.cacheKey ?? input.key ?? ""} mode=${input.mode} text=${input.markdown.length} timeout=${PARSE_TIMEOUT_MS}`,
-              )
-              resolve(fallback(input.normalized))
-            }, PARSE_TIMEOUT_MS),
+            setTimeout(() => resolve(fallback(input.normalized)), PARSE_TIMEOUT_MS),
           ),
         ])
       }
@@ -977,11 +969,6 @@ export function Markdown(
     })
 
     if (!content) {
-      if (local.text.length > 0) {
-        console.warn(
-          `[blank-diag] markdown empty html with non-empty text: key=${local.cacheKey ?? ""} text=${local.text.length} stage=${stage()} eager=${eager()} visible=${visible()} mode=${mode()} streaming=${!!local.streaming} loading=${html.loading} error=${html.error?.message ?? "none"} time=${performance.now().toFixed(1)}`,
-        )
-      }
       container.innerHTML = ""
       delete container.dataset.html
       return

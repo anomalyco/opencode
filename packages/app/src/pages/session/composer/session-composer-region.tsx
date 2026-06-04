@@ -13,6 +13,7 @@ import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 import type { FollowupDraft } from "@/components/prompt-input/submit"
+import { markQuestionProfileUi } from "./session-question-profile"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
@@ -114,6 +115,19 @@ export function SessionComposerRegion(props: {
   const full = createMemo(() => Math.max(78, store.height))
 
   createEffect(() => {
+    const request = props.state.questionRequest()
+    if (!request) return
+    markQuestionProfileUi("composer-region", request, {
+      ready: store.ready,
+      propsReady: props.ready,
+      blocked: props.state.blocked(),
+      dock: props.state.dock(),
+      closing: props.state.closing(),
+      promptReady: prompt.ready(),
+    })
+  })
+
+  createEffect(() => {
     const el = store.body
     if (!el) return
     let raf: number | undefined
@@ -148,7 +162,13 @@ export function SessionComposerRegion(props: {
       >
         <Show when={props.state.questionRequest()} keyed>
           {(request) => (
-            <div>
+            <div
+              ref={(el) => {
+                markQuestionProfileUi("question-wrapper-ref", request, {
+                  height: Math.round(el.getBoundingClientRect().height),
+                })
+              }}
+            >
               <SessionQuestionDock request={request} onSubmit={props.onResponseSubmit} />
             </div>
           )}
