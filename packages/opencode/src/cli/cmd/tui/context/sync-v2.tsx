@@ -431,7 +431,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
 
     event.subscribe((event) => {
       if (duplicate(event.id)) return
-      if ("sessionID" in event.properties) buffering.get(event.properties.sessionID)?.push(event)
+      if ("sessionID" in event.properties && typeof event.properties.sessionID === "string")
+        buffering.get(event.properties.sessionID)?.push(event)
       apply(event)
     })
 
