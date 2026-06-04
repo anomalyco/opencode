@@ -82,7 +82,11 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
     if (abortSignals.length === 1) opts.signal = abortSignals[0]
     if (abortSignals.length > 1) opts.signal = AbortSignal.any(abortSignals)
 
-    if ((pkg === "@ai-sdk/openai" || pkg === "@ai-sdk/azure") && opts.body && opts.method === "POST") {
+    if (
+      (pkg === "@ai-sdk/openai" || pkg === "@ai-sdk/azure" || pkg === "@ai-sdk/amazon-bedrock/mantle") &&
+      opts.body &&
+      opts.method === "POST"
+    ) {
       const body = JSON.parse(opts.body as string)
       if (body.store !== true && Array.isArray(body.input)) {
         for (const item of body.input) {

@@ -1,6 +1,13 @@
 import { Effect } from "effect"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { PluginV2 } from "../../plugin"
 import { ProviderV2 } from "../../provider"
+
+type MantleSDK = {
+  languageModel: (modelID: string) => LanguageModelV3
+  chat: (modelID: string) => LanguageModelV3
+  responses: (modelID: string) => LanguageModelV3
+}
 
 // Bedrock cross-region inference profiles require regional prefixes only for
 // specific model/region combinations. Keep the mapping narrow and avoid
@@ -46,6 +53,12 @@ function resolveModelID(modelID: string, region: string | undefined) {
     : modelID
 }
 
+function selectMantleModel(sdk: MantleSDK, modelID: string) {
+  if (modelID === "openai.gpt-oss-safeguard-20b" || modelID === "openai.gpt-oss-safeguard-120b")
+    return sdk.chat(modelID)
+  return sdk.responses(modelID)
+}
+
 export const AmazonBedrockPlugin = PluginV2.define({
   id: PluginV2.ID.make("amazon-bedrock"),
   effect: Effect.gen(function* () {
@@ -65,7 +78,7 @@ export const AmazonBedrockPlugin = PluginV2.define({
         }
       }),
       "aisdk.sdk": Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/amazon-bedrock") return
+        if (!["@ai-sdk/amazon-bedrock", "@ai-sdk/amazon-bedrock/mantle"].includes(evt.package)) return
         const options = { ...evt.options }
         const profile = typeof options.profile === "string" ? options.profile : process.env.AWS_PROFILE
         const region = typeof options.region === "string" ? options.region : (process.env.AWS_REGION ?? "us-east-1")
@@ -86,11 +99,21 @@ export const AmazonBedrockPlugin = PluginV2.define({
           options.credentialProvider = fromNodeProviderChain(profile ? { profile } : {})
         }
 
+        if (evt.package === "@ai-sdk/amazon-bedrock/mantle") {
+          const mod = yield* Effect.promise(() => import("@ai-sdk/amazon-bedrock/mantle"))
+          evt.sdk = mod.createBedrockMantle(options)
+          return
+        }
+
         const mod = yield* Effect.promise(() => import("@ai-sdk/amazon-bedrock"))
         evt.sdk = mod.createAmazonBedrock(options)
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
+        if (evt.model.api.type === "aisdk" && evt.model.api.package === "@ai-sdk/amazon-bedrock/mantle") {
+          evt.language = selectMantleModel(evt.sdk, evt.model.api.id)
+          return
+        }
         const region = typeof evt.options.region === "string" ? evt.options.region : process.env.AWS_REGION
         evt.language = evt.sdk.languageModel(resolveModelID(evt.model.api.id, region))
       }),
