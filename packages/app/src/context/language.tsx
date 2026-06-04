@@ -25,6 +25,7 @@ export type Locale =
   | "th"
   | "bs"
   | "tr"
+  | "it"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
@@ -53,6 +54,7 @@ const LOCALES: readonly Locale[] = [
   "br",
   "th",
   "tr",
+  "it",
 ]
 
 const INTL: Record<Locale, string> = {
@@ -74,6 +76,7 @@ const INTL: Record<Locale, string> = {
   th: "th",
   bs: "bs",
   tr: "tr",
+  it: "it",
 }
 
 const LABEL_KEY: Record<Locale, keyof Dictionary> = {
@@ -95,6 +98,7 @@ const LABEL_KEY: Record<Locale, keyof Dictionary> = {
   th: "language.th",
   bs: "language.bs",
   tr: "language.tr",
+  it: "language.it",
 }
 
 const base = i18n.flatten({ ...en, ...uiEn })
@@ -121,6 +125,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   th: () => merge(import("@/i18n/th"), import("@opencode-ai/ui/i18n/th")),
   bs: () => merge(import("@/i18n/bs"), import("@opencode-ai/ui/i18n/bs")),
   tr: () => merge(import("@/i18n/tr"), import("@opencode-ai/ui/i18n/tr")),
+  it: () => merge(import("@/i18n/it"), import("@opencode-ai/ui/i18n/it")),
 }
 
 function loadDict(locale: Locale) {
@@ -160,6 +165,7 @@ const localeMatchers: Array<{ locale: Locale; match: (language: string) => boole
   { locale: "th", match: (language) => language.startsWith("th") },
   { locale: "bs", match: (language) => language.startsWith("bs") },
   { locale: "tr", match: (language) => language.startsWith("tr") },
+  { locale: "it", match: (language) => language.startsWith("it") },
 ]
 
 function detectLocale(): Locale {
