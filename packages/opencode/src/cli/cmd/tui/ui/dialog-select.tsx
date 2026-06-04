@@ -66,6 +66,7 @@ export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
   selected: DialogSelectOption<T> | undefined
+  moveTo(value: T): void
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -341,6 +342,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     get selected() {
       return selected()
     },
+    moveTo(value) {
+      const index = flat().findIndex((option) => isDeepEqual(option.value, value))
+      if (index >= 0) moveTo(index, true)
+    },
   }
   props.ref?.(ref)
 
@@ -551,7 +556,7 @@ function Option(props: {
           ●
         </text>
       </Show>
-      <Show when={!props.current && props.gutter}>
+      <Show when={props.gutter}>
         <box flexShrink={0} marginRight={0}>
           {props.gutter?.()}
         </box>
