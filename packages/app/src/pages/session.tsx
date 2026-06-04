@@ -467,8 +467,6 @@ export default function Page() {
     return {
       queryKey: [...vcsKey(), mode] as const,
       enabled,
-      staleTime: Number.POSITIVE_INFINITY,
-      gcTime: 60 * 1000,
       queryFn: mode
         ? () =>
             sdk.client.vcs
