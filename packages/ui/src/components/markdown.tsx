@@ -15,6 +15,7 @@ type Entry = {
 
 const max = 200
 const cache = new Map<string, Entry>()
+const imageCache = new Map<string, Promise<string | undefined>>()
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
@@ -335,15 +336,22 @@ export function Markdown(
 
     const resolver = useLocalImageResolver()
     if (resolver && local.directory) {
+      let alive = true
       for (const img of container.querySelectorAll<HTMLImageElement>("[data-local-image]")) {
-        const path = img.getAttribute("data-local-image")
-        if (!path || img.src) continue
-        resolver(path, local.directory)
+        const imgPath = img.getAttribute("data-local-image")
+        if (!imgPath || img.hasAttribute("data-local-image-resolved")) continue
+        img.setAttribute("data-local-image-resolved", "")
+        const cacheKey = `${local.directory}\0${imgPath}`
+        const pending = imageCache.get(cacheKey) ?? resolver(imgPath, local.directory)
+        imageCache.set(cacheKey, pending)
+        pending
           .then((dataUri) => {
-            if (dataUri) img.src = dataUri
+            if (!alive || !img.isConnected || !dataUri) return
+            img.src = dataUri
           })
           .catch(() => {})
       }
+      onCleanup(() => { alive = false })
     }
   })
 

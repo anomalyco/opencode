@@ -70,14 +70,17 @@ function UiI18nBridge(props: ParentProps) {
 function LocalImageResolverProvider(props: ParentProps) {
   const serverSDK = useServerSDK()
   const resolver: LocalImageResolver = async (rawPath, directory) => {
+    if (!directory) return undefined
+    if (!rawPath || /(^|[/\\])\.\.([/\\]|$)/.test(rawPath)) return undefined
     try {
-      if (!directory) return undefined
       const client = serverSDK.createClient({ directory, throwOnError: true })
       const resp = await client.file.read({ path: rawPath })
       if (resp.data?.type === "binary" && resp.data.encoding === "base64" && resp.data.mimeType) {
         return `data:${resp.data.mimeType};base64,${resp.data.content}`
       }
-    } catch {}
+    } catch (err) {
+      if (import.meta.env.DEV) console.warn("[local-image] failed to resolve", rawPath, err)
+    }
     return undefined
   }
   return <LocalImageProvider value={resolver}>{props.children}</LocalImageProvider>
