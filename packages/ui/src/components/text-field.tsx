@@ -52,6 +52,7 @@ export function TextField(props: TextFieldProps) {
     "copyable",
     "copyKind",
     "multiline",
+    "autofocus",
   ])
   const [copied, setCopied] = createSignal(false)
 
@@ -101,9 +102,22 @@ export function TextField(props: TextFieldProps) {
       <div data-slot="input-wrapper">
         <Show
           when={local.multiline}
-          fallback={<Kobalte.Input {...others} data-slot="input-input" class={local.class} />}
+          fallback={
+            <Kobalte.Input
+              {...others}
+              data-autofocus={local.autofocus ? "" : undefined}
+              data-slot="input-input"
+              class={local.class}
+            />
+          }
         >
-          <Kobalte.TextArea {...others} autoResize data-slot="input-input" class={local.class} />
+          <Kobalte.TextArea
+            {...others}
+            autoResize
+            data-autofocus={local.autofocus ? "" : undefined}
+            data-slot="input-input"
+            class={local.class}
+          />
         </Show>
         <Show when={local.copyable}>
           <Tooltip value={label()} placement="top" gutter={4} forceOpen={copied()} skipDelayDuration={0}>

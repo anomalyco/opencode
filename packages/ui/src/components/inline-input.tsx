@@ -6,7 +6,7 @@ export type InlineInputProps = ComponentProps<"input"> & {
 }
 
 export function InlineInput(props: InlineInputProps) {
-  const [local, others] = splitProps(props, ["class", "width", "style"])
+  const [local, others] = splitProps(props, ["class", "width", "style", "autofocus"])
 
   const style = () => {
     if (!local.style) return { width: local.width }
@@ -18,5 +18,13 @@ export function InlineInput(props: InlineInputProps) {
     return { ...local.style, width: local.width }
   }
 
-  return <input data-component="inline-input" class={local.class} style={style()} {...others} />
+  return (
+    <input
+      data-autofocus={local.autofocus ? "" : undefined}
+      data-component="inline-input"
+      class={local.class}
+      style={style()}
+      {...others}
+    />
+  )
 }
