@@ -122,6 +122,8 @@ export const SessionMessageTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionMessage.Type>().notNull(),
+    // Immutable sequence of the durable event that first projected this row.
+    // Later events may update row data but never move it through the transcript.
     seq: integer().notNull(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<SessionMessageData>(),
