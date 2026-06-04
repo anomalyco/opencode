@@ -1,7 +1,9 @@
+import path from "node:path"
 import { expect, mock, beforeEach } from "bun:test"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
+import { TestInstance } from "../fixture/fixture"
 
 // --- Mock infrastructure ---
 
@@ -29,6 +31,8 @@ let connectError = "Mock transport cannot connect"
 let clientCreateCount = 0
 // Tracks how many times transport.close() is called across all mock transports
 let transportCloseCount = 0
+// Captures the opts passed to the most recently constructed MockStdioTransport
+let lastStdioOpts: any | undefined
 
 function getOrCreateClientState(name?: string): MockClientState {
   const key = name ?? "default"
@@ -56,8 +60,9 @@ function getOrCreateClientState(name?: string): MockClientState {
 class MockStdioTransport {
   stderr: null = null
   pid = 12345
-  // oxlint-disable-next-line no-useless-constructor
-  constructor(_opts: any) {}
+  constructor(opts: any) {
+    lastStdioOpts = opts
+  }
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
     if (connectShouldFail) throw new Error(connectError)
@@ -187,6 +192,54 @@ function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server:
   if ("status" in status) return status.status
   return status[server]?.status
 }
+
+// ========================================================================
+// Test: local mcp `cwd` resolves against the instance directory
+// ========================================================================
+
+it.instance(
+  "local mcp cwd defaults to instance directory when omitted",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        lastCreatedClientName = "no-cwd"
+        lastStdioOpts = undefined
+        yield* mcp.add("no-cwd", { type: "local", command: ["echo", "test"] })
+        expect(lastStdioOpts?.cwd).toBe(directory)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "local mcp cwd resolves relative paths against instance directory",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        lastCreatedClientName = "rel-cwd"
+        lastStdioOpts = undefined
+        yield* mcp.add("rel-cwd", { type: "local", command: ["echo", "test"], cwd: "plugins/sub" })
+        expect(lastStdioOpts?.cwd).toBe(path.resolve(directory, "plugins/sub"))
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "local mcp cwd passes through absolute paths",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "abs-cwd"
+        lastStdioOpts = undefined
+        yield* mcp.add("abs-cwd", { type: "local", command: ["echo", "test"], cwd: "/tmp/abs-path" })
+        expect(lastStdioOpts?.cwd).toBe("/tmp/abs-path")
+      }),
+    ),
+  { config: { mcp: {} } },
+)
 
 // ========================================================================
 // Test: tools() are cached after connect
