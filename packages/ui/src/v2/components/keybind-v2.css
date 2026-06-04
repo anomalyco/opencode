@@ -6,13 +6,13 @@
 
 [data-component="keybind-v2"] {
   box-sizing: border-box;
-  font-family: var(--font-family-sans), var(--sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   display: inline-flex;
   flex-direction: row;
   align-items: center;
-  padding: 0px;
+  padding: 0;
   gap: 2px;
+  flex-shrink: 0;
 }
 
 [data-component="keybind-v2"] *,
@@ -26,9 +26,9 @@
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  padding: 0px;
+  padding: 0;
   gap: 4px;
-  width: 14px;
+  min-width: 14px;
   height: 14px;
   border-radius: 2px;
   flex: none;
@@ -36,7 +36,7 @@
 }
 
 [data-component="keybind-v2"][data-variant="neutral"] [data-slot="keybind-v2-key"] {
-  background: var(--background-bg-layer-03);
+  background: var(--v2-background-bg-layer-03);
 }
 
 [data-component="keybind-v2"][data-variant="ghost"] [data-slot="keybind-v2-key"] {
@@ -48,26 +48,29 @@
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  width: 14px;
-  height: 14px;
-  padding: 0px;
-  flex: 1 1 auto;
-  align-self: stretch;
-  font-family: "Inter", var(--font-family-sans), var(--sans), system-ui, sans-serif;
+  min-width: 14px;
+  height: 11px;
+  padding: 0;
+  flex: none;
   font-style: normal;
   font-weight: 530;
   font-size: 11px;
-  line-height: 100%;
+  line-height: 1;
   text-align: center;
   letter-spacing: 0.05px;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings:
+    "tnum" on,
+    "lnum" on;
   font-variation-settings: "slnt" 0;
   user-select: none;
 }
 
 [data-component="keybind-v2"][data-variant="neutral"] [data-slot="keybind-v2-label"] {
-  color: var(--text-text-muted);
+  color: var(--v2-text-text-muted);
 }
 
 [data-component="keybind-v2"][data-variant="ghost"] [data-slot="keybind-v2-label"] {
-  color: var(--text-text-faint);
+  color: var(--v2-text-text-faint);
 }
