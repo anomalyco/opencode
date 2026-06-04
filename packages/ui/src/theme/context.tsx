@@ -1,3 +1,5 @@
+// @refresh reload
+
 import { createEffect, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"

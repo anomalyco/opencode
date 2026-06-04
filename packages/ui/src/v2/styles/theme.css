@@ -64,6 +64,7 @@
     --v2-state-border-info: var(--v2-blue-300);
 
     /* ── Project avatar (fixed; theme-independent) ── */
+    --v2-avatar-fg: #ffffffff;
     --v2-avatar-bg-orange: #ee7330ff;
     --v2-avatar-border-orange: #d16427ff;
     --v2-avatar-bg-yellow: #e7af36ff;
@@ -306,6 +307,7 @@
     --v2-illustration-illustration-layer-02: var(--v2-grey-400);
     --v2-illustration-illustration-layer-03: var(--v2-grey-500);
 
+    --v2-avatar-fg: #ffffffff;
     --v2-avatar-bg-orange: #ee7330ff;
     --v2-avatar-border-orange: #d16427ff;
     --v2-avatar-bg-yellow: #e7af36ff;
@@ -385,6 +387,7 @@
     --v2-state-fg-info: var(--v2-blue-500);
     --v2-state-border-info: var(--v2-blue-900);
 
+    --v2-avatar-fg: #ffffffff;
     --v2-avatar-bg-orange: #723d22ff;
     --v2-avatar-border-orange: #ff8648ff;
     --v2-avatar-bg-yellow: #68552bff;

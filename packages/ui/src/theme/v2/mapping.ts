@@ -13,15 +13,12 @@ const light: Record<string, V2ColorValue> = {
   "v2-background-bg-contrast": ref("v2-grey-900"),
   "v2-background-bg-button-neutral": ref("v2-grey-100"),
   "v2-background-bg-accent": ref("v2-blue-600"),
-  "v2-text-text-base": ref("v2-grey-1000"),
-  "v2-text-text-muted": ref("v2-grey-700"),
-  "v2-text-text-faint": ref("v2-grey-600"),
   "v2-text-text-inverse": ref("v2-grey-100"),
   "v2-text-text-contrast": ref("v2-grey-100"),
   "v2-text-text-accent": ref("v2-blue-600"),
   "v2-text-text-accent-hover": ref("v2-blue-700"),
-  "v2-icon-icon-base": ref("v2-grey-800"),
-  "v2-icon-icon-muted": ref("v2-grey-600"),
+  "v2-icon-icon-base": ref("v2-grey-1000"),
+  "v2-icon-icon-muted": ref("v2-grey-800"),
   "v2-icon-icon-inverse": ref("v2-grey-100"),
   "v2-icon-icon-contrast": ref("v2-grey-200"),
   "v2-icon-icon-accent": ref("v2-blue-600"),
@@ -84,15 +81,12 @@ const dark: Record<string, V2ColorValue> = {
   "v2-background-bg-contrast": ref("v2-grey-700"),
   "v2-background-bg-button-neutral": ref("v2-alpha-light-6"),
   "v2-background-bg-accent": ref("v2-blue-600"),
-  "v2-text-text-base": ref("v2-grey-200"),
-  "v2-text-text-muted": ref("v2-grey-500"),
-  "v2-text-text-faint": ref("v2-grey-600"),
   "v2-text-text-inverse": ref("v2-grey-1000"),
   "v2-text-text-contrast": ref("v2-grey-100"),
   "v2-text-text-accent": ref("v2-blue-400"),
   "v2-text-text-accent-hover": ref("v2-blue-300"),
-  "v2-icon-icon-base": ref("v2-grey-400"),
-  "v2-icon-icon-muted": ref("v2-grey-600"),
+  "v2-icon-icon-base": ref("v2-grey-300"),
+  "v2-icon-icon-muted": ref("v2-grey-400"),
   "v2-icon-icon-inverse": ref("v2-grey-1000"),
   "v2-icon-icon-contrast": ref("v2-grey-200"),
   "v2-icon-icon-accent": ref("v2-blue-400"),
@@ -150,9 +144,7 @@ export function mapV2Semantics(isDark: boolean): Record<string, V2ColorValue> {
 }
 
 export function mergeV2Tokens(
-  primitives: Record<string, V2ColorValue>,
-  semantics: Record<string, V2ColorValue>,
-  overrides: Record<string, V2ColorValue> = {},
+  ...layers: Record<string, V2ColorValue>[]
 ): Record<string, V2ColorValue> {
-  return { ...primitives, ...semantics, ...overrides }
+  return Object.assign({}, ...layers)
 }

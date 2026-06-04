@@ -1,4 +1,7 @@
-import { hexToOklch, oklchToHex, shift } from "../color"
+// @refresh reload
+
+import { generateNeutralScale, hexToOklch, oklchToHex, shift } from "../color"
+import { mapV2Foreground } from "./foreground"
 import { mapV2Semantics, mergeV2Tokens } from "./mapping"
 import type { DesktopTheme, HexColor, ResolvedV2Theme, ThemeVariant, V2ColorValue } from "../types"
 import { V2_PRIMITIVES_DEFAULT } from "./default-primitives"
@@ -52,19 +55,10 @@ function generateV2HueScale(seed: HexColor, isDark: boolean): HexColor[] {
   )
 }
 
+/** Grey ramp: 100 = lightest, 1200 = darkest. Derived from palette neutral → ink like v1. */
 function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolean): HexColor[] {
-  const inkOklch = hexToOklch(ink)
-  const neutralOklch = hexToOklch(neutral)
-  const chroma = Math.min(Math.max(neutralOklch.c, inkOklch.c) * 0.35, 0.028)
-  const chromaBoost = isDark ? 1 : 1.05
-  // OC-2 ramp shape; light mode nudges surfaces + mid-tones ~5% stronger.
-  const lightSteps = isDark
-    ? [0.998, 0.982, 0.928, 0.84, 0.72, 0.58, 0.42, 0.28, 0.22, 0.155, 0.1, 0.07]
-    : [0.998, 0.968, 0.898, 0.805, 0.685, 0.55, 0.405, 0.265, 0.22, 0.155, 0.1, 0.07]
-
-  return lightSteps.map((l) =>
-    oklchToHex({ l, c: chroma * chromaBoost * (1 - Math.abs(l - 0.55) * 1.1), h: inkOklch.h }),
-  )
+  const scale = generateNeutralScale(neutral, isDark, ink)
+  return isDark ? scale.toReversed() : scale
 }
 
 function assignHueRamp(prefix: string, scale: HexColor[]): Record<string, V2ColorValue> {
@@ -141,8 +135,8 @@ export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Re
 export function resolveThemeVariantV2(variant: ThemeVariant, isDark: boolean): ResolvedV2Theme {
   const primitives = generateV2Primitives(variant, isDark)
   const semantics = mapV2Semantics(isDark)
-  const overrides = variant.v2Overrides ?? {}
-  return mergeV2Tokens(primitives, semantics, overrides)
+  const foreground = mapV2Foreground(readPalette(variant).ink, isDark, variant.overrides)
+  return mergeV2Tokens(primitives, semantics, foreground, variant.v2Overrides ?? {})
 }
 
 export function resolveThemeV2(theme: DesktopTheme): { light: ResolvedV2Theme; dark: ResolvedV2Theme } {
