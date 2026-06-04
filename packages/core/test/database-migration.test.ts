@@ -66,12 +66,14 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 30 })
         expect(
           yield* db.all(
-            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
+            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_input_session_admitted_seq_idx', 'session_input_session_promoted_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
           ),
         ).toEqual([
           { name: "event_aggregate_seq_idx" },
           { name: "event_aggregate_type_seq_idx" },
+          { name: "session_input_session_admitted_seq_idx" },
           { name: "session_input_session_pending_delivery_seq_idx" },
+          { name: "session_input_session_promoted_seq_idx" },
           { name: "session_message_session_seq_idx" },
           { name: "session_message_session_time_created_id_idx" },
           { name: "session_message_session_type_seq_idx" },
@@ -85,6 +87,7 @@ describe("DatabaseMigration", () => {
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, workspace_id text)`)
+        yield* db.run(sql`CREATE TABLE workspace (id text PRIMARY KEY)`)
         yield* db.run(sql`CREATE TABLE message (id text PRIMARY KEY)`)
         yield* db.run(sql`CREATE TABLE part (id text PRIMARY KEY)`)
         yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
@@ -104,6 +107,7 @@ describe("DatabaseMigration", () => {
           sql`CREATE INDEX session_input_session_pending_delivery_seq_idx ON session_input (session_id, promoted_seq, delivery, seq)`,
         )
         yield* db.run(sql`INSERT INTO session (id, workspace_id) VALUES ('session', 'wrk_old')`)
+        yield* db.run(sql`INSERT INTO workspace (id) VALUES ('wrk_old')`)
         yield* db.run(sql`INSERT INTO message (id) VALUES ('message')`)
         yield* db.run(sql`INSERT INTO part (id) VALUES ('part')`)
         yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 0)`)
@@ -120,8 +124,9 @@ describe("DatabaseMigration", () => {
         yield* DatabaseMigration.applyOnly(db, [eventSourcedSessionInputMigration])
 
         expect(yield* db.all(sql`SELECT id, workspace_id FROM session`)).toEqual([
-          { id: "session", workspace_id: "wrk_old" },
+          { id: "session", workspace_id: null },
         ])
+        expect(yield* db.all(sql`SELECT id FROM workspace`)).toEqual([])
         expect(yield* db.all(sql`SELECT id FROM message`)).toEqual([{ id: "message" }])
         expect(yield* db.all(sql`SELECT id FROM part`)).toEqual([{ id: "part" }])
         expect(yield* db.all(sql`SELECT id FROM event`)).toEqual([])
@@ -138,9 +143,17 @@ describe("DatabaseMigration", () => {
         ).toMatchObject({ unique: 1 })
         expect(
           (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(event)`)).find(
-            (index) => index.name === "event_aggregate_type_seq_idx",
+            (index) => index.name === "event_aggregate_seq_idx",
           ),
-        ).toMatchObject({ unique: 0 })
+        ).toMatchObject({ unique: 1 })
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(session_input)`)).filter((index) =>
+            ["session_input_session_admitted_seq_idx", "session_input_session_promoted_seq_idx"].includes(index.name),
+          ),
+        ).toEqual([
+          expect.objectContaining({ name: "session_input_session_promoted_seq_idx", unique: 1 }),
+          expect.objectContaining({ name: "session_input_session_admitted_seq_idx", unique: 1 }),
+        ])
       }),
     )
   })

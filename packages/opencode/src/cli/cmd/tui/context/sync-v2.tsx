@@ -72,6 +72,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     const event = useEvent()
     const sdk = useSDK()
     const applied = new Set<string>()
+    const admitted = new Map<string, Extract<SessionMessage, { type: "user" }>>()
 
     function duplicate(id: string) {
       if (applied.has(id)) return true
@@ -129,8 +130,26 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         }
         case "session.next.prompt.admitted":
-        case "session.next.prompt.promoted":
+          admitted.set(event.properties.messageID, {
+            id: event.properties.messageID,
+            type: "user",
+            text: event.properties.prompt.text,
+            files: event.properties.prompt.files,
+            agents: event.properties.prompt.agents,
+            references: event.properties.prompt.references,
+            time: { created: event.properties.timestamp },
+          })
           break
+        case "session.next.prompt.promoted": {
+          const message = admitted.get(event.properties.messageID)
+          admitted.delete(event.properties.messageID)
+          if (!message) break
+          update(event.properties.sessionID, (draft) => {
+            if (draft.some((item) => item.id === message.id)) return
+            draft.unshift(message)
+          })
+          break
+        }
         case "session.next.synthetic":
           update(event.properties.sessionID, (draft) => {
             draft.unshift({

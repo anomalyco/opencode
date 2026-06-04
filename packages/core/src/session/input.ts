@@ -84,16 +84,6 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
   )
 })
 
-export const pending = Effect.fn("SessionInput.pending")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  return (yield* db
-    .select()
-    .from(SessionInputTable)
-    .where(and(eq(SessionInputTable.session_id, sessionID), isNull(SessionInputTable.promoted_seq)))
-    .orderBy(asc(SessionInputTable.admitted_seq))
-    .all()
-    .pipe(Effect.orDie)).map(fromRow)
-})
-
 export const latestSeq = Effect.fn("SessionInput.latestSeq")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,

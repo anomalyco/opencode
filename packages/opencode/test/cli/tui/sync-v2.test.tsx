@@ -131,3 +131,58 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
     app.renderer.destroy()
   }
 })
+
+test("sync v2 renders admitted prompts only after promotion", async () => {
+  const events = createEventSource()
+  const calls = createFetch()
+  let sync!: ReturnType<typeof useSyncV2>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useSyncV2()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+      <ProjectProvider>
+        <SyncProviderV2>
+          <Probe />
+        </SyncProviderV2>
+      </ProjectProvider>
+    </SDKProvider>
+  ))
+
+  try {
+    await mounted
+    emitTwice(events, {
+      id: "evt_admitted_1",
+      type: "session.next.prompt.admitted",
+      properties: {
+        sessionID: "session-1",
+        messageID: "msg_user_1",
+        timestamp: 0,
+        prompt: { text: "hello" },
+        delivery: "steer",
+      },
+    })
+    expect(sync.session.message.fromSession("session-1")).toEqual([])
+
+    emitTwice(events, {
+      id: "evt_promoted_1",
+      type: "session.next.prompt.promoted",
+      properties: { sessionID: "session-1", messageID: "msg_user_1", timestamp: 1 },
+    })
+
+    await wait(() => sync.session.message.fromSession("session-1").length === 1)
+    expect(
+      sync.session.message.fromSession("session-1").map((message) => [message.id, message.type, message.text]),
+    ).toEqual([["msg_user_1", "user", "hello"]])
+  } finally {
+    app.renderer.destroy()
+  }
+})

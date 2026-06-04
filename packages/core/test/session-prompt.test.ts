@@ -388,9 +388,7 @@ describe("SessionV2.prompt", () => {
         })),
       )
 
-      expect(yield* SessionInput.pending(db, sessionID)).toMatchObject([
-        { id: messageID, prompt: { text: "Replay pending" } },
-      ])
+      expect(yield* admitted(messageID)).toMatchObject({ id: messageID, prompt: { text: "Replay pending" } })
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(wakeCalls).toEqual([])
     }),

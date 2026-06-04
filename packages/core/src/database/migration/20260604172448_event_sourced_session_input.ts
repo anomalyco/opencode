@@ -9,6 +9,8 @@ export default {
       yield* tx.run(`DELETE FROM \`session_message\`;`)
       yield* tx.run(`DELETE FROM \`event\`;`)
       yield* tx.run(`DELETE FROM \`event_sequence\`;`)
+      yield* tx.run(`UPDATE \`session\` SET \`workspace_id\` = NULL;`)
+      yield* tx.run(`DELETE FROM \`workspace\`;`)
       yield* tx.run(`DROP INDEX IF EXISTS \`event_aggregate_seq_idx\`;`)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`DROP INDEX IF EXISTS \`session_message_session_seq_idx\`;`)
