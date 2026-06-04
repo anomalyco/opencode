@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
+import { fileURLToPath } from "url"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -432,7 +433,7 @@ describe("EditTool", () => {
 test("keeps the locked edit schema, semantics docstring, and deferred TODOs visible", async () => {
   const source = await fs.readFile(new URL("../src/tool/edit.ts", import.meta.url), "utf8")
   const definition = await Effect.runPromise(
-    withTool(path.dirname(new URL(import.meta.url).pathname), (registry) => registry.definitions()),
+    withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => registry.definitions()),
   )
   const schema = definition[0]?.inputSchema as { readonly properties?: Record<string, unknown> }
 
