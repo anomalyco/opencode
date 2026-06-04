@@ -25,17 +25,18 @@ export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.op
 /** OpenAI function schemas require one flat object at the top level. */
 export const openAiToolInputSchema = (schema: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
   const variants = Array.isArray(schema.anyOf) ? schema.anyOf.filter(isRecord) : []
-  const flattened = variants.length === 0
-    ? { ...schema, type: "object" }
-    : {
-        ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "anyOf")),
-        type: "object",
-        properties: variants.reduce(
-          (properties, variant) => ({ ...(isRecord(variant.properties) ? variant.properties : {}), ...properties }),
-          {},
-        ),
-        additionalProperties: false,
-      }
+  const flattened =
+    variants.length === 0
+      ? { ...schema, type: "object" }
+      : {
+          ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "anyOf")),
+          type: "object",
+          properties: variants.reduce(
+            (properties, variant) => ({ ...(isRecord(variant.properties) ? variant.properties : {}), ...properties }),
+            {},
+          ),
+          additionalProperties: false,
+        }
   const normalized = removeNullSchemas(flattened)
   return isRecord(normalized) ? normalized : { type: "object" }
 }
