@@ -818,7 +818,6 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          admittedAt?: number
           prompt: Prompt
           delivery: "steer" | "queue"
         }
@@ -3124,7 +3123,6 @@ export type SyncEventSessionNextPrompted = {
     data: {
       timestamp: number
       sessionID: string
-      admittedAt?: number
       prompt: Prompt
       delivery: "steer" | "queue"
     }
@@ -4155,7 +4153,6 @@ export type EventSessionNextPrompted = {
   properties: {
     timestamp: number
     sessionID: string
-    admittedAt?: number
     prompt: Prompt
     delivery: "steer" | "queue"
   }

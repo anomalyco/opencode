@@ -76,14 +76,13 @@ Affected schema:
 
 - New `session_input` table from `20260603141458_session_input_inbox.ts`.
 - Updated pending-input index from `20260603160727_jittery_ezekiel_stane.ts`.
-- New `SessionInput.Admitted` schema and `Prompted.delivery` and optional `Prompted.admittedAt` fields.
+- New `SessionInput.Admitted` schema and `Prompted.delivery` field.
 - Prompt-admission conflict behavior in `SessionV2.prompt(...)`.
 
 Change:
 
 - Persist admitted prompts before projection with an autoincrement inbox sequence, unique message ID, Session ID, encoded prompt, `steer` or `queue` delivery mode, optional promoted event sequence, and creation time.
 - Index pending inputs by Session, promotion state, delivery mode, and admission sequence.
-- Record prompt promotion time as the `Prompted` event timestamp while retaining admission time explicitly for user-message display.
 
 Reason:
 
@@ -94,7 +93,6 @@ Compatibility:
 
 - Database migration creates the inbox table and replaces its first pending index with a delivery-aware index.
 - Exact prompt retries are idempotent; reusing a message ID for different input fails.
-- Historical `Prompted` events without `admittedAt` continue using their event timestamp as the user-message creation time.
 
 ### Durable Session Projection Order
 
