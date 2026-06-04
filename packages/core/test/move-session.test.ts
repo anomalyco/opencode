@@ -52,6 +52,7 @@ function abs(input: string) {
 
 async function initRepo(directory: string) {
   await $`git init`.cwd(directory).quiet()
+  await $`git config core.autocrlf false`.cwd(directory).quiet()
   await $`git config core.fsmonitor false`.cwd(directory).quiet()
   await $`git config commit.gpgsign false`.cwd(directory).quiet()
   await $`git config user.email test@opencode.test`.cwd(directory).quiet()
