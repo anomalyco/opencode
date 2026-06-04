@@ -21,6 +21,7 @@ import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
+import { initializationData, initializationReady } from "./initialization"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import "./styles.css"
 import { useTheme } from "@opencode-ai/ui/theme"
@@ -329,7 +330,7 @@ render(() => {
   const [locale] = createResource(loadLocale)
 
   const servers = () => {
-    const data = sidecar()
+    const data = initializationData(sidecar)
     if (!data) return []
     const server: ServerConnection.Sidecar = {
       displayName: "Local Server",
@@ -383,7 +384,7 @@ render(() => {
         <Show
           when={
             !defaultServer.loading &&
-            !sidecar.loading &&
+            initializationReady(sidecar) &&
             !windowConfig.loading &&
             !windowCount.loading &&
             !locale.loading
