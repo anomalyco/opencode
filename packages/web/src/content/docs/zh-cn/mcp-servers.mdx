@@ -63,7 +63,7 @@ MCP 服务器会占用你的上下文空间，所以请谨慎选择启用哪些�
 }
 ```
 
-本地配置值会覆盖远程默认值。详情请参阅[配置优先级](/docs/config#precedence-order)。
+本地配置值会覆盖远程默认值。详情请参阅[配置优先级](/docs/zh-cn/config#precedence-order)。
 
 ---
 
@@ -348,7 +348,7 @@ opencode mcp debug my-oauth-server
 如果你有大量 MCP 服务器，可以选择全局禁用它们，然后仅在特定代理中启用。具体做法：
 
 1. 全局禁用该工具。
-2. 在[代理配置](/docs/agents#tools)中，将 MCP 服务器作为工具启用。
+2. 在[代理配置](/docs/zh-cn/agents#tools)中，将 MCP 服务器作为工具启用。
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -474,7 +474,7 @@ Show me the latest unresolved issues in my project. use sentry
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-你也可以在 [AGENTS.md](/docs/rules/) 中添加类似的规则。
+你也可以在 [AGENTS.md](/docs/zh-cn/rules/) 中添加类似的规则。
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -504,7 +504,7 @@ When you need to search docs, use `context7` tools.
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-你也可以在 [AGENTS.md](/docs/rules/) 中添加类似的规则。
+你也可以在 [AGENTS.md](/docs/zh-cn/rules/) 中添加类似的规则。
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

@@ -1,0 +1,137 @@
+---
+title: 策略
+description: 控制 OpenCode 可以使用哪些已配置的资源。
+---
+
+策略控制 OpenCode 是否可以对指定资源执行操作。此功能为实验性功能，通过 `opencode.json` 中的 `experimental.policies` 数组进行配置。
+
+策略与[权限](/docs/zh-cn/permissions)是不同的概念。权限控制工具在会话期间可以做什么，而策略控制 OpenCode 是否可以使用某个资源（例如 LLM 提供商）。
+
+---
+
+## 配置
+
+每条策略声明包含三个字段：
+
+- `effect` — 取值为 `"allow"` 或 `"deny"`。
+- `action` — 被控制的操作。
+- `resource` — 该策略适用的资源 ID 或通配符模式。
+
+例如，禁止使用 `openai` 提供商：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+被策略禁止的提供商将无法用于模型选择或调用，即便其凭据和配置均已正确设置。
+
+---
+
+## 可用策略
+
+OpenCode 目前支持一种策略操作：
+
+| 操作           | 资源                          | 描述                               |
+| -------------- | ----------------------------- | ---------------------------------- |
+| `provider.use` | 提供商 ID，例如 `openai`      | 允许或禁止使用某个 LLM 提供商。    |
+
+未来可能会添加更多策略操作。
+
+---
+
+## 匹配
+
+`resource` 字段支持通配符匹配。使用 `*` 匹配零个或多个字符，使用 `?` 匹配一个字符。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "company-*"
+      }
+    ]
+  }
+}
+```
+
+这将禁止 `company-us` 和 `company-eu` 等提供商。
+
+---
+
+## 规则顺序
+
+当多条规则同时匹配时，最后一条匹配的规则生效。建议先放置较为宽泛的规则，再紧跟更具体的例外规则。
+
+例如，仅允许 Anthropic：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "*"
+      },
+      {
+        "effect": "allow",
+        "action": "provider.use",
+        "resource": "anthropic"
+      }
+    ]
+  }
+}
+```
+
+如果没有策略匹配某个提供商，则默认允许使用该提供商。
+
+策略可以在全局配置和项目配置中同时设置。如果两个位置的策略都匹配同一个提供商，则全局策略优先于项目策略。这可以防止某个项目仓库重新启用你已在全局禁用的提供商。
+
+---
+
+## 提供商列表
+
+控制提供商访问权限时，推荐使用策略来替代旧的 `disabled_providers` 和 `enabled_providers` 配置。
+
+替代 `disabled_providers` 的写法：
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "openai" },
+      { "effect": "deny", "action": "provider.use", "resource": "google" }
+    ]
+  }
+}
+```
+
+替代 `enabled_providers` 的写法：先禁止所有提供商，然后在其后允许选定的提供商：
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "*" },
+      { "effect": "allow", "action": "provider.use", "resource": "anthropic" },
+      { "effect": "allow", "action": "provider.use", "resource": "openai" }
+    ]
+  }
+}
+```

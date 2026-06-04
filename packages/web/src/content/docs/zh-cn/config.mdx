@@ -172,7 +172,7 @@ opencode run "Hello world"
 - `scroll_speed` - 自定义滚动速度倍率（默认值：`3`，最小值：`1`）。如果 `scroll_acceleration.enabled` 为 `true`，则忽略此选项。
 - `diff_style` - 控制差异渲染方式。`"auto"` 根据终端宽度自适应，`"stacked"` 始终显示单列。
 
-[在此了解更多关于 TUI 的信息](/docs/tui)。
+[在此了解更多关于 TUI 的信息](/docs/zh-cn/tui)。
 
 ---
 
@@ -201,7 +201,7 @@ opencode run "Hello world"
 - `mdnsDomain` - mDNS 服务的自定义域名。默认为 `opencode.local`。适用于在同一网络上运行多个实例的场景。
 - `cors` - 从基于浏览器的客户端使用 HTTP 服务器时允许 CORS 的额外来源。值必须是完整的来源（协议 + 主机 + 可选端口），例如 `https://app.example.com`。
 
-[在此了解更多关于服务器的信息](/docs/server)。
+[在此了解更多关于服务器的信息](/docs/zh-cn/server)。
 
 ---
 
@@ -219,7 +219,7 @@ opencode run "Hello world"
 }
 ```
 
-[在此了解更多关于工具的信息](/docs/tools)。
+[在此了解更多关于工具的信息](/docs/zh-cn/tools)。
 
 ---
 
@@ -257,7 +257,7 @@ opencode run "Hello world"
 - `timeout` - 请求超时时间，单位为毫秒（默认值：300000）。设置为 `false` 可禁用超时。
 - `setCacheKey` - 确保始终为指定提供商设置缓存键。
 
-您还可以配置[本地模型](/docs/models#local)。[了解更多](/docs/models)。
+您还可以配置[本地模型](/docs/zh-cn/models#local)。[了解更多](/docs/zh-cn/models)。
 
 ---
 
@@ -289,10 +289,10 @@ Amazon Bedrock 支持 AWS 特定配置：
 - `endpoint` - VPC 端点的自定义端点 URL。这是通用 `baseURL` 选项使用 AWS 特定术语的别名。如果两者都指定，`endpoint` 优先。
 
 :::note
-Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置文件的身份验证。详情请参见[身份验证优先级](/docs/providers#authentication-precedence)。
+Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置文件的身份验证。详情请参见[身份验证优先级](/docs/zh-cn/providers#authentication-precedence)。
 :::
 
-[了解更多关于 Amazon Bedrock 配置的信息](/docs/providers#amazon-bedrock)。
+[了解更多关于 Amazon Bedrock 配置的信息](/docs/zh-cn/providers#amazon-bedrock)。
 
 ---
 
@@ -307,7 +307,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 }
 ```
 
-[在此了解更多](/docs/themes)。
+[在此了解更多](/docs/zh-cn/themes)。
 
 ---
 
@@ -333,7 +333,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 }
 ```
 
-您还可以使用 `~/.config/opencode/agents/` 或 `.opencode/agents/` 中的 Markdown 文件定义代理。[在此了解更多](/docs/agents)。
+您还可以使用 `~/.config/opencode/agents/` 或 `.opencode/agents/` 中的 Markdown 文件定义代理。[在此了解更多](/docs/zh-cn/agents)。
 
 ---
 
@@ -348,7 +348,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 }
 ```
 
-默认代理必须是主代理（不能是子代理）。可以是内置代理（如 `"build"` 或 `"plan"`），也可以是您定义的[自定义代理](/docs/agents)。如果指定的代理不存在或是子代理，OpenCode 将回退到 `"build"` 并发出警告。
+默认代理必须是主代理（不能是子代理）。可以是内置代理（如 `"build"` 或 `"plan"`），也可以是您定义的[自定义代理](/docs/zh-cn/agents)。如果指定的代理不存在或是子代理，OpenCode 将回退到 `"build"` 并发出警告。
 
 此设置适用于所有界面：TUI、CLI（`opencode run`）、桌面应用和 GitHub Action。
 
@@ -356,7 +356,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 
 ### 分享
 
-您可以通过 `share` 选项配置[分享](/docs/share)功能。
+您可以通过 `share` 选项配置[分享](/docs/zh-cn/share)功能。
 
 ```json title="opencode.json"
 {
@@ -397,7 +397,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 }
 ```
 
-您还可以使用 `~/.config/opencode/commands/` 或 `.opencode/commands/` 中的 Markdown 文件定义命令。[在此了解更多](/docs/commands)。
+您还可以使用 `~/.config/opencode/commands/` 或 `.opencode/commands/` 中的 Markdown 文件定义命令。[在此了解更多](/docs/zh-cn/commands)。
 
 ---
 
@@ -412,7 +412,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 }
 ```
 
-[在此了解更多](/docs/keybinds)。
+[在此了解更多](/docs/zh-cn/keybinds)。
 
 ---
 
@@ -454,7 +454,7 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 }
 ```
 
-[在此了解更多关于格式化程序的信息](/docs/formatters)。
+[在此了解更多关于格式化程序的信息](/docs/zh-cn/formatters)。
 
 ---
 
@@ -474,7 +474,7 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 }
 ```
 
-[在此了解更多关于权限的信息](/docs/permissions)。
+[在此了解更多关于权限的信息](/docs/zh-cn/permissions)。
 
 ---
 
@@ -527,13 +527,13 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 }
 ```
 
-[在此了解更多](/docs/mcp-servers)。
+[在此了解更多](/docs/zh-cn/mcp-servers)。
 
 ---
 
 ### 插件
 
-[插件](/docs/plugins)通过自定义工具、钩子和集成来扩展 OpenCode。
+[插件](/docs/zh-cn/plugins)通过自定义工具、钩子和集成来扩展 OpenCode。
 
 将插件文件放置在 `.opencode/plugins/` 或 `~/.config/opencode/plugins/` 中。您还可以通过 `plugin` 选项从 npm 加载插件。
 
@@ -544,7 +544,7 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 }
 ```
 
-[在此了解更多](/docs/plugins)。
+[在此了解更多](/docs/zh-cn/plugins)。
 
 ---
 
@@ -559,7 +559,7 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 }
 ```
 
-该选项接受指令文件路径和 glob 模式的数组。[在此了解更多关于规则的信息](/docs/rules)。
+该选项接受指令文件路径和 glob 模式的数组。[在此了解更多关于规则的信息](/docs/zh-cn/rules)。
 
 ---
 

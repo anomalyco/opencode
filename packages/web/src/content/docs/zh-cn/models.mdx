@@ -11,7 +11,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 大多数热门提供商已默认预加载。如果你通过 `/connect` 命令添加了提供商的凭据，它们将在你启动 OpenCode 时自动可用。
 
-了解更多关于[提供商](/docs/providers)的信息。
+了解更多关于[提供商](/docs/zh-cn/providers)的信息。
 
 ---
 
@@ -57,9 +57,9 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 }
 ```
 
-这里完整的 ID 格式为 `provider_id/model_id`。例如，如果你使用 [OpenCode Zen](/docs/zen)，则 GPT 5.1 Codex 对应的值为 `opencode/gpt-5.1-codex`。
+这里完整的 ID 格式为 `provider_id/model_id`。例如，如果你使用 [OpenCode Zen](/docs/zh-cn/zen)，则 GPT 5.1 Codex 对应的值为 `opencode/gpt-5.1-codex`。
 
-如果你配置了[自定义提供商](/docs/providers#custom)，`provider_id` 是配置中 `provider` 部分的键名，`model_id` 是 `provider.models` 中的键名。
+如果你配置了[自定义提供商](/docs/zh-cn/providers#custom)，`provider_id` 是配置中 `provider` 部分的键名，`model_id` 是 `provider.models` 中的键名。
 
 ---
 
@@ -102,7 +102,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 这里我们为两个内置模型配置了全局设置：通过 `openai` 提供商访问的 `gpt-5`，以及通过 `anthropic` 提供商访问的 `claude-sonnet-4-20250514`。
 内置的提供商和模型名称可以在 [Models.dev](https://models.dev) 上查阅。
 
-你还可以为使用中的任何代理配置这些选项。代理配置会覆盖此处的全局选项。[了解更多](/docs/agents/#additional)。
+你还可以为使用中的任何代理配置这些选项。代理配置会覆盖此处的全局选项。[了解更多](/docs/zh-cn/agents/#additional)。
 
 你也可以定义扩展内置变体的自定义变体。变体允许你为同一个模型配置不同的设置，而无需创建重复的条目：
 
@@ -196,7 +196,7 @@ OpenCode 为许多提供商提供了默认变体：
 
 ### 切换变体
 
-使用快捷键 `variant_cycle` 可以快速在变体之间切换。[了解更多](/docs/keybinds)。
+使用快捷键 `variant_cycle` 可以快速在变体之间切换。[了解更多](/docs/zh-cn/keybinds)。
 
 ---
 

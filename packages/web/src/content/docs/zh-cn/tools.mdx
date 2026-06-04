@@ -3,9 +3,9 @@ title: 工具
 description: 管理 LLM 可以使用的工具。
 ---
 
-工具允许 LLM 在您的代码库中执行操作。OpenCode 自带一组内置工具，您也可以通过[自定义工具](/docs/custom-tools)或 [MCP 服务器](/docs/mcp-servers)来扩展它。
+工具允许 LLM 在您的代码库中执行操作。OpenCode 自带一组内置工具，您也可以通过[自定义工具](/docs/zh-cn/custom-tools)或 [MCP 服务器](/docs/zh-cn/mcp-servers)来扩展它。
 
-默认情况下，所有工具都是**启用**的，且无需权限即可运行。您可以通过[权限](/docs/permissions)来控制工具的行为。
+默认情况下，所有工具都是**启用**的，且无需权限即可运行。您可以通过[权限](/docs/zh-cn/permissions)来控制工具的行为。
 
 ---
 
@@ -35,7 +35,7 @@ description: 管理 LLM 可以使用的工具。
 }
 ```
 
-[了解更多](/docs/permissions)关于配置权限的内容。
+[了解更多](/docs/zh-cn/permissions)关于配置权限的内容。
 
 ---
 
@@ -170,7 +170,7 @@ description: 管理 LLM 可以使用的工具。
 
 支持的操作包括 `goToDefinition`、`findReferences`、`hover`、`documentSymbol`、`workspaceSymbol`、`goToImplementation`、`prepareCallHierarchy`、`incomingCalls` 和 `outgoingCalls`。
 
-要配置项目可用的 LSP 服务器，请参阅 [LSP 服务器](/docs/lsp)。
+要配置项目可用的 LSP 服务器，请参阅 [LSP 服务器](/docs/zh-cn/lsp)。
 
 ---
 
@@ -197,7 +197,7 @@ description: 管理 LLM 可以使用的工具。
 
 ### skill
 
-加载一个[技能](/docs/skills)（即 `SKILL.md` 文件）并在对话中返回其内容。
+加载一个[技能](/docs/zh-cn/skills)（即 `SKILL.md` 文件）并在对话中返回其内容。
 
 ```json title="opencode.json" {4}
 {
@@ -226,7 +226,7 @@ description: 管理 LLM 可以使用的工具。
 创建和更新任务列表以跟踪复杂操作的进度。LLM 使用此工具来组织多步骤任务。
 
 :::note
-该工具默认对子代理禁用，但您可以手动启用。[了解更多](/docs/agents/#permissions)
+该工具默认对子代理禁用，但您可以手动启用。[了解更多](/docs/zh-cn/agents/#permissions)
 :::
 
 ---
@@ -310,7 +310,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 自定义工具允许您定义 LLM 可以调用的自定义函数。这些函数在您的配置文件中定义，可以执行任意代码。
 
-[了解更多](/docs/custom-tools)关于创建自定义工具的内容。
+[了解更多](/docs/zh-cn/custom-tools)关于创建自定义工具的内容。
 
 ---
 
@@ -318,7 +318,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 MCP（Model Context Protocol）服务器允许您集成外部工具和服务，包括数据库访问、API 集成和第三方服务。
 
-[了解更多](/docs/mcp-servers)关于配置 MCP 服务器的内容。
+[了解更多](/docs/zh-cn/mcp-servers)关于配置 MCP 服务器的内容。
 
 ---
 
