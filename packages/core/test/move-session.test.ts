@@ -44,7 +44,9 @@ const layer = MoveSession.layer.pipe(
   Layer.provide(project),
   Layer.provide(sessions),
 )
-const it = testEffect(Layer.mergeAll(layer, database, events, project, projector, store, SessionExecution.noopLayer, sessions))
+const it = testEffect(
+  Layer.mergeAll(layer, database, events, project, projector, store, SessionExecution.noopLayer, sessions),
+)
 
 function abs(input: string) {
   return AbsolutePath.make(input)
