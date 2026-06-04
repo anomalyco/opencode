@@ -14,7 +14,6 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Portal } from "solid-js/web"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -2171,7 +2170,6 @@ export default function ConfigPage() {
     skillMarketInstalling: "",
     treeClosed: {} as Record<string, boolean>,
     busy: false,
-    bootstrapping: false,
     reloadingBackend: false,
     workspaceRev: 0,
     skillRev: 0,
@@ -3282,6 +3280,7 @@ export default function ConfigPage() {
     if (section === "agents-md") return agentsMd().map((item) => item.id)
     if (section === "providers") {
       const list = providerVisible().map((item) => `provider:${item.id}`)
+      if (state.pick === CUSTOM_NEW) return [CUSTOM_NEW, ...list]
       return list.length > 0 ? list : [CUSTOM_NEW]
     }
     if (section === "agents") return agents().map((item) => item.id)
@@ -3860,19 +3859,25 @@ export default function ConfigPage() {
 
   const setConfig = (next: Config) => globalSync.set("config", next)
 
-  async function patchConfig(patch: Partial<Config>) {
+  async function patchConfig(patch: Partial<Config>, options?: { refreshProviders?: boolean }) {
     const next = { ...cfg(), ...patch }
-    await globalSync.updateConfig(patch as Config)
+    await globalSync.updateConfig(patch as Config, options)
     setConfig(next)
     return next
   }
 
-  async function update(next: Partial<Config>) {
-    await patchConfig(next).catch((err: unknown) => {
+  async function update(next: Partial<Config>, options?: { refreshProviders?: boolean }) {
+    await patchConfig(next, options).catch((err: unknown) => {
       showToast({
         title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : String(err),
       })
+    })
+  }
+
+  function refreshProviderStateInBackground() {
+    void globalSync.provider.refresh(mainDomain).catch((err: unknown) => {
+      console.error(`[config] provider refresh failed error=${err instanceof Error ? err.message : String(err)}`)
     })
   }
 
@@ -4143,7 +4148,7 @@ export default function ConfigPage() {
       tasks.push(globalSDK.client.auth.remove({ providerID: id }).catch(() => undefined))
     await Promise.all(tasks)
       .then(() => writeGlobalConfig(next))
-      .then(() => globalSync.updateConfig(next, { refreshProviders: true }))
+      .then(() => globalSync.updateConfig(next, { refreshProviders: false }))
       .then((synced) => {
         batch(() => {
           setConfig(synced)
@@ -4154,6 +4159,7 @@ export default function ConfigPage() {
           setState("custom", "mode", "edit")
           setState("custom", "secret", true)
         })
+        refreshProviderStateInBackground()
         showToast({ variant: "success", title: t("common.save"), description: id })
       })
       .catch((err: unknown) => {
@@ -4177,13 +4183,14 @@ export default function ConfigPage() {
       .remove({ providerID: id })
       .catch(() => undefined)
       .then(() => writeGlobalConfig(next))
-      .then(() => globalSync.updateConfig(next, { refreshProviders: true }))
+      .then(() => globalSync.updateConfig(next, { refreshProviders: false }))
       .then((synced) => {
         batch(() => {
           setConfig(synced)
           globalSync.provider.remove(id)
           createCustomProvider()
         })
+        refreshProviderStateInBackground()
         showToast({ variant: "success", title: t("config.action.delete"), description: id })
       })
       .catch((err: unknown) => {
@@ -4207,7 +4214,17 @@ export default function ConfigPage() {
   function toggleProviderConfig(id: string, enabled: boolean) {
     const prev = cfg().disabled_providers ?? []
     const next = enabled ? prev.filter((item) => item !== id) : Array.from(new Set([...prev, id]))
-    return update({ disabled_providers: next })
+    return patchConfig({ disabled_providers: next }, { refreshProviders: false })
+      .then(() => {
+        if (!enabled) globalSync.provider.remove(id)
+        refreshProviderStateInBackground()
+      })
+      .catch((err: unknown) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
   }
 
   async function disconnectProvider(item: ProviderItem) {
@@ -4216,19 +4233,21 @@ export default function ConfigPage() {
       await globalSDK.client.auth.remove({ providerID: item.id }).catch(() => undefined)
       const prev = cfg().disabled_providers ?? []
       const next = prev.includes(item.id) ? prev : [...prev, item.id]
-      await patchConfig({ disabled_providers: next })
+      await patchConfig({ disabled_providers: next }, { refreshProviders: false })
+      globalSync.provider.remove(item.id)
+      refreshProviderStateInBackground()
       return
     }
     await globalSDK.client.auth.remove({ providerID: item.id })
-    await globalSync.provider.refresh(mainDomain)
+    globalSync.provider.remove(item.id)
+    refreshProviderStateInBackground()
   }
 
   function toggleProvider(item: ProviderItem, enabled: boolean) {
     if (item.custom) {
-      // Prevent duplicate calls during bootstrap
-      if (state.bootstrapping) return
-      setState("bootstrapping", true)
-      void toggleProviderConfig(item.id, enabled).finally(() => setState("bootstrapping", false))
+      if (state.providerBusy === item.id) return
+      setState("providerBusy", item.id)
+      void toggleProviderConfig(item.id, enabled).finally(() => setState("providerBusy", ""))
       return
     }
     if (enabled) {
@@ -4236,10 +4255,8 @@ export default function ConfigPage() {
       return
     }
     if (item.source === "env") return
-    // Prevent duplicate calls during bootstrap
-    if (state.bootstrapping) return
+    if (state.providerBusy === item.id) return
     setState("providerBusy", item.id)
-    setState("bootstrapping", true)
     void disconnectProvider(item)
       .then(() => {
         showToast({ variant: "success", title: t("common.disconnect"), description: item.name })
@@ -4252,7 +4269,6 @@ export default function ConfigPage() {
       })
       .finally(() => {
         setState("providerBusy", "")
-        setState("bootstrapping", false)
       })
   }
 
@@ -4270,25 +4286,6 @@ export default function ConfigPage() {
 
   return (
     <div class="size-full overflow-hidden bg-background-base">
-      <Portal>
-        <Show when={state.bootstrapping}>
-          <div
-            class="fixed inset-0 flex items-center justify-center"
-            style={{
-              "z-index": "9999",
-              "background-color": "rgba(0, 0, 0, 0.45)",
-              "backdrop-filter": "blur(8px)",
-            }}
-          >
-            <div class="rounded-lg bg-surface-base px-6 py-4 shadow-lg">
-              <div class="flex items-center gap-3">
-                <Spinner />
-                <span class="text-14-medium text-text-strong">正在更新配置...</span>
-              </div>
-            </div>
-          </div>
-        </Show>
-      </Portal>
       <div class="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.03),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_22%)] xl:flex-row">
         <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[200px] xl:border-r xl:border-b-0">
           <div class="flex h-full min-h-0 flex-col">
