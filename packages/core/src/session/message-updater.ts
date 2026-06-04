@@ -1,7 +1,10 @@
 import { produce, type WritableDraft } from "immer"
-import { Effect } from "effect"
+import { DateTime, Effect, Schema } from "effect"
+import { ToolOutput } from "../tool-output"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
+
+const decodeToolContent = Schema.decodeUnknownSync(ToolOutput.Content)
 
 export type MemoryState = {
   messages: SessionMessage.Message[]
@@ -92,14 +95,16 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
 
   const latestTool = (assistant: DraftAssistant | undefined, callID?: string) =>
     assistant?.content.findLast(
-      (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.id === callID),
+      (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.callID === callID),
     )
 
   const latestText = (assistant: DraftAssistant | undefined) =>
     assistant?.content.findLast((item): item is DraftText => item.type === "text")
 
   const latestReasoning = (assistant: DraftAssistant | undefined, reasoningID: string) =>
-    assistant?.content.findLast((item): item is DraftReasoning => item.type === "reasoning" && item.id === reasoningID)
+    assistant?.content.findLast(
+      (item): item is DraftReasoning => item.type === "reasoning" && item.reasoningID === reasoningID,
+    )
 
   return Effect.gen(function* () {
     yield* SessionEvent.All.match(event, {
@@ -229,13 +234,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
-      "session.next.text.started": () => {
+      "session.next.text.started": (event) => {
         return Effect.gen(function* () {
           const currentAssistant = yield* adapter.getCurrentAssistant()
           if (currentAssistant) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
-                draft.content.push(new SessionMessage.AssistantText({ type: "text", text: "" }) as DraftText)
+                draft.content.push(new SessionMessage.AssistantText({ type: "text", id: event.id, text: "" }) as DraftText)
               }),
             )
           }
@@ -276,7 +281,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 draft.content.push(
                   new SessionMessage.AssistantTool({
                     type: "tool",
-                    id: event.data.callID,
+                    id: event.id,
+                    callID: event.data.callID,
                     name: event.data.name,
                     time: { created: event.data.timestamp },
                     state: new SessionMessage.ToolStatePending({ status: "pending", input: "" }),
@@ -309,15 +315,15 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
                 const match = latestTool(draft, event.data.callID)
-                if (match) {
+                if (match && match.state.status === "pending") {
                   match.provider = event.data.provider
                   match.time.ran = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateRunning({
                     status: "running",
                     input: event.data.input,
                     structured: {},
                     content: [],
-                  }
+                  }) as DraftTool["state"]
                 }
               }),
             )
@@ -333,7 +339,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 const match = latestTool(draft, event.data.callID)
                 if (match && match.state.status === "running") {
                   match.state.structured = event.data.structured
-                  match.state.content = [...event.data.content]
+                  match.state.content = event.data.content.map((item) => decodeToolContent(item))
                 }
               }),
             )
@@ -350,12 +356,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 if (match && match.state.status === "running") {
                   match.provider = event.data.provider
                   match.time.completed = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateCompleted({
                     status: "completed",
                     input: match.state.input,
                     structured: event.data.structured,
-                    content: [...event.data.content],
-                  }
+                    content: event.data.content.map((item) => decodeToolContent(item)),
+                  }) as DraftTool["state"]
                 }
               }),
             )
@@ -372,13 +378,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 if (match && match.state.status === "running") {
                   match.provider = event.data.provider
                   match.time.completed = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateError({
                     status: "error",
                     error: event.data.error,
                     input: match.state.input,
                     structured: match.state.structured,
-                    content: match.state.content,
-                  }
+                    content: match.state.content.map((item) => decodeToolContent(item)),
+                  }) as DraftTool["state"]
                 }
               }),
             )
@@ -394,7 +400,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 draft.content.push(
                   new SessionMessage.AssistantReasoning({
                     type: "reasoning",
-                    id: event.data.reasoningID,
+                    id: event.id,
+                    reasoningID: event.data.reasoningID,
                     text: "",
                   }) as DraftReasoning,
                 )
@@ -429,7 +436,33 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
-      "session.next.retried": () => Effect.void,
+      "session.next.retried": (event) => {
+        return Effect.gen(function* () {
+          const currentAssistant = yield* adapter.getCurrentAssistant()
+          if (currentAssistant) {
+            yield* adapter.updateAssistant(
+              produce(currentAssistant, (draft) => {
+                if (
+                  draft.retries?.some(
+                    (retry) =>
+                      retry.attempt === event.data.attempt &&
+                      DateTime.toEpochMillis(retry.time.created) === DateTime.toEpochMillis(event.data.timestamp),
+                  )
+                )
+                  return
+                draft.retries = [
+                  ...(draft.retries ?? []),
+                  new SessionMessage.AssistantRetry({
+                    attempt: event.data.attempt,
+                    error: event.data.error,
+                    time: { created: event.data.timestamp },
+                  }),
+                ]
+              }),
+            )
+          }
+        })
+      },
       "session.next.compaction.started": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Compaction({

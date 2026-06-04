@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Effect, Layer, Schema, Context } from "effect"
+import { Cause, DateTime, Effect, Layer, Schema, Context } from "effect"
 import { and, asc, desc, eq, gt, gte, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -13,6 +13,7 @@ import { EventV2 } from "./event"
 import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
+import { SessionMessageBackfillService } from "./session/message-backfill-service"
 import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, RelativePath } from "./schema"
@@ -177,7 +178,8 @@ function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const db = (yield* Database.Service).db
+    const database = yield* Database.Service
+    const db = database.db
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -190,6 +192,26 @@ export const layer = Layer.effect(
             }),
         ),
       )
+
+    const ensureLegacyBackfillBeforeRead = Effect.fn("V2Session.ensureLegacyBackfillBeforeRead")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      const exit = yield* SessionMessageBackfillService.ensureLegacySessionMessagesBackfilled(sessionID).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.exit,
+      )
+      if (exit._tag === "Success") {
+        if (exit.value.status === "aborted") {
+          yield* Effect.logWarning("legacy session message backfill aborted before v2 read").pipe(
+            Effect.annotateLogs({ sessionID, status: exit.value.status, reason: exit.value.reason }),
+          )
+        }
+        return
+      }
+      yield* Effect.logWarning("legacy session message backfill failed before v2 read").pipe(
+        Effect.annotateLogs({ sessionID, status: "failure", cause: Cause.pretty(exit.cause) }),
+      )
+    })
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* () {
@@ -238,6 +260,7 @@ export const layer = Layer.effect(
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
         yield* result.get(input.sessionID)
+        yield* ensureLegacyBackfillBeforeRead(input.sessionID)
         const direction = input.cursor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
@@ -276,6 +299,7 @@ export const layer = Layer.effect(
       }),
       context: Effect.fn("V2Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
+        yield* ensureLegacyBackfillBeforeRead(sessionID)
         const compaction = yield* db
           .select()
           .from(SessionMessageTable)

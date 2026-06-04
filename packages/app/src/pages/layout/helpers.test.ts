@@ -14,6 +14,7 @@ import {
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
+  routeProjectRoot,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
 
@@ -119,6 +120,85 @@ describe("layout workspace helpers", () => {
   test("keeps local first while preserving known order", () => {
     const result = effectiveWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])
+  })
+
+  test("resolves direct route roots from project metadata", () => {
+    const result = routeProjectRoot({
+      directory: "/repo",
+      opened: [],
+      projects: [{ id: "project-1", worktree: "/repo", sandboxes: ["/repo-sandbox"] }],
+      workspaceOrder: {},
+    })
+
+    expect(result).toBe("/repo")
+  })
+
+  test("canonicalizes sandbox route directories to their root project", () => {
+    const result = routeProjectRoot({
+      directory: "/repo-sandbox",
+      opened: [],
+      projects: [{ id: "project-1", worktree: "/repo", sandboxes: ["/repo-sandbox"] }],
+      workspaceOrder: {},
+    })
+
+    expect(result).toBe("/repo")
+  })
+
+  test("prefers an already opened project over global metadata", () => {
+    const result = routeProjectRoot({
+      directory: "/repo-sandbox",
+      opened: [{ id: "opened", worktree: "/opened-root", sandboxes: ["/repo-sandbox"] }],
+      projects: [{ id: "project-1", worktree: "/repo", sandboxes: ["/repo-sandbox"] }],
+      workspaceOrder: {},
+    })
+
+    expect(result).toBe("/opened-root")
+  })
+
+  test("uses persisted workspace order before global metadata", () => {
+    const result = routeProjectRoot({
+      directory: "/repo-sandbox",
+      opened: [],
+      projects: [{ id: "project-1", worktree: "/metadata-root", sandboxes: ["/repo-sandbox"] }],
+      workspaceOrder: { "/ordered-root": ["/ordered-root", "/repo-sandbox"] },
+    })
+
+    expect(result).toBe("/ordered-root")
+  })
+
+  test("does not invent a root for unknown direct routes", () => {
+    const result = routeProjectRoot({
+      directory: "/unknown",
+      opened: [],
+      projects: [{ id: "project-1", worktree: "/repo", sandboxes: ["/repo-sandbox"] }],
+      workspaceOrder: {},
+    })
+
+    expect(result).toBeUndefined()
+  })
+
+  test("resolves direct route roots from a synced session project id", () => {
+    const result = routeProjectRoot({
+      directory: "/repo/worktree",
+      opened: [],
+      projects: [{ id: "project-1", worktree: "/repo", sandboxes: [] }],
+      workspaceOrder: {},
+      projectID: "project-1",
+    })
+
+    expect(result).toBe("/repo")
+  })
+
+  test("does not invent a root for an unknown session project id", () => {
+    const result = routeProjectRoot({
+      directory: "/repo/worktree",
+      opened: [],
+      projects: [{ id: "project-1", worktree: "/repo", sandboxes: [] }],
+      workspaceOrder: {},
+      projectID: "missing-project",
+    })
+
+    expect(result).toBeUndefined()
   })
 
   test("finds the latest root session across workspaces", () => {

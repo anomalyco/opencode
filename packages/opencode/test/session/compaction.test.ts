@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from "bun:test"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { APICallError } from "ai"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
@@ -232,7 +233,7 @@ const deps = Layer.mergeAll(
   Plugin.defaultLayer,
   EventV2Bridge.defaultLayer,
   Config.defaultLayer,
-  RuntimeFlags.layer({ experimentalEventSystem: true }),
+  RuntimeFlags.layer({}),
   Database.defaultLayer,
   EventV2Bridge.defaultLayer,
 )
@@ -274,7 +275,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     ? SessionProcessorModule.SessionProcessor.layer.pipe(
         Layer.provide(summary),
         Layer.provide(Image.defaultLayer),
-        Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+        Layer.provide(RuntimeFlags.layer({})),
         Layer.provide(status),
       )
     : layer(options?.result ?? "continue")
@@ -289,7 +290,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     Layer.provide(status),
     Layer.provide(events),
     Layer.provide(options?.config ?? Config.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(RuntimeFlags.layer({})),
     Layer.provide(EventV2Bridge.defaultLayer),
   )
 }
@@ -845,6 +846,25 @@ describe("session.compaction.process", () => {
   )
 
   it.instance(
+    "publishes compaction started event when creating summary marker without experimental flag",
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const seen: string[] = []
+      const unsub = yield* events.listen((evt) => {
+        if ((evt.data as { sessionID?: string }).sessionID === session.id) seen.push(evt.type)
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => unsub)
+
+      yield* SessionCompaction.use.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+
+      expect(seen).toContain(SessionEvent.Compaction.Started.type)
+    }),
+  )
+
+  it.instance(
     "publishes compacted event on continue",
     Effect.gen(function* () {
       const events = yield* EventV2Bridge.Service
@@ -854,7 +874,9 @@ describe("session.compaction.process", () => {
       const msgs = yield* ssn.messages({ sessionID: session.id })
       const done = yield* Deferred.make<void, Error>()
       let seen = false
+      const seenNext: string[] = []
       const unsub = yield* events.listen((evt) => {
+        if ((evt.data as { sessionID?: string }).sessionID === session.id) seenNext.push(evt.type)
         if (evt.type !== SessionCompaction.Event.Compacted.type) return Effect.void
         if ((evt.data as typeof SessionCompaction.Event.Compacted.data.Type).sessionID !== session.id)
           return Effect.void
@@ -874,6 +896,7 @@ describe("session.compaction.process", () => {
       yield* Deferred.await(done).pipe(Effect.timeout("500 millis"))
       expect(result).toBe("continue")
       expect(seen).toBe(true)
+      expect(seenNext).toContain(SessionEvent.Compaction.Ended.type)
     }),
   )
 

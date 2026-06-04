@@ -9,6 +9,15 @@ export type Event =
   | EventPluginAdded
   | EventCatalogModelUpdated
   | EventFileEdited
+  | EventSessionMailboxEnqueued
+  | EventSessionMailboxProcessing
+  | EventSessionMailboxDelivered
+  | EventSessionMailboxFailed
+  | EventSessionMailboxCancelled
+  | EventSessionBackgroundStarted
+  | EventSessionBackgroundCompleted
+  | EventSessionBackgroundFailed
+  | EventSessionBackgroundCancelled
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
   | EventSessionNextPrompted
@@ -610,6 +619,45 @@ export type Part =
   | RetryPart
   | CompactionPart
 
+export type PermissionMetadata = {
+  filepath?: string
+  diff?: string
+  files?: Array<{
+    filePath: string
+    relativePath: string
+    type: string
+    patch: string
+    additions: number
+    deletions: number
+    movePath?: string
+  }>
+  parentDir?: string
+  url?: string
+  format?: string
+  timeout?: number
+  query?: string
+  numResults?: number
+  livecrawl?: boolean
+  type?: string
+  contextMaxCharacters?: number
+  provider?: string
+  repository?: string
+  remote?: string
+  path?: string
+  refresh?: boolean
+  branch?: string
+  depth?: number
+  pattern?: string
+  include?: string
+  description?: string
+  subagent_type?: string
+  operation?: string
+  filePath?: string
+  line?: number
+  character?: number
+  input?: unknown
+}
+
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -727,6 +775,122 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.mailbox.enqueued"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.processing"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+          claimID?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.delivered"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.failed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+          error?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.cancelled"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+        }
+      }
+    | {
+        id: string
+        type: "session.background.started"
+        properties: {
+          timestamp: number
+          sessionID: string
+          parentSessionID: string
+          jobID: string
+          taskID?: string
+          description?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.background.completed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          parentSessionID: string
+          jobID: string
+          taskID?: string
+          description?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.background.failed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          parentSessionID: string
+          jobID: string
+          taskID?: string
+          description?: string
+          error?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.background.cancelled"
+        properties: {
+          timestamp: number
+          sessionID: string
+          parentSessionID: string
+          jobID: string
+          taskID?: string
+          description?: string
+        }
+      }
+    | {
+        id: string
         type: "session.next.agent.switched"
         properties: {
           timestamp: number
@@ -826,7 +990,14 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          error: SessionErrorUnknown
+          error:
+            | SessionErrorAssistantAborted
+            | SessionErrorAssistantApi
+            | SessionErrorAssistantAuth
+            | SessionErrorAssistantContextOverflow
+            | SessionErrorAssistantOutputLength
+            | SessionErrorAssistantStructuredOutput
+            | SessionErrorUnknown
         }
       }
     | {
@@ -1104,9 +1275,7 @@ export type GlobalEvent = {
           sessionID: string
           permission: string
           patterns: Array<string>
-          metadata: {
-            [key: string]: unknown
-          }
+          metadata: PermissionMetadata
           always: Array<string>
           tool?: {
             messageID: string
@@ -1455,6 +1624,15 @@ export type GlobalEvent = {
         }
       }
     | EventServerInstanceDisposed
+    | SyncEventSessionMailboxEnqueued
+    | SyncEventSessionMailboxProcessing
+    | SyncEventSessionMailboxDelivered
+    | SyncEventSessionMailboxFailed
+    | SyncEventSessionMailboxCancelled
+    | SyncEventSessionBackgroundStarted
+    | SyncEventSessionBackgroundCompleted
+    | SyncEventSessionBackgroundFailed
+    | SyncEventSessionBackgroundCancelled
     | SyncEventSessionNextAgentSwitched
     | SyncEventSessionNextModelSwitched
     | SyncEventSessionNextPrompted
@@ -2352,9 +2530,7 @@ export type PermissionRequest = {
   sessionID: string
   permission: string
   patterns: Array<string>
-  metadata: {
-    [key: string]: unknown
-  }
+  metadata: PermissionMetadata
   always: Array<string>
   tool?: {
     messageID: string
@@ -2936,6 +3112,10 @@ export type ModelV2Info = {
   }
 }
 
+export type SessionMailboxKind = "user" | "inter_agent" | "control"
+
+export type SessionMailboxDelivery = "async" | "interrupt"
+
 export type PromptSource = {
   start: number
   end: number
@@ -2965,6 +3145,47 @@ export type PromptReferenceAttachment = {
   targetUri?: string
   problem?: string
   source?: PromptSource
+}
+
+export type SessionErrorAssistantAborted = {
+  type: "aborted"
+  message: string
+}
+
+export type SessionErrorAssistantApi = {
+  type: "api"
+  message: string
+  statusCode?: number
+  isRetryable: boolean
+  responseHeaders?: {
+    [key: string]: string
+  }
+  responseBody?: string
+  metadata?: {
+    [key: string]: string
+  }
+}
+
+export type SessionErrorAssistantAuth = {
+  type: "auth"
+  providerID: string
+  message: string
+}
+
+export type SessionErrorAssistantContextOverflow = {
+  type: "context_overflow"
+  message: string
+  responseBody?: string
+}
+
+export type SessionErrorAssistantOutputLength = {
+  type: "output_length"
+}
+
+export type SessionErrorAssistantStructuredOutput = {
+  type: "structured_output"
+  message: string
+  retries: number
 }
 
 export type SessionErrorUnknown = {
@@ -3026,6 +3247,158 @@ export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
     directory: string
+  }
+}
+
+export type SyncEventSessionMailboxEnqueued = {
+  type: "sync"
+  name: "session.mailbox.enqueued.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type SyncEventSessionMailboxProcessing = {
+  type: "sync"
+  name: "session.mailbox.processing.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+    claimID?: string
+  }
+}
+
+export type SyncEventSessionMailboxDelivered = {
+  type: "sync"
+  name: "session.mailbox.delivered.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type SyncEventSessionMailboxFailed = {
+  type: "sync"
+  name: "session.mailbox.failed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+    error?: string
+  }
+}
+
+export type SyncEventSessionMailboxCancelled = {
+  type: "sync"
+  name: "session.mailbox.cancelled.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type SyncEventSessionBackgroundStarted = {
+  type: "sync"
+  name: "session.background.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
+export type SyncEventSessionBackgroundCompleted = {
+  type: "sync"
+  name: "session.background.completed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
+export type SyncEventSessionBackgroundFailed = {
+  type: "sync"
+  name: "session.background.failed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+    error?: string
+  }
+}
+
+export type SyncEventSessionBackgroundCancelled = {
+  type: "sync"
+  name: "session.background.cancelled.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
   }
 }
 
@@ -3165,7 +3538,14 @@ export type SyncEventSessionNextStepFailed = {
   data: {
     timestamp: number
     sessionID: string
-    error: SessionErrorUnknown
+    error:
+      | SessionErrorAssistantAborted
+      | SessionErrorAssistantApi
+      | SessionErrorAssistantAuth
+      | SessionErrorAssistantContextOverflow
+      | SessionErrorAssistantOutputLength
+      | SessionErrorAssistantStructuredOutput
+      | SessionErrorUnknown
   }
 }
 
@@ -3626,12 +4006,14 @@ export type SessionMessageShell = {
 
 export type SessionMessageAssistantText = {
   type: "text"
+  id: string
   text: string
 }
 
 export type SessionMessageAssistantReasoning = {
   type: "reasoning"
   id: string
+  reasoningID: string
   text: string
 }
 
@@ -3656,7 +4038,6 @@ export type SessionMessageToolStateCompleted = {
   input: {
     [key: string]: unknown
   }
-  attachments?: Array<PromptFileAttachment>
   content: Array<ToolTextContent | ToolFileContent>
   structured: {
     [key: string]: unknown
@@ -3678,6 +4059,7 @@ export type SessionMessageToolStateError = {
 export type SessionMessageAssistantTool = {
   type: "tool"
   id: string
+  callID: string
   name: string
   provider?: {
     executed: boolean
@@ -3695,6 +4077,14 @@ export type SessionMessageAssistantTool = {
     ran?: number
     completed?: number
     pruned?: number
+  }
+}
+
+export type SessionMessageAssistantRetry = {
+  attempt: number
+  error: SessionNextRetryError
+  time: {
+    created: number
   }
 }
 
@@ -3721,6 +4111,7 @@ export type SessionMessageAssistant = {
   }
   finish?: string
   cost?: number
+  retries?: Array<SessionMessageAssistantRetry>
   tokens?: {
     input: number
     output: number
@@ -3730,7 +4121,14 @@ export type SessionMessageAssistant = {
       write: number
     }
   }
-  error?: SessionErrorUnknown
+  error?:
+    | SessionErrorAssistantAborted
+    | SessionErrorAssistantApi
+    | SessionErrorAssistantAuth
+    | SessionErrorAssistantContextOverflow
+    | SessionErrorAssistantOutputLength
+    | SessionErrorAssistantStructuredOutput
+    | SessionErrorUnknown
 }
 
 export type SessionMessageCompaction = {
@@ -3953,6 +4351,131 @@ export type EventFileEdited = {
   }
 }
 
+export type EventSessionMailboxEnqueued = {
+  id: string
+  type: "session.mailbox.enqueued"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type EventSessionMailboxProcessing = {
+  id: string
+  type: "session.mailbox.processing"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+    claimID?: string
+  }
+}
+
+export type EventSessionMailboxDelivered = {
+  id: string
+  type: "session.mailbox.delivered"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type EventSessionMailboxFailed = {
+  id: string
+  type: "session.mailbox.failed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+    error?: string
+  }
+}
+
+export type EventSessionMailboxCancelled = {
+  id: string
+  type: "session.mailbox.cancelled"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type EventSessionBackgroundStarted = {
+  id: string
+  type: "session.background.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
+export type EventSessionBackgroundCompleted = {
+  id: string
+  type: "session.background.completed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
+export type EventSessionBackgroundFailed = {
+  id: string
+  type: "session.background.failed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+    error?: string
+  }
+}
+
+export type EventSessionBackgroundCancelled = {
+  id: string
+  type: "session.background.cancelled"
+  properties: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
 export type EventSessionNextAgentSwitched = {
   id: string
   type: "session.next.agent.switched"
@@ -4062,7 +4585,14 @@ export type EventSessionNextStepFailed = {
   properties: {
     timestamp: number
     sessionID: string
-    error: SessionErrorUnknown
+    error:
+      | SessionErrorAssistantAborted
+      | SessionErrorAssistantApi
+      | SessionErrorAssistantAuth
+      | SessionErrorAssistantContextOverflow
+      | SessionErrorAssistantOutputLength
+      | SessionErrorAssistantStructuredOutput
+      | SessionErrorUnknown
   }
 }
 
@@ -4367,9 +4897,7 @@ export type EventPermissionAsked = {
     sessionID: string
     permission: string
     patterns: Array<string>
-    metadata: {
-      [key: string]: unknown
-    }
+    metadata: PermissionMetadata
     always: Array<string>
     tool?: {
       messageID: string

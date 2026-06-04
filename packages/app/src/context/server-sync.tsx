@@ -1,11 +1,21 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import {
+  batch,
+  createContext,
+  createEffect,
+  getOwner,
+  onCleanup,
+  onMount,
+  type ParentProps,
+  untrack,
+  useContext,
+} from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
-import { useServerSDK } from "./server-sdk"
+import { ServerSDK, useServerSDK } from "./server-sdk"
 import {
   bootstrapDirectory,
   bootstrapGlobal,
@@ -27,10 +37,13 @@ import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
+import { planReconnectRefresh } from "./global-sync/reconnect-refresh"
 import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
 import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 import { createRefCountMap } from "@/utils/refcount"
+import { useGlobal } from "./global"
+import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
 
 type GlobalStore = {
@@ -74,8 +87,8 @@ function makeQueryOptionsApi(serverSDK: () => OpencodeClient, sdkFor: (dir: Path
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContext() {
-  const serverSDK = useServerSDK()
+export function createServerSyncContext(_serverSDK?: ServerSDK) {
+  const serverSDK: ServerSDK = _serverSDK ?? useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("ServerSync must be created within owner")
@@ -84,6 +97,7 @@ export function createServerSyncContext() {
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
+  const forceSessionRefresh = new Set<string>()
 
   const sdkFor = (directory: string) => {
     const key = directoryKey(directory)
@@ -105,7 +119,7 @@ export function createServerSyncContext() {
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     get ready() {
-      return bootstrap.isPending
+      return !bootstrap.isPending
     },
     project: [],
     session_todo: {},
@@ -128,12 +142,14 @@ export function createServerSyncContext() {
       return updateConfigMutation.isPending ? "pending" : undefined
     },
   })
+
   const queryClient = useQueryClient()
 
   let bootedAt = 0
   let bootingRoot = false
   let eventFrame: number | undefined
   let eventTimer: ReturnType<typeof setTimeout> | undefined
+  let streamConnectedCount = 0
 
   onCleanup(() => {
     if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
@@ -223,6 +239,7 @@ export function createServerSyncContext() {
       const key = directoryKey(directory)
       queue.clear(key)
       sessionMeta.delete(key)
+      forceSessionRefresh.delete(key)
       sdkCache.delete(key)
       clearProviderRev(key)
       clearSessionPrefetchDirectory(key)
@@ -234,7 +251,7 @@ export function createServerSyncContext() {
     },
   })
 
-  async function loadSessions(directory: string) {
+  async function loadSessions(directory: string, options?: { force?: boolean }) {
     const key = directoryKey(directory)
     const pending = sessionLoads.get(key)
     if (pending) return pending
@@ -242,7 +259,7 @@ export function createServerSyncContext() {
     children.pin(key)
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(key)
-    if (meta && meta.limit >= store.limit) {
+    if (meta && meta.limit >= store.limit && !options?.force) {
       const next = trimSessions(store.session, {
         limit: store.limit,
         permission: store.permission,
@@ -316,6 +333,7 @@ export function createServerSyncContext() {
     if (!key) return
     const pending = booting.get(key)
     if (pending) return pending
+    const refreshSessions = forceSessionRefresh.delete(key)
 
     children.pin(key)
     const promise = Promise.resolve().then(async () => {
@@ -336,7 +354,7 @@ export function createServerSyncContext() {
         store: child[0],
         setStore: child[1],
         vcsCache: cache,
-        loadSessions,
+        loadSessions: (directory) => loadSessions(directory, { force: refreshSessions }),
         translate: language.t,
         queryClient,
       })
@@ -350,28 +368,59 @@ export function createServerSyncContext() {
     return promise
   }
 
+  function refreshAfterReconnect(input: { forceSessions: boolean }) {
+    const plan = planReconnectRefresh({
+      directories: Object.keys(children.children),
+      forceSessions: input.forceSessions,
+      hasSessionMeta: (key) => sessionMeta.has(key),
+    })
+
+    if (plan.refreshGlobal) queue.refresh()
+
+    for (const key of plan.forceSessionDirectories) {
+      // server-sync only owns child stores that already exist. Route/layout
+      // state owns which projects are "opened", so reconnect resync refreshes
+      // currently materialized child stores without introducing route coupling.
+      forceSessionRefresh.add(key)
+    }
+
+    for (const directory of plan.bootstrapDirectories) {
+      queue.push(directory)
+    }
+
+    // Active session messages are owned by directory-sync contexts because that
+    // layer tracks pagination, optimistic writes, and the current session's
+    // loaded range. Reconnect safely refreshes session status through
+    // bootstrapDirectory(), but message-range resync should stay with that
+    // owner instead of duplicating partial message merge logic here.
+  }
+
   const unsub = serverSDK.event.listen((e) => {
     const directory = e.name
     const key = directoryKey(directory)
     const event = e.details
+    if (directory === "global" && event.type === "server.connected") streamConnectedCount += 1
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     if (directory === "global") {
+      if (event.type === "server.connected" || event.type === "global.disposed") {
+        if (!recent) {
+          refreshAfterReconnect({
+            forceSessions: event.type === "global.disposed" || streamConnectedCount > 1,
+          })
+        }
+        return
+      }
+
       applyGlobalEvent({
         event,
         project: globalStore.project,
         refresh: () => {
           if (recent) return
-          bootstrap.refetch()
+          queue.refresh()
         },
         setGlobalProject: setProjects,
       })
-      if (event.type === "server.connected" || event.type === "global.disposed") {
-        if (recent) return
-        for (const directory of Object.keys(children.children)) {
-          queue.push(directory)
-        }
-      }
       return
     }
 
@@ -465,17 +514,22 @@ export function createServerSyncContext() {
 
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
-  init: () => {
-    const sync = createServerSyncContext()
+  init: (props: { server?: ServerConnection.Any }) => {
+    const global = useGlobal()
+    const language = useLanguage()
+    const server = useServer()
 
-    return {
-      ...sync,
+    const conn = props.server ?? server.current
+    if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
+    const ctx = global.createServerCtx(conn)
+
+    return Object.assign(ctx.sync, {
       createDirSyncContext: createRefCountMap(
-        (dir) => createDirSyncContext(dir, sync),
-        (dir) => sync.disableMcp(dir),
+        (dir) => createDirSyncContext(dir, ctx.sync),
+        (dir) => ctx.sync.disableMcp(dir),
         directoryKey,
       ),
-    }
+    })
   },
 })
 

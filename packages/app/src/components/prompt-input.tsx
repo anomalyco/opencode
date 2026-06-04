@@ -277,6 +277,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    variantOpen: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -285,6 +286,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    variantOpen: false,
   })
   const [picker, setPicker] = createStore({
     projectOpen: false,
@@ -1101,6 +1103,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  // Check provider variants directly: `variants` also includes the UI-only default option.
+  const showVariantControl = createMemo(() => local.model.variant.list().length > 0)
   const accepting = createMemo(() => {
     const id = params.id
     if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
@@ -1363,6 +1367,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     navigate(`/${base64Encode(worktree)}/session`)
   }
   const addProject = async () => {
+    const conn = server.current
+    if (!conn) return
     const select = (result: string | string[] | null) => {
       const directory = Array.isArray(result) ? result[0] : result
       if (!directory) return
@@ -1374,7 +1380,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     void import("@/components/dialog-select-directory").then((x) => {
       dialog.show(
-        () => <x.DialogSelectDirectory onSelect={select} />,
+        () => <x.DialogSelectDirectory onSelect={select} server={conn} />,
         () => select(null),
       )
     })
@@ -1460,7 +1466,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               data-component={newSession() ? "session-new-composer" : "session-composer"}
               onSubmit={handleSubmit}
               classList={{
-                "group/prompt-input min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
+                // `max-md:rounded-2xl` softens the composer on mobile only; `rounded-xl`
+                // still wins at >=md so desktop stays pixel-identical.
+                "group/prompt-input min-h-[96px] w-full rounded-xl max-md:rounded-2xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
                 "border-icon-info-active border-dashed": store.draggingType !== null,
                 [props.class ?? ""]: !!props.class,
               }}
@@ -1541,8 +1549,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </div>
                 </div>
               </div>
-              <div class="flex h-11 items-center px-2">
-                <div class="flex min-w-0 flex-1 items-center gap-0">
+              {/* Action bar: taller with comfier touch targets on mobile (max-md:*),
+                  reset to the exact desktop metrics at >=md. */}
+              <div class="flex h-11 max-md:h-12 items-center px-2 max-md:px-2.5">
+                <div class="flex min-w-0 flex-1 items-center gap-0 max-md:gap-0.5">
                   {fileAttachmentInput()}
                   <TooltipKeybind
                     placement="top"
@@ -1554,7 +1564,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       type="button"
                       icon="plus"
                       variant="ghost"
-                      class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted"
+                      class="size-7 max-md:size-9 rounded-md max-md:rounded-lg p-[6px] max-md:p-2 text-v2-icon-icon-muted"
                       style={buttons()}
                       onClick={pick}
                       disabled={store.mode !== "normal"}
@@ -1569,6 +1579,39 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <ComposerPickerTrigger state={newProjectTriggerState()} />
                   </Show>
                   <ComposerModelControl state={modelControlState()} />
+                  <Show when={store.mode !== "shell" && showVariantControl()}>
+                    <div
+                      data-component="prompt-variant-control"
+                      classList={{
+                        "hidden group-hover/prompt-input:block group-focus-within/prompt-input:block":
+                          !local.model.variant.current() && !store.variantOpen,
+                      }}
+                    >
+                      <TooltipKeybind
+                        placement="top"
+                        gutter={4}
+                        title={language.t("command.model.variant.cycle")}
+                        keybind={command.keybind("model.variant.cycle")}
+                      >
+                        <Select
+                          size="normal"
+                          options={variants()}
+                          current={local.model.variant.current() ?? "default"}
+                          label={(x) => (x === "default" ? language.t("common.default") : x)}
+                          onOpenChange={(open) => setStore("variantOpen", open)}
+                          onSelect={(value) => {
+                            local.model.variant.set(value === "default" ? undefined : value)
+                            restoreFocus()
+                          }}
+                          class="capitalize max-w-[160px] justify-start text-v2-text-text-faint"
+                          valueClass="truncate text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+                          triggerStyle={control()}
+                          triggerProps={{ "data-action": "prompt-model-variant" }}
+                          variant="ghost"
+                        />
+                      </TooltipKeybind>
+                    </div>
+                  </Show>
                 </div>
                 <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
@@ -1578,7 +1621,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     tabIndex={store.mode === "normal" ? undefined : -1}
                     icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
                     variant="primary"
-                    class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+                    class="size-7 max-md:size-9 rounded-md max-md:rounded-lg p-[6px] max-md:p-2 text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
                     style={{
                       "background-image":
                         "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
@@ -1888,7 +1931,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             </TooltipKeybind>
                           </Show>
                         </div>
-                        <Show when={variants().length > 2}>
+                        <Show when={showVariantControl()}>
                           <div
                             data-component="prompt-variant-control"
                             style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
@@ -2090,9 +2133,22 @@ function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
   )
 }
 
+function ComposerModelControlSkeleton(props: { style: JSX.CSSProperties | undefined }) {
+  return (
+    <div
+      aria-hidden="true"
+      class="flex h-7 w-[min(220px,45vw)] shrink-0 items-center gap-1.5 rounded px-2"
+      style={props.style}
+    >
+      <div class="size-4 shrink-0 rounded-full bg-v2-overlay-simple-overlay-hover opacity-80" />
+      <div class="h-3.5 w-24 rounded bg-v2-overlay-simple-overlay-hover opacity-80" />
+    </div>
+  )
+}
+
 function ComposerModelControl(props: { state: ComposerModelControlState }) {
   return (
-    <Show when={!props.state.loading}>
+    <Show when={!props.state.loading} fallback={<ComposerModelControlSkeleton style={props.state.style} />}>
       <Show
         when={props.state.paid}
         fallback={

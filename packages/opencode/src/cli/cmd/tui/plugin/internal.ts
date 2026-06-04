@@ -22,7 +22,7 @@ export type InternalTuiPlugin = Omit<TuiPluginModule, "id"> & {
   enabled?: boolean
 }
 
-export function internalTuiPlugins(flags: Pick<RuntimeFlags.Info, "experimentalEventSystem">): InternalTuiPlugin[] {
+export function internalTuiPlugins(_flags: RuntimeFlags.Info): InternalTuiPlugin[] {
   return [
     HomeFooter,
     HomeTips,
@@ -36,7 +36,7 @@ export function internalTuiPlugins(flags: Pick<RuntimeFlags.Info, "experimentalE
     PluginManager,
     WhichKey,
     DiffViewer,
-    ...(flags.experimentalEventSystem ? [SessionV2Debug] : []),
+    SessionV2Debug,
     ...(Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHER ? [SessionSwitcher] : []),
   ]
 }

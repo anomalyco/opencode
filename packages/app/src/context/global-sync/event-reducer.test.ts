@@ -202,6 +202,98 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
+  test("does not throw and cleans caches when archived session sorts after all stored sessions", () => {
+    const message = userMessage("msg_1", "ses_z_missing")
+    const [store, setStore] = createStore(
+      baseState({
+        session: [rootSession({ id: "ses_other" })],
+        sessionTotal: 1,
+        message: { ses_z_missing: [message] },
+        part: { [message.id]: [textPart("prt_1", "ses_z_missing", message.id)] },
+        session_diff: { ses_z_missing: [] },
+        todo: { ses_z_missing: [] },
+        permission: { ses_z_missing: [] },
+        question: { ses_z_missing: [] },
+        session_status: { ses_z_missing: { type: "busy" } },
+      }),
+    )
+    const todos: string[] = []
+
+    expect(() =>
+      applyDirectoryEvent({
+        event: { type: "session.updated", properties: { info: rootSession({ id: "ses_z_missing", archived: 10 }) } },
+        store,
+        setStore,
+        push() {},
+        directory: "/tmp",
+        loadLsp() {},
+        setSessionTodo(sessionID, value) {
+          if (value !== undefined) return
+          todos.push(sessionID)
+        },
+      }),
+    ).not.toThrow()
+
+    // session list is untouched (it was never present), caches are dropped
+    expect(store.session.map((x) => x.id)).toEqual(["ses_other"])
+    expect(store.message.ses_z_missing).toBeUndefined()
+    expect(store.part[message.id]).toBeUndefined()
+    expect(store.session_diff.ses_z_missing).toBeUndefined()
+    expect(store.todo.ses_z_missing).toBeUndefined()
+    expect(store.permission.ses_z_missing).toBeUndefined()
+    expect(store.question.ses_z_missing).toBeUndefined()
+    expect(store.session_status.ses_z_missing).toBeUndefined()
+    expect(todos).toContain("ses_z_missing")
+    expect(store.sessionTotal).toBe(0)
+  })
+
+  test("archived event with same archived timestamp leaves existing session and total unchanged", () => {
+    const [store, setStore] = createStore(
+      baseState({
+        session: [rootSession({ id: "ses_1", archived: 10 }), rootSession({ id: "ses_2" })],
+        sessionTotal: 2,
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info: rootSession({ id: "ses_1", archived: 10 }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session.map((x) => x.id)).toEqual(["ses_1", "ses_2"])
+    expect(store.sessionTotal).toBe(2)
+  })
+
+  test("archived event on a parented session not in store does not decrement total", () => {
+    const [store, setStore] = createStore(
+      baseState({
+        session: [rootSession({ id: "ses_root" })],
+        sessionTotal: 1,
+      }),
+    )
+
+    expect(() =>
+      applyDirectoryEvent({
+        event: {
+          type: "session.updated",
+          properties: { info: rootSession({ id: "ses_child", parentID: "ses_root", archived: 10 }) },
+        },
+        store,
+        setStore,
+        push() {},
+        directory: "/tmp",
+        loadLsp() {},
+      }),
+    ).not.toThrow()
+
+    expect(store.session.map((x) => x.id)).toEqual(["ses_root"])
+    expect(store.sessionTotal).toBe(1)
+  })
+
   test("cleans session caches when deleted and decrements only root totals", () => {
     const cases = [
       { info: rootSession({ id: "ses_1" }), expectedTotal: 1 },

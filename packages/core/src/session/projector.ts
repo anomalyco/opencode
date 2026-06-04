@@ -107,6 +107,7 @@ function applyUsage(
 
 function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
+    if (yield* hasProjectedIdentity(db, event)) return
     const adapter: SessionMessageUpdater.Adapter = {
       getCurrentAssistant() {
         return Effect.gen(function* () {
@@ -266,6 +267,41 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
   })
 }
 
+function hasProjectedIdentity(db: DatabaseService, event: SessionEvent.Event) {
+  return Effect.gen(function* () {
+    if (!createsMessageIdentity(event)) return false
+    const rows = yield* db
+      .select()
+      .from(SessionMessageTable)
+      .where(eq(SessionMessageTable.session_id, event.data.sessionID))
+      .all()
+      .pipe(Effect.orDie)
+    return rows
+      .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+      .some((message) => message.id === event.id || hasContentIdentity(message, event.id))
+  })
+}
+
+function createsMessageIdentity(event: SessionEvent.Event) {
+  return (
+    event.type === "session.next.agent.switched" ||
+    event.type === "session.next.model.switched" ||
+    event.type === "session.next.prompted" ||
+    event.type === "session.next.synthetic" ||
+    event.type === "session.next.shell.started" ||
+    event.type === "session.next.step.started" ||
+    event.type === "session.next.text.started" ||
+    event.type === "session.next.tool.input.started" ||
+    event.type === "session.next.reasoning.started" ||
+    event.type === "session.next.compaction.started"
+  )
+}
+
+function hasContentIdentity(message: SessionMessage.Message, id: EventV2.ID) {
+  if (message.type !== "assistant") return false
+  return message.content.some((item) => item.id === id)
+}
+
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -363,93 +399,49 @@ export const layer = Layer.effectDiscard(
         if (next) yield* applyUsage(db, sessionID, next)
       }),
     )
-    // session.next.* projectors are disabled while the v2 message projection is stabilized.
-    // The events still publish through EventV2 and fan out through the opencode bridge.
-    // yield* events.project(SessionEvent.AgentSwitched, (event) =>
-    //   Effect.gen(function* () {
-    //     const message = Schema.encodeSync(SessionMessage.AgentSwitched)(
-    //       new SessionMessage.AgentSwitched({
-    //         id: event.id,
-    //         type: "agent-switched",
-    //         metadata: event.metadata,
-    //         agent: event.data.agent,
-    //         time: { created: event.data.timestamp },
-    //       }),
-    //     )
-    //     const data = { metadata: message.metadata, agent: message.agent, time: message.time }
-    //     yield* db
-    //       .update(SessionTable)
-    //       .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
-    //       .where(eq(SessionTable.id, event.data.sessionID))
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //     yield* db
-    //       .insert(SessionMessageTable)
-    //       .values([
-    //         {
-    //           id: SessionMessage.ID.make(event.id),
-    //           session_id: event.data.sessionID,
-    //           type: "agent-switched",
-    //           time_created: DateTime.toEpochMillis(event.data.timestamp),
-    //           data,
-    //         },
-    //       ])
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //   }),
-    // )
-    // yield* events.project(SessionEvent.ModelSwitched, (event) =>
-    //   Effect.gen(function* () {
-    //     const message = Schema.encodeSync(SessionMessage.ModelSwitched)(
-    //       new SessionMessage.ModelSwitched({
-    //         id: event.id,
-    //         type: "model-switched",
-    //         metadata: event.metadata,
-    //         model: event.data.model,
-    //         time: { created: event.data.timestamp },
-    //       }),
-    //     )
-    //     const data = { metadata: message.metadata, model: message.model, time: message.time }
-    //     yield* db
-    //       .update(SessionTable)
-    //       .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
-    //       .where(eq(SessionTable.id, event.data.sessionID))
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //     yield* db
-    //       .insert(SessionMessageTable)
-    //       .values([
-    //         {
-    //           id: SessionMessage.ID.make(event.id),
-    //           session_id: event.data.sessionID,
-    //           type: "model-switched",
-    //           time_created: DateTime.toEpochMillis(event.data.timestamp),
-    //           data,
-    //         },
-    //       ])
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //   }),
-    // )
-    // yield* events.project(SessionEvent.Prompted, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.AgentSwitched, (event) =>
+      run(db, event).pipe(
+        Effect.andThen(
+          db
+            .update(SessionTable)
+            .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+            .where(eq(SessionTable.id, event.data.sessionID))
+            .run()
+            .pipe(Effect.orDie),
+        ),
+      ),
+    )
+    yield* events.project(SessionEvent.ModelSwitched, (event) =>
+      run(db, event).pipe(
+        Effect.andThen(
+          db
+            .update(SessionTable)
+            .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+            .where(eq(SessionTable.id, event.data.sessionID))
+            .run()
+            .pipe(Effect.orDie),
+        ),
+      ),
+    )
+    yield* events.project(SessionEvent.Prompted, (event) => run(db, event))
+    yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
+    yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Retried, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
   }),
 )
 

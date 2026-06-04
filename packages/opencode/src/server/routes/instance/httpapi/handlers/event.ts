@@ -40,7 +40,18 @@ function eventResponse(events: EventV2.Interface) {
           event.location?.directory === instance.directory &&
           (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID),
       ),
-      Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
+      Stream.map((event) => {
+        const payload = EventV2.encodeKnownPayloadForFanout(event, (error) =>
+          log.warn("dropping unencodable EventV2 SSE fanout event", { id: event.id, type: event.type, error }),
+        )
+        if (!payload) {
+          // SSE is live best-effort fanout. Keep the stream alive and drop only
+          // this event; strict EventTable encoding still happens on persistence.
+          return undefined
+        }
+        return { id: payload.id, type: payload.type, properties: payload.data }
+      }),
+      Stream.filter((event) => event !== undefined),
     )
     const disposed = Stream.callback<{ id: string; type: string; properties: unknown }>((queue) => {
       const listener = (event: {

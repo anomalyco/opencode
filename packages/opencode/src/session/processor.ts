@@ -29,8 +29,8 @@ import { Database } from "@opencode-ai/core/database/database"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
 import * as DateTime from "effect/DateTime"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -131,6 +131,44 @@ interface ProcessorContext extends Input {
 
 type StreamEvent = LLMEvent
 
+type LegacyAssistantError = NonNullable<SessionLegacy.Assistant["error"]>
+
+function legacyErrorMessage(error: LegacyAssistantError) {
+  return typeof error.data === "object" && error.data !== null && "message" in error.data && typeof error.data.message === "string"
+    ? error.data.message
+    : "Unknown error"
+}
+
+export function toAssistantError(error: LegacyAssistantError): SessionEvent.AssistantError {
+  if (SessionLegacy.AbortedError.isInstance(error)) return { type: "aborted", message: error.data.message }
+  if (SessionLegacy.APIError.isInstance(error)) {
+    return {
+      type: "api",
+      message: error.data.message,
+      isRetryable: error.data.isRetryable,
+      ...(error.data.statusCode === undefined ? {} : { statusCode: error.data.statusCode }),
+      ...(error.data.responseHeaders === undefined ? {} : { responseHeaders: error.data.responseHeaders }),
+      ...(error.data.responseBody === undefined ? {} : { responseBody: error.data.responseBody }),
+      ...(error.data.metadata === undefined ? {} : { metadata: error.data.metadata }),
+    }
+  }
+  if (SessionLegacy.AuthError.isInstance(error)) {
+    return { type: "auth", providerID: error.data.providerID, message: error.data.message }
+  }
+  if (SessionLegacy.ContextOverflowError.isInstance(error)) {
+    return {
+      type: "context_overflow",
+      message: error.data.message,
+      ...(error.data.responseBody === undefined ? {} : { responseBody: error.data.responseBody }),
+    }
+  }
+  if (SessionLegacy.OutputLengthError.isInstance(error)) return { type: "output_length" }
+  if (SessionLegacy.StructuredOutputError.isInstance(error)) {
+    return { type: "structured_output", message: error.data.message, retries: error.data.retries }
+  }
+  return { type: "unknown", message: legacyErrorMessage(error) }
+}
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
 export const layer = Layer.effect(
@@ -148,7 +186,6 @@ export const layer = Layer.effect(
     const status = yield* SessionStatus.Service
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
-    const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
@@ -270,15 +307,12 @@ export const layer = Layer.effect(
 
       const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* (reasoningID: string) {
         if (!(reasoningID in ctx.reasoningMap)) return
-        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (flags.experimentalEventSystem) {
-          yield* events.publish(SessionEvent.Reasoning.Ended, {
-            sessionID: ctx.sessionID,
-            reasoningID,
-            text: ctx.reasoningMap[reasoningID].text,
-            timestamp: DateTime.makeUnsafe(Date.now()),
-          })
-        }
+        yield* events.publish(SessionEvent.Reasoning.Ended, {
+          sessionID: ctx.sessionID,
+          reasoningID,
+          text: ctx.reasoningMap[reasoningID].text,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+        })
         // oxlint-disable-next-line no-self-assign -- reactivity trigger
         ctx.reasoningMap[reasoningID].text = ctx.reasoningMap[reasoningID].text
         ctx.reasoningMap[reasoningID].time = { ...ctx.reasoningMap[reasoningID].time, end: Date.now() }
@@ -306,15 +340,12 @@ export const layer = Layer.effect(
           }
           return { call: ctx.toolcalls[input.id], part }
         }
-        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (flags.experimentalEventSystem) {
-          yield* events.publish(SessionEvent.Tool.Input.Started, {
-            sessionID: ctx.sessionID,
-            callID: input.id,
-            name: input.name,
-            timestamp: DateTime.makeUnsafe(Date.now()),
-          })
-        }
+        yield* events.publish(SessionEvent.Tool.Input.Started, {
+          sessionID: ctx.sessionID,
+          callID: input.id,
+          name: input.name,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+        })
         const part = yield* session.updatePart({
           id: PartID.ascending(),
           messageID: ctx.assistantMessage.id,
@@ -363,14 +394,11 @@ export const layer = Layer.effect(
           case "reasoning-start":
             attempt.resetIfNeeded()
             if (value.id in ctx.reasoningMap) return
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Reasoning.Started, {
-                sessionID: ctx.sessionID,
-                reasoningID: value.id,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
+            yield* events.publish(SessionEvent.Reasoning.Started, {
+              sessionID: ctx.sessionID,
+              reasoningID: value.id,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -423,15 +451,12 @@ export const layer = Layer.effect(
           case "tool-input-end": {
             attempt.markToolActivity()
             const toolCall = yield* ensureToolCall(value)
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Tool.Input.Ended, {
-                sessionID: ctx.sessionID,
-                callID: value.id,
-                text: "",
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
+            yield* events.publish(SessionEvent.Tool.Input.Ended, {
+              sessionID: ctx.sessionID,
+              callID: value.id,
+              text: "",
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             ctx.toolcalls[value.id] = { ...toolCall.call, inputEnded: true }
             return
           }
@@ -444,30 +469,24 @@ export const layer = Layer.effect(
             const toolCall = yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
             if (!toolCall.call.inputEnded) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (flags.experimentalEventSystem) {
-                yield* events.publish(SessionEvent.Tool.Input.Ended, {
-                  sessionID: ctx.sessionID,
-                  callID: value.id,
-                  text: "",
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-              }
-            }
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Tool.Called, {
+              yield* events.publish(SessionEvent.Tool.Input.Ended, {
                 sessionID: ctx.sessionID,
                 callID: value.id,
-                tool: value.name,
-                input,
-                provider: {
-                  executed: toolCall.part.metadata?.providerExecuted === true,
-                  ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
-                },
+                text: "",
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
+            yield* events.publish(SessionEvent.Tool.Called, {
+              sessionID: ctx.sessionID,
+              callID: value.id,
+              tool: value.name,
+              input,
+              provider: {
+                executed: toolCall.part.metadata?.providerExecuted === true,
+                ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+              },
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             yield* updateToolCall(value.id, (match) => ({
               ...match,
               tool: value.name,
@@ -539,30 +558,27 @@ export const layer = Layer.effect(
                   : `${rawOutput.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the image size limit.]`,
               attachments: attachments.length ? attachments : undefined,
             }
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Tool.Success, {
-                sessionID: ctx.sessionID,
-                callID: value.id,
-                structured: output.metadata,
-                content: [
-                  {
-                    type: "text",
-                    text: output.output,
-                  },
-                  ...(output.attachments?.map((item: SessionLegacy.FilePart) => ({
-                    type: "file" as const,
-                    uri: item.url,
-                    mime: item.mime,
-                    name: item.filename,
-                  })) ?? []),
-                ],
-                provider: {
-                  executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
-                },
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
+            yield* events.publish(SessionEvent.Tool.Success, {
+              sessionID: ctx.sessionID,
+              callID: value.id,
+              structured: output.metadata,
+              content: [
+                new ToolOutput.TextContent({
+                  type: "text",
+                  text: output.output,
+                }),
+                ...(output.attachments?.map((item: SessionLegacy.FilePart) => new ToolOutput.FileContent({
+                  type: "file" as const,
+                  uri: item.url,
+                  mime: item.mime,
+                  name: item.filename,
+                })) ?? []),
+              ],
+              provider: {
+                executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+              },
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             yield* completeToolCall(value.id, output)
             return
           }
@@ -570,21 +586,18 @@ export const layer = Layer.effect(
           case "tool-error": {
             attempt.markToolActivity()
             const toolCall = yield* readToolCall(value.id)
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Tool.Failed, {
-                sessionID: ctx.sessionID,
-                callID: value.id,
-                error: {
-                  type: "unknown",
-                  message: value.message,
-                },
-                provider: {
-                  executed: toolCall?.part.metadata?.providerExecuted === true,
-                },
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
+            yield* events.publish(SessionEvent.Tool.Failed, {
+              sessionID: ctx.sessionID,
+              callID: value.id,
+              error: {
+                type: "unknown",
+                message: value.message,
+              },
+              provider: {
+                executed: toolCall?.part.metadata?.providerExecuted === true,
+              },
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             yield* failToolCall(value.id, value.error ?? new Error(value.message))
             return
           }
@@ -596,20 +609,17 @@ export const layer = Layer.effect(
             attempt.resetIfNeeded()
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (flags.experimentalEventSystem) {
-                yield* events.publish(SessionEvent.Step.Started, {
-                  sessionID: ctx.sessionID,
-                  agent: input.assistantMessage.agent,
-                  model: {
-                    id: ModelV2.ID.make(ctx.model.id),
-                    providerID: ProviderV2.ID.make(ctx.model.providerID),
-                    variant: ModelV2.VariantID.make(input.assistantMessage.variant ?? "default"),
-                  },
-                  snapshot: ctx.snapshot,
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-              }
+              yield* events.publish(SessionEvent.Step.Started, {
+                sessionID: ctx.sessionID,
+                agent: input.assistantMessage.agent,
+                model: {
+                  id: ModelV2.ID.make(ctx.model.id),
+                  providerID: ProviderV2.ID.make(ctx.model.providerID),
+                  variant: ModelV2.VariantID.make(input.assistantMessage.variant ?? "default"),
+                },
+                snapshot: ctx.snapshot,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
             }
             const stepStartID = PartID.ascending()
             yield* session.updatePart({
@@ -632,17 +642,14 @@ export const layer = Layer.effect(
               metadata: value.providerMetadata,
             })
             if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (flags.experimentalEventSystem) {
-                yield* events.publish(SessionEvent.Step.Ended, {
-                  sessionID: ctx.sessionID,
-                  finish: value.reason,
-                  cost: usage.cost,
-                  tokens: usage.tokens,
-                  snapshot: completedSnapshot,
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-              }
+              yield* events.publish(SessionEvent.Step.Ended, {
+                sessionID: ctx.sessionID,
+                finish: value.reason,
+                cost: usage.cost,
+                tokens: usage.tokens,
+                snapshot: completedSnapshot,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
             }
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
@@ -695,13 +702,10 @@ export const layer = Layer.effect(
           case "text-start":
             attempt.resetIfNeeded()
             if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (flags.experimentalEventSystem) {
-                yield* events.publish(SessionEvent.Text.Started, {
-                  sessionID: ctx.sessionID,
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-              }
+              yield* events.publish(SessionEvent.Text.Started, {
+                sessionID: ctx.sessionID,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
             }
             ctx.currentText = {
               id: PartID.ascending(),
@@ -745,14 +749,11 @@ export const layer = Layer.effect(
               { text: ctx.currentText.text },
             )).text
             if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (flags.experimentalEventSystem) {
-                yield* events.publish(SessionEvent.Text.Ended, {
-                  sessionID: ctx.sessionID,
-                  text: ctx.currentText.text,
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-              }
+              yield* events.publish(SessionEvent.Text.Ended, {
+                sessionID: ctx.sessionID,
+                text: ctx.currentText.text,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
             }
             {
               const end = Date.now()
@@ -838,17 +839,11 @@ export const layer = Layer.effect(
           return
         }
         if (!ctx.assistantMessage.summary) {
-          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-          if (flags.experimentalEventSystem) {
-            yield* events.publish(SessionEvent.Step.Failed, {
-              sessionID: ctx.sessionID,
-              error: {
-                type: "unknown",
-                message: errorMessage(e),
-              },
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
-          }
+          yield* events.publish(SessionEvent.Step.Failed, {
+            sessionID: ctx.sessionID,
+            error: toAssistantError(error),
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
         }
         ctx.assistantMessage.error = error
         yield* events.publish(Session.Event.Error, {
@@ -958,29 +953,27 @@ export const layer = Layer.effect(
                 provider: input.model.providerID,
                 parse,
                 set: (info) => {
-                  // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-                  const event = flags.experimentalEventSystem
-                    ? events.publish(SessionEvent.Retried, {
-                        sessionID: ctx.sessionID,
-                        attempt: info.attempt,
-                        error: {
-                          message: info.message,
-                          isRetryable: true,
-                        },
-                        timestamp: DateTime.makeUnsafe(Date.now()),
-                      })
-                    : Effect.void
-                  return event.pipe(
-                    Effect.andThen(
-                      status.set(ctx.sessionID, {
-                        type: "retry",
-                        attempt: info.attempt,
+                  return events
+                    .publish(SessionEvent.Retried, {
+                      sessionID: ctx.sessionID,
+                      attempt: info.attempt,
+                      error: {
                         message: info.message,
-                        action: info.action,
-                        next: info.next,
-                      }),
-                    ),
-                  )
+                        isRetryable: true,
+                      },
+                      timestamp: DateTime.makeUnsafe(Date.now()),
+                    })
+                    .pipe(
+                      Effect.andThen(
+                        status.set(ctx.sessionID, {
+                          type: "retry",
+                          attempt: info.attempt,
+                          message: info.message,
+                          action: info.action,
+                          next: info.next,
+                        }),
+                      ),
+                    )
                 },
               }),
             ),
@@ -1022,7 +1015,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(Image.defaultLayer),
     Layer.provide(Config.defaultLayer),
-    Layer.provide(RuntimeFlags.defaultLayer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
   ),

@@ -4,10 +4,13 @@ import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import * as Log from "@opencode-ai/core/util/log"
 import "@opencode-ai/core/account"
 import "@opencode-ai/core/catalog"
 import "@opencode-ai/core/session/event"
 import { Context, Effect, Layer } from "effect"
+
+const log = Log.create({ service: "event-v2-bridge" })
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}
 
@@ -35,11 +38,17 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         const ctx = yield* InstanceRef
         const workspaceID = (yield* WorkspaceRef) ?? event.location?.workspaceID
+        const payload = EventV2.encodeKnownPayloadForFanout(event, (error) =>
+          log.warn("dropping unencodable EventV2 GlobalBus fanout event", { id: event.id, type: event.type, error }),
+        )
+        if (!payload) {
+          return
+        }
         GlobalBus.emit("event", {
           directory: event.location?.directory ?? ctx?.directory,
           project: ctx?.project.id,
           workspace: workspaceID,
-          payload: { id: event.id, type: event.type, properties: event.data },
+          payload: { id: payload.id, type: payload.type, properties: payload.data },
         })
       }),
     )

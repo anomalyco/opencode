@@ -13,6 +13,7 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
+import { EventTable } from "@opencode-ai/core/event/sql"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
@@ -518,9 +519,10 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("background tasks complete through the background job service", () =>
+  background.instance("background tasks complete through the background job service and lifecycle events", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
+      const database = yield* Database.Service
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
       const def = yield* tool.init()
@@ -548,15 +550,22 @@ describe("tool.task", () => {
       expect(waited.timedOut).toBe(false)
       expect(waited.info?.status).toBe("completed")
       expect(waited.info?.output).toBe("background done")
+
+      const rows = yield* database.db.select().from(EventTable).all().pipe(Effect.orDie)
+      expect(rows.map((row) => row.type).filter((type) => type.startsWith("session.background."))).toEqual([
+        "session.background.started.1",
+        "session.background.completed.1",
+      ])
     }),
   )
 
-  background.instance("background task completion does not wait for the parent async prompt", () =>
+  background.instance("background task completion does not synthesize a parent prompt", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
       const def = yield* tool.init()
+      let parentPrompts = 0
 
       const result = yield* def.execute(
         {
@@ -574,7 +583,12 @@ describe("tool.task", () => {
             promptOps: {
               ...stubOps({ text: "background done" }),
               prompt: (input) =>
-                input.sessionID === chat.id ? Effect.never : Effect.succeed(reply(input, "background done")),
+                input.sessionID === chat.id
+                  ? Effect.sync(() => {
+                      parentPrompts++
+                      return reply(input, "unexpected parent prompt")
+                    })
+                  : Effect.succeed(reply(input, "background done")),
             } satisfies TaskPromptOps,
           },
           messages: [],
@@ -586,6 +600,56 @@ describe("tool.task", () => {
       const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
       expect(waited.timedOut).toBe(false)
       expect(waited.info?.status).toBe("completed")
+      expect(parentPrompts).toBe(0)
+    }),
+  )
+
+  background.instance("cancelling a background task cancels the child runner once", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const database = yield* Database.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const cancelled: SessionID[] = []
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              cancel: (sessionID) =>
+                Effect.sync(() => {
+                  cancelled.push(sessionID)
+                }),
+              resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+              prompt: () => Effect.never,
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect((yield* jobs.cancel(result.metadata.sessionId))?.status).toBe("cancelled")
+      expect((yield* jobs.cancel(result.metadata.sessionId))?.status).toBe("cancelled")
+      expect(cancelled).toEqual([result.metadata.sessionId])
+
+      const rows = yield* database.db.select().from(EventTable).all().pipe(Effect.orDie)
+      expect(rows.map((row) => row.type).filter((type) => type.startsWith("session.background."))).toEqual([
+        "session.background.started.1",
+        "session.background.cancelled.1",
+      ])
     }),
   )
 

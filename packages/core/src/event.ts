@@ -34,6 +34,10 @@ export type Payload<D extends Definition = Definition> = {
   readonly metadata?: Record<string, unknown>
 }
 
+export type EncodedPayload<D extends Definition = Definition> = Omit<Payload<D>, "data"> & {
+  readonly data: Record<string, unknown>
+}
+
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 type AnyProjector = (event: Payload) => Effect.Effect<void>
 export type Listener = (event: Payload) => Effect.Effect<void>
@@ -56,12 +60,38 @@ export class InvalidSyncEventError extends Schema.TaggedErrorClass<InvalidSyncEv
   },
 ) {}
 
+export class DuplicateEventDefinitionError extends Error {
+  constructor(type: string) {
+    super(`Event definition ${type} is already registered`)
+    this.name = "EventV2.DuplicateEventDefinition"
+  }
+}
+
 export function versionedType(type: string, version: number) {
   return `${type}.${version}`
 }
 
 export const registry = new Map<string, Definition>()
 const syncRegistry = new Map<string, Definition & { readonly sync: NonNullable<Definition["sync"]> }>()
+
+function registerDefinition(definition: Definition) {
+  const sync = definition.sync
+
+  if (sync === undefined) {
+    if (registry.has(definition.type)) throw new DuplicateEventDefinitionError(definition.type)
+    registry.set(definition.type, definition)
+    return
+  }
+
+  const versioned = versionedType(definition.type, sync.version)
+  if (syncRegistry.has(versioned)) throw new DuplicateEventDefinitionError(versioned)
+
+  const existing = registry.get(definition.type)
+  const existingSync = existing?.sync
+  if (existing !== undefined && existingSync === undefined) throw new DuplicateEventDefinitionError(definition.type)
+  if (existingSync === undefined || sync.version >= existingSync.version) registry.set(definition.type, definition)
+  syncRegistry.set(versioned, definition as Definition & { readonly sync: NonNullable<Definition["sync"]> })
+}
 
 export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
   readonly type: Type
@@ -86,21 +116,67 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
     ...(input.sync === undefined ? {} : { sync: input.sync }),
     data: Data,
   })
-  const existing = registry.get(input.type)
-  if (input.sync === undefined || existing?.sync === undefined || input.sync.version >= existing.sync.version) {
-    registry.set(input.type, definition)
-  }
-  if (input.sync)
-    syncRegistry.set(
-      versionedType(input.type, input.sync.version),
-      definition as Definition & { readonly sync: NonNullable<Definition["sync"]> },
-    )
+  registerDefinition(definition)
   return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
     Definition<Type, Schema.Struct<Fields>>
 }
 
 export function definitions() {
   return registry.values().toArray()
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>
+  return {}
+}
+
+function normalizeLegacyData(definition: Definition, data: Record<string, unknown>): Record<string, unknown> {
+  if (!definition.type.startsWith("session.next.")) return data
+  const timestamp = data.timestamp
+  if (typeof timestamp !== "string") return data
+  const millis = Date.parse(timestamp)
+  if (!Number.isFinite(millis)) return data
+  return { ...data, timestamp: millis }
+}
+
+export function encodeData<D extends Definition>(definition: D, data: Data<D>): Record<string, unknown> {
+  const schema = definition.data as Schema.Encoder<Record<string, unknown>>
+  return asRecord(Schema.encodeUnknownSync(schema)(data))
+}
+
+export function decodeData<D extends Definition>(definition: D, data: Record<string, unknown>): Data<D> {
+  const schema = definition.data as Schema.Decoder<unknown>
+  return Schema.decodeUnknownSync(schema)(normalizeLegacyData(definition, data)) as Data<D>
+}
+
+export function encodePayload<D extends Definition>(definition: D, payload: Payload<D>): EncodedPayload<D> {
+  return { ...payload, data: encodeData(definition, payload.data) }
+}
+
+export function decodePayload<D extends Definition>(definition: D, payload: EncodedPayload<D>): Payload<D> {
+  return { ...payload, data: decodeData(definition, payload.data) }
+}
+
+export function encodeKnownPayload(payload: Payload): EncodedPayload {
+  const definition = registry.get(payload.type)
+  if (!definition) return { ...payload, data: asRecord(payload.data) }
+  return encodePayload(definition, payload as Payload<typeof definition>)
+}
+
+export function encodeKnownPayloadForFanout(
+  payload: Payload,
+  onError?: (error: unknown) => void,
+): EncodedPayload | undefined {
+  try {
+    return encodeKnownPayload(payload)
+  } catch (error) {
+    // Live fanout is best-effort compatibility delivery. Transactional sync
+    // persistence remains fail-fast via encodeData/encodeKnownPayload callers,
+    // but GlobalBus/SSE must not let one unencodable event abort publish or
+    // disconnect streams. Callers should log and drop only this event.
+    onError?.(error)
+    return undefined
+  }
 }
 
 export interface PublishOptions {
@@ -163,9 +239,10 @@ export const layer = Layer.effect(
     function commitSyncEvent(
       event: Payload,
       input?: { readonly seq: number; readonly aggregateID: string; readonly ownerID?: string },
+      resolvedDefinition?: Definition & { readonly sync: NonNullable<Definition["sync"]> },
     ) {
       return Effect.gen(function* () {
-        const definition = registry.get(event.type)
+        const definition = resolvedDefinition ?? registry.get(event.type)
         const sync = definition?.sync
         if (sync) {
           if (event.version !== sync.version) {
@@ -220,6 +297,7 @@ export const layer = Layer.effect(
                       })
                       .run()
                       .pipe(Effect.orDie)
+                    const data = encodeData(definition, event.data)
                     yield* db
                       .insert(EventTable)
                       .values([
@@ -228,7 +306,7 @@ export const layer = Layer.effect(
                           aggregate_id: aggregateID,
                           seq,
                           type: versionedType(definition.type, sync.version),
-                          data: event.data as Record<string, unknown>,
+                          data,
                         },
                       ])
                       .run()
@@ -289,9 +367,13 @@ export const layer = Layer.effect(
             id: event.id,
             type: definition.type,
             version: definition.sync.version,
-            data: event.data,
+            data: decodeData(definition, event.data),
           } as Payload
-          yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
+          yield* commitSyncEvent(
+            payload,
+            { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID },
+            definition,
+          )
           if (options?.publish) {
             for (const listener of listeners) {
               yield* listener(payload)

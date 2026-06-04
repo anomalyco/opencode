@@ -77,7 +77,6 @@ export class ToolStateRunning extends Schema.Class<ToolStateRunning>("Session.Me
 export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Session.Message.ToolState.Completed")({
   status: Schema.Literal("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
   content: ToolOutput.Content.pipe(Schema.Array),
   structured: ToolOutput.Structured,
 }) {}
@@ -97,7 +96,8 @@ export type ToolState = Schema.Schema.Type<typeof ToolState>
 
 export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.Assistant.Tool")({
   type: Schema.Literal("tool"),
-  id: Schema.String,
+  id: ID,
+  callID: Schema.String,
   name: Schema.String,
   provider: Schema.Struct({
     executed: Schema.Boolean,
@@ -114,12 +114,14 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.
 
 export class AssistantText extends Schema.Class<AssistantText>("Session.Message.Assistant.Text")({
   type: Schema.Literal("text"),
+  id: ID,
   text: Schema.String,
 }) {}
 
 export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Session.Message.Assistant.Reasoning")({
   type: Schema.Literal("reasoning"),
-  id: Schema.String,
+  id: ID,
+  reasoningID: Schema.String,
   text: Schema.String,
 }) {}
 
@@ -127,6 +129,14 @@ export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning,
   Schema.toTaggedUnion("type"),
 )
 export type AssistantContent = Schema.Schema.Type<typeof AssistantContent>
+
+export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Message.Assistant.Retry")({
+  attempt: SessionEvent.Retried.data.fields.attempt,
+  error: SessionEvent.Retried.data.fields.error,
+  time: Schema.Struct({
+    created: V2Schema.DateTimeUtcFromMillis,
+  }),
+}) {}
 
 export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistant")({
   ...Base,
@@ -140,6 +150,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
   }).pipe(Schema.optional),
   finish: Schema.String.pipe(Schema.optional),
   cost: Schema.Finite.pipe(Schema.optional),
+  retries: AssistantRetry.pipe(Schema.Array, Schema.optional),
   tokens: Schema.Struct({
     input: Schema.Finite,
     output: Schema.Finite,

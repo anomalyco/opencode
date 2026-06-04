@@ -11,6 +11,7 @@ import {
 import { createServerSyncContext } from "./server-sync"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
+import { directoryKey } from "./global-sync/utils"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
 
@@ -123,6 +124,15 @@ export function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) 
   }
 }
 
+// Decide whether an optimistic write targets the context's current directory
+// store or a sibling child store. Compare via directoryKey() so equivalent
+// paths (e.g. trailing slash, separator normalization) still resolve to current.
+export function selectTargetDirectory(context: string, requested?: string) {
+  if (!requested) return undefined
+  if (directoryKey(requested) === directoryKey(context)) return undefined
+  return requested
+}
+
 export function applyOptimisticAdd(draft: OptimisticStore, input: OptimisticAddInput) {
   const messages = draft.message[input.sessionID]
   if (messages) {
@@ -179,9 +189,10 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
   type Setter = Child[1]
 
   const current = createMemo(() => serverSync.child(directory, { mcp: true }))
-  const target = (directory?: string) => {
-    if (!directory || directory === directory) return current()
-    return serverSync.child(directory)
+  const target = (requested?: string) => {
+    const resolved = selectTargetDirectory(directory, requested)
+    if (!resolved) return current()
+    return serverSync.child(resolved)
   }
   const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
   const initialMessagePageSize = 80
