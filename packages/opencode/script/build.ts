@@ -141,6 +141,24 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
+
+function resolveOpenTuiDll(item: { os: string; arch: "arm64" | "x64" }) {
+  if (item.os !== "win32") return
+
+  const packagePath = `@opentui/core-win32-${item.arch}/opentui.dll`
+  const candidates = [
+    path.resolve(dir, `node_modules/${packagePath}`),
+    path.resolve(dir, `node_modules/.bun/node_modules/${packagePath}`),
+    path.resolve(dir, `../../node_modules/${packagePath}`),
+    path.resolve(dir, `../../node_modules/.bun/node_modules/${packagePath}`),
+  ]
+  const dllPath = candidates.find((candidate) => fs.existsSync(candidate))
+  if (!dllPath) {
+    throw new Error(`OpenTUI Windows native library not found. Checked: ${candidates.join(", ")}`)
+  }
+  return fs.realpathSync(dllPath)
+}
+
 for (const item of targets) {
   const name = [
     pkg.name,
@@ -194,6 +212,11 @@ for (const item of targets) {
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
     },
   })
+
+  const openTuiDll = resolveOpenTuiDll(item)
+  if (openTuiDll) {
+    await $`cp ${openTuiDll} dist/${name}/bin/opentui.dll`
+  }
 
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {

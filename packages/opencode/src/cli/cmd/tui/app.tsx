@@ -4,6 +4,7 @@ import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
 import * as TuiAudio from "@tui/util/audio"
 import { createCliRenderer, MouseButton, type CliRenderer, type CliRendererConfig } from "@opentui/core"
+import { configureOpenTuiNativeLibrary } from "@/cli/opentui-native"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
   Switch,
@@ -151,7 +152,8 @@ export function tuiRendererConfig(_config: TuiConfig.Resolved): CliRendererConfi
   }
 }
 
-export function createTuiRenderer(config: TuiConfig.Resolved) {
+export async function createTuiRenderer(config: TuiConfig.Resolved) {
+  await configureOpenTuiNativeLibrary()
   return createCliRenderer(tuiRendererConfig(config))
 }
 

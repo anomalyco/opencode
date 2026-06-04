@@ -27,6 +27,8 @@ const arch = archMap[os.arch()] ?? os.arch()
 const base = `opencode-${platform}-${arch}`
 const sourceBinary = platform === "windows" ? "opencode.exe" : "opencode"
 const targetBinary = path.join(__dirname, "bin", "opencode.exe")
+const sourceOpenTuiDll = "opentui.dll"
+const targetOpenTuiDll = path.join(__dirname, "bin", sourceOpenTuiDll)
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -120,7 +122,10 @@ function resolveBinary(name) {
   const packageJsonPath = require.resolve(`${name}/package.json`)
   const binaryPath = path.join(path.dirname(packageJsonPath), "bin", sourceBinary)
   if (!fs.existsSync(binaryPath)) throw new Error(`Binary not found at ${binaryPath}`)
-  return binaryPath
+  return {
+    binaryPath,
+    packageDir: path.dirname(packageJsonPath),
+  }
 }
 
 function installPackage(name) {
@@ -136,15 +141,31 @@ function installPackage(name) {
     )
     if (result.status !== 0) return
     const packageDir = path.join(temp, "node_modules", name)
-    copyBinary(path.join(packageDir, "bin", sourceBinary), targetBinary)
+    copyPackageFiles({
+      binaryPath: path.join(packageDir, "bin", sourceBinary),
+      packageDir,
+    })
     return true
   } finally {
     fs.rmSync(temp, { recursive: true, force: true })
   }
 }
 
-function copyBinary(source, target) {
-  if (!fs.existsSync(source)) throw new Error(`Binary not found at ${source}`)
+function copyPackageFiles(resolved) {
+  copyFile(resolved.binaryPath, targetBinary, { executable: true })
+  copyOpenTuiDll(resolved.packageDir)
+}
+
+function copyOpenTuiDll(packageDir) {
+  if (platform !== "windows") return
+
+  const source = path.join(packageDir, "bin", sourceOpenTuiDll)
+  if (!fs.existsSync(source)) return
+  copyFile(source, targetOpenTuiDll)
+}
+
+function copyFile(source, target, options = {}) {
+  if (!fs.existsSync(source)) throw new Error(`File not found at ${source}`)
   fs.mkdirSync(path.dirname(target), { recursive: true })
   if (fs.existsSync(target)) fs.unlinkSync(target)
   try {
@@ -152,7 +173,7 @@ function copyBinary(source, target) {
   } catch {
     fs.copyFileSync(source, target)
   }
-  fs.chmodSync(target, 0o755)
+  if (options.executable) fs.chmodSync(target, 0o755)
 }
 
 function verifyBinary() {
@@ -167,7 +188,7 @@ function verifyBinary() {
 function main() {
   for (const name of packageNames()) {
     try {
-      copyBinary(resolveBinary(name), targetBinary)
+      copyPackageFiles(resolveBinary(name))
       if (verifyBinary()) return
     } catch {
       if (installPackage(name) && verifyBinary()) return

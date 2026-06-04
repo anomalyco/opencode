@@ -12,6 +12,7 @@ import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWr
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Session as SessionApi } from "@/session/session"
 import { registerOpencodeKeymap } from "@/cli/cmd/tui/keymap"
+import { configureOpenTuiNativeLibrary } from "@/cli/opentui-native"
 import * as Locale from "@/util/locale"
 import { withRunSpan } from "./otel"
 import { resolveInteractiveStdin } from "./runtime.stdin"
@@ -174,6 +175,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       let unregisterKeymap: (() => void) | undefined
 
       try {
+        await configureOpenTuiNativeLibrary()
         const renderer = await createCliRenderer({
           stdin: source.stdin,
           targetFps: 30,
