@@ -3274,6 +3274,28 @@ describe("ProviderTransform.variants", () => {
     })
   })
 
+  describe("@ai-sdk/amazon-bedrock/mantle", () => {
+    test("gpt-5.5 returns OpenAI-style reasoning variants", () => {
+      const model = createMockModel({
+        id: "openai.gpt-5.5",
+        providerID: "amazon-bedrock",
+        api: {
+          id: "openai.gpt-5.5",
+          url: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+          npm: "@ai-sdk/amazon-bedrock/mantle",
+        },
+        release_date: "2026-04-23",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
+      expect(result.medium).toEqual({
+        reasoningEffort: "medium",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      })
+    })
+  })
+
   describe("@ai-sdk/anthropic", () => {
     for (const testCase of [
       {

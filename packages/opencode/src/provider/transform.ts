@@ -820,6 +820,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           },
         ]),
       )
+    case "@ai-sdk/amazon-bedrock/mantle":
     case "@ai-sdk/openai": {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
       const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
