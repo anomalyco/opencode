@@ -35,6 +35,22 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("lowers chronological system updates to wrapped user text in order", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "user", parts: [{ text: "Before." }, { text: "<system-update>\nUpdate.\n</system-update>" }] },
+        { role: "model", parts: [{ text: "After." }] },
+      ])
+    }),
+  )
+
   it.effect("prepares multimodal user input and tool history", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
@@ -236,6 +252,72 @@ describe("Gemini route", () => {
           type: "finish",
           reason: "stop",
           usage,
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves thoughtSignature for reasoning and tool-call continuation", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                { text: "thinking", thought: true },
+                { text: "", thought: true, thoughtSignature: "thought_sig" },
+                { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+      const reasoning = response.events.find((event) => event.type === "reasoning-start")
+      const reasoningEnd = response.events.find((event) => event.type === "reasoning-end")
+      const toolCall = response.events.find((event) => event.type === "tool-call")
+
+      expect(reasoning).toEqual({
+        type: "reasoning-start",
+        id: "reasoning-0",
+        providerMetadata: undefined,
+      })
+      expect(reasoningEnd).toEqual({
+        type: "reasoning-end",
+        id: "reasoning-0",
+        providerMetadata: { google: { thoughtSignature: "thought_sig" } },
+      })
+      expect(toolCall).toMatchObject({ providerMetadata: { google: { thoughtSignature: "tool_sig" } } })
+
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "thinking", providerMetadata: reasoningEnd?.providerMetadata },
+              ToolCallPart.make({
+                id: "tool_0",
+                name: "lookup",
+                input: { query: "weather" },
+                providerMetadata: toolCall?.providerMetadata,
+              }),
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            { text: "thinking", thought: true, thoughtSignature: "thought_sig" },
+            { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+          ],
         },
       ])
     }),

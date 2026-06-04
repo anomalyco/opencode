@@ -389,7 +389,7 @@ export const layer = Layer.effect(
                 type: event.type,
                 data: event.data,
               },
-              { publish: true },
+              { publish: true, ownerID: space.id },
             )
             .pipe(Effect.provideService(WorkspaceRef, space.id)),
         { discard: true },
@@ -434,7 +434,7 @@ export const layer = Layer.effect(
               if (payload.type === "server.heartbeat") return
 
               if (payload.type === "sync" && payload.syncEvent) {
-                const failed = yield* events.replay(payload.syncEvent, { publish: true }).pipe(
+                const failed = yield* events.replay(payload.syncEvent, { publish: true, ownerID: space.id }).pipe(
                   Effect.as(false),
                   Effect.catchCause((error) =>
                     Effect.sync(() => {

@@ -122,6 +122,8 @@ export const layer = Layer.effect(
       return skills
     })
 
+    // QUESTION(Dax): Should local skill sources invalidate on filesystem watch
+    // events, following the reload policy chosen for other context sources?
     const cache = new Map<string, Info[]>()
     const list = Effect.fn("SkillV2.list")(function* () {
       const skills = new Map<string, Info>()

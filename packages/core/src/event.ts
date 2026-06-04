@@ -1,18 +1,28 @@
 export * as EventV2 from "./event"
 
 import { Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
-import { eq } from "drizzle-orm"
+import { and, asc, eq, gt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
-import { withStatics } from "./schema"
+import { externalID, type ExternalID, NonNegativeInt, withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Event.ID"),
-  withStatics((schema) => ({ create: () => schema.make("evt_" + Identifier.ascending()) })),
+  withStatics((schema) => ({
+    create: () => schema.make("evt_" + Identifier.ascending()),
+    fromExternal: (input: ExternalID) => schema.make(externalID("evt", input)),
+  })),
 )
 export type ID = typeof ID.Type
+
+/**
+ * Durable aggregate continuation position for embedded replay streams.
+ * TODO: Decide whether a future HTTP / SDK surface should expose an opaque cursor instead.
+ */
+export const Cursor = NonNegativeInt.pipe(Schema.brand("EventV2.Cursor"))
+export type Cursor = typeof Cursor.Type
 
 export type Definition<Type extends string = string, DataSchema extends Schema.Top = Schema.Top> = {
   readonly type: Type
@@ -29,6 +39,8 @@ export type Payload<D extends Definition = Definition> = {
   readonly id: ID
   readonly type: D["type"]
   readonly data: Data<D>
+  /** Durable aggregate order, populated while synchronized events are projected. */
+  readonly seq?: number
   readonly version?: number
   readonly location?: Location.Ref
   readonly metadata?: Record<string, unknown>
@@ -36,6 +48,7 @@ export type Payload<D extends Definition = Definition> = {
 
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 type AnyProjector = (event: Payload) => Effect.Effect<void>
+export type CommitGuard = (event: Payload) => Effect.Effect<void>
 export type Listener = (event: Payload) => Effect.Effect<void>
 export type Sync = (event: Payload) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -46,6 +59,11 @@ export type SerializedEvent = {
   readonly seq: number
   readonly aggregateID: string
   readonly data: Record<string, unknown>
+}
+
+export type CursorEvent<E extends Payload = Payload> = {
+  readonly cursor: Cursor
+  readonly event: E
 }
 
 export class InvalidSyncEventError extends Schema.TaggedErrorClass<InvalidSyncEventError>()(
@@ -61,7 +79,15 @@ export function versionedType(type: string, version: number) {
 }
 
 export const registry = new Map<string, Definition>()
-const syncRegistry = new Map<string, Definition & { readonly sync: NonNullable<Definition["sync"]> }>()
+type SyncDefinition = Definition & {
+  readonly sync: NonNullable<Definition["sync"]>
+  readonly encode: (data: unknown) => unknown
+  readonly decode: (data: unknown) => unknown
+}
+const syncRegistry = new Map<string, SyncDefinition>()
+
+// Synchronized events cross a JSON boundary, so their data schemas must encode and decode without services.
+const syncCodec = (definition: Definition) => definition.data as Schema.Codec<unknown, unknown, never, never>
 
 export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
   readonly type: Type
@@ -93,7 +119,10 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
   if (input.sync)
     syncRegistry.set(
       versionedType(input.type, input.sync.version),
-      definition as Definition & { readonly sync: NonNullable<Definition["sync"]> },
+      Object.assign(definition, {
+        encode: Schema.encodeUnknownSync(syncCodec(definition)),
+        decode: Schema.decodeUnknownSync(syncCodec(definition)),
+      }) as SyncDefinition,
     )
   return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
     Definition<Type, Schema.Struct<Fields>>
@@ -117,16 +146,18 @@ export interface Interface {
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
+  readonly aggregateEvents: (input: { readonly aggregateID: string; readonly after?: Cursor }) => Stream.Stream<CursorEvent>
   readonly sync: (handler: Sync) => Effect.Effect<Unsubscribe>
   readonly listen: (listener: Listener) => Effect.Effect<Unsubscribe>
+  readonly beforeCommit: (guard: CommitGuard) => Effect.Effect<void>
   readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
   readonly replay: (
     event: SerializedEvent,
-    options?: { readonly publish?: boolean; readonly ownerID?: string },
+    options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
   ) => Effect.Effect<void>
   readonly replayAll: (
     events: SerializedEvent[],
-    options?: { readonly publish?: boolean; readonly ownerID?: string },
+    options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
   ) => Effect.Effect<string | undefined>
   readonly remove: (aggregateID: string) => Effect.Effect<void>
   readonly claim: (aggregateID: string, ownerID: string) => Effect.Effect<void>
@@ -134,12 +165,18 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
 
-export const layer = Layer.effect(
+export interface LayerOptions {
+  readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
+}
+
+export const layerWith = (options?: LayerOptions) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const all = yield* PubSub.unbounded<Payload>()
+    const synchronized = new Map<string, Set<PubSub.PubSub<void>>>()
     const typed = new Map<string, PubSub.PubSub<Payload>>()
     const projectors = new Map<string, AnyProjector[]>()
+    const commitGuards = new Array<CommitGuard>()
     const listeners = new Array<Listener>()
     const syncHandlers = new Array<Sync>()
     const { db } = yield* Database.Service
@@ -156,13 +193,16 @@ export const layer = Layer.effect(
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
         yield* PubSub.shutdown(all)
+        yield* Effect.forEach(synchronized.values(), (pubsubs) =>
+          Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
+        { discard: true })
         yield* Effect.forEach(typed.values(), PubSub.shutdown, { discard: true })
       }),
     )
 
     function commitSyncEvent(
       event: Payload,
-      input?: { readonly seq: number; readonly aggregateID: string; readonly ownerID?: string },
+      input?: { readonly seq: number; readonly aggregateID: string; readonly ownerID?: string; readonly strictOwner?: boolean },
     ) {
       return Effect.gen(function* () {
         const definition = registry.get(event.type)
@@ -185,58 +225,93 @@ export const layer = Layer.effect(
               }),
             )
           } else {
-            const list = projectors.get(event.type) ?? []
-            yield* db
-              .transaction(
-                () =>
-                  Effect.gen(function* () {
-                    const row = yield* db
-                      .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
-                      .from(EventSequenceTable)
-                      .where(eq(EventSequenceTable.aggregate_id, aggregateID))
-                      .get()
-                      .pipe(Effect.orDie)
-                    const latest = row?.seq ?? -1
-                    if (input && input.seq <= latest) return
-                    if (input && row?.ownerID && row.ownerID !== input.ownerID) return
-                    const seq = input?.seq ?? latest + 1
-                    if (input && seq !== latest + 1) {
-                      yield* Effect.die(
-                        new InvalidSyncEventError({
-                          type: event.type,
-                          message: `Sequence mismatch for aggregate ${aggregateID}: expected ${latest + 1}, got ${seq}`,
-                        }),
-                      )
-                    }
-                    for (const projector of list) {
-                      yield* projector(event as Payload)
-                    }
-                    yield* db
-                      .insert(EventSequenceTable)
-                      .values([{ aggregate_id: aggregateID, seq, owner_id: input?.ownerID }])
-                      .onConflictDoUpdate({
-                        target: EventSequenceTable.aggregate_id,
-                        set: { seq },
-                      })
-                      .run()
-                      .pipe(Effect.orDie)
-                    yield* db
-                      .insert(EventTable)
-                      .values([
-                        {
-                          id: event.id,
-                          aggregate_id: aggregateID,
-                          seq,
-                          type: versionedType(definition.type, sync.version),
-                          data: event.data as Record<string, unknown>,
-                        },
-                      ])
-                      .run()
-                      .pipe(Effect.orDie)
-                  }),
-                { behavior: "immediate" },
+            if (input && input.aggregateID !== aggregateID) {
+              yield* Effect.die(
+                new InvalidSyncEventError({
+                  type: event.type,
+                  message: `Aggregate mismatch: expected ${input.aggregateID}, got ${aggregateID}`,
+                }),
               )
-              .pipe(Effect.orDie)
+            }
+            const list = projectors.get(event.type) ?? []
+            return yield* Effect.uninterruptible(
+              Effect.gen(function* () {
+                const committed = yield* db
+                  .transaction(
+                    () =>
+                      Effect.gen(function* () {
+                        const row = yield* db
+                          .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+                          .from(EventSequenceTable)
+                          .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+                          .get()
+                          .pipe(Effect.orDie)
+                        const latest = row?.seq ?? -1
+                        if (input && input.seq <= latest) return
+                        if (input && row?.ownerID && row.ownerID !== input.ownerID) {
+                          if (input.strictOwner) {
+                            yield* Effect.die(
+                              new InvalidSyncEventError({
+                                type: event.type,
+                                message: `Replay owner mismatch for aggregate ${aggregateID}: expected ${row.ownerID}, got ${input.ownerID ?? "none"}`,
+                              }),
+                            )
+                          }
+                          return
+                        }
+                        const seq = input?.seq ?? latest + 1
+                        if (input && seq !== latest + 1) {
+                          yield* Effect.die(
+                            new InvalidSyncEventError({
+                              type: event.type,
+                              message: `Sequence mismatch for aggregate ${aggregateID}: expected ${latest + 1}, got ${seq}`,
+                            }),
+                          )
+                        }
+                        for (const guard of commitGuards) {
+                          yield* guard(event)
+                        }
+                        for (const projector of list) {
+                          yield* projector({ ...event, seq } as Payload)
+                        }
+                        const encoded = syncRegistry.get(versionedType(definition.type, sync.version))!.encode(event.data)
+                        yield* db
+                          .insert(EventSequenceTable)
+                          .values([{ aggregate_id: aggregateID, seq, owner_id: input?.ownerID }])
+                          .onConflictDoUpdate({
+                            target: EventSequenceTable.aggregate_id,
+                            set: { seq, ...(input?.ownerID && row?.ownerID == null ? { owner_id: input.ownerID } : {}) },
+                          })
+                          .run()
+                          .pipe(Effect.orDie)
+                        yield* db
+                          .insert(EventTable)
+                          .values([
+                            {
+                              id: event.id,
+                              aggregate_id: aggregateID,
+                              seq,
+                              type: versionedType(definition.type, sync.version),
+                              data: encoded as Record<string, unknown>,
+                            },
+                          ])
+                          .run()
+                          .pipe(Effect.orDie)
+                        return { aggregateID, seq }
+                      }),
+                    { behavior: "immediate" },
+                  )
+                  .pipe(Effect.orDie)
+                if (committed) {
+                  yield* Effect.forEach(
+                    synchronized.get(committed.aggregateID) ?? [],
+                    (pubsub) => PubSub.publish(pubsub, undefined),
+                    { discard: true },
+                  )
+                }
+                return committed
+              }),
+            )
           }
         }
       })
@@ -244,10 +319,14 @@ export const layer = Layer.effect(
 
     function publishEvent<D extends Definition>(event: Payload<D>) {
       return Effect.gen(function* () {
-        for (const sync of syncHandlers) {
-          yield* sync(event as Payload)
+        const durable = registry.get(event.type)?.sync !== undefined
+        if (durable) {
+          for (const sync of syncHandlers) {
+            yield* sync(event as Payload)
+          }
+          const committed = yield* commitSyncEvent(event as Payload)
+          if (committed) event = { ...event, seq: committed.seq }
         }
-        yield* commitSyncEvent(event as Payload)
         for (const listener of listeners) {
           yield* listener(event as Payload)
         }
@@ -277,7 +356,7 @@ export const layer = Layer.effect(
       })
     }
 
-    function replay(event: SerializedEvent, options?: { readonly publish?: boolean; readonly ownerID?: string }) {
+    function replay(event: SerializedEvent, options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean }) {
       return Effect.gen(function* () {
         const definition = syncRegistry.get(event.type)
         if (!definition) {
@@ -289,22 +368,23 @@ export const layer = Layer.effect(
             id: event.id,
             type: definition.type,
             version: definition.sync.version,
-            data: event.data,
+            data: definition.decode(event.data),
           } as Payload
-          yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
-          if (options?.publish) {
+          const committed = yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID, strictOwner: options?.strictOwner })
+          if (committed && options?.publish) {
+            const published = { ...payload, seq: committed.seq }
             for (const listener of listeners) {
-              yield* listener(payload)
+              yield* listener(published)
             }
             const pubsub = typed.get(payload.type)
-            if (pubsub) yield* PubSub.publish(pubsub, payload)
-            yield* PubSub.publish(all, payload)
+            if (pubsub) yield* PubSub.publish(pubsub, published)
+            yield* PubSub.publish(all, published)
           }
         }
       })
     }
 
-    function replayAll(events: SerializedEvent[], options?: { readonly publish?: boolean; readonly ownerID?: string }) {
+    function replayAll(events: SerializedEvent[], options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean }) {
       return Effect.gen(function* () {
         const source = events[0]?.aggregateID
         if (!source) return undefined
@@ -362,6 +442,88 @@ export const layer = Layer.effect(
 
     const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(all)
 
+    const decodeSerializedEvent = (event: SerializedEvent): CursorEvent => {
+      const definition = syncRegistry.get(event.type)
+      if (!definition) {
+        throw new InvalidSyncEventError({ type: event.type, message: `Unknown sync event type ${event.type}` })
+      }
+      return {
+        cursor: Cursor.make(event.seq),
+        event: {
+          id: event.id,
+          type: definition.type,
+          version: definition.sync.version,
+          seq: event.seq,
+          data: definition.decode(event.data),
+        },
+      }
+    }
+
+    const readAfter = (aggregateID: string, after: number) =>
+      (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
+        Effect.andThen(
+          db
+            .select()
+            .from(EventTable)
+            .where(and(eq(EventTable.aggregate_id, aggregateID), gt(EventTable.seq, after)))
+            .orderBy(asc(EventTable.seq))
+            .all(),
+        ),
+        Effect.orDie,
+        Effect.map((rows) =>
+          rows.map((event) =>
+            decodeSerializedEvent({
+              id: event.id,
+              aggregateID: event.aggregate_id,
+              seq: event.seq,
+              type: event.type,
+              data: event.data,
+            }),
+          ),
+        ),
+      )
+
+    const subscribeSynchronized = (aggregateID: string) =>
+      Effect.gen(function* () {
+        const pubsub = yield* PubSub.sliding<void>(1)
+        const subscription = yield* PubSub.subscribe(pubsub)
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const pubsubs = synchronized.get(aggregateID) ?? new Set()
+            pubsubs.add(pubsub)
+            synchronized.set(aggregateID, pubsubs)
+          }),
+          () =>
+            Effect.sync(() => {
+              const pubsubs = synchronized.get(aggregateID)
+              pubsubs?.delete(pubsub)
+              if (pubsubs?.size === 0) synchronized.delete(aggregateID)
+            }).pipe(Effect.andThen(PubSub.shutdown(pubsub))),
+        )
+        return subscription
+      })
+
+    const streamEvents = (input: { readonly aggregateID: string; readonly after?: Cursor }): Stream.Stream<CursorEvent> =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          const synchronized = yield* subscribeSynchronized(input.aggregateID)
+          let cursor = input.after ?? -1
+          const read = Effect.suspend(() => readAfter(input.aggregateID, cursor)).pipe(
+            Effect.tap((events) =>
+              Effect.sync(() => {
+                cursor = events.at(-1)?.cursor ?? cursor
+              }),
+            ),
+          )
+          const historical = yield* read
+          const live = Stream.fromSubscription(synchronized).pipe(
+            Stream.mapEffect(() => read),
+            Stream.flattenIterable,
+          )
+          return Stream.concat(Stream.fromIterable(historical), live)
+        }),
+      )
+
     const listen = (listener: Listener): Effect.Effect<Unsubscribe> =>
       Effect.sync(() => {
         listeners.push(listener)
@@ -380,6 +542,11 @@ export const layer = Layer.effect(
         })
       })
 
+    const beforeCommit = (guard: CommitGuard): Effect.Effect<void> =>
+      Effect.sync(() => {
+        commitGuards.push(guard)
+      })
+
     const project = <D extends Definition>(definition: D, projector: Projector<D>): Effect.Effect<void> =>
       Effect.sync(() => {
         const list = projectors.get(definition.type) ?? []
@@ -387,8 +554,10 @@ export const layer = Layer.effect(
         projectors.set(definition.type, list)
       })
 
-    return Service.of({ publish, subscribe, all: streamAll, sync, listen, project, replay, replayAll, remove, claim })
+    return Service.of({ publish, subscribe, all: streamAll, aggregateEvents: streamEvents, sync, listen, beforeCommit, project, replay, replayAll, remove, claim })
   }),
 )
+
+export const layer = layerWith()
 
 export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))

@@ -60,13 +60,20 @@ type TestScope = Scope.Scope | TestServices
 function client(
   serverPath: ServerPath,
   directory?: string,
-  input?: { password?: string; username?: string; headers?: Record<string, string> },
+  input?: {
+    password?: string
+    username?: string
+    headers?: Record<string, string>
+    workspaceID?: string
+    onRequest?: (request: Request) => void
+  },
 ) {
   return serverFetch(serverPath, input).pipe(
     Effect.map((fetch) =>
       createOpencodeClient({
         baseUrl: "http://localhost",
         directory,
+        experimental_workspaceID: input?.workspaceID,
         headers: input?.headers,
         fetch,
       }),
@@ -74,7 +81,10 @@ function client(
   )
 }
 
-function serverFetch(serverPath: ServerPath, input?: { password?: string; username?: string }) {
+function serverFetch(
+  serverPath: ServerPath,
+  input?: { password?: string; username?: string; onRequest?: (request: Request) => void },
+) {
   return HttpServer.HttpServer.use((server) =>
     Effect.sync(() => {
       void serverPath
@@ -84,6 +94,7 @@ function serverFetch(serverPath: ServerPath, input?: { password?: string; userna
       return Object.assign(
         async (request: RequestInfo | URL, init?: RequestInit) => {
           const source = request instanceof Request ? request : new Request(request, init)
+          input?.onRequest?.(source)
           const url = new URL(source.url)
           return globalThis.fetch(new Request(new URL(`${url.pathname}${url.search}`, baseUrl), source))
         },
@@ -365,6 +376,31 @@ describe("HttpApi SDK", () => {
           expectStatus(() => sdk.find.files({ query: "hello", limit: 10 }), 200),
         ])
       }),
+  )
+
+  httpapi(
+    "routes configured SDK directory and workspace for v2 location GETs",
+    withProject("raw", { setup: writeStandardFiles }, ({ directory }) =>
+      Effect.gen(function* () {
+        const workspaceID = "wrk_sdk"
+        let request: Request | undefined
+        const sdk = yield* client("raw", directory, {
+          workspaceID,
+          onRequest: (value) => (request = value),
+        })
+        const file = yield* call(() => sdk.v2.fs.read({ path: "hello.txt" }))
+        const url = new URL(request!.url)
+
+        expect(file.response.status).toBe(200)
+        expect(file.data).toMatchObject({ content: "hello" })
+        expect(url.searchParams.get("directory")).toBe(directory)
+        expect(url.searchParams.get("workspace")).toBe(workspaceID)
+        expect(url.searchParams.get("location[directory]")).toBe(directory)
+        expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
+        expect(request!.headers.has("x-opencode-directory")).toBe(false)
+        expect(request!.headers.has("x-opencode-workspace")).toBe(false)
+      }),
+    ),
   )
 
   serverPathParity("matches generated SDK global and control behavior", (serverPath) =>

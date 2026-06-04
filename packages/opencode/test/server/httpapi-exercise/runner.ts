@@ -7,7 +7,7 @@ import type { Config } from "../../../src/config/config"
 
 import type { MessageV2 } from "../../../src/session/message-v2"
 import { MessageID, PartID } from "../../../src/session/schema"
-import { call, callAuthProbe } from "./backend"
+import { call, callAuthProbe, disposeApps } from "./backend"
 import { original } from "./environment"
 import { runtime } from "./runtime"
 import type { ActiveScenario, Options, ProjectOptions, Result, Scenario, ScenarioContext, SeededContext } from "./types"
@@ -259,6 +259,7 @@ const resetState = Effect.promise(async () => {
   const modules = await runtime()
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
+  await disposeApps()
   await modules.disposeAllInstances()
   await modules.resetDatabase()
   await Bun.sleep(25)

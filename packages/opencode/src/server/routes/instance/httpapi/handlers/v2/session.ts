@@ -3,7 +3,13 @@ import { DateTime, Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
 import { SessionsCursor } from "../../groups/v2/session"
-import { InvalidCursorError, ServiceUnavailableError, SessionNotFoundError, UnknownError } from "../../errors"
+import {
+  ConflictError,
+  InvalidCursorError,
+  ServiceUnavailableError,
+  SessionNotFoundError,
+  UnknownError,
+} from "../../errors"
 
 const DefaultSessionsLimit = 50
 
@@ -61,8 +67,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
           return yield* session
             .prompt({
               sessionID: ctx.params.sessionID,
+              id: ctx.payload.id,
               prompt: ctx.payload.prompt,
-              delivery: ctx.payload.delivery ?? SessionV2.DefaultDelivery,
+              delivery: ctx.payload.delivery,
+              resume: ctx.payload.resume,
             })
             .pipe(
               Effect.catchTag("Session.NotFoundError", (error) =>
@@ -73,11 +81,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
                   }),
                 ),
               ),
-              Effect.catchTag("Session.OperationUnavailableError", (error) =>
+              Effect.catchTag("Session.PromptConflictError", (error) =>
                 Effect.fail(
-                  new ServiceUnavailableError({
-                    message: `V2 session ${error.operation} is not available yet`,
-                    service: `v2.session.${error.operation}`,
+                  new ConflictError({
+                    message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
+                    resource: error.messageID,
                   }),
                 ),
               ),

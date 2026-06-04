@@ -53,7 +53,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { AgentAttachment, FileAttachment, ReferenceAttachment, Source } from "@opencode-ai/core/session/prompt"
+import { AgentAttachment, FileAttachment, Prompt, ReferenceAttachment, Source } from "@opencode-ai/core/session/prompt"
 import { Reference } from "@/reference/reference"
 import * as DateTime from "effect/DateTime"
 import { eq } from "drizzle-orm"
@@ -1191,12 +1191,13 @@ export const layer = Layer.effect(
         yield* events.publish(SessionEvent.Prompted, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
-          prompt: {
+          delivery: "steer",
+          prompt: new Prompt({
             text: nextPrompt.text.join("\n"),
             files: nextPrompt.files,
             agents: nextPrompt.agents,
             references: nextPrompt.references,
-          },
+          }),
         })
       }
       for (const text of nextPrompt.synthetic) {
