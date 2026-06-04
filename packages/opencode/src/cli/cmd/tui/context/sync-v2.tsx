@@ -95,8 +95,14 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     async function sync(sessionID: string): Promise<void> {
       const start = revision
       const response = await sdk.client.v2.session.messages({ sessionID })
-      if (revision !== start) return sync(sessionID)
-      setStore("messages", sessionID, reconcile(response.data?.data ?? []))
+      const messages = response.data?.data ?? []
+      if (revision === start) {
+        setStore("messages", sessionID, reconcile(messages))
+        return
+      }
+      const live = store.messages[sessionID] ?? []
+      const liveIDs = new Set(live.map((message) => message.id))
+      setStore("messages", sessionID, reconcile([...live, ...messages.filter((message) => !liveIDs.has(message.id))]))
     }
 
     event.subscribe((event) => {
