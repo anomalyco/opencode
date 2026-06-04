@@ -3,7 +3,7 @@ import { MemoryStore } from "./memory-store"
 import { Decay } from "./decay"
 import { PatternExtractor } from "./pattern-extractor"
 import { curationLogTable } from "./curation-log.sql"
-import * as Database from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import * as Log from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "memory.curation" })
@@ -25,6 +25,7 @@ export const layer = Layer.effect(
     const store = yield* MemoryStore.Service
     const decay = yield* Decay.Service
     const patternExtractor = yield* PatternExtractor.Service
+    const { db } = yield* Database.Service
     const scope = yield* Scope.Scope
     let fiber: Fiber.Fiber<void> | null = null
 
@@ -58,7 +59,7 @@ export const layer = Layer.effect(
         consolidated,
       }
 
-      Database.Client()
+      yield* db
         .insert(curationLogTable)
         .values({
           id: runID,
@@ -69,7 +70,7 @@ export const layer = Layer.effect(
           time_started: now,
           time_completed: now,
         })
-        .run()
+        .pipe(Effect.orDie)
 
       log.info("curation cycle complete", { decay: decayResult, pattern: patternResult, consolidated })
     })
@@ -95,6 +96,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
+export const defaultLayer = Layer.provide(layer, Database.defaultLayer)
 
 export * as Curation from "./curation"
