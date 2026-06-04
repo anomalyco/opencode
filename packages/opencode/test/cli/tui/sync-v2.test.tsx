@@ -290,3 +290,70 @@ test("sync v2 preserves live events while snapshot hydration is in flight", asyn
     app.renderer.destroy()
   }
 })
+
+test("sync v2 replaces stale cached rows while preserving in-flight live rows", async () => {
+  const events = createEventSource()
+  const response = Promise.withResolvers<Response>()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-1/message") return response.promise
+    return undefined
+  })
+  let sync!: ReturnType<typeof useSyncV2>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useSyncV2()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+      <ProjectProvider>
+        <SyncProviderV2>
+          <Probe />
+        </SyncProviderV2>
+      </ProjectProvider>
+    </SDKProvider>
+  ))
+
+  try {
+    await mounted
+    emitTwice(events, {
+      id: "evt_promoted_1",
+      type: "session.next.prompt.promoted",
+      properties: {
+        sessionID: "session-1",
+        messageID: "msg_user_1",
+        timestamp: 1,
+        prompt: { text: "stale" },
+        timeCreated: 0,
+      },
+    })
+    await wait(() => sync.session.message.fromSession("session-1")[0]?.id === "msg_user_1")
+    const hydration = sync.session.message.sync("session-1")
+    emitTwice(events, {
+      id: "evt_agent_1",
+      type: "session.next.agent.switched",
+      properties: { sessionID: "session-1", messageID: "msg_agent_1", timestamp: 2, agent: "build" },
+    })
+    await wait(() => sync.session.message.fromSession("session-1")[0]?.id === "msg_agent_1")
+    response.resolve(
+      json({
+        data: [{ id: "msg_user_1", type: "user", text: "fresh", time: { created: 0 } }],
+      }),
+    )
+    await hydration
+
+    expect(sync.session.message.fromSession("session-1").map((message) => [message.id, message.type])).toEqual([
+      ["msg_agent_1", "agent-switched"],
+      ["msg_user_1", "user"],
+    ])
+    expect(sync.session.message.fromSession("session-1")[1]).toMatchObject({ text: "fresh" })
+  } finally {
+    app.renderer.destroy()
+  }
+})

@@ -68,7 +68,6 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     const event = useEvent()
     const sdk = useSDK()
     const applied = new Set<string>()
-    let revision = 0
 
     function duplicate(id: string) {
       if (applied.has(id)) return true
@@ -89,21 +88,18 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     }
 
     async function sync(sessionID: string) {
-      const start = revision
+      const before = new Map((store.messages[sessionID] ?? []).map((message) => [message.id, JSON.stringify(message)]))
       const response = await sdk.client.v2.session.messages({ sessionID })
       const messages = response.data?.data ?? []
-      if (revision === start) {
-        setStore("messages", sessionID, reconcile(messages))
-        return
-      }
-      const live = store.messages[sessionID] ?? []
+      const live = (store.messages[sessionID] ?? []).filter(
+        (message) => before.get(message.id) !== JSON.stringify(message),
+      )
       const liveIDs = new Set(live.map((message) => message.id))
       setStore("messages", sessionID, reconcile([...live, ...messages.filter((message) => !liveIDs.has(message.id))]))
     }
 
     event.subscribe((event) => {
       if (duplicate(event.id)) return
-      revision += 1
       switch (event.type) {
         case "session.next.agent.switched":
           update(event.properties.sessionID, (draft) => {

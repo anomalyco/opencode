@@ -112,29 +112,23 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
     const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type })
-    const writeMessage = (message: SessionMessage.Message) => {
+    const updateMessage = (message: SessionMessage.Message) => {
       if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
       const encoded = encodeMessage(message)
       const { id, type, ...data } = encoded
       return db
-        .insert(SessionMessageTable)
-        .values([
-          {
-            id: SessionMessage.ID.make(id),
-            session_id: event.data.sessionID,
-            type,
-            seq: event.seq,
-            time_created: DateTime.toEpochMillis(message.time.created),
-            data,
-          },
-        ])
-        .onConflictDoUpdate({
-          target: SessionMessageTable.id,
-          set: { type, time_created: DateTime.toEpochMillis(message.time.created), data },
-        })
+        .update(SessionMessageTable)
+        .set({ type, time_created: DateTime.toEpochMillis(message.time.created), data })
+        .where(
+          and(
+            eq(SessionMessageTable.id, SessionMessage.ID.make(id)),
+            eq(SessionMessageTable.session_id, event.data.sessionID),
+          ),
+        )
         .run()
         .pipe(Effect.orDie)
     }
+    const appendMessage = (message: SessionMessage.Message) => insertMessage(db, event, message)
     const adapter: SessionMessageUpdater.Adapter = {
       getCurrentAssistant() {
         return Effect.gen(function* () {
@@ -204,10 +198,10 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
         })
       },
-      updateAssistant: writeMessage,
-      updateCompaction: writeMessage,
-      updateShell: writeMessage,
-      appendMessage: writeMessage,
+      updateAssistant: updateMessage,
+      updateCompaction: updateMessage,
+      updateShell: updateMessage,
+      appendMessage,
     }
     yield* SessionMessageUpdater.update(adapter, event)
   })

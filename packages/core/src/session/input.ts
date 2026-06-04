@@ -30,7 +30,6 @@ export class Admitted extends Schema.Class<Admitted>("SessionInput.Admitted")({
 
 const decodePrompt = Schema.decodeUnknownSync(Prompt)
 const encodePrompt = Schema.encodeSync(Prompt)
-const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 
 const fromRow = (row: typeof SessionInputTable.$inferSelect): Admitted =>
   new Admitted({
@@ -267,39 +266,7 @@ export const projectLegacyPrompted = Effect.fn("SessionInput.projectLegacyPrompt
     .get()
     .pipe(Effect.orDie)
   if (!inserted) return yield* Effect.die("Prompt projection conflicts with admitted input")
-  const admitted = fromRow(inserted)
-  if (admitted.delivery !== input.delivery || !matchesPrompt(admitted, input))
-    return yield* Effect.die("Prompt projection conflicts with admitted input")
-  return admitted
-})
-
-export const reconcileProjected = Effect.fn("SessionInput.reconcileProjected")(function* (
-  db: DatabaseService,
-  expected: {
-    readonly id: SessionMessage.ID
-    readonly sessionID: SessionSchema.ID
-    readonly prompt: Prompt
-    readonly delivery: Delivery
-  },
-) {
-  if (expected.delivery !== "steer") return undefined
-  const row = yield* db
-    .select()
-    .from(SessionMessageTable)
-    .where(eq(SessionMessageTable.id, expected.id))
-    .get()
-    .pipe(Effect.orDie)
-  if (row === undefined || row.session_id !== expected.sessionID || row.type !== "user") return undefined
-  const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
-  if (message.type !== "user" || !Prompt.equivalence(Prompt.fromUserMessage(message), expected.prompt)) return undefined
-  return yield* projectLegacyPrompted(db, {
-    id: expected.id,
-    sessionID: expected.sessionID,
-    prompt: expected.prompt,
-    delivery: expected.delivery,
-    timeCreated: message.time.created,
-    promotedSeq: row.seq,
-  })
+  return fromRow(inserted)
 })
 
 const publish = Effect.fn("SessionInput.publish")(function* (

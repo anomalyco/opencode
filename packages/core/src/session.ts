@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { Cause, DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
+import { Cause, Effect, Layer, Schema, Context, Stream } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -10,7 +10,6 @@ import { Location } from "./location"
 import { SessionMessage } from "./session/message"
 import { Prompt } from "./session/prompt"
 import { EventV2 } from "./event"
-import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
@@ -198,20 +197,6 @@ export const layer = Layer.effect(
         ),
       )
 
-    const findExistingPrompt = Effect.fnUntraced(function* (input: {
-      sessionID: SessionSchema.ID
-      messageID: SessionMessage.ID
-      prompt: Prompt
-      delivery: SessionInput.Delivery
-    }) {
-      const stored = yield* SessionInput.find(db, input.messageID)
-      if (!stored) return yield* SessionInput.reconcileProjected(db, { id: input.messageID, ...input })
-      if (!SessionInput.equivalent(stored, input)) {
-        return yield* new PromptConflictError({ sessionID: input.sessionID, messageID: input.messageID })
-      }
-      return stored
-    })
-
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
@@ -372,8 +357,6 @@ export const layer = Layer.effect(
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
-            const existing = yield* findExistingPrompt(expected)
-            if (existing) return yield* returnPrompt(existing)
             const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,

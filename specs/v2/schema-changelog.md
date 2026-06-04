@@ -16,14 +16,14 @@ Change:
 
 - Replace inbox-local admission sequence with event-sourced prompt admission and promotion sequences.
 - Give projected Session messages stable `msg_*` resource IDs distinct from `evt_*` creator event IDs.
-- Give every message-producing event an explicit `msg_*` resource ID. Assistant steps propagate one `assistantMessageID` through assistant-owned events.
+- Give every event that creates a projected transcript resource an explicit `msg_*` resource ID. Assistant steps propagate one `assistantMessageID` through assistant-owned events.
 - Reset incompatible unreleased beta event history, derived Session projections, workspace rows, and Session workspace links.
 
 Compatibility:
 
 - The reset preserves canonical V1 `session`, `message`, and `part` rows.
 - Existing synchronized workspaces are disposable beta state and are removed by the reset.
-- Adapter-managed external workspace resources from unreleased builds are disposable operational state and must also be discarded rather than rediscovered after the reset.
+- Before starting the new build, discard adapter-managed external workspace resources created by unreleased builds. The SQL migration cannot remove external resources through runtime adapters, and rediscovering retained resources after startup can replay incompatible beta history.
 - Exact prompt retries reconcile one stable `msg_*` identity when Session, prompt, and delivery mode match.
 
 ## Earlier Branch History

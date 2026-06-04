@@ -268,6 +268,47 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("rejects distinct creator events that reuse one projected message ID", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const id = SessionMessage.ID.make("msg_creator_collision")
+
+      yield* events.publish(SessionEvent.Synthetic, { sessionID, messageID: id, timestamp: created, text: "keep me" })
+      const exit = yield* events
+        .publish(SessionEvent.Step.Started, {
+          sessionID,
+          assistantMessageID: id,
+          timestamp: created,
+          agent: "build",
+          model,
+        })
+        .pipe(Effect.exit)
+
+      expect(exit._tag).toBe("Failure")
+      expect(
+        yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, id)).get().pipe(Effect.orDie),
+      ).toMatchObject({ type: "synthetic" })
+    }),
+  )
+
   it.effect("rejects a Prompted event that conflicts with an admitted inbox row", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

@@ -284,15 +284,6 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("does not match pending inputs when no delivery modes are eligible", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const { db } = yield* Database.Service
-      const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Wait" }), resume: false })
-    }),
-  )
-
   it.effect("returns one recorded message to concurrent exact retries", () =>
     Effect.gen(function* () {
       yield* setup
@@ -392,7 +383,7 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("reconciles an existing projected prompt into a promoted inbox record", () =>
+  it.effect("returns an exact retry of a legacy projected prompt", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -413,7 +404,7 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("reconciles an existing projected queued prompt with its delivery mode", () =>
+  it.effect("returns an exact retry of a legacy projected queued prompt", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
