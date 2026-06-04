@@ -13,7 +13,7 @@ export const Plugin = PluginV2.define({
     const catalog = yield* Catalog.Service
     const config = yield* Config.Service
     const transform = yield* catalog.transform()
-    const files = yield* config.get()
+    const files = (yield* config.entries()).filter((entry): entry is Config.Document => entry.type === "document")
 
     yield* transform((catalog) => {
       for (const file of files) {
@@ -32,10 +32,9 @@ export const Plugin = PluginV2.define({
 
           for (const [id, config] of Object.entries(item.models ?? {})) {
             catalog.model.update(providerID, ModelV2.ID.make(id), (model) => {
-              if (config.api_id !== undefined) model.apiID = config.api_id
               if (config.family !== undefined) model.family = config.family
               if (config.name !== undefined) model.name = config.name
-              if (config.api !== undefined) model.api = { ...config.api }
+              if (config.api !== undefined) model.api = { ...model.api, ...config.api }
               if (config.capabilities !== undefined) {
                 model.capabilities = {
                   tools: config.capabilities.tools,

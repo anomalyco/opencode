@@ -46,7 +46,9 @@ describe("OpenAIPlugin", () => {
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("openai", "alias", { apiID: ModelV2.ID.make("gpt-5") }),
+          model: model("openai", "alias", {
+            api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
+          }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },

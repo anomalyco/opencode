@@ -61,6 +61,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
       buffer: info.compaction.reserved,
     },
     skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
+    commands: info.command,
     instructions: info.instructions,
     references: info.reference,
     plugins: info.plugin?.map((plugin) =>
@@ -103,7 +104,7 @@ function agents(info: typeof ConfigV1.Info.Type) {
   return Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
 }
 
-function migrateAgent(info: ConfigAgentV1.Info) {
+export function migrateAgent(info: ConfigAgentV1.Info) {
   const body = {
     ...info.options,
     ...(info.temperature === undefined ? {} : { temperature: info.temperature }),
@@ -205,12 +206,19 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
       : undefined
   const lowerer = ConfigProviderOptionsV1.get(info.provider?.npm ?? packageName)
   return {
-    api_id: info.id,
     family: info.family,
     name: info.name,
     api: info.provider?.npm
-      ? { type: "aisdk" as const, package: info.provider.npm, url: info.provider.api, settings: {} }
-      : undefined,
+      ? {
+          ...(info.id === undefined ? {} : { id: info.id }),
+          type: "aisdk" as const,
+          package: info.provider.npm,
+          url: info.provider.api,
+          settings: {},
+        }
+      : info.id === undefined
+        ? undefined
+        : { id: info.id },
     capabilities,
     request: (info.headers || info.options) && {
       headers: info.headers,

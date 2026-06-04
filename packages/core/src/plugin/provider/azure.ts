@@ -45,7 +45,7 @@ export const AzurePlugin = PluginV2.define({
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.azure) return
-        evt.language = selectLanguage(evt.sdk, evt.model.apiID, Boolean(evt.options.useCompletionUrls))
+        evt.language = selectLanguage(evt.sdk, evt.model.api.id, Boolean(evt.options.useCompletionUrls))
       }),
     }
   }),
@@ -69,7 +69,7 @@ export const AzureCognitiveServicesPlugin = PluginV2.define({
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("azure-cognitive-services")) return
-        evt.language = selectLanguage(evt.sdk, evt.model.apiID, Boolean(evt.options.useCompletionUrls))
+        evt.language = selectLanguage(evt.sdk, evt.model.api.id, Boolean(evt.options.useCompletionUrls))
       }),
     }
   }),

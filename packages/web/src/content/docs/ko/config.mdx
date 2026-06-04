@@ -489,14 +489,14 @@ OpenCode는 시작 시 새 업데이트를 자동으로 다운로드합니다. `
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - context가 가득 찼을 때 세션을 자동 compact합니다(기본값: `true`).
-- `prune` - token 절약을 위해 오래된 tool 출력을 제거합니다(기본값: `true`).
+- `prune` - token 절약을 위해 오래된 tool 출력을 제거합니다(기본값: `false`).
 - `reserved` - compaction용 token buffer입니다. compaction 중 overflow가 나지 않도록 충분한 window를 남깁니다.
 
 ---

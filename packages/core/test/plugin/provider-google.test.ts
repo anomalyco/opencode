@@ -51,8 +51,8 @@ describe("GooglePlugin", () => {
       yield* plugin.add(GooglePlugin)
       const language = yield* aisdk.language(
         model("custom-google", "alias", {
-          apiID: ModelV2.ID.make("gemini-api"),
           api: {
+            id: ModelV2.ID.make("gemini-api"),
             type: "aisdk",
             package: "@ai-sdk/google",
           },

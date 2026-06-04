@@ -14,7 +14,7 @@ export const OpenAIPlugin = PluginV2.define({
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.openai) return
-        evt.language = evt.sdk.responses(evt.model.apiID)
+        evt.language = evt.sdk.responses(evt.model.api.id)
       }),
       "catalog.transform": Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {

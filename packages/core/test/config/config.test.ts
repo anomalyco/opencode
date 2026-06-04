@@ -100,6 +100,34 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates v1 command configuration", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.migrate({
+          command: {
+            review: {
+              template: "Review changes",
+              description: "Review code",
+              agent: "reviewer",
+              model: "anthropic/claude",
+              variant: "high",
+              subtask: true,
+            },
+          },
+        }).commands,
+      ).toEqual({
+        review: {
+          template: "Review changes",
+          description: "Review code",
+          agent: "reviewer",
+          model: "anthropic/claude",
+          variant: "high",
+          subtask: true,
+        },
+      })
+    }),
+  )
+
   it.live("returns an empty configuration when directory files do not exist", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -108,9 +136,11 @@ describe("Config", () => {
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const config = yield* Config.Service
-          const documents = yield* config.get()
+          const entries = yield* config.entries()
 
-          expect(documents).toEqual([])
+          expect(entries).toEqual([
+            new Config.Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }),
+          ])
         }).pipe(Effect.provide(testLayer(tmp.path))),
       ),
     ),
@@ -145,21 +175,23 @@ describe("Config", () => {
           )
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
-            const documents = yield* config.get()
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents).toHaveLength(3)
-            expect(documents.map((document) => document.source.type)).toEqual(["file", "file", "file"])
+            expect(documents.map((document) => document.type)).toEqual(["document", "document", "document"])
             expect(documents.map((document) => document.info.$schema)).toEqual(["base", "middle", "last"])
-            expect(documents[0]).toBeInstanceOf(Config.Loaded)
-            expect(documents[0]?.source.type === "file" ? documents[0].source.path : undefined).toBe(
-              path.join(tmp.path, "config.json"),
-            )
+            expect(documents[0]).toBeInstanceOf(Config.Document)
+            expect(documents[0]?.path).toBe(path.join(tmp.path, "config.json"))
             expect(documents[2]?.info.providers?.last).toBeInstanceOf(ConfigProvider.Info)
 
             yield* Effect.promise(() =>
               fs.writeFile(path.join(tmp.path, "opencode.jsonc"), JSON.stringify({ $schema: "changed" })),
             )
-            expect((yield* config.get()).map((document) => document.info.$schema)).toEqual(["base", "middle", "last"])
+            expect(
+              (yield* config.entries())
+                .filter((entry) => entry.type === "document")
+                .map((document) => document.info.$schema),
+            ).toEqual(["base", "middle", "last"])
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
@@ -183,7 +215,7 @@ describe("Config", () => {
 
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
-            const documents = yield* config.get()
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents[0]?.info.$schema).toBeUndefined()
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
@@ -291,7 +323,7 @@ describe("Config", () => {
 
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
-            const documents = yield* config.get()
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents).toHaveLength(1)
             expect(documents[0]?.info.shell).toBe("/bin/bash")
@@ -450,7 +482,7 @@ describe("Config", () => {
 
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
-            const documents = yield* config.get()
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents).toHaveLength(1)
             expect(documents[0]?.info).toBeInstanceOf(Config.Info)
@@ -528,7 +560,7 @@ describe("Config", () => {
           )
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
-            const documents = yield* config.get()
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents.map((document) => document.info.$schema)).toEqual(["base"])
           }).pipe(Effect.provide(testLayer(tmp.path)))
@@ -603,10 +635,10 @@ describe("Config", () => {
 
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
-            const directories = yield* config.directories()
-            const documents = yield* config.get()
+            const entries = yield* config.entries()
+            const documents = entries.filter((entry) => entry.type === "document")
 
-            expect(directories).toEqual([
+            expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(global),
               AbsolutePath.make(path.join(root, ".opencode")),
               AbsolutePath.make(path.join(directory, ".opencode")),
@@ -618,6 +650,17 @@ describe("Config", () => {
               "directory",
               "root-dot",
               "directory-dot",
+            ])
+            expect(entries.map((entry) => (entry.type === "document" ? entry.info.$schema : entry.path))).toEqual([
+              "global",
+              AbsolutePath.make(global),
+              "root",
+              "parent",
+              "directory",
+              "root-dot",
+              AbsolutePath.make(path.join(root, ".opencode")),
+              "directory-dot",
+              AbsolutePath.make(path.join(directory, ".opencode")),
             ])
           }).pipe(
             Effect.provide(

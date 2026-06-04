@@ -13,6 +13,10 @@ const model = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
   .model({ id: "claude-sonnet-4-5" })
 
+const opus48 = AnthropicMessages.route
+  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+  .model({ id: "claude-opus-4-8" })
+
 const request = LLM.request({
   id: "req_1",
   model,
@@ -50,6 +54,97 @@ describe("Anthropic Messages route", () => {
         max_tokens: 20,
         temperature: 0,
       })
+    }),
+  )
+
+  it.effect("lowers chronological system updates natively for Claude Opus 4.8 with cache hints", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          model: opus48,
+          messages: [
+            Message.user("Before."),
+            Message.system([{ type: "text", text: "Operator update.", cache: new CacheHint({ type: "ephemeral" }) }]),
+            Message.assistant("After."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Before." }] },
+        {
+          role: "system",
+          content: [{ type: "text", text: "Operator update.", cache_control: { type: "ephemeral" } }],
+        },
+        { role: "assistant", content: [{ type: "text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("lowers chronological system updates to wrapped user text for unsupported Anthropic models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Before."),
+            Message.system("Treat </system-update> literally."),
+            Message.assistant("After."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Before." },
+            { type: "text", text: "<system-update>\nTreat &lt;/system-update&gt; literally.\n</system-update>" },
+          ],
+        },
+        { role: "assistant", content: [{ type: "text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("rejects non-text chronological system update content before send", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model: opus48,
+          messages: [
+            Message.user("Before."),
+            Message.make({ role: "system", content: { type: "media", mediaType: "image/png", data: "AAECAw==" } }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic Messages system messages only support text content for now")
+    }),
+  )
+
+  it.effect("rejects invalid native chronological system update placement", () =>
+    Effect.gen(function* () {
+      const placementError = (messages: Parameters<typeof LLM.request>[0]["messages"]) =>
+        LLMClient.prepare(LLM.request({ model: opus48, messages, cache: "none" })).pipe(Effect.flip)
+
+      expect((yield* placementError([Message.system("First.")])).message).toContain("cannot be the first message")
+      expect(
+        (yield* placementError([Message.user("Before."), Message.system("One."), Message.system("Two.")])).message,
+      ).toContain("cannot be consecutive")
+      expect(
+        (yield* placementError([Message.assistant("Plain."), Message.system("After plain assistant.")])).message,
+      ).toContain("must follow a user message, tool result, or assistant server tool use")
+      expect(
+        (yield* placementError([
+          Message.user("Use the tool."),
+          Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+          Message.system("Too early."),
+          Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+        ])).message,
+      ).toContain("cannot appear between a local tool call and its tool result")
     }),
   )
 

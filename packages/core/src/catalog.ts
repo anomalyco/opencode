@@ -99,7 +99,7 @@ export const layer = Layer.effect(
       const provider = state.get().providers.get(model.providerID)!.provider
       const api =
         model.api.type === "native" && !model.api.url && Object.keys(model.api.settings).length === 0
-          ? provider.api
+          ? { ...provider.api, id: model.api.id }
           : model.api.type === "aisdk" && provider.api.type === "aisdk" && !model.api.url
             ? { ...model.api, url: provider.api.url, settings: { ...provider.api.settings, ...model.api.settings } }
             : model.api.type === "aisdk" && provider.api.type === "aisdk"
