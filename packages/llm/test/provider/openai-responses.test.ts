@@ -57,6 +57,58 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("flattens top-level object unions in function schemas", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.updateRequest(request, {
+          tools: [
+            {
+              name: "read",
+              description: "Read a path or resource.",
+              inputSchema: {
+                type: "object",
+                anyOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      path: { type: "string" },
+                      reference: { anyOf: [{ type: "string" }, { type: "null" }] },
+                      limit: { type: "integer", maximum: 2000 },
+                    },
+                    required: ["path"],
+                  },
+                  {
+                    type: "object",
+                    properties: { resource: { type: "string" }, limit: { type: "integer", maximum: 51200 } },
+                    required: ["resource"],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "read",
+          description: "Read a path or resource.",
+          parameters: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+              reference: { type: "string" },
+              limit: { type: "integer", maximum: 2000 },
+              resource: { type: "string" },
+            },
+            additionalProperties: false,
+          },
+        },
+      ])
+    }),
+  )
+
   it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(

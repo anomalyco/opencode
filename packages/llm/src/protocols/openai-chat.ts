@@ -165,7 +165,7 @@ const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: tool.inputSchema,
+    parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
   },
 })
 
