@@ -5,11 +5,11 @@ import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
-import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
-import { MenuV2 } from "@opencode-ai/ui/v2/components/menu-v2.jsx"
+import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/avatar-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -239,6 +239,9 @@ function HomeDesign() {
   }
 
   async function chooseProject() {
+    const conn = server.current
+    if (!conn) return
+
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
         result.forEach(addProject)
@@ -258,7 +261,7 @@ function HomeDesign() {
     }
 
     dialog.show(
-      () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
+      () => <DialogSelectDirectory multiple={true} onSelect={resolve} server={conn} />,
       () => resolve(null),
     )
   }
@@ -645,7 +648,7 @@ function HomeProjectRow(props: {
           size="small"
           icon={<IconV2 name="edit" />}
           aria-label={props.language.t("command.session.new")}
-          onClick={(event) => {
+          onClick={(event: MouseEvent) => {
             event.stopPropagation()
             props.openNewSession(props.project.worktree)
           }}
@@ -971,6 +974,9 @@ function LegacyHome() {
   }
 
   async function chooseProject() {
+    const conn = server.current
+    if (!conn) return
+
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
         for (const directory of result) {
@@ -989,7 +995,7 @@ function LegacyHome() {
       resolve(result)
     } else {
       dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
+        () => <DialogSelectDirectory multiple={true} onSelect={resolve} server={conn} />,
         () => resolve(null),
       )
     }
