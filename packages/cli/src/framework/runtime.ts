@@ -11,7 +11,9 @@ export type Input<Value> =
       : never
 
 type RuntimeHandler = (input: unknown) => Effect.Effect<void, unknown, Daemon.Service>
-type Loader<Node extends Spec.Any> = () => Promise<{ default: (input: Input<Node>) => Effect.Effect<void, any, Daemon.Service> }>
+type Loader<Node extends Spec.Any> = () => Promise<{
+  default: (input: Input<Node>) => Effect.Effect<void, any, Daemon.Service>
+}>
 type ProvidedCommand = Command.Command<string, unknown, unknown, unknown, Daemon.Service>
 
 export type Handlers<Node extends Spec.Any> = keyof Node["commands"] extends never

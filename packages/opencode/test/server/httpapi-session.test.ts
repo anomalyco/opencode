@@ -457,7 +457,8 @@ describe("session HttpApi", () => {
           })}`,
           { headers },
         )
-        const sessionCursor = (yield* json<{ data: Session.Info[]; cursor: { next?: string } }>(sessionPage)).cursor.next
+        const sessionCursor = (yield* json<{ data: Session.Info[]; cursor: { next?: string } }>(sessionPage)).cursor
+          .next
         expect(sessionCursor).toBeTruthy()
         expect(JSON.parse(Buffer.from(sessionCursor!, "base64url").toString("utf8"))).toMatchObject({
           order: "asc",

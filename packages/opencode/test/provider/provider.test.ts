@@ -980,14 +980,8 @@ it.instance(
 it.instance("getModel returns consistent results", () =>
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
-    const model1 = yield* Provider.use.getModel(
-      ProviderV2.ID.anthropic,
-      ModelV2.ID.make("claude-sonnet-4-20250514"),
-    )
-    const model2 = yield* Provider.use.getModel(
-      ProviderV2.ID.anthropic,
-      ModelV2.ID.make("claude-sonnet-4-20250514"),
-    )
+    const model1 = yield* Provider.use.getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-20250514"))
+    const model2 = yield* Provider.use.getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-20250514"))
     expect(model1.providerID).toEqual(model2.providerID)
     expect(model1.id).toEqual(model2.id)
     expect(model1).toEqual(model2)

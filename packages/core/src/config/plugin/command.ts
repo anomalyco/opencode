@@ -22,7 +22,9 @@ export const Plugin = PluginV2.define({
     const documents = yield* Effect.forEach(yield* config.entries(), (entry) => {
       if (entry.type === "document") return Effect.succeed([{ commands: entry.info.commands }])
       return loadDirectory(fs, entry.path).pipe(
-        Effect.map((commands) => [{ commands: Object.fromEntries(commands.map((command) => [command.name, command.info])) }]),
+        Effect.map((commands) => [
+          { commands: Object.fromEntries(commands.map((command) => [command.name, command.info])) },
+        ]),
       )
     }).pipe(Effect.map((documents) => documents.flat()))
 

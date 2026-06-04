@@ -57,7 +57,10 @@ describe("v2 location HttpApi", () => {
     for (const route of ["/api/command", "/api/skill"]) {
       const response = await request(route, tmp.path)
       expect(response.status).toBe(200)
-      const body = (await response.json()) as { location: { directory: string; project: { id: string } }; data: unknown }
+      const body = (await response.json()) as {
+        location: { directory: string; project: { id: string } }
+        data: unknown
+      }
       expect(body.data).toBeArray()
       expect(body.location.directory).toBe(tmp.path)
       expect(body.location.project.id).toBeTruthy()

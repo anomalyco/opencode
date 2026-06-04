@@ -1671,10 +1671,7 @@ describe("session.llm.stream", () => {
         ]
         const request = waitRequest("/messages", createEventResponse(chunks))
 
-        const resolved = yield* Provider.use.getModel(
-          ProviderV2.ID.make("anthropic"),
-          ModelV2.ID.make(model.id),
-        )
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make("anthropic"), ModelV2.ID.make(model.id))
         const sessionID = SessionID.make("session-test-anthropic-tools")
         const agent = {
           name: "test",

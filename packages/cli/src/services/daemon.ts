@@ -125,11 +125,9 @@ export const layer = Layer.effect(
     const register = Effect.fn("cli.daemon.register")(function* (address: HttpServer.Address) {
       const temp = file + ".tmp"
       yield* fs.makeDirectory(directory, { recursive: true })
-      yield* fs.writeFileString(
-        temp,
-        JSON.stringify({ url: HttpServer.formatAddress(address), pid: process.pid }),
-        { mode: 0o600 },
-      )
+      yield* fs.writeFileString(temp, JSON.stringify({ url: HttpServer.formatAddress(address), pid: process.pid }), {
+        mode: 0o600,
+      })
       yield* fs.rename(temp, file)
       // The metadata file represents this live listener, not persistent config.
       // Scope shutdown removes it when the server exits normally.

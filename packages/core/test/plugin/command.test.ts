@@ -12,10 +12,7 @@ const project = AbsolutePath.make("/repo")
 const it = testEffect(
   CommandV2.locationLayer.pipe(
     Layer.provide(
-      Layer.succeed(
-        Location.Service,
-        Location.Service.of(location({ directory }, { projectDirectory: project })),
-      ),
+      Layer.succeed(Location.Service, Location.Service.of(location({ directory }, { projectDirectory: project }))),
     ),
   ),
 )
@@ -26,7 +23,10 @@ describe("CommandPlugin.Plugin", () => {
       const command = yield* CommandV2.Service
       yield* CommandPlugin.Plugin.effect.pipe(
         Effect.provideService(CommandV2.Service, command),
-        Effect.provideService(Location.Service, Location.Service.of(location({ directory }, { projectDirectory: project }))),
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory }, { projectDirectory: project })),
+        ),
       )
 
       expect(yield* command.get("init")).toMatchObject({

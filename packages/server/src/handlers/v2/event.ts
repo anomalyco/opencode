@@ -34,13 +34,15 @@ export const eventHandlers = HttpApiBuilder.group(V2Api, "v2.event", (handlers) 
         return HttpServerResponse.stream(
           Stream.make(connected).pipe(
             Stream.concat(
-              events.all().pipe(
-                Stream.filter(
-                  (event) =>
-                    event.location?.directory === location.directory &&
-                    event.location.workspaceID === location.workspaceID,
+              events
+                .all()
+                .pipe(
+                  Stream.filter(
+                    (event) =>
+                      event.location?.directory === location.directory &&
+                      event.location.workspaceID === location.workspaceID,
+                  ),
                 ),
-              ),
             ),
             Stream.map(eventData),
             Stream.pipeThroughChannel(Sse.encode()),

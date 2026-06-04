@@ -14,23 +14,24 @@ import { schemaErrorLayer } from "./middleware/schema-error"
 
 export function createRoutes(password?: string) {
   return HttpApiBuilder.layer(V2Api).pipe(
-  Layer.provide(v2Handlers),
-  Layer.provide(v2AuthorizationLayer),
-  Layer.provide(schemaErrorLayer),
-  Layer.provide(
-    password
-      ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
-      : ServerAuth.Config.defaultLayer,
-  ),
-  Layer.provide(LocationServiceMap.layer),
-  Layer.provide(PermissionSaved.layer),
-  Layer.provide(SessionV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(FetchHttpClient.layer),
+    Layer.provide(v2Handlers),
+    Layer.provide(v2AuthorizationLayer),
+    Layer.provide(schemaErrorLayer),
+    Layer.provide(
+      password
+        ? ServerAuth.Config.layer({ username: "opencode", password: Option.some(password) })
+        : ServerAuth.Config.defaultLayer,
+    ),
+    Layer.provide(LocationServiceMap.layer),
+    Layer.provide(PermissionSaved.layer),
+    Layer.provide(SessionV2.defaultLayer),
+    Layer.provide(Database.defaultLayer),
+    Layer.provide(EventV2.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
   )
 }
 
 export const routes = createRoutes()
 
-export const webHandler = () => HttpRouter.toWebHandler(routes.pipe(Layer.provide(HttpServer.layerServices)), { disableLogger: true })
+export const webHandler = () =>
+  HttpRouter.toWebHandler(routes.pipe(Layer.provide(HttpServer.layerServices)), { disableLogger: true })

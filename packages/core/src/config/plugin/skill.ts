@@ -23,8 +23,12 @@ export const Plugin = PluginV2.define({
 
     yield* transform((editor) => {
       for (const directory of directories) {
-        editor.source(new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }))
-        editor.source(new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }))
+        editor.source(
+          new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }),
+        )
+        editor.source(
+          new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }),
+        )
       }
       for (const item of items) {
         if (URL.canParse(item) && /^(https?:)$/.test(new URL(item).protocol)) {

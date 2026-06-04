@@ -574,10 +574,7 @@ export const layer: Layer.Layer<
       }
       log.info("created", result)
 
-      yield* events.publish(
-        SessionV1.Event.Created,
-        { sessionID: result.id, info: result },
-      )
+      yield* events.publish(SessionV1.Event.Created, { sessionID: result.id, info: result })
 
       return result
     })
@@ -664,10 +661,7 @@ export const layer: Layer.Layer<
           yield* remove(child.id)
         }
 
-        yield* events.publish(
-          SessionV1.Event.Deleted,
-          { sessionID, info: session },
-        )
+        yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
         yield* events.remove(sessionID)
       } catch (e) {
         log.error(e)
@@ -682,14 +676,11 @@ export const layer: Layer.Layer<
 
     const updatePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        yield* events.publish(
-          SessionV1.Event.PartUpdated,
-          {
-            sessionID: part.sessionID,
-            part: structuredClone(part),
-            time: Date.now(),
-          },
-        )
+        yield* events.publish(SessionV1.Event.PartUpdated, {
+          sessionID: part.sessionID,
+          part: structuredClone(part),
+          time: Date.now(),
+        })
         return part
       }).pipe(Effect.withSpan("Session.updatePart"))
 
@@ -892,13 +883,10 @@ export const layer: Layer.Layer<
       sessionID: SessionID
       messageID: MessageID
     }) {
-      yield* events.publish(
-        SessionV1.Event.MessageRemoved,
-        {
-          sessionID: input.sessionID,
-          messageID: input.messageID,
-        },
-      )
+      yield* events.publish(SessionV1.Event.MessageRemoved, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+      })
       return input.messageID
     })
 
@@ -907,14 +895,11 @@ export const layer: Layer.Layer<
       messageID: MessageID
       partID: PartID
     }) {
-      yield* events.publish(
-        SessionV1.Event.PartRemoved,
-        {
-          sessionID: input.sessionID,
-          messageID: input.messageID,
-          partID: input.partID,
-        },
-      )
+      yield* events.publish(SessionV1.Event.PartRemoved, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: input.partID,
+      })
       return input.partID
     })
 

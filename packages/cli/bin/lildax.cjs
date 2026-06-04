@@ -88,8 +88,17 @@ const names = (() => {
         return false
       }
     })()
-    if (musl) return arch === "x64" ? (baseline ? [`${base}-baseline-musl`, `${base}-musl`, `${base}-baseline`, base] : [`${base}-musl`, `${base}-baseline-musl`, base, `${base}-baseline`]) : [`${base}-musl`, base]
-    return arch === "x64" ? (baseline ? [`${base}-baseline`, base, `${base}-baseline-musl`, `${base}-musl`] : [base, `${base}-baseline`, `${base}-musl`, `${base}-baseline-musl`]) : [base, `${base}-musl`]
+    if (musl)
+      return arch === "x64"
+        ? baseline
+          ? [`${base}-baseline-musl`, `${base}-musl`, `${base}-baseline`, base]
+          : [`${base}-musl`, `${base}-baseline-musl`, base, `${base}-baseline`]
+        : [`${base}-musl`, base]
+    return arch === "x64"
+      ? baseline
+        ? [`${base}-baseline`, base, `${base}-baseline-musl`, `${base}-musl`]
+        : [base, `${base}-baseline`, `${base}-musl`, `${base}-baseline-musl`]
+      : [base, `${base}-musl`]
   }
   return arch === "x64" ? (baseline ? [`${base}-baseline`, base] : [base, `${base}-baseline`]) : [base]
 })()
@@ -98,10 +107,11 @@ function findBinary(startDir) {
   let current = startDir
   for (;;) {
     const modules = path.join(current, "node_modules")
-    if (fs.existsSync(modules)) for (const name of names) {
-      const candidate = path.join(modules, name, "bin", binary)
-      if (fs.existsSync(candidate)) return candidate
-    }
+    if (fs.existsSync(modules))
+      for (const name of names) {
+        const candidate = path.join(modules, name, "bin", binary)
+        if (fs.existsSync(candidate)) return candidate
+      }
     const parent = path.dirname(current)
     if (parent === current) return
     current = parent
@@ -110,7 +120,11 @@ function findBinary(startDir) {
 
 const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
 if (!resolved) {
-  console.error("It seems that your package manager failed to install the right lildax CLI package. Try manually installing " + names.map((name) => `"${name}"`).join(" or ") + " package")
+  console.error(
+    "It seems that your package manager failed to install the right lildax CLI package. Try manually installing " +
+      names.map((name) => `"${name}"`).join(" or ") +
+      " package",
+  )
   process.exit(1)
 }
 run(resolved)

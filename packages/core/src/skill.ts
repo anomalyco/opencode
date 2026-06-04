@@ -37,7 +37,11 @@ export const Source = Schema.Union([DirectorySource, UrlSource, EmbeddedSource])
       return false
     },
     key: (source: DirectorySource | UrlSource | EmbeddedSource) =>
-      source.type === "directory" ? `directory:${source.path}` : source.type === "url" ? `url:${source.url}` : `embedded:${source.skill.name}`,
+      source.type === "directory"
+        ? `directory:${source.path}`
+        : source.type === "url"
+          ? `url:${source.url}`
+          : `embedded:${source.skill.name}`,
   })),
 )
 export type Source = typeof Source.Type
