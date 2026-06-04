@@ -316,6 +316,46 @@ describe("ACP service sessions", () => {
     expect(result.configOptions?.find((option) => option.id === "mode")?.currentValue).toBe("plan")
   })
 
+  it("replays loaded session transcript chunks", async () => {
+    const { service, updates } = makeService([
+      {
+        info: { id: "msg_user", sessionID: "ses_loaded", role: "user" },
+        parts: [{ id: "part_user", sessionID: "ses_loaded", messageID: "msg_user", type: "text", text: "hello" }],
+      },
+      {
+        info: { id: "msg_assistant", sessionID: "ses_loaded", role: "assistant" },
+        parts: [
+          {
+            id: "part_assistant",
+            sessionID: "ses_loaded",
+            messageID: "msg_assistant",
+            type: "text",
+            text: "hi there",
+          },
+        ],
+      },
+    ])
+
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    expect(
+      updates
+        .map((item) => item.update)
+        .filter((item) => item.sessionUpdate === "user_message_chunk" || item.sessionUpdate === "agent_message_chunk"),
+    ).toEqual([
+      {
+        sessionUpdate: "user_message_chunk",
+        messageId: "msg_user",
+        content: { type: "text", text: "hello" },
+      },
+      {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg_assistant",
+        content: { type: "text", text: "hi there" },
+      },
+    ])
+  })
+
   it("lists sessions sorted by updated time with cursor support", async () => {
     const { service } = makeService()
     const first = await Effect.runPromise(service.listSessions({ cwd: "/workspace" }))
