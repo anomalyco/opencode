@@ -14,7 +14,9 @@ import {
   onMount,
   untrack,
   createResource,
+  createSignal,
 } from "solid-js"
+import { Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -54,7 +56,7 @@ import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
-import { SessionMobileBottomBar } from "@/pages/session/session-mobile-bottom-bar"
+import { SessionMobileBottomBar, SessionMobileTabToggle } from "@/pages/session/session-mobile-bottom-bar"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -490,10 +492,19 @@ export default function Page() {
   }
   const reviewCount = () => reviewDiffs().length
   const hasReview = () => reviewCount() > 0
+  const changesLabel = () =>
+    hasReview()
+      ? language.t("session.review.filesChanged", { count: reviewCount() })
+      : language.t("session.review.change.other")
   const reviewReady = () => {
     if (store.changes === "git" || store.changes === "branch") return !vcsQuery.isPending
     return true
   }
+
+  const [mobileTitlebarLeftMount, setMobileTitlebarLeftMount] = createSignal<HTMLElement | null>(null)
+  onMount(() => {
+    setMobileTitlebarLeftMount(document.getElementById("opencode-titlebar-mobile-left"))
+  })
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -1827,17 +1838,19 @@ export default function Page() {
         />
       </div>
 
-      <SessionMobileBottomBar
-        activeDirectory={activeDirectory()}
-        hasSession={!!params.id && !isDesktop()}
-        tab={store.mobileTab}
-        changesLabel={
-          hasReview()
-            ? language.t("session.review.filesChanged", { count: reviewCount() })
-            : language.t("session.review.change.other")
-        }
-        onTabChange={(tab) => setStore("mobileTab", tab)}
-      />
+      <Show when={!isDesktop() && !!params.id ? mobileTitlebarLeftMount() : undefined}>
+        {(mount) => (
+          <Portal mount={mount()}>
+            <SessionMobileTabToggle
+              tab={store.mobileTab}
+              changesLabel={changesLabel()}
+              onTabChange={(tab) => setStore("mobileTab", tab)}
+            />
+          </Portal>
+        )}
+      </Show>
+
+      <SessionMobileBottomBar activeDirectory={activeDirectory()} />
 
       <TerminalPanel />
     </div>

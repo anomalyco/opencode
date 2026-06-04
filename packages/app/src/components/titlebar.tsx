@@ -484,46 +484,54 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 />
 
                 <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
-                  <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
-                    <For each={tabsEnriched()}>
-                      {(tab, i) => (
-                        <>
-                          {i() !== 0 && (
-                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                          )}
-                          <TabNavItem
-                            href={tab.href}
-                            title={tab.info.title}
-                            project={projectForSession(tab.info, projects(), projectByID())}
-                            directory={tab.dir}
-                            sessionId={tab.info.id}
-                            onClose={() => tabsStoreActions.removeTab(tab.href)}
-                          />
-                        </>
-                      )}
-                    </For>
-                  </div>
-                  <Show
-                    when={creating() && params.dir}
-                    fallback={
-                      <IconButtonV2
-                        type="button"
-                        variant="ghost-muted"
-                        size="large"
-                        class="shrink-0"
-                        icon={<IconV2 name="plus" />}
-                        as="a"
-                        href={newSessionHref()}
-                        aria-label={language.t("command.session.new")}
+                  {/* Session tab strip + new-session button: desktop-only. On mobile the
+                      floating bottom bar covers project switching / new sessions. */}
+                  <div class="hidden md:flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
+                    <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
+                      <For each={tabsEnriched()}>
+                        {(tab, i) => (
+                          <>
+                            {i() !== 0 && (
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                            )}
+                            <TabNavItem
+                              href={tab.href}
+                              title={tab.info.title}
+                              project={projectForSession(tab.info, projects(), projectByID())}
+                              directory={tab.dir}
+                              sessionId={tab.info.id}
+                              onClose={() => tabsStoreActions.removeTab(tab.href)}
+                            />
+                          </>
+                        )}
+                      </For>
+                    </div>
+                    <Show
+                      when={creating() && params.dir}
+                      fallback={
+                        <IconButtonV2
+                          type="button"
+                          variant="ghost-muted"
+                          size="large"
+                          class="shrink-0"
+                          icon={<IconV2 name="plus" />}
+                          as="a"
+                          href={newSessionHref()}
+                          aria-label={language.t("command.session.new")}
+                        />
+                      }
+                    >
+                      <NewSessionTabItem
+                        href={`/${params.dir}/session`}
+                        title={language.t("command.session.new")}
+                        onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
                       />
-                    }
-                  >
-                    <NewSessionTabItem
-                      href={`/${params.dir}/session`}
-                      title={language.t("command.session.new")}
-                      onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
-                    />
-                  </Show>
+                    </Show>
+                  </div>
+                  <div
+                    id="opencode-titlebar-mobile-left"
+                    class="md:hidden flex min-w-0 max-w-[46vw] shrink items-center overflow-hidden"
+                  />
                   <div class="min-w-0 flex-1" />
                 </div>
                 <TitlebarV2Right state={v2RightState()} />
@@ -573,6 +581,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   />
                 </div>
               </Show>
+              <div
+                id="opencode-titlebar-mobile-left"
+                class="md:hidden flex min-w-0 max-w-[46vw] shrink items-center overflow-hidden"
+              />
               <div class="flex items-center gap-1 shrink-0">
                 <TooltipKeybind
                   class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}

@@ -159,6 +159,7 @@ export function SessionHeader() {
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
   const isDesktopV2 = createMemo(() => platform.platform === "desktop" && settings.general.newLayoutDesigns())
+  const useV2HeaderActions = createMemo(() => settings.general.newLayoutDesigns())
   const search = createMemo(() => (isDesktopV2() ? settings.general.showSearch() : true))
   const tree = createMemo(() => (isDesktopV2() ? settings.general.showFileTree() : true))
   const term = createMemo(() => (isDesktopV2() ? settings.general.showTerminal() : true))
@@ -343,7 +344,7 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <Show
-              when={isDesktopV2}
+              when={useV2HeaderActions()}
               fallback={
                 <div class="flex items-center gap-2">
                   <Show when={projectDirectory()}>
@@ -466,21 +467,23 @@ export function SessionHeader() {
                       </Tooltip>
                     </Show>
                     <Show when={term()}>
-                      <TooltipKeybind
-                        title={language.t("command.terminal.toggle")}
-                        keybind={command.keybind("terminal.toggle")}
-                      >
-                        <Button
-                          variant="ghost"
-                          class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
-                          onClick={toggleTerminal}
-                          aria-label={language.t("command.terminal.toggle")}
-                          aria-expanded={view().terminal.opened()}
-                          aria-controls="terminal-panel"
+                      <div class="hidden md:flex items-center">
+                        <TooltipKeybind
+                          title={language.t("command.terminal.toggle")}
+                          keybind={command.keybind("terminal.toggle")}
                         >
-                          <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
-                        </Button>
-                      </TooltipKeybind>
+                          <Button
+                            variant="ghost"
+                            class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                            onClick={toggleTerminal}
+                            aria-label={language.t("command.terminal.toggle")}
+                            aria-expanded={view().terminal.opened()}
+                            aria-controls="terminal-panel"
+                          >
+                            <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
+                          </Button>
+                        </TooltipKeybind>
+                      </div>
                     </Show>
 
                     <div class="hidden md:flex items-center gap-1 shrink-0">
@@ -588,17 +591,22 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
           </div>
         )}
       </Show>
+      {/* Status popover + review/side-panel toggle are desktop-only. On mobile the
+          floating bottom bar handles the Session<->Changes toggle, so these top
+          controls would be redundant; keep them mounted at >=md unchanged. */}
       <Show when={props.state.statusVisible}>
-        <Tooltip placement="bottom" value={props.state.statusLabel}>
-          <StatusPopoverV2 />
-        </Tooltip>
+        <div class="hidden md:flex items-center">
+          <Tooltip placement="bottom" value={props.state.statusLabel}>
+            <StatusPopoverV2 />
+          </Tooltip>
+        </div>
       </Show>
       <TooltipKeybind title={props.state.reviewLabel} keybind={props.state.reviewKeybind}>
         <IconButtonV2
           type="button"
           variant="ghost-muted"
           size="large"
-          class="!w-9 shrink-0"
+          class="!w-9 shrink-0 !hidden md:!inline-flex"
           state={props.state.reviewOpened ? "pressed" : undefined}
           onClick={props.state.onReviewToggle}
           aria-label={props.state.reviewLabel}

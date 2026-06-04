@@ -1466,7 +1466,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               data-component={newSession() ? "session-new-composer" : "session-composer"}
               onSubmit={handleSubmit}
               classList={{
-                "group/prompt-input min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
+                // `max-md:rounded-2xl` softens the composer on mobile only; `rounded-xl`
+                // still wins at >=md so desktop stays pixel-identical.
+                "group/prompt-input min-h-[96px] w-full rounded-xl max-md:rounded-2xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
                 "border-icon-info-active border-dashed": store.draggingType !== null,
                 [props.class ?? ""]: !!props.class,
               }}
@@ -1547,8 +1549,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </div>
                 </div>
               </div>
-              <div class="flex h-11 items-center px-2">
-                <div class="flex min-w-0 flex-1 items-center gap-0">
+              {/* Action bar: taller with comfier touch targets on mobile (max-md:*),
+                  reset to the exact desktop metrics at >=md. */}
+              <div class="flex h-11 max-md:h-12 items-center px-2 max-md:px-2.5">
+                <div class="flex min-w-0 flex-1 items-center gap-0 max-md:gap-0.5">
                   {fileAttachmentInput()}
                   <TooltipKeybind
                     placement="top"
@@ -1560,7 +1564,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       type="button"
                       icon="plus"
                       variant="ghost"
-                      class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted"
+                      class="size-7 max-md:size-9 rounded-md max-md:rounded-lg p-[6px] max-md:p-2 text-v2-icon-icon-muted"
                       style={buttons()}
                       onClick={pick}
                       disabled={store.mode !== "normal"}
@@ -1617,7 +1621,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     tabIndex={store.mode === "normal" ? undefined : -1}
                     icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
                     variant="primary"
-                    class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+                    class="size-7 max-md:size-9 rounded-md max-md:rounded-lg p-[6px] max-md:p-2 text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
                     style={{
                       "background-image":
                         "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",

@@ -12,17 +12,12 @@ export type SessionMobileTab = "session" | "changes"
 
 /**
  * Floating, Telegram-style bottom navigation shown only below `md`. It gives
- * mobile users a way to jump home, switch between open projects (deep-linking
- * into each project's session list), and — when viewing a session — toggle
- * between the conversation and the changes/review view. Desktop is unaffected
+ * mobile users a way to jump home and switch between open projects (deep-linking
+ * into each project's session list). Desktop is unaffected
  * because the whole bar is gated with `md:hidden`.
  */
 export function SessionMobileBottomBar(props: {
   activeDirectory?: string
-  hasSession: boolean
-  tab: SessionMobileTab
-  changesLabel: string
-  onTabChange: (tab: SessionMobileTab) => void
 }) {
   const layout = useLayout()
   const language = useLanguage()
@@ -91,37 +86,46 @@ export function SessionMobileBottomBar(props: {
           </div>
         </Show>
 
-        <Show when={props.hasSession}>
-          <div class="ml-auto flex shrink-0 items-center rounded-full bg-v2-background-bg-base p-0.5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]">
-            <BottomBarToggleButton
-              label={language.t("session.tab.session")}
-              selected={props.tab === "session"}
-              onClick={() => props.onTabChange("session")}
-            />
-            <BottomBarToggleButton
-              label={props.changesLabel}
-              selected={props.tab === "changes"}
-              onClick={() => props.onTabChange("changes")}
-            />
-          </div>
-        </Show>
       </nav>
     </div>
   )
 }
 
-function BottomBarToggleButton(props: { label: string; selected: boolean; onClick: () => void }) {
+export function SessionMobileTabToggle(props: {
+  tab: SessionMobileTab
+  changesLabel: string
+  onTabChange: (tab: SessionMobileTab) => void
+}) {
+  const language = useLanguage()
+
+  return (
+    <div class="flex min-w-0 max-w-full shrink items-center rounded-full bg-v2-background-bg-base p-0.5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]">
+      <MobileTabToggleButton
+        label={language.t("session.tab.session")}
+        selected={props.tab === "session"}
+        onClick={() => props.onTabChange("session")}
+      />
+      <MobileTabToggleButton
+        label={props.changesLabel}
+        selected={props.tab === "changes"}
+        onClick={() => props.onTabChange("changes")}
+      />
+    </div>
+  )
+}
+
+function MobileTabToggleButton(props: { label: string; selected: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
-      class="flex h-9 items-center justify-center whitespace-nowrap rounded-[8px] px-3 text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_var(--v2-border-border-focus)] [font-weight:530]"
+      class="flex h-9 min-w-0 items-center justify-center rounded-[8px] px-3 text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_var(--v2-border-border-focus)] [font-weight:530]"
       classList={{
         "bg-v2-background-bg-deep text-v2-text-text-base shadow-[var(--v2-elevation-raised)]": props.selected,
       }}
       aria-pressed={props.selected}
       onClick={props.onClick}
     >
-      {props.label}
+      <span class="truncate whitespace-nowrap">{props.label}</span>
     </button>
   )
 }

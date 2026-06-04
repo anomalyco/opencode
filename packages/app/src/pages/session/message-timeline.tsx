@@ -69,6 +69,8 @@ import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { makeTimer } from "@solid-primitives/timer"
+import { decodeDirectory } from "@/pages/directory-layout"
+import { projectBottomBarHref } from "@/pages/session/session-mobile-bottom-bar-helpers"
 import { MessageComment, SummaryDiff, Timeline, TimelineRow, TimelineRowMap } from "./message-timeline.data"
 
 const emptyMessages: MessageType[] = []
@@ -297,6 +299,14 @@ export function MessageTimeline(props: {
 
   let virtualizer: VirtualizerHandle | undefined
   const sessionID = createMemo(() => params.id)
+  // Mobile-only "back" target: the current project's session list (Home `?project=<dir>`),
+  // matching the destination the floating bottom bar uses for a project. Reuses
+  // `projectBottomBarHref` so the URL stays in one place.
+  const projectSessionListHref = createMemo(() => {
+    const worktree = params.dir ? decodeDirectory(params.dir) : undefined
+    if (!worktree) return "/"
+    return projectBottomBarHref({ worktree })
+  })
   const sessionMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return emptyMessages
@@ -1322,6 +1332,16 @@ export function MessageTimeline(props: {
             </Show>
             <div class="h-12 w-full flex items-center justify-between gap-2">
               <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
+                {/* Mobile-only back control: returns to the project session list. Hidden
+                    at >=md so the desktop header markup is unchanged. */}
+                <IconButton
+                  as="a"
+                  href={projectSessionListHref()}
+                  icon="chevron-left"
+                  variant="ghost"
+                  class="md:hidden size-7 -ml-1 shrink-0 rounded-md text-text-weak"
+                  aria-label={language.t("common.goBack")}
+                />
                 <div class="flex items-center min-w-0 grow-1">
                   <Show when={parentID()}>
                     <button
