@@ -46,6 +46,7 @@ export function toToolKind(toolName: string): ToolKind {
       return "fetch"
 
     case "edit":
+    case "apply_patch":
     case "patch":
     case "write":
       return "edit"
@@ -60,6 +61,9 @@ export function toToolKind(toolName: string): ToolKind {
     case "read":
       return "read"
 
+    case "task":
+      return "think"
+
     default:
       return "other"
   }
@@ -73,6 +77,9 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
     case "edit":
     case "write":
       return locationFrom(input.filePath ?? input.filepath)
+
+    case "external_directory":
+      return locationFrom(input.filePath ?? input.filepath, input.parentDir, input.directories)
 
     case "grep":
     case "glob":
@@ -91,12 +98,14 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
 }
 
 export function completedToolContent(toolName: string, state: CompletedToolState): ToolCallContent[] {
+  const text =
+    toolName.toLocaleLowerCase() === "read" ? (readDisplayText(state.metadata) ?? state.output) : state.output
   const content: ToolCallContent[] = [
     {
       type: "content",
       content: {
         type: "text",
-        text: state.output,
+        text,
       },
     },
   ]
@@ -251,9 +260,19 @@ export const buildDuplicateRunningToolUpdate = duplicateRunningToolUpdate
 export const buildCompletedToolUpdate = completedToolUpdate
 export const buildErrorToolUpdate = errorToolUpdate
 
-function locationFrom(value: unknown): ToolCallLocation[] {
-  const path = stringValue(value)
-  return path ? [{ path }] : []
+function locationFrom(...values: unknown[]): ToolCallLocation[] {
+  return Array.from(
+    new Set(
+      values.flatMap((value): string[] => {
+        if (Array.isArray(value)) {
+          return value.filter((item): item is string => typeof item === "string" && item.length > 0)
+        }
+        const path = stringValue(value)
+        return path ? [path] : []
+      }),
+    ),
+    (path) => ({ path }),
+  )
 }
 
 function diffContent(input: ToolInput): ToolCallContent[] {
@@ -269,6 +288,18 @@ function diffContent(input: ToolInput): ToolCallContent[] {
       newText,
     },
   ]
+}
+
+function readDisplayText(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return undefined
+  const display = (metadata as Record<string, unknown>).display
+  if (!display || typeof display !== "object") return undefined
+  const info = display as Record<string, unknown>
+  if (info.type === "file") return stringValue(info.text)
+  if (info.type === "directory" && Array.isArray(info.entries)) {
+    return info.entries.filter((item): item is string => typeof item === "string").join("\n")
+  }
+  return undefined
 }
 
 function dataUrlImage(attachment: ToolAttachment) {
