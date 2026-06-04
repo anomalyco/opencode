@@ -14,7 +14,6 @@ export interface CreateWebSocketFetchOptions {
   connectTimeout?: number
   idleTimeout?: number
   maxConnectionAge?: number
-  streamRetries?: number
 }
 
 interface PoolEntry {
@@ -23,7 +22,6 @@ interface PoolEntry {
   lastUsedAt: number
   busy: boolean
   fallback: boolean
-  streamFailures: number
 }
 
 const DEFAULT_CONNECT_TIMEOUT = 15_000
@@ -37,7 +35,6 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   const connectTimeout = options?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT
   const idleTimeout = options?.idleTimeout ?? DEFAULT_IDLE_TIMEOUT
   const maxConnectionAge = options?.maxConnectionAge ?? DEFAULT_MAX_CONNECTION_AGE
-  const streamRetries = options?.streamRetries ?? 5
   const pruneTimer = setInterval(() => prune(), Math.min(idleTimeout, 60_000))
   if (typeof pruneTimer === "object" && "unref" in pruneTimer && typeof pruneTimer.unref === "function") {
     pruneTimer.unref()
@@ -74,7 +71,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     }
     const key = `${sessionID}:conversation`
 
-    const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false, streamFailures: 0 }
+    const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false }
     pool.set(key, entry)
 
     if (entry.fallback) {
@@ -112,24 +109,29 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onTerminal: (event) => {
           entry.busy = false
           entry.lastUsedAt = Date.now()
-          entry.streamFailures = 0
           if (event.type !== "response.completed" && event.type !== "response.done") {
             log.warn("websocket terminal failure", { key, type: event.type })
             invalidate(entry)
           }
         },
         onConnectionInvalid: (error) => {
-          log.warn("websocket invalidated", { key, error: error.message })
+          log.warn("websocket invalidated", {
+            key,
+            error: error.message,
+            transport: error.info.transport,
+            phase: error.info.phase,
+            autoReplaySafe: error.info.autoReplaySafe,
+          })
           entry.busy = false
-          if (!entry.fallback) recordStreamFailure(entry)
+          entry.lastUsedAt = Date.now()
+          entry.fallback = true
           invalidate(entry)
-          resolveFirstEvent(false)
+          if (error.info.autoReplaySafe) resolveFirstEvent(false)
         },
         onAbort: (error) => {
           log.debug("websocket aborted", { key })
           entry.busy = false
           entry.lastUsedAt = Date.now()
-          entry.streamFailures = 0
           invalidate(entry)
           rejectFirstEvent(error)
         },
@@ -148,31 +150,21 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       entry.busy = false
       entry.lastUsedAt = Date.now()
       if (OpenAIWebSocket.isAbortError(error)) {
-        entry.streamFailures = 0
         invalidate(entry)
         throw error
       }
 
-      recordStreamFailure(entry)
+      const streamError = toWebSocketSetupError(error)
+      if (!streamError) throw error
+      entry.fallback = true
       log.warn("websocket setup failed", {
         key,
-        error: error instanceof Error ? error.message : String(error),
-        fallback: entry.fallback ? "http" : undefined,
+        error: streamError.message,
+        fallback: "http",
       })
       invalidate(entry)
-      if (entry.fallback) return httpFetch(input, httpInit)
-      return failedResponse(
-        new ProviderError.ResponseStreamError(error instanceof Error ? error.message : String(error), {
-          cause: error,
-        }),
-      )
+      return httpFetch(input, httpInit)
     }
-  }
-
-  function recordStreamFailure(entry: PoolEntry) {
-    entry.streamFailures++
-    // Codex counts retries after the initial failed WebSocket attempt.
-    if (entry.streamFailures > streamRetries) entry.fallback = true
   }
 
   function prune() {
@@ -201,20 +193,6 @@ function connectionLimitError(event: Record<string, unknown>) {
   return new Error(typeof event.error.message === "string" ? event.error.message : CONNECTION_LIMIT_REACHED_CODE)
 }
 
-function failedResponse(error: ProviderError.ResponseStreamError) {
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        controller.error(error)
-      },
-    }),
-    {
-      status: 200,
-      headers: { "content-type": "text/event-stream" },
-    },
-  )
-}
-
 async function socket(
   entry: PoolEntry,
   url: string,
@@ -237,6 +215,8 @@ async function socket(
     headers,
     timeout: connectTimeout,
     signal: signal ?? undefined,
+  }).catch((error) => {
+    throw toWebSocketSetupError(error) ?? error
   })
   entry.connectedAt = Date.now()
   return next
@@ -249,6 +229,20 @@ function invalidate(entry: PoolEntry) {
     entry.socket = undefined
   }
   entry.connectedAt = undefined
+}
+
+function toWebSocketSetupError(error: unknown) {
+  if (error instanceof ProviderError.ResponseStreamError) return error
+  if (OpenAIWebSocket.isAbortError(error)) return
+  return new ProviderError.ResponseStreamError(
+    error instanceof Error ? error.message : String(error),
+    {
+      transport: "websocket",
+      phase: "before_first_event",
+      autoReplaySafe: true,
+    },
+    { cause: error },
+  )
 }
 
 export function withoutInternalHeaders<T extends { headers?: HeadersInit }>(init: T | undefined): T | undefined {

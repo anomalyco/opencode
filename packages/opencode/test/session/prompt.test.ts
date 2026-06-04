@@ -53,7 +53,7 @@ import { Reference } from "../../src/reference/reference"
 import { RepositoryCache } from "../../src/reference/repository-cache"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
-import { reply, TestLLMServer } from "../lib/llm-server"
+import { httpError, reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -717,6 +717,42 @@ it.instance("loop continues when finish is stop but assistant has tool parts", (
       expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
       expect(result.info.finish).toBe("stop")
     }
+  }),
+)
+
+it.instance("loop continues after a retryable follow-up HTTP failure without re-running the tool", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.push(
+      reply().tool("first", { value: "first" }).item(),
+      httpError(500, { type: "error", error: { message: "Internal server error" } }),
+      reply().text("second").stop().item(),
+    )
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+    const toolParts = msgs.flatMap((msg) => msg.parts).filter((part): part is MessageV2.ToolPart => part.type === "tool")
+
+    expect(yield* llm.calls).toBe(3)
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+      expect(result.info.finish).toBe("stop")
+    }
+    expect(toolParts).toHaveLength(1)
+    expect(toolParts[0]?.state.status).toBe("completed")
   }),
 )
 

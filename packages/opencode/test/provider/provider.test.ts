@@ -21,6 +21,7 @@ import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const originalEnv = new Map<string, string | undefined>()
+const servers: ReturnType<typeof Bun.serve>[] = []
 
 const rememberEnv = (k: string) => {
   if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
@@ -47,6 +48,8 @@ const remove = (k: string) =>
   })
 
 afterEach(async () => {
+  for (const server of servers.splice(0)) await server.stop(true)
+  bifrostAuthorizationHeaders.length = 0
   for (const [key, value] of originalEnv) {
     if (value === undefined) delete process.env[key]
     else process.env[key] = value
@@ -167,6 +170,88 @@ it.instance(
     expect(models).not.toContain("claude-sonnet-4-20250514")
   }),
   { config: { provider: { anthropic: { blacklist: ["claude-sonnet-4-20250514"] } } } },
+)
+
+it.instance(
+  "model filters support wildcard patterns",
+  Effect.gen(function* () {
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.make("custom-provider")].models["codex/gpt-5"]).toBeUndefined()
+    expect(providers[ProviderV2.ID.make("custom-provider")].models["openai/gpt-5"]).toBeDefined()
+  }),
+  {
+    config: {
+      provider: {
+        "custom-provider": {
+          name: "Custom Provider",
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.custom.com/v1",
+          options: { apiKey: "custom-key" },
+          blacklist: ["codex/*"],
+          models: {
+            "codex/gpt-5": { name: "Codex GPT-5" },
+            "openai/gpt-5": { name: "OpenAI GPT-5" },
+          },
+        },
+      },
+    },
+  },
+)
+
+const bifrostAuthorizationHeaders: string[] = []
+
+it.instance(
+  "bifrost discovers OpenAI-compatible models as OpenAI Responses models and applies wildcard whitelist",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const bifrost = providers[ProviderV2.ID.bifrost]
+
+    expect(bifrost).toBeDefined()
+    expect(bifrostAuthorizationHeaders).toEqual(["Bearer bifrost-key"])
+    expect(bifrost.options.baseURL.endsWith("/")).toBe(false)
+    expect(Object.keys(bifrost.models)).toEqual(["codex/gpt-5"])
+    expect(bifrost.models["codex/gpt-5"].api.url).toBe(bifrost.options.baseURL)
+    expect(bifrost.models["codex/gpt-5"]).toMatchObject({
+      providerID: ProviderV2.ID.bifrost,
+      api: {
+        id: "codex/gpt-5",
+        npm: "@ai-sdk/openai",
+      },
+      name: "codex/gpt-5",
+      status: "active",
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 0, output: 0 },
+      capabilities: {
+        toolcall: true,
+        input: { text: true },
+        output: { text: true },
+      },
+    })
+  }),
+  {
+    config: () => {
+      const server = Bun.serve({
+        port: 0,
+        fetch(request) {
+          if (new URL(request.url).pathname !== "/openai/models") return new Response("not found", { status: 404 })
+          bifrostAuthorizationHeaders.push(request.headers.get("Authorization") ?? "")
+          return Response.json({ data: [{ id: "codex/gpt-5" }, { id: "openai/gpt-5" }] })
+        },
+      })
+      servers.push(server)
+      return {
+        provider: {
+          bifrost: {
+            options: {
+              baseURL: new URL("/openai/", server.url).toString(),
+              apiKey: "bifrost-key",
+            },
+            whitelist: ["codex/*"],
+          },
+        },
+      }
+    },
+  },
 )
 
 it.instance(
