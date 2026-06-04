@@ -64,8 +64,9 @@ function backgroundOutput(sessionID: SessionID) {
     `<task id="${sessionID}" state="running">`,
     "<summary>Background task started</summary>",
     "<task_result>",
-    "Background task started. Completion is observable via task/session events and status; parent auto-continuation is not automatic.",
-    "Do not duplicate its work. Continue only with non-overlapping work, or stop if there is nothing else useful to do.",
+    "The task is working in the background. You will be notified automatically when it finishes.",
+    "Do not poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
+    "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
     "</task_result>",
     "</task>",
   ].join("\n")
@@ -143,6 +144,7 @@ export const TaskTool = Tool.define(
         (yield* sessions.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${next.name} subagent)`,
+          agent: next.name,
           permission: [
             ...deriveSubagentSessionPermission({
               parentSessionPermission: parent.permission ?? [],
