@@ -7,8 +7,9 @@ import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
 import { externalID, type ExternalID, NonNegativeInt, withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
+import { isDeepStrictEqual } from "node:util"
 
-export const ID = Schema.String.pipe(
+export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
   Schema.brand("Event.ID"),
   withStatics((schema) => ({
     create: () => schema.make("evt_" + Identifier.ascending()),
@@ -258,7 +259,29 @@ export const layerWith = (options?: LayerOptions) =>
                             .get()
                             .pipe(Effect.orDie)
                           const latest = row?.seq ?? -1
-                          if (input && input.seq <= latest) return
+                          const encoded = syncRegistry
+                            .get(versionedType(definition.type, sync.version))!
+                            .encode(event.data) as Record<string, unknown>
+                          if (input && input.seq <= latest) {
+                            const stored = yield* db
+                              .select()
+                              .from(EventTable)
+                              .where(and(eq(EventTable.aggregate_id, aggregateID), eq(EventTable.seq, input.seq)))
+                              .get()
+                              .pipe(Effect.orDie)
+                            if (
+                              stored?.id === event.id &&
+                              stored.type === versionedType(definition.type, sync.version) &&
+                              isDeepStrictEqual(stored.data, encoded)
+                            )
+                              return
+                            yield* Effect.die(
+                              new InvalidSyncEventError({
+                                type: event.type,
+                                message: `Replay diverged at aggregate ${aggregateID} sequence ${input.seq}`,
+                              }),
+                            )
+                          }
                           if (input && row?.ownerID && row.ownerID !== input.ownerID) {
                             if (input.strictOwner) {
                               yield* Effect.die(
@@ -279,15 +302,25 @@ export const layerWith = (options?: LayerOptions) =>
                               }),
                             )
                           }
+                          const stored = yield* db
+                            .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
+                            .from(EventTable)
+                            .where(eq(EventTable.id, event.id))
+                            .get()
+                            .pipe(Effect.orDie)
+                          if (stored)
+                            yield* Effect.die(
+                              new InvalidSyncEventError({
+                                type: event.type,
+                                message: `Event ${event.id} already exists at aggregate ${stored.aggregateID} sequence ${stored.seq}`,
+                              }),
+                            )
                           for (const guard of commitGuards) {
                             yield* guard(event)
                           }
                           for (const projector of list) {
                             yield* projector({ ...event, seq } as Payload)
                           }
-                          const encoded = syncRegistry
-                            .get(versionedType(definition.type, sync.version))!
-                            .encode(event.data)
                           yield* db
                             .insert(EventSequenceTable)
                             .values([{ aggregate_id: aggregateID, seq, owner_id: input?.ownerID }])
@@ -308,7 +341,7 @@ export const layerWith = (options?: LayerOptions) =>
                                 aggregate_id: aggregateID,
                                 seq,
                                 type: versionedType(definition.type, sync.version),
-                                data: encoded as Record<string, unknown>,
+                                data: encoded,
                               },
                             ])
                             .run()

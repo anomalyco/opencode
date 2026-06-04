@@ -122,6 +122,7 @@ export interface Interface {
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly inputs: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInput.Admitted[], NotFoundError>
   readonly events: (input: {
     sessionID: SessionSchema.ID
     after?: EventV2.Cursor
@@ -140,7 +141,7 @@ export interface Interface {
     prompt: Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionMessage.User, NotFoundError | PromptConflictError>
+  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -351,6 +352,10 @@ export const layer = Layer.effect(
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
       }),
+      inputs: Effect.fn("V2Session.inputs")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* SessionInput.pending(db, sessionID)
+      }),
       events: (input) =>
         Stream.unwrap(
           result
@@ -367,20 +372,25 @@ export const layer = Layer.effect(
             yield* result.get(input.sessionID)
             const returnPrompt = Effect.fnUntraced(function* (admitted: SessionInput.Admitted) {
               if (input.resume !== false) yield* enqueueWake(input.sessionID)
-              return SessionInput.toMessage(admitted)
+              return admitted
             }, Effect.uninterruptible)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
             const existing = yield* findExistingPrompt(expected)
             if (existing) return yield* returnPrompt(existing)
-            const admitted = yield* SessionInput.admit(db, {
+            const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
               prompt: input.prompt,
               delivery,
-            })
-            if (!admitted) return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
+            }).pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof SessionInput.LifecycleConflict
+                  ? new PromptConflictError({ sessionID: input.sessionID, messageID })
+                  : Effect.die(defect),
+              ),
+            )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             return yield* returnPrompt(admitted)

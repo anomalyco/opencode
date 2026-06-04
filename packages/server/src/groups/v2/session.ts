@@ -114,13 +114,26 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
         delivery: SessionInput.Delivery.pipe(Schema.optional),
         resume: Schema.Boolean.pipe(Schema.optional),
       }),
-      success: Schema.Struct({ data: SessionMessage.User }),
+      success: Schema.Struct({ data: SessionInput.Admitted }),
       error: [ConflictError, SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.prompt",
         summary: "Send v2 message",
         description: "Durably admit one v2 session input and schedule agent-loop execution unless resume is false.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("inputs", "/api/session/:sessionID/input", {
+      params: { sessionID: SessionV2.ID },
+      success: Schema.Struct({ data: Schema.Array(SessionInput.Admitted) }),
+      error: SessionNotFoundError,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.session.inputs",
+        summary: "List pending v2 session inputs",
+        description: "Retrieve prompts that were durably admitted but have not entered context-eligible history yet.",
       }),
     ),
   )

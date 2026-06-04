@@ -9,6 +9,7 @@ import { FileAttachment, Prompt } from "./prompt"
 import { SessionSchema } from "./schema"
 import { Location } from "../location"
 import { RelativePath } from "../schema"
+import { SessionMessageID } from "./message-id"
 
 export { FileAttachment }
 
@@ -88,6 +89,30 @@ export const Prompted = EventV2.define({
   },
 })
 export type Prompted = typeof Prompted.Type
+
+export namespace PromptLifecycle {
+  export const Admitted = EventV2.define({
+    type: "session.next.prompt.admitted",
+    ...options,
+    schema: {
+      ...Base,
+      messageID: SessionMessageID.ID,
+      prompt: Prompt,
+      delivery: Schema.Literals(["steer", "queue"]),
+    },
+  })
+  export type Admitted = typeof Admitted.Type
+
+  export const Promoted = EventV2.define({
+    type: "session.next.prompt.promoted",
+    ...options,
+    schema: {
+      ...Base,
+      messageID: SessionMessageID.ID,
+    },
+  })
+  export type Promoted = typeof Promoted.Type
+}
 
 export const Synthetic = EventV2.define({
   type: "session.next.synthetic",
@@ -402,6 +427,8 @@ const DurableDefinitions = [
   ModelSwitched,
   Moved,
   Prompted,
+  PromptLifecycle.Admitted,
+  PromptLifecycle.Promoted,
   Synthetic,
   Shell.Started,
   Shell.Ended,

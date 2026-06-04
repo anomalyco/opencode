@@ -60,7 +60,7 @@ describe("Tool.Progress", () => {
         const row = yield* db
           .select()
           .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, assistantMessageID))
+          .where(eq(SessionMessageTable.id, SessionMessage.ID.fromEvent(assistantMessageID)))
           .get()
           .pipe(Effect.orDie)
         if (!row) return yield* Effect.die("Missing projected assistant")

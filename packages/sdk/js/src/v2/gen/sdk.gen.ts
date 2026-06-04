@@ -288,6 +288,8 @@ import type {
   V2SessionCompactResponses,
   V2SessionContextErrors,
   V2SessionContextResponses,
+  V2SessionInputsErrors,
+  V2SessionInputsResponses,
   V2SessionListErrors,
   V2SessionListResponses,
   V2SessionMessagesErrors,
@@ -5229,6 +5231,25 @@ export class Session3 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List pending v2 session inputs
+   *
+   * Retrieve prompts that were durably admitted but have not entered context-eligible history yet.
+   */
+  public inputs<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<V2SessionInputsResponses, V2SessionInputsErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/input",
+      ...options,
+      ...params,
     })
   }
 

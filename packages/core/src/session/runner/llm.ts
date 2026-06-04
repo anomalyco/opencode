@@ -13,6 +13,7 @@ import { ToolRegistry } from "../../tool-registry"
 import { SessionRunnerModel } from "./model"
 import { Database } from "../../database/database"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
 import { QuestionV2 } from "../../question"
 
 /**
@@ -106,7 +107,7 @@ export const layer = Layer.effect(
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID,
             timestamp: yield* DateTime.now,
-            assistantMessageID: message.id,
+            assistantMessageID: SessionMessage.ID.toEvent(message.id),
             callID: tool.id,
             error: { type: "unknown", message: "Tool execution interrupted" },
             provider: {

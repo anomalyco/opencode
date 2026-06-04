@@ -815,6 +815,57 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("rejects divergent stale replay without publishing it", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<EventV2.Payload>()
+      const aggregateID = EventV2.ID.create()
+      const replayed = {
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "original" },
+      }
+      yield* events.listen((event) => Effect.sync(() => received.push(event)))
+      yield* events.replay(replayed, { publish: true })
+
+      const exit = yield* events
+        .replay({ ...replayed, data: { id: aggregateID, text: "divergent" } }, { publish: true })
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay diverged")
+      expect(received).toHaveLength(1)
+    }),
+  )
+
+  it.effect("rejects an event ID reused at another aggregate position", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const id = EventV2.ID.create()
+      yield* events.replay({
+        id,
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "first" },
+      })
+
+      const exit = yield* events
+        .replay({
+          id,
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 1,
+          aggregateID,
+          data: { id: aggregateID, text: "second" },
+        })
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain(`Event ${id} already exists`)
+    }),
+  )
+
   it.effect("replay from a different owner leaves claimed sequence unchanged", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

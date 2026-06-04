@@ -213,6 +213,24 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
   })
 }
 
+function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: SessionMessage.Message) {
+  if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+  const encoded = encodeMessage(message)
+  const { id, type, ...data } = encoded
+  return db
+    .insert(SessionMessageTable)
+    .values({
+      id: SessionMessage.ID.make(id),
+      session_id: event.data.sessionID,
+      type,
+      seq: event.seq,
+      time_created: DateTime.toEpochMillis(message.time.created),
+      data,
+    })
+    .run()
+    .pipe(Effect.orDie)
+}
+
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -349,10 +367,11 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
+        const messageID = SessionMessage.ID.fromEvent(event.id)
         const existing = yield* db
           .select({ id: SessionMessageTable.id })
           .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, event.id))
+          .where(eq(SessionMessageTable.id, messageID))
           .get()
           .pipe(Effect.orDie)
         if (existing) return yield* Effect.die(new PromptAlreadyProjected())
@@ -360,7 +379,7 @@ export const layer = Layer.effectDiscard(
         const row = yield* db
           .select()
           .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, event.id))
+          .where(eq(SessionMessageTable.id, messageID))
           .get()
           .pipe(Effect.orDie)
         if (!row) return yield* Effect.die("Prompt projection was not stored")
@@ -368,14 +387,43 @@ export const layer = Layer.effectDiscard(
         if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
         if (event.seq === undefined)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
-        yield* SessionInput.project(db, {
-          id: SessionMessage.ID.make(event.id),
+        yield* SessionInput.projectLegacyPrompted(db, {
+          id: messageID,
           sessionID: event.data.sessionID,
           prompt: event.data.prompt,
           delivery: event.data.delivery,
           timeCreated: event.data.timestamp,
           promotedSeq: event.seq,
         })
+      }),
+    )
+    yield* events.project(SessionEvent.PromptLifecycle.Admitted, (event) =>
+      Effect.gen(function* () {
+        if (event.seq === undefined)
+          return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
+        yield* SessionInput.projectAdmitted(db, {
+          admittedSeq: event.seq,
+          id: event.data.messageID,
+          sessionID: event.data.sessionID,
+          prompt: event.data.prompt,
+          delivery: event.data.delivery,
+          timeCreated: event.data.timestamp,
+        })
+      }),
+    )
+    yield* events.project(SessionEvent.PromptLifecycle.Promoted, (event) =>
+      Effect.gen(function* () {
+        if (event.seq === undefined)
+          return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
+        yield* insertMessage(
+          db,
+          event,
+          yield* SessionInput.projectPromoted(db, {
+            id: event.data.messageID,
+            sessionID: event.data.sessionID,
+            promotedSeq: event.seq,
+          }),
+        )
       }),
     )
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
