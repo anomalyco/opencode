@@ -378,6 +378,8 @@ registerCustomTheme("OpenCode", () => {
 
 function renderMathInText(text: string): string {
   let result = text
+  // Escape $ followed by a digit (e.g. $50) so it isn't parsed as inline math
+  result = result.replace(/\$(\d)/g, "&#36;$1")
 
   // Display math: $$...$$
   const displayMathRegex = /\$\$([\s\S]*?)\$\$/g
@@ -514,6 +516,12 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }
     }
 
-    return jsParser
+    return {
+      async parse(markdown: string): Promise<string> {
+        // Escape $ followed by a digit (e.g. $50) so it isn't parsed as inline math
+        const escaped = markdown.replace(/\$(\d)/g, "&#36;$1")
+        return jsParser.parse(escaped)
+      },
+    }
   },
 })
