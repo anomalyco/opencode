@@ -7,14 +7,16 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
 
 test.skip("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
+  const assistantMessageID = EventV2.ID.create()
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
-      id: EventV2.ID.create(),
+      id: assistantMessageID,
       type: "session.next.step.started",
       data: {
         sessionID,
@@ -36,6 +38,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
       type: "session.next.step.ended",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(2),
         finish: "stop",
         cost: 0,
@@ -84,6 +87,7 @@ test.skip("text ended populates assistant text content", () => {
       data: {
         sessionID,
         timestamp: DateTime.makeUnsafe(2),
+        textID: "text-1",
       },
     } satisfies SessionEvent.Event),
   )
@@ -95,6 +99,7 @@ test.skip("text ended populates assistant text content", () => {
       data: {
         sessionID,
         timestamp: DateTime.makeUnsafe(3),
+        textID: "text-1",
         text: "hello assistant",
       },
     } satisfies SessionEvent.Event),
@@ -102,17 +107,18 @@ test.skip("text ended populates assistant text content", () => {
 
   expect(state.messages[0]?.type).toBe("assistant")
   if (state.messages[0]?.type !== "assistant") return
-  expect(state.messages[0].content).toEqual([{ type: "text", text: "hello assistant" }])
+  expect(state.messages[0].content).toEqual([{ type: "text", id: "text-1", text: "hello assistant" }])
 })
 
 test.skip("tool completion stores completed timestamp", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
   const callID = "call"
+  const assistantMessageID = EventV2.ID.create()
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
-      id: EventV2.ID.create(),
+      id: assistantMessageID,
       type: "session.next.step.started",
       data: {
         sessionID,
@@ -133,6 +139,7 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.input.started",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(2),
         callID,
         name: "bash",
@@ -146,11 +153,12 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.called",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(3),
         callID,
         tool: "bash",
         input: { command: "pwd" },
-        provider: { executed: true, metadata: { source: "provider" } },
+        provider: { executed: true, metadata: { fake: { source: "provider" } } },
       },
     } satisfies SessionEvent.Event),
   )
@@ -161,11 +169,12 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.success",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(4),
         callID,
         structured: {},
-        content: [{ type: "text", text: "/tmp" }],
-        provider: { executed: true, metadata: { status: "done" } },
+        content: [ToolOutput.text({ type: "text", text: "/tmp" })],
+        provider: { executed: true, metadata: { fake: { status: "done" } } },
       },
     } satisfies SessionEvent.Event),
   )
@@ -175,7 +184,7 @@ test.skip("tool completion stores completed timestamp", () => {
   expect(state.messages[0].content[0]?.type).toBe("tool")
   if (state.messages[0].content[0]?.type !== "tool") return
   expect(state.messages[0].content[0].time.completed).toEqual(DateTime.makeUnsafe(4))
-  expect(state.messages[0].content[0].provider).toEqual({ executed: true, metadata: { status: "done" } })
+  expect(state.messages[0].content[0].provider).toEqual({ executed: true, metadata: { fake: { status: "done" } } })
 })
 
 test.skip("compaction events reduce to compaction message", () => {

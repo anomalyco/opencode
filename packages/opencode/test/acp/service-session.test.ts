@@ -12,6 +12,7 @@ import type {
 } from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Effect } from "effect"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
@@ -19,9 +20,9 @@ import { UsageService } from "@/acp/usage"
 import type { Provider } from "@/provider/provider"
 
 const providerID = ProviderV2.ID.make("test")
-const modelID = ProviderV2.ModelID.make("test-model")
-const configuredModelID = ProviderV2.ModelID.make("configured-model")
-const secondModelID = ProviderV2.ModelID.make("second-model")
+const modelID = ModelV2.ID.make("test-model")
+const configuredModelID = ModelV2.ID.make("configured-model")
+const secondModelID = ModelV2.ID.make("second-model")
 
 const provider: Provider.Info = {
   id: providerID,

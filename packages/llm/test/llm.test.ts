@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLM, LLMResponse } from "../src"
+import { CacheHint, LLM, LLMResponse } from "../src"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as OpenAIResponses from "../src/protocols/openai-responses"
 import { LLMRequest, Message, Model, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart } from "../src/schema"
@@ -133,6 +133,25 @@ describe("llm constructors", () => {
     expect(Message.tool(result).content).toEqual([
       { type: "tool-result", id: "call_1", name: "lookup", result: { type: "json", value: { temperature: 72 } } },
     ])
+  })
+
+  test("builds chronological text-only system updates separately from the initial system prompt", () => {
+    const update = Message.system([
+      { type: "text", text: "Use parameterized SQL.", cache: new CacheHint({ type: "ephemeral" }) },
+    ])
+    const request = LLM.request({
+      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
+      system: "Initial operator prompt.",
+      messages: [Message.user("Review this."), update],
+    })
+
+    expect(update).toBeInstanceOf(Message)
+    expect(update).toEqual({
+      role: "system",
+      content: [{ type: "text", text: "Use parameterized SQL.", cache: { type: "ephemeral" } }],
+    })
+    expect(request.system).toEqual([{ type: "text", text: "Initial operator prompt." }])
+    expect(request.messages.map((message) => message.role)).toEqual(["user", "system"])
   })
 
   test("extracts output text from response events", () => {

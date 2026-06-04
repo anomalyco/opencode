@@ -22,9 +22,6 @@ export const ID = Schema.String.pipe(
 )
 export type ID = typeof ID.Type
 
-export const ModelID = Schema.String.pipe(Schema.brand("ModelID"))
-export type ModelID = typeof ModelID.Type
-
 export const AISDK = Schema.Struct({
   type: Schema.Literal("aisdk"),
   package: Schema.String,
