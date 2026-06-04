@@ -211,7 +211,7 @@ Provider, model, variant, and provisional agent `options` are authored as partia
 
 Keep provider `env` as an authored list of recognized credential environment variable names. Built-in catalog providers already carry this metadata for automatic environment-backed availability, and configured providers may need to declare the same source. For a configured provider this is additive metadata, not a requirement that one of the variables exists: the provider may instead be usable through configured options, a stored account, or an endpoint that needs no credential.
 
-Within configured models, rename legacy upstream model identifier `id` to `api_id` rather than exposing camelCase runtime `apiID`. Model `limit` is an authored patch, so an override may change only `context`, `input`, or `output`. Model `cost` accepts one simple pricing object or an array of tiered pricing entries; omitted cache prices default to zero.
+Within configured models, nest the legacy upstream model identifier `id` under `api.id` with the rest of the model API override. Model `limit` is an authored patch, so an override may change only `context`, `input`, or `output`. Model `cost` accepts one simple pricing object or an array of tiered pricing entries; omitted cache prices default to zero.
 
 Do not port legacy provider model `reasoning`, `temperature`, or `interleaved` flags as first-class config fields; provider/request behavior belongs in structured `options` or model variants. Do not port `release_date`, `status`, `experimental`, `whitelist`, or `blacklist` in this v2 surface.
 
@@ -223,7 +223,7 @@ Do not port legacy provider model `reasoning`, `temperature`, or `interleaved` f
       "options": { "headers": { "Authorization": "Bearer {env:API_KEY}" } },
       "models": {
         "chat": {
-          "api_id": "upstream-chat-model",
+          "api": { "id": "upstream-chat-model" },
           "limit": { "output": 32768 },
           "cost": { "input": 1.25, "output": 10 },
           "variants": [{ "id": "high", "aisdk": { "request": { "reasoningEffort": "high" } } }],

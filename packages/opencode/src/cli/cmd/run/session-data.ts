@@ -60,6 +60,7 @@ type SessionCommit = StreamCommit
 // - part:   part ID → "assistant" | "reasoning" (text parts only)
 // - text:   part ID → full accumulated text so far
 // - sent:   part ID → byte offset of last flushed text (for incremental output)
+// - visible: part ID → rendered text for an active part after display transforms
 // - end:    part IDs whose time.end has arrived (part is finished)
 // - shell:  shell call ID → chosen transcript source for direct shell calls
 // - echo:   message ID → bash outputs to strip from the next assistant chunk
@@ -82,6 +83,7 @@ export type SessionData = {
   part: Map<string, PartKind>
   text: Map<string, string>
   sent: Map<string, number>
+  visible: Map<string, string>
   end: Set<string>
   echo: Map<string, Set<string>>
 }
@@ -119,6 +121,7 @@ export function createSessionData(
     part: new Map(),
     text: new Map(),
     sent: new Map(),
+    visible: new Map(),
     end: new Set(),
     echo: new Map(),
   }
@@ -538,6 +541,7 @@ function flushPart(data: SessionData, commits: SessionCommit[], partID: string, 
 
   if (chunk) {
     data.sent.set(partID, text.length)
+    data.visible.set(partID, (data.visible.get(partID) ?? "") + chunk)
     commits.push({
       kind,
       text: chunk,
@@ -567,6 +571,7 @@ function drop(data: SessionData, partID: string) {
   data.part.delete(partID)
   data.text.delete(partID)
   data.sent.delete(partID)
+  data.visible.delete(partID)
   data.msg.delete(partID)
   data.end.delete(partID)
 }

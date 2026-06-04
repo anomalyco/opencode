@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpencodeClient, type GlobalEvent } from "@opencode-ai/sdk/v2"
 import { createSessionTransport } from "@/cli/cmd/run/stream.transport"
-import type { FooterApi, FooterEvent, RunFilePart, StreamCommit } from "@/cli/cmd/run/types"
+import type { FooterApi, FooterEvent, LocalReplayRow, RunFilePart, StreamCommit } from "@/cli/cmd/run/types"
 
 type EventStream = Awaited<ReturnType<OpencodeClient["event"]["subscribe"]>>["stream"]
 type GlobalEventStream = Awaited<ReturnType<OpencodeClient["global"]["event"]>>["stream"]
@@ -11,6 +11,7 @@ type SessionChild = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["ch
 type SessionToolPart = Extract<SessionMessage["parts"][number], { type: "tool" }>
 type SessionStatusMap = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["status"]>>["data"]>
 type TextPart = Extract<SessionMessage["parts"][number], { type: "text" }>
+type ReasoningPart = Extract<SessionMessage["parts"][number], { type: "reasoning" }>
 
 afterEach(() => {
   mock.restore()
@@ -298,6 +299,29 @@ function textUpdated(part: TextPart): SdkEvent {
   }
 }
 
+function reasoningPart(id: string, messageID: string, text: string): ReasoningPart {
+  return {
+    id,
+    sessionID: "session-1",
+    messageID,
+    type: "reasoning",
+    text,
+    time: { start: 1 },
+  }
+}
+
+function reasoningUpdated(part: ReasoningPart): SdkEvent {
+  return {
+    id: `evt-${part.id}-updated`,
+    type: "message.part.updated",
+    properties: {
+      sessionID: part.sessionID,
+      part,
+      time: 1,
+    },
+  }
+}
+
 function toolUpdated(part: SessionToolPart): SdkEvent {
   return {
     id: `evt-${part.id}-updated`,
@@ -358,6 +382,7 @@ function footer(fn?: (commit: StreamCommit) => void) {
       return closed
     },
     onPrompt: () => () => {},
+    onQueuedRemove: () => () => {},
     onClose: () => () => {},
     event(next) {
       events.push(next)
@@ -714,6 +739,444 @@ describe("run stream transport", () => {
           status: "running bash",
         }),
       )
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("rebuilds session output on resize and continues live deltas from replayed state", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    let calls = 0
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        messages: async () => {
+          calls += 1
+          if (calls === 1) {
+            return ok([])
+          }
+
+          return ok([
+            assistantMessage({
+              sessionID: "session-1",
+              id: "msg-1",
+              parts: [textPart("text-1", "msg-1", "Hello")],
+            }),
+          ])
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const localRows: LocalReplayRow[] = [
+      { commit: { kind: "user", text: "pending prompt", phase: "start", source: "system", messageID: "msg-pending" } },
+    ]
+    const reset = mock(() => {
+      localRows.push({
+        commit: {
+          kind: "user",
+          text: "sent during reset",
+          phase: "start",
+          source: "system",
+          messageID: "msg-during-reset",
+        },
+      })
+      return Promise.resolve()
+    })
+
+    try {
+      expect(
+        await transport.replayOnResize({
+          localRows: () => localRows,
+          reset,
+        }),
+      ).toBe(true)
+      expect(reset).toHaveBeenCalledTimes(1)
+      expect(ui.commits).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: "assistant", text: "Hello" }),
+          expect.objectContaining({ kind: "user", text: "sent during reset", messageID: "msg-during-reset" }),
+        ]),
+      )
+
+      src.push(textUpdated(textPart("text-1", "msg-1", "Hello world")))
+      await waitFor(() => ui.commits.find((commit) => commit.kind === "assistant" && commit.text === " world"))
+      expect(ui.commits.filter((commit) => commit.kind === "assistant").map((commit) => commit.text)).toEqual([
+        "Hello",
+        " world",
+      ])
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("coalesces active resize requests into one trailing replay", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const firstReset = defer()
+    const resetA = mock(() => firstReset.promise)
+    const resetB = mock(() => Promise.resolve())
+    const resetC = mock(() => Promise.resolve())
+    const transport = await createSessionTransport({
+      sdk: sdk({ stream: src.stream }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      const active = transport.replayOnResize({ localRows: () => [], reset: resetA })
+      await waitFor(() => (resetA.mock.calls.length === 1 ? true : undefined))
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: resetB })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset: resetC })).toBe(false)
+      expect(resetB).not.toHaveBeenCalled()
+
+      firstReset.resolve()
+      expect(await active).toBe(true)
+      expect(resetA).toHaveBeenCalledTimes(1)
+      expect(resetB).not.toHaveBeenCalled()
+      expect(resetC).toHaveBeenCalledTimes(1)
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("keeps coalescing resize requests while buffered events drain", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const firstReset = defer()
+    const statusGate = defer()
+    const statusStarted = defer()
+    let blockStatus = false
+    const trace = mock((_type: string, _data?: unknown) => {})
+    const resetA = mock(() => firstReset.promise)
+    const resetB = mock(() => Promise.resolve())
+    const resetC = mock(() => Promise.resolve())
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        status: async () => {
+          if (blockStatus) {
+            statusStarted.resolve()
+            await statusGate.promise
+          }
+          return ok(statusMap(true))
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+      trace: { write: trace },
+    })
+    const turn = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { text: "active", parts: [] },
+      files: [],
+      includeFiles: false,
+    })
+
+    try {
+      await waitFor(() => ui.events.find((event) => event.type === "turn.wait"))
+      const active = transport.replayOnResize({ localRows: () => [], reset: resetA })
+      await waitFor(() => (resetA.mock.calls.length === 1 ? true : undefined))
+      blockStatus = true
+      src.push(busy())
+      src.push(idle())
+      await waitFor(() => (trace.mock.calls.filter((call) => call[0] === "recv.event").length >= 2 ? true : undefined))
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: resetB })).toBe(false)
+      firstReset.resolve()
+      await Promise.race([
+        statusStarted.promise,
+        Bun.sleep(1_000).then(() => {
+          throw new Error("timed out waiting for buffered status drain")
+        }),
+      ])
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: resetC })).toBe(false)
+      expect(resetC).not.toHaveBeenCalled()
+      blockStatus = false
+      statusGate.resolve()
+
+      expect(
+        await Promise.race([
+          active,
+          Bun.sleep(1_000).then(() => {
+            throw new Error("timed out waiting for trailing resize replay")
+          }),
+        ]),
+      ).toBe(true)
+      expect(resetB).not.toHaveBeenCalled()
+      expect(resetC).toHaveBeenCalledTimes(1)
+    } finally {
+      src.close()
+      await transport.close()
+      await turn
+    }
+  })
+
+  test("preserves assistant deltas not yet persisted when replaying during a live stream", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    let calls = 0
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        messages: async () => {
+          calls += 1
+          if (calls === 1) {
+            return ok([])
+          }
+
+          return ok([
+            assistantMessage({
+              sessionID: "session-1",
+              id: "msg-live",
+              parts: [textPart("text-live", "msg-live", "")],
+            }),
+          ])
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      src.push(assistant("msg-live"))
+      src.push(textUpdated(textPart("text-live", "msg-live", "")))
+      src.push(textDelta("msg-live", "text-live", "Hello"))
+      await waitFor(() => ui.commits.find((commit) => commit.kind === "assistant" && commit.text === "Hello"))
+      ui.commits.length = 0
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: () => Promise.resolve() })).toBe(true)
+      src.push(textDelta("msg-live", "text-live", "Hello"))
+      src.push(
+        textUpdated({
+          ...textPart("text-live", "msg-live", "HelloHello"),
+          time: { start: 1, end: 2 },
+        }),
+      )
+
+      await waitFor(() =>
+        ui.commits.filter((commit) => commit.kind === "assistant" && commit.text === "Hello").length === 2
+          ? true
+          : undefined,
+      )
+      expect(
+        ui.commits.filter((commit) => commit.kind === "assistant" && commit.text).map((commit) => commit.text),
+      ).toEqual(["Hello", "Hello"])
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("preserves the display prefix for active reasoning restored during replay", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    let calls = 0
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        messages: async () => {
+          calls += 1
+          if (calls === 1) {
+            return ok([])
+          }
+
+          return ok([
+            assistantMessage({
+              sessionID: "session-1",
+              id: "msg-thinking",
+              parts: [reasoningPart("thinking-1", "msg-thinking", "")],
+            }),
+          ])
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      src.push(assistant("msg-thinking"))
+      src.push(reasoningUpdated(reasoningPart("thinking-1", "msg-thinking", "")))
+      src.push(textDelta("msg-thinking", "thinking-1", "plan"))
+      await waitFor(() => ui.commits.find((commit) => commit.kind === "reasoning" && commit.text === "Thinking: plan"))
+      ui.commits.length = 0
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: () => Promise.resolve() })).toBe(true)
+      expect(ui.commits.filter((commit) => commit.kind === "reasoning").map((commit) => commit.text)).toEqual([
+        "Thinking: plan",
+      ])
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("does not overlay stale active text when persistence completes during replay", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    let calls = 0
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        messages: async () => {
+          calls += 1
+          if (calls === 1) {
+            return ok([])
+          }
+
+          return ok([
+            assistantMessage({
+              sessionID: "session-1",
+              id: "msg-finished",
+              parts: [
+                {
+                  ...textPart("text-finished", "msg-finished", "Hello"),
+                  time: { start: 1, end: 2 },
+                },
+              ],
+            }),
+          ])
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      src.push(assistant("msg-finished"))
+      src.push(textUpdated(textPart("text-finished", "msg-finished", "")))
+      src.push(textDelta("msg-finished", "text-finished", "Hello"))
+      await waitFor(() => ui.commits.find((commit) => commit.kind === "assistant" && commit.text === "Hello"))
+      ui.commits.length = 0
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: () => Promise.resolve() })).toBe(true)
+      expect(
+        ui.commits.filter((commit) => commit.kind === "assistant" && commit.text).map((commit) => commit.text),
+      ).toEqual(["Hello"])
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("does not clear the terminal when resize replay snapshot fetch fails", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    let calls = 0
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        messages: async () => {
+          calls += 1
+          if (calls === 1) {
+            return ok([])
+          }
+
+          throw new Error("snapshot failed")
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const reset = mock(() => Promise.resolve())
+
+    try {
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
+      expect(reset).not.toHaveBeenCalled()
+      expect(ui.commits).toEqual([])
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("disables resize replay for the session after terminal reset fails", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({ stream: src.stream }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const reset = mock(() => Promise.reject(new Error("clear failed")))
+
+    try {
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
+      expect(reset).toHaveBeenCalledTimes(1)
+      expect(ui.commits).toContainEqual({
+        kind: "error",
+        text: "resize replay failed; disabled for this session",
+        phase: "start",
+        source: "system",
+      })
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("disables resize replay when rebuilding scrollback fails after terminal reset", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    let cleared = false
+    const idle = ui.api.idle
+    ui.api.idle = () => (cleared ? Promise.reject(new Error("render failed")) : idle())
+    const transport = await createSessionTransport({
+      sdk: sdk({ stream: src.stream }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const reset = mock(() => {
+      cleared = true
+      return Promise.resolve()
+    })
+
+    try {
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
+      expect(reset).toHaveBeenCalledTimes(1)
+      expect(ui.commits).toContainEqual({
+        kind: "error",
+        text: "resize replay failed; disabled for this session",
+        phase: "start",
+        source: "system",
+      })
     } finally {
       src.close()
       await transport.close()
