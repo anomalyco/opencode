@@ -159,36 +159,20 @@ describe("PermissionV2", () => {
     }),
   )
 
-  it.effect("denies bash by default until an exact-action configured rule opts in", () =>
+  it.effect("evaluates bash with the normal configured-rule semantics", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "*", resource: "*", effect: "allow" }])
       const service = yield* PermissionV2.Service
       const bash = assertion({ action: "bash", resources: ["pwd"] })
-      let spawned = false
-
-      expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "deny" })
-      const denied = yield* service.assert(bash).pipe(
-        Effect.andThen(Effect.sync(() => {
-          spawned = true
-        })),
-        Effect.flip,
-      )
-      expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
-      expect(spawned).toBe(false)
-      expect(yield* service.ask(assertion({ action: "read" }))).toEqual({
-        id: PermissionV2.ID.create("per_test"),
-        effect: "allow",
-      })
-
-      yield* setRules([{ action: "bash", resource: "*", effect: "ask" }])
-      expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "ask" })
-
-      yield* setRules([{ action: "bash", resource: "*", effect: "allow" }])
       expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "allow" })
+
+      yield* setRules([])
+      expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "ask" })
+      expect(yield* service.get(PermissionV2.ID.create("per_test"))).toBeDefined()
     }),
   )
 
-  it.effect("does not let a saved approval bypass bash default denial", () =>
+  it.effect("uses saved bash approvals while preserving configured deny precedence", () =>
     Effect.gen(function* () {
       yield* setup()
       const saved = yield* PermissionSaved.Service
@@ -197,9 +181,15 @@ describe("PermissionV2", () => {
       const service = yield* PermissionV2.Service
       expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
         id: PermissionV2.ID.create("per_test"),
-        effect: "deny",
+        effect: "allow",
       })
       expect(yield* service.list()).toEqual([])
+
+      yield* setRules([{ action: "bash", resource: "*", effect: "deny" }])
+      expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
+        id: PermissionV2.ID.create("per_test"),
+        effect: "deny",
+      })
     }),
   )
 

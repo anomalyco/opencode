@@ -146,6 +146,20 @@ describe("ToolOutputStore", () => {
     ),
   )
 
+  it.live("rejects resources whose payload size no longer matches metadata", () =>
+    withStore(({ root, store, fs }) =>
+      Effect.gen(function* () {
+        const resource = yield* store.write({ sessionID, toolCallID: "call-modified", content: "original" })
+        const id = resource.uri.slice("tool-output://".length)
+        yield* fs.writeFileString(path.join(root, "tool-output", "managed", `${id}.txt`), "changed payload")
+
+        expect(yield* Effect.flip(store.read({ sessionID, uri: resource.uri }))).toBeInstanceOf(
+          ToolOutputStore.ResourceNotFoundError,
+        )
+      }),
+    ),
+  )
+
   it.live("honors configured truncation limits", () =>
     withStore(
       ({ store }) =>
@@ -207,6 +221,24 @@ describe("ToolOutputStore", () => {
         expect(yield* fs.exists(orphan)).toBe(false)
         expect(yield* fs.exists(malformedPayload)).toBe(false)
         expect(yield* fs.exists(malformedMetadata)).toBe(false)
+      }),
+    ),
+  )
+
+  it.live("cleans managed resources whose payload size no longer matches metadata", () =>
+    withStore(({ root, store, fs }) =>
+      Effect.gen(function* () {
+        const resource = yield* store.write({ sessionID, toolCallID: "call-modified", content: "original" })
+        const directory = path.join(root, "tool-output", "managed")
+        const id = resource.uri.slice("tool-output://".length)
+        const payload = path.join(directory, `${id}.txt`)
+        const metadata = path.join(directory, `${id}.json`)
+        yield* fs.writeFileString(payload, "changed payload")
+
+        yield* store.cleanup()
+
+        expect(yield* fs.exists(payload)).toBe(false)
+        expect(yield* fs.exists(metadata)).toBe(false)
       }),
     ),
   )

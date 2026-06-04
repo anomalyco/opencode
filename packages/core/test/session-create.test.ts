@@ -229,4 +229,29 @@ describe("SessionV2.create", () => {
       expect(yield* session.create({ id, location }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
     }),
   )
+
+  it.effect("reports unfinished Session operations as unavailable", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      const unavailable = (effect: Effect.Effect<void, SessionV2.NotFoundError | SessionV2.OperationUnavailableError>) =>
+        effect.pipe(
+          Effect.flip,
+          Effect.map((error) => (error instanceof SessionV2.OperationUnavailableError ? error.operation : "not-found")),
+        )
+
+      expect(yield* unavailable(session.move({ sessionID: created.id, location }))).toBe("move")
+      expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
+      expect(yield* unavailable(session.skill({ sessionID: created.id, skill: "review" }))).toBe("skill")
+      expect(yield* unavailable(session.switchAgent({ sessionID: created.id, agent: "build" }))).toBe("switchAgent")
+      expect(
+        yield* unavailable(
+          session.switchModel({
+            sessionID: created.id,
+            model: ModelV2.Ref.make({ id: ModelV2.ID.make("sonnet"), providerID: ProviderV2.ID.anthropic }),
+          }),
+        ),
+      ).toBe("switchModel")
+    }),
+  )
 })

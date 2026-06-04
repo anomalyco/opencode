@@ -11590,12 +11590,6 @@
             "$ref": "#/components/schemas/EventSessionNextStepFailed"
           },
           {
-            "$ref": "#/components/schemas/EventSessionNextTurnStarted"
-          },
-          {
-            "$ref": "#/components/schemas/EventSessionNextTurnSettled"
-          },
-          {
             "$ref": "#/components/schemas/EventSessionNextTextStarted"
           },
           {
@@ -11627,9 +11621,6 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionNextToolProgress"
-          },
-          {
-            "$ref": "#/components/schemas/EventSessionNextToolProgressLive"
           },
           {
             "$ref": "#/components/schemas/EventSessionNextToolSuccess"
@@ -14275,69 +14266,6 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["session.next.turn.started"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "timestamp": {
-                        "type": "number"
-                      },
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      }
-                    },
-                    "required": ["timestamp", "sessionID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["session.next.turn.settled"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "timestamp": {
-                        "type": "number"
-                      },
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      },
-                      "turnID": {
-                        "type": "string"
-                      },
-                      "outcome": {
-                        "type": "string",
-                        "enum": ["completed", "failed", "interrupted"]
-                      }
-                    },
-                    "required": ["timestamp", "sessionID", "turnID", "outcome"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
                     "enum": ["session.next.text.started"]
                   },
                   "properties": {
@@ -14716,56 +14644,6 @@
                   "type": {
                     "type": "string",
                     "enum": ["session.next.tool.progress"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "timestamp": {
-                        "type": "number"
-                      },
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      },
-                      "assistantMessageID": {
-                        "type": "string"
-                      },
-                      "callID": {
-                        "type": "string"
-                      },
-                      "structured": {
-                        "type": "object"
-                      },
-                      "content": {
-                        "type": "array",
-                        "items": {
-                          "anyOf": [
-                            {
-                              "$ref": "#/components/schemas/ToolTextContent"
-                            },
-                            {
-                              "$ref": "#/components/schemas/ToolFileContent"
-                            }
-                          ]
-                        }
-                      }
-                    },
-                    "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "structured", "content"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["session.next.tool.progress.live"]
                   },
                   "properties": {
                     "type": "object",
@@ -16539,12 +16417,6 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextStepFailed"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextTurnStarted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextTurnSettled"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextTextStarted"
@@ -21223,91 +21095,6 @@
         "required": ["type", "name", "id", "seq", "aggregateID", "data"],
         "additionalProperties": false
       },
-      "SyncEventSessionNextTurnStarted": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["sync"]
-          },
-          "name": {
-            "type": "string",
-            "enum": ["session.next.turn.started.1"]
-          },
-          "id": {
-            "type": "string"
-          },
-          "seq": {
-            "type": "number"
-          },
-          "aggregateID": {
-            "type": "string",
-            "enum": ["sessionID"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "timestamp": {
-                "type": "number"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["timestamp", "sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["type", "name", "id", "seq", "aggregateID", "data"],
-        "additionalProperties": false
-      },
-      "SyncEventSessionNextTurnSettled": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["sync"]
-          },
-          "name": {
-            "type": "string",
-            "enum": ["session.next.turn.settled.1"]
-          },
-          "id": {
-            "type": "string"
-          },
-          "seq": {
-            "type": "number"
-          },
-          "aggregateID": {
-            "type": "string",
-            "enum": ["sessionID"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "timestamp": {
-                "type": "number"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "turnID": {
-                "type": "string"
-              },
-              "outcome": {
-                "type": "string",
-                "enum": ["completed", "failed", "interrupted"]
-              }
-            },
-            "required": ["timestamp", "sessionID", "turnID", "outcome"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["type", "name", "id", "seq", "aggregateID", "data"],
-        "additionalProperties": false
-      },
       "SyncEventSessionNextTextStarted": {
         "type": "object",
         "properties": {
@@ -22550,6 +22337,12 @@
                 "type": "boolean"
               },
               "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object"
+                }
+              },
+              "resultMetadata": {
                 "type": "object",
                 "additionalProperties": {
                   "type": "object"
@@ -24098,69 +23891,6 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventSessionNextTurnStarted": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.next.turn.started"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "timestamp": {
-                "type": "number"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["timestamp", "sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionNextTurnSettled": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.next.turn.settled"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "timestamp": {
-                "type": "number"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "turnID": {
-                "type": "string"
-              },
-              "outcome": {
-                "type": "string",
-                "enum": ["completed", "failed", "interrupted"]
-              }
-            },
-            "required": ["timestamp", "sessionID", "turnID", "outcome"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventSessionNextTextStarted": {
         "type": "object",
         "properties": {
@@ -24547,56 +24277,6 @@
           "type": {
             "type": "string",
             "enum": ["session.next.tool.progress"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "timestamp": {
-                "type": "number"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "assistantMessageID": {
-                "type": "string"
-              },
-              "callID": {
-                "type": "string"
-              },
-              "structured": {
-                "type": "object"
-              },
-              "content": {
-                "type": "array",
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ToolTextContent"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ToolFileContent"
-                    }
-                  ]
-                }
-              }
-            },
-            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "structured", "content"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionNextToolProgressLive": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.next.tool.progress.live"]
           },
           "properties": {
             "type": "object",

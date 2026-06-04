@@ -35,7 +35,9 @@ SessionExecution.resume(sessionID)
 
 The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started tool fiber after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant-message ID because provider-local call IDs may repeat across turns. Before assembling a provider request, the runner durably fails any local tool still projected as `running` from a previous process with `Tool execution interrupted`; abandoned side effects are never silently replayed.
 
-Each provider turn has two runtime deadlines: a 60-second inactivity timeout reset by each provider event and a 10-minute absolute deadline for the full stream. Either deadline flushes complete durable text, reasoning, and tool-input checkpoints, durably fails any recorded unsettled local tools, publishes the existing failed assistant-step shape, settles the outer turn as `failed`, and releases the local drain chain. These deadlines are runtime policy rather than new durable-event fields.
+Projected hosted tools preserve call-side and settlement-side provider metadata separately so settlement and interruption recovery cannot erase continuation identifiers. Provider-native reasoning and provider metadata replay only while the historical assistant model matches the selected continuation model; after a model switch, visible reasoning text remains ordinary assistant text and provider-native metadata is omitted.
+
+Provider timeout, retry, and watchdog policy is intentionally deferred. The runner does not impose a universal provider-stream inactivity or absolute timeout. A future slice should design configurable policy around provider behavior, durable failure reporting, and local drain-chain release rather than hardcoding one default for every provider.
 
 Inbox delivery is explicit:
 
@@ -45,9 +47,9 @@ Inbox delivery is explicit:
 Execution has two entry points:
 
 - `run` is an explicit resume. It joins an active drain chain or starts one, and performs at least one provider attempt even when no input is eligible.
-- `wake` reports newly recorded durable work. Repeated wakes coalesce. A wake calls the provider only when it can promote eligible input or recover an unsettled attempt.
+- `wake` reports newly recorded durable inbox work. Repeated wakes coalesce. A wake calls the provider only when it can promote eligible input.
 
-Each provider attempt records `Turn.Started` before inbox promotion. `Turn.Settled({ turnID, outcome })` records completion after the provider stream and every started tool fiber settle. A later wake retries when the latest start has no matching settlement, including the crash window after promotion removed the input from the pending inbox but before request assembly completed.
+Post-crash activity recovery is intentionally deferred. A wake does not infer that ambiguous provider work is safe to retry after an input has already been promoted. Explicit `run` may deliberately continue from durable projected history. A future recovery slice should model durable activity identity, provider-dispatch ambiguity, required continuation, queue-opener reservation, retry policy, and visible recovery status together.
 
 A location-scoped `SessionRunCoordinator` serializes each Session drain chain while allowing different Sessions to drain concurrently. Automatic startup discovery, durable multi-node ownership, stale-owner fencing, interruption controls, and retry policy remain future work.
 
@@ -55,7 +57,7 @@ Inbox promotion coalesces pending steers in durable admission order and opens on
 
 Eager local-tool execution is intentionally unbounded in the current local slice. This minimizes tool latency but does not increase SQLite settlement throughput: Session-event publication remains serialized per provider turn. Before broadening exposure, revisit per-turn call limits, output truncation, and operational backpressure using observed workloads. The `session.next.*` event schemas remain experimental and unshipped; databases created by earlier experimental builds are disposable rather than compatibility targets.
 
-Core persists synchronized Session events and exposes internal replay for projection reconstruction. Projected Session messages retain their source aggregate sequence so canonical context ordering and `sessions.messages(...)` pagination follow durable event order even when caller-supplied IDs or timestamps do not. Consumers can use `sessions.events({ sessionID, after? })` to replay durable `session.next.*` events after an aggregate sequence cursor, then tail durable events without a race. Live-only text, reasoning, and tool-input fragments remain available through EventV2 subscriptions for connected renderers; they are intentionally absent from the replayable Session stream.
+The synchronized `session.next.*` event family and projected Session-message model predate this branch. This slice refines their replay contract: projected Session messages retain their source aggregate sequence so canonical context ordering and `sessions.messages(...)` pagination follow durable event order even when caller-supplied IDs or timestamps do not. Consumers can use `sessions.events({ sessionID, after? })` to replay durable `session.next.*` events after an aggregate sequence cursor, then tail durable events without a race. Live-only text, reasoning, and tool-input fragments remain available through EventV2 subscriptions for connected renderers; they are intentionally absent from the replayable Session stream.
 
 The first `sessions.events(...)` contract is durable-only during both replay and live tailing. This keeps one cursor equal to one persisted aggregate sequence and is sufficient for reconnect-safe consumers such as Discord publication. A later UI-facing API may optionally interleave live-only deltas while connected, but those fragments must remain explicitly ephemeral: they cannot advance the durable cursor, replay after reconnect, or be mistaken for publication boundaries. Until that contract is designed, connected renderers can combine `sessions.events(...)` with direct EventV2 delta subscriptions.
 
@@ -75,12 +77,12 @@ The first built-in contribution is bounded `read`:
 resolve one path relative to the Location or a named project reference
 -> reject absolute paths, path escapes, and symlink escapes
 -> authorize read against the canonical resource identity
--> for a file: reject content larger than 50 KiB, then return UTF-8 text or base64 binary content
+-> for a file: return UTF-8 text or base64 binary content; page oversized UTF-8 text by bounded line ranges
 -> for a directory: return direct children in directory-first alphabetical order
 -> page directory results with one-based offset and next cursor
 ```
 
-V2 `bash` is isolated behind a safe default. It is denied unless the selected agent's configured rules contain a matching exact-action `bash` rule with `ask` or `allow`. A remembered approval cannot enable bash by itself, and an authored catch-all allow rule does not count as explicit bash opt-in. Once opted in, bash is not sandboxed: the spawned shell runs with the host user's filesystem, process, and network authority. Structured external `workdir` resolution remains an enforced `external_directory` authority check. Best-effort scans of absolute command arguments produce advisory warnings only; they are not sandbox boundaries and do not request or enforce `external_directory` approval.
+V2 `bash` uses the normal permission semantics: configured agent rules plus saved project approvals, with `ask` as the default when no rule matches. Bash is not sandboxed: the spawned shell runs with the host user's filesystem, process, and network authority. Structured external `workdir` resolution remains an enforced `external_directory` authority check. Best-effort scans of absolute command arguments produce advisory warnings only; they are not sandbox boundaries and do not request or enforce `external_directory` approval.
 
 The first V2 `apply_patch` leaf supports add, update, and delete hunks. It parses every hunk, resolves every mutation target, approves external directories, approves one edit batch, and preflights approved update/delete targets before committing operations sequentially. A later commit-time failure leaves earlier operations applied and returns an explicit partial-application report. Moves and atomic rollback remain separate follow-ups rather than implied behavior.
 
@@ -89,7 +91,7 @@ The first V2 `apply_patch` leaf supports add, update, and delete hunks. It parse
 - Keep eager structured local-tool settlement: durably record each complete call, start its child execution immediately, await all started settlements after provider-turn consumption, persist every result, and reload history once before continuation.
 - Buffer or coalesce streamed deltas before rewriting growing assistant projections.
 - Revisit additional covering indexes as larger-history query shapes become concrete.
-- Expose replayable Session events over HTTP and the generated SDK where remote consumers need them.
+- Expose replayable Session events over HTTP and the generated SDK where remote consumers need them, deciding whether that public cursor should be opaque rather than the embedded API's branded aggregate sequence.
 - Decide whether UI-facing Session subscriptions should optionally interleave ephemeral deltas while connected without advancing the durable cursor.
 
 ## Remove Dedicated `session.init` Route

@@ -144,13 +144,11 @@ describe("SessionRunnerLLM recorded", () => {
           .orderBy(EventTable.seq)
           .all()).map((event) => event.type),
       ).toEqual([
-        "session.next.turn.started.1",
         "session.next.prompted.1",
         "session.next.step.started.1",
         "session.next.text.started.1",
         "session.next.text.ended.1",
         "session.next.step.ended.2",
-        "session.next.turn.settled.1",
       ])
     }),
   )

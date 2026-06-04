@@ -63,6 +63,43 @@ describe("FileSystem", () => {
           encoding: "base64",
           mime: "application/octet-stream",
         })
+        const binary = yield* service.resolveRead({ path: RelativePath.make("data.bin") })
+        expect(Exit.isFailure(yield* service.readTextPageResolved(binary).pipe(Effect.exit))).toBe(true)
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("pages large UTF-8 text files by line with continuation", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const lines = Array.from({ length: 30 }, (_, index) => `line-${index + 1}-é`.padEnd(2_000, "x"))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "large.txt"), lines.join("\n")))
+        const service = yield* FileSystem.Service
+        const target = yield* service.resolveRead({ path: RelativePath.make("large.txt") })
+
+        const first = yield* service.readTextPageResolved(target)
+        expect(first).toMatchObject({
+          type: "text-page",
+          offset: 1,
+          truncated: true,
+        })
+        expect(first.next).toBeDefined()
+        const next = first.next!
+        expect(yield* service.readTextPageResolved(target, { offset: next, limit: 1 })).toEqual({
+          type: "text-page",
+          content: lines[next - 1],
+          mime: "text/plain",
+          offset: next,
+          truncated: true,
+          next: next + 1,
+        })
+        expect(yield* service.readTextPageResolved(target, { offset: 30 })).toEqual({
+          type: "text-page",
+          content: lines[29],
+          mime: "text/plain",
+          offset: 30,
+          truncated: false,
+        })
       }).pipe(provide(directory)),
     ),
   )

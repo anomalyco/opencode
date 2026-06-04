@@ -134,14 +134,14 @@ describe("SessionV2.prompt", () => {
       expect(
         streamed.map((event) => [event.cursor, event.event.type, (event.event.data as { prompt: Prompt }).prompt.text]),
       ).toEqual([
-        [0, "session.next.prompted", "First"],
-        [1, "session.next.prompted", "Second"],
+        [EventV2.Cursor.make(0), "session.next.prompted", "First"],
+        [EventV2.Cursor.make(1), "session.next.prompted", "Second"],
       ])
       expect(
         Array.from(
           yield* session.events({ sessionID, after: streamed[0]!.cursor }).pipe(Stream.take(1), Stream.runCollect),
         ).map((event) => [event.cursor, (event.event.data as { prompt: Prompt }).prompt.text]),
-      ).toEqual([[1, "Second"]])
+      ).toEqual([[EventV2.Cursor.make(1), "Second"]])
     }),
   )
 
@@ -344,7 +344,11 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      yield* events.publish(SessionEvent.Turn.Started, { sessionID, timestamp: yield* DateTime.now }, { id: messageID })
+      yield* events.publish(
+        SessionEvent.Synthetic,
+        { sessionID, timestamp: yield* DateTime.now, text: "Collision" },
+        { id: messageID },
+      )
 
       const failure = yield* session
         .prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Collision" }), resume: false })
@@ -352,6 +356,34 @@ describe("SessionV2.prompt", () => {
 
       expect(failure._tag).toBe("Session.PromptConflictError")
       expect(yield* admitted(messageID)).toBeUndefined()
+    }),
+  )
+
+  it.effect("rejects a durable event ID reserved by an admitted prompt without poisoning promotion", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const prompt = new Prompt({ text: "Reserved prompt" })
+      yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
+
+      const failure = yield* events
+        .publish(
+          SessionEvent.Synthetic,
+          { sessionID, timestamp: yield* DateTime.now, text: "Conflicting synthetic" },
+          { id: messageID },
+        )
+        .pipe(Effect.catchDefect(Effect.succeed))
+
+      expect(failure).toBe("Durable event conflicts with admitted prompt input")
+      expect(yield* admitted(messageID)).not.toHaveProperty("promotedSeq")
+      expect(yield* session.messages({ sessionID })).toEqual([])
+
+      yield* SessionInput.promoteSteers(db, events, sessionID)
+
+      expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 0 })
+      expect(yield* session.messages({ sessionID })).toMatchObject([{ id: messageID, type: "user", text: "Reserved prompt" }])
     }),
   )
 

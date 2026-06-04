@@ -21,7 +21,12 @@ import { testEffect } from "./lib/effect"
 
 const sessionID = SessionV2.ID.make("ses_bash_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
-const runs: Array<{ readonly command: string; readonly cwd?: string; readonly shell?: string | boolean; readonly options?: AppProcess.RunOptions }> = []
+const runs: Array<{
+  readonly command: string
+  readonly cwd?: string
+  readonly shell?: string | boolean
+  readonly options?: AppProcess.RunOptions
+}> = []
 const truncations: ToolOutputStore.TruncateInput[] = []
 let denyAction: string | undefined
 let result: AppProcess.RunResult = {
@@ -41,7 +46,9 @@ const permission = Layer.succeed(
   PermissionV2.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
-        Effect.andThen(input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void),
+        Effect.andThen(
+          input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
+        ),
       ),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
@@ -135,7 +142,9 @@ describe("BashTool", () => {
         reset()
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
-            expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["bash"])
+            const definitions = yield* registry.definitions()
+            expect(definitions.map((tool) => tool.name)).toEqual(["bash"])
+            expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.background")
             expect(yield* registry.settle(call({ command: "pwd", description: "Print working directory" }))).toEqual({
               result: { type: "text", value: "hello\n\n\nCommand exited with code 0." },
               output: {
@@ -150,7 +159,10 @@ describe("BashTool", () => {
               },
             })
             expect(runs).toMatchObject([{ command: "pwd", cwd: realpathSync(tmp.path) }])
-            expect(runs[0]?.options).toMatchObject({ maxOutputBytes: BashTool.MAX_CAPTURE_BYTES, maxErrorBytes: BashTool.MAX_CAPTURE_BYTES })
+            expect(runs[0]?.options).toMatchObject({
+              maxOutputBytes: BashTool.MAX_CAPTURE_BYTES,
+              maxErrorBytes: BashTool.MAX_CAPTURE_BYTES,
+            })
             expect(assertions).toEqual([{ sessionID, action: "bash", resources: ["pwd"], save: ["pwd"] }])
           }),
         )
@@ -166,7 +178,9 @@ describe("BashTool", () => {
         reset()
         return Effect.promise(() => fs.mkdir(path.join(tmp.path, "src"))).pipe(
           Effect.andThen(withTool(tmp.path, (registry) => registry.execute(call({ command: "pwd", workdir: "src" })))),
-          Effect.andThen(Effect.sync(() => expect(runs).toMatchObject([{ cwd: realpathSync(path.join(tmp.path, "src")) }]))),
+          Effect.andThen(
+            Effect.sync(() => expect(runs).toMatchObject([{ cwd: realpathSync(path.join(tmp.path, "src")) }])),
+          ),
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -179,7 +193,11 @@ describe("BashTool", () => {
         Effect.promise(() => tmpdir()),
         (tmp) => {
           reset()
-          return withTool(tmp.path, (registry) => registry.settle(call({ command: "printf core-bash" })), AppProcess.defaultLayer).pipe(
+          return withTool(
+            tmp.path,
+            (registry) => registry.settle(call({ command: "printf core-bash" })),
+            AppProcess.defaultLayer,
+          ).pipe(
             Effect.andThen((settled) =>
               Effect.sync(() => {
                 expect(settled.result).toEqual({ type: "text", value: "core-bash\n\nCommand exited with code 0." })
@@ -203,17 +221,24 @@ describe("BashTool", () => {
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([active, outside]) => {
         reset()
-        return withTool(active.path, (registry) => registry.execute(call({ command: "pwd", workdir: outside.path }))).pipe(
+        return withTool(active.path, (registry) =>
+          registry.execute(call({ command: "pwd", workdir: outside.path })),
+        ).pipe(
           Effect.andThen(
             Effect.sync(() => {
               expect(assertions.map((item) => item.action)).toEqual(["external_directory", "bash"])
-              expect(assertions[0]).toMatchObject({ resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")] })
+              expect(assertions[0]).toMatchObject({
+                resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+              })
               expect(runs).toHaveLength(1)
             }),
           ),
         )
       },
-      ([active, outside]) => Effect.promise(() => Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined)),
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
     ),
   )
 
@@ -234,7 +259,10 @@ describe("BashTool", () => {
           expect(assertions.map((item) => item.action)).toEqual(["bash"])
           expect(runs).toEqual([])
         }),
-      ([active, outside]) => Effect.promise(() => Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined)),
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
     ),
   )
 
@@ -260,7 +288,10 @@ describe("BashTool", () => {
           ),
         )
       },
-      ([active, outside]) => Effect.promise(() => Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined)),
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
     ),
   )
 
@@ -274,12 +305,19 @@ describe("BashTool", () => {
           Effect.succeed({
             content: "HEAD\n\n... output truncated; full content available as tool-output://opaque ...\n\nTAIL",
             truncated: true,
-            resource: new ToolOutputStore.Resource({ uri: "tool-output://opaque", mime: "text/plain", size: input.content.length }),
+            resource: new ToolOutputStore.Resource({
+              uri: "tool-output://opaque",
+              mime: "text/plain",
+              size: input.content.length,
+            }),
           })
         return withTool(tmp.path, (registry) => registry.settle(call({ command: "false" }, "call-overflow"))).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
-              expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("Command exited with code 7") })
+              expect(settled.result).toMatchObject({
+                type: "text",
+                value: expect.stringContaining("Command exited with code 7"),
+              })
               expect(settled.output?.structured).toMatchObject({
                 command: "false",
                 cwd: realpathSync(tmp.path),
@@ -287,7 +325,9 @@ describe("BashTool", () => {
                 truncated: true,
                 resource: { uri: "tool-output://opaque" },
               })
-              expect(truncations).toMatchObject([{ sessionID, toolCallID: "call-overflow", content: "HEAD full output TAIL" }])
+              expect(truncations).toMatchObject([
+                { sessionID, toolCallID: "call-overflow", content: "HEAD full output TAIL" },
+              ])
               expect(JSON.stringify(settled)).not.toContain(tmp.path + path.sep + "tool-output")
             }),
           ),
@@ -307,7 +347,10 @@ describe("BashTool", () => {
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(settled.output?.structured).toMatchObject({ truncated: true, stdoutTruncated: true })
-              expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("stdout capture truncated") })
+              expect(settled.result).toMatchObject({
+                type: "text",
+                value: expect.stringContaining("stdout capture truncated"),
+              })
               expect(settled.output?.structured).not.toHaveProperty("resource")
             }),
           ),
@@ -326,8 +369,15 @@ describe("BashTool", () => {
         return withTool(tmp.path, (registry) => registry.settle(call({ command: "sleep 60", timeout: 10 }))).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
-              expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("Command timed out") })
-              expect(settled.output?.structured).toMatchObject({ command: "sleep 60", timedOut: true, truncated: false })
+              expect(settled.result).toMatchObject({
+                type: "text",
+                value: expect.stringContaining("Command timed out"),
+              })
+              expect(settled.output?.structured).toMatchObject({
+                command: "sleep 60",
+                timedOut: true,
+                truncated: false,
+              })
             }),
           ),
         )
@@ -346,6 +396,7 @@ test("keeps locked deferred parity TODOs visible", async () => {
     "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
     "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
     "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",
+    "Persist background job status and define restart recovery before exposing remote observation.",
     "Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.",
     "Revisit binary output handling if stdout/stderr decoding is text-only.",
     "Stream full shell output into managed storage while retaining only a bounded in-memory preview.",

@@ -879,6 +879,42 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("references stored provider-executed hosted tool results by id", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({
+                id: "ws_1",
+                name: "web_search",
+                input: { query: "effect 4" },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              }),
+              {
+                type: "tool-result",
+                id: "ws_1",
+                name: "web_search",
+                result: { type: "json", value: { type: "web_search_call", id: "ws_1", status: "completed" } },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              },
+            ]),
+            Message.user("Continue."),
+          ],
+          providerOptions: { openai: { store: true } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "item_reference", id: "ws_1" },
+        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
+    }),
+  )
+
   it.effect("joins streamed summary blocks into one continuation reasoning item", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(

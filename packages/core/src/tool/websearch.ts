@@ -167,7 +167,12 @@ const callMcp = <F extends Schema.Struct.Fields>(
     }).pipe(Effect.timeoutOrElse({ duration: Duration.seconds(25), orElse: () => Effect.die(new Error(`${tool} request timed out`)) }))
   })
 
-const Success = Schema.Struct({ provider: Provider, text: Schema.String })
+const Success = Schema.Struct({
+  provider: Provider,
+  text: Schema.String,
+  truncated: Schema.Boolean,
+  resource: ToolOutputStore.Resource.pipe(Schema.optional),
+})
 
 const definition = Tool.make({
   description,
@@ -221,7 +226,12 @@ export const layer = Layer.effectDiscard(
                   },
                 )
             const truncated = yield* resources.truncate({ sessionID, toolCallID: call.id, content: text ?? NO_RESULTS })
-            return { provider, text: truncated.content }
+            return {
+              provider,
+              text: truncated.content,
+              truncated: truncated.truncated,
+              ...(truncated.truncated ? { resource: truncated.resource } : {}),
+            }
           }).pipe(
             Effect.catchCause((cause) =>
               Effect.fail(new ToolFailure({ message: `Unable to search the web for ${parameters.query}`, error: Cause.squash(cause) })),

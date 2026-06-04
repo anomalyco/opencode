@@ -1,18 +1,19 @@
-import { LLM, LLMClient, LLMEvent } from "@opencode-ai/llm"
-import { Cause, DateTime, Duration, Effect, FiberSet, Layer, Semaphore, Stream } from "effect"
+import { LLM, LLMClient, LLMError, LLMEvent } from "@opencode-ai/llm"
+import { Cause, DateTime, Effect, FiberSet, Layer, Semaphore, Stream } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
 import { SessionEvent } from "../event"
 import { SessionStore } from "../store"
-import { ProviderStreamTimeoutError, Service, StepLimitExceededError, TimeoutService, timeoutDefaultLayer } from "./index"
+import { Service, StepLimitExceededError } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { ToolRegistry } from "../../tool-registry"
 import { SessionRunnerModel } from "./model"
 import { Database } from "../../database/database"
 import { SessionInput } from "../input"
+import { QuestionV2 } from "../../question"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -44,7 +45,6 @@ import { SessionInput } from "../input"
  *   - [x] Translate every projected V2 Session message variant into canonical
  *     `@opencode-ai/llm` messages.
  *   - [ ] Resolve policy-filtered built-in, MCP, plugin, and structured-output tool definitions.
- *   - [x] Persist one outer Turn.Started recovery marker before promoting inputs.
  *   - [x] Stream exactly one `llm.stream(request)` provider turn.
  *   - [x] Persist assistant text and usage events incrementally as they arrive.
  *   - [ ] Persist snapshots, patches, and retry notices incrementally as they arrive.
@@ -66,9 +66,8 @@ import { SessionInput } from "../input"
  *   - [ ] Coalesce streamed deltas and add covering projected-history indexes.
  *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
  *
- * Use `llm.stream(request)` for each provider turn. Keep tool execution and continuation here;
- * durable outer-turn watermarks preserve steering decisions and stale-attempt recovery while
- * automatic startup discovery remains a separate future slice.
+ * Use `llm.stream(request)` for each provider turn. Keep tool execution and continuation here.
+ * Durable activity recovery remains a separate future slice with an explicit retry policy.
  *
  * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
  * provider turn. Registry definitions are advertised, local tool calls are settled durably, and a
@@ -85,7 +84,6 @@ export const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const tools = yield* ToolRegistry.Service
     const models = yield* SessionRunnerModel.Service
-    const timeouts = yield* TimeoutService
     const store = yield* SessionStore.Service
     const db = (yield* Database.Service).db
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -111,7 +109,10 @@ export const layer = Layer.effect(
             assistantMessageID: message.id,
             callID: tool.id,
             error: { type: "unknown", message: "Tool execution interrupted" },
-            provider: { executed: tool.provider?.executed === true },
+            provider: {
+              executed: tool.provider?.executed === true,
+              ...(tool.provider?.metadata === undefined ? {} : { metadata: tool.provider.metadata }),
+            },
           })
         }
       }
@@ -120,6 +121,10 @@ export const layer = Layer.effect(
     const awaitToolFibers = (fibers: FiberSet.FiberSet<void, never>) =>
       Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
 
+    // Match V1: dismissing a question halts the loop instead of becoming model-facing tool output.
+    const isQuestionRejected = (cause: Cause.Cause<unknown>) =>
+      cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
+
     const runTurn = Effect.fn("SessionRunner.runTurn")(function* (
       session: SessionSchema.Info,
       promotion: "steer" | "queue" | undefined,
@@ -127,10 +132,6 @@ export const layer = Layer.effect(
       const model = yield* models.resolve(session)
       const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
-      const turn = yield* events.publish(SessionEvent.Turn.Started, {
-        sessionID: session.id,
-        timestamp: yield* DateTime.now,
-      })
       if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id)
       if (promotion === "queue") {
         yield* SessionInput.promoteNextQueued(db, events, session.id)
@@ -138,7 +139,7 @@ export const layer = Layer.effect(
       }
       yield* failInterruptedTools(session.id)
       const context = yield* getContext(session.id)
-      const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
+      const request = LLM.request({ model, messages: toLLMMessages(context, model), tools: yield* tools.definitions() })
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: session.agent ?? "build",
@@ -150,62 +151,65 @@ export const layer = Layer.effect(
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent) => withPublication(publisher.publish(event))
-      const timeout = (kind: "inactivity" | "absolute", duration: Duration.Duration) =>
-        new ProviderStreamTimeoutError({ kind, duration: Duration.format(duration) })
       const providerStream = llm.stream(request).pipe(
-        Stream.timeoutOrElse({
-          duration: timeouts.inactivity,
-          orElse: () => Stream.fail(timeout("inactivity", timeouts.inactivity)),
-        }),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
             yield* tools.settle({ sessionID: session.id, call: event }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.succeed({ result: { type: "error" as const, value: String(Cause.squash(cause)) }, output: undefined }),
-              ),
+              Effect.catchCause((cause) => {
+                if (isQuestionRejected(cause)) return Effect.failCause(cause)
+                return Effect.succeed({
+                  result: { type: "error" as const, value: String(Cause.squash(cause)) },
+                  output: undefined,
+                })
+              }),
               Effect.flatMap((settlement) =>
-                publish(LLMEvent.toolResult({ id: event.id, name: event.name, result: settlement.result, output: settlement.output })),
+                publish(
+                  LLMEvent.toolResult({
+                    id: event.id,
+                    name: event.name,
+                    result: settlement.result,
+                    output: settlement.output,
+                  }),
+                ),
               ),
               FiberSet.run(toolFibers),
             )
           }),
         ),
-        Effect.timeoutOrElse({
-          duration: timeouts.absolute,
-          orElse: () => timeout("absolute", timeouts.absolute),
-        }),
         Effect.ensuring(withPublication(publisher.flush())),
       )
 
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const stream = yield* restore(providerStream).pipe(Effect.exit)
-          let timeoutFailure: ProviderStreamTimeoutError | undefined
+          let llmFailure: LLMError | undefined
           if (stream._tag === "Failure") {
             for (const reason of stream.cause.reasons) {
-              if (!Cause.isFailReason(reason) || !(reason.error instanceof ProviderStreamTimeoutError)) continue
-              timeoutFailure = reason.error
-              break
+              if (!Cause.isFailReason(reason)) continue
+              if (reason.error instanceof LLMError) llmFailure = reason.error
             }
           }
-          if (timeoutFailure) {
-            yield* FiberSet.clear(toolFibers)
-            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+          if (llmFailure && !publisher.hasProviderError()) {
+            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(
               events.publish(SessionEvent.Step.Failed, {
                 sessionID: session.id,
                 timestamp: yield* DateTime.now,
                 assistantMessageID: yield* publisher.startAssistant(),
-                error: { type: "unknown", message: timeoutFailure.message },
+                error: { type: "unknown", message: llmFailure.reason.message },
               }),
             )
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
-          const attempt = stream._tag === "Failure" ? stream : settled
+          if (settled._tag === "Failure" && isQuestionRejected(settled.cause)) {
+            yield* FiberSet.clear(toolFibers)
+            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+            return yield* Effect.interrupt
+          }
           if (
             (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) ||
             (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
@@ -213,20 +217,11 @@ export const layer = Layer.effect(
             yield* FiberSet.clear(toolFibers)
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           }
-          if (publisher.hasProviderError()) yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
-          yield* events.publish(SessionEvent.Turn.Settled, {
-            sessionID: session.id,
-            timestamp: yield* DateTime.now,
-            turnID: turn.id,
-            outcome:
-              attempt._tag === "Success"
-                ? publisher.hasProviderError()
-                  ? "failed"
-                  : "completed"
-                : Cause.hasInterruptsOnly(attempt.cause)
-                  ? "interrupted"
-                  : "failed",
-          })
+          if (publisher.hasProviderError())
+            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+          if (stream._tag === "Success" && !publisher.hasProviderError())
+            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+          const attempt = stream._tag === "Failure" ? stream : settled
           if (attempt._tag === "Failure") return yield* Effect.failCause(attempt.cause)
           return !publisher.hasProviderError() && needsContinuation
         }),
@@ -239,17 +234,10 @@ export const layer = Layer.effect(
     }) {
       const session = yield* getSession(input.sessionID)
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
-      const unsettled = !hasSteer ? (yield* store.attemptState(input.sessionID)).unsettled : false
       const hasQueue = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
-      if (input.force !== true && !hasSteer && !hasQueue && !unsettled) return
-      let promotion: "steer" | "queue" | undefined = hasSteer
-        ? "steer"
-        : unsettled
-          ? undefined
-          : hasQueue
-            ? "queue"
-            : undefined
-      let openActivity = input.force === true || hasSteer || hasQueue || unsettled
+      if (input.force !== true && !hasSteer && !hasQueue) return
+      let promotion: "steer" | "queue" | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
+      let openActivity = input.force === true || hasSteer || hasQueue
       while (openActivity) {
         let needsContinuation = true
         for (let step = 0; step < MAX_STEPS; step++) {
@@ -271,4 +259,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(timeoutDefaultLayer))
+export const defaultLayer = layer

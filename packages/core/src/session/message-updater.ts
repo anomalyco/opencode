@@ -19,7 +19,8 @@ export interface Adapter {
 }
 
 export function memory(state: MemoryState): Adapter {
-  const assistantIndex = (messageID: SessionMessage.ID) => state.messages.findLastIndex((message) => message.id === messageID)
+  const assistantIndex = (messageID: SessionMessage.ID) =>
+    state.messages.findLastIndex((message) => message.id === messageID)
   // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
   const latestAssistantIndex = () => state.messages.findLastIndex((message) => message.type === "assistant")
   const activeCompactionIndex = () => state.messages.findLastIndex((message) => message.type === "compaction")
@@ -192,8 +193,6 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
-      "session.next.turn.started": () => Effect.void,
-      "session.next.turn.settled": () => Effect.void,
       "session.next.step.started": (event) => {
         return Effect.gen(function* () {
           const currentAssistant = yield* adapter.getCurrentAssistant()
@@ -239,7 +238,9 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           if (currentAssistant) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
-                draft.content.push(castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })))
+                draft.content.push(
+                  castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })),
+                )
               }),
             )
           }
@@ -274,13 +275,15 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.tool.input.started": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.content.push(
-            castDraft(new SessionMessage.AssistantTool({
-              type: "tool",
-              id: event.data.callID,
-              name: event.data.name,
-              time: { created: event.data.timestamp },
-              state: new SessionMessage.ToolStatePending({ status: "pending", input: "" }),
-            })),
+            castDraft(
+              new SessionMessage.AssistantTool({
+                type: "tool",
+                id: event.data.callID,
+                name: event.data.name,
+                time: { created: event.data.timestamp },
+                state: new SessionMessage.ToolStatePending({ status: "pending", input: "" }),
+              }),
+            ),
           )
         })
       },
@@ -297,12 +300,14 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           if (match) {
             match.provider = event.data.provider
             match.time.ran = event.data.timestamp
-            match.state = castDraft(new SessionMessage.ToolStateRunning({
-              status: "running",
-              input: event.data.input,
-              structured: {},
-              content: [],
-            }))
+            match.state = castDraft(
+              new SessionMessage.ToolStateRunning({
+                status: "running",
+                input: event.data.input,
+                structured: {},
+                content: [],
+              }),
+            )
           }
         })
       },
@@ -315,21 +320,25 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
-      // Live progress reaches connected subscribers only; durable checkpoints update the read model.
-      "session.next.tool.progress.live": () => Effect.void,
       "session.next.tool.success": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && match.state.status === "running") {
-            match.provider = event.data.provider
+            match.provider = {
+              executed: event.data.provider.executed || match.provider?.executed === true,
+              metadata: match.provider?.metadata,
+              resultMetadata: event.data.provider.metadata,
+            }
             match.time.completed = event.data.timestamp
-            match.state = castDraft(new SessionMessage.ToolStateCompleted({
-              status: "completed",
-              input: match.state.input,
-              structured: event.data.structured,
-              content: [...event.data.content],
-              result: event.data.result,
-            }))
+            match.state = castDraft(
+              new SessionMessage.ToolStateCompleted({
+                status: "completed",
+                input: match.state.input,
+                structured: event.data.structured,
+                content: [...event.data.content],
+                result: event.data.result,
+              }),
+            )
           }
         })
       },
@@ -337,16 +346,22 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && (match.state.status === "pending" || match.state.status === "running")) {
-            match.provider = event.data.provider
+            match.provider = {
+              executed: event.data.provider.executed || match.provider?.executed === true,
+              metadata: match.provider?.metadata,
+              resultMetadata: event.data.provider.metadata,
+            }
             match.time.completed = event.data.timestamp
-            match.state = castDraft(new SessionMessage.ToolStateError({
-              status: "error",
-              error: event.data.error,
-              input: typeof match.state.input === "string" ? {} : match.state.input,
-              structured: match.state.status === "running" ? match.state.structured : {},
-              content: match.state.status === "running" ? match.state.content : [],
-              result: event.data.result,
-            }))
+            match.state = castDraft(
+              new SessionMessage.ToolStateError({
+                status: "error",
+                error: event.data.error,
+                input: typeof match.state.input === "string" ? {} : match.state.input,
+                structured: match.state.status === "running" ? match.state.structured : {},
+                content: match.state.status === "running" ? match.state.content : [],
+                result: event.data.result,
+              }),
+            )
           }
         })
       },
@@ -357,12 +372,14 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
                 draft.content.push(
-                  castDraft(new SessionMessage.AssistantReasoning({
-                    type: "reasoning",
-                    id: event.data.reasoningID,
-                    text: "",
-                    providerMetadata: event.data.providerMetadata,
-                  })),
+                  castDraft(
+                    new SessionMessage.AssistantReasoning({
+                      type: "reasoning",
+                      id: event.data.reasoningID,
+                      text: "",
+                      providerMetadata: event.data.providerMetadata,
+                    }),
+                  ),
                 )
               }),
             )

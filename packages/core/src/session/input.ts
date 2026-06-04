@@ -128,6 +128,17 @@ export const equivalent = (
 const matchesPrompt = (input: Admitted, expected: { readonly sessionID: SessionSchema.ID; readonly prompt: Prompt }) =>
   input.sessionID === expected.sessionID && JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
 
+export const guardReservedID = Effect.fn("SessionInput.guardReservedID")(function* (
+  db: DatabaseService,
+  event: EventV2.Payload,
+) {
+  const admitted = yield* find(db, event.id)
+  if (admitted === undefined) return
+  if (!Schema.is(SessionEvent.Prompted)(event))
+    return yield* Effect.die("Durable event conflicts with admitted prompt input")
+  if (!equivalent(admitted, event.data)) return yield* Effect.die("Prompt projection conflicts with admitted input")
+})
+
 export const project = Effect.fn("SessionInput.project")(function* (
   db: DatabaseService,
   input: {

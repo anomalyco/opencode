@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { testEffect } from "./lib/effect"
 
@@ -255,6 +255,86 @@ describe("SessionRunCoordinator", () => {
         expect(modes).toEqual(["run", "wake", "run"])
       }),
     ),
+  )
+
+  it.effect("propagates an upgraded explicit run failure before a successful advisory successor", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const wakeStarted = yield* Deferred.make<void>()
+        const wakeGate = yield* Deferred.make<void>()
+        const runStarted = yield* Deferred.make<void>()
+        const runGate = yield* Deferred.make<void>()
+        const advisoryStarted = yield* Deferred.make<void>()
+        const failure = new Error("explicit run failed")
+        const modes: SessionRunCoordinator.Mode[] = []
+        const coordinator = yield* SessionRunCoordinator.make<string, void, Error>({
+          drain: (_key, mode) =>
+            Effect.sync(() => modes.push(mode)).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(wakeStarted, undefined).pipe(Effect.andThen(Deferred.await(wakeGate)))
+                  : run === 2
+                    ? Deferred.succeed(runStarted, undefined).pipe(
+                        Effect.andThen(Deferred.await(runGate)),
+                        Effect.andThen(Effect.fail(failure)),
+                      )
+                    : Deferred.succeed(advisoryStarted, undefined),
+              ),
+            ),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(wakeStarted)
+        const run = yield* coordinator.run("session").pipe(Effect.forkChild)
+        yield* Deferred.succeed(wakeGate, undefined)
+        yield* Deferred.await(runStarted)
+        yield* coordinator.wake("session")
+        yield* Deferred.succeed(runGate, undefined)
+        yield* Deferred.await(advisoryStarted)
+
+        expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
+        expect(modes).toEqual(["wake", "run", "wake"])
+      }),
+    ),
+  )
+
+  it.effect("settles active callers when its owning scope closes", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      const started = yield* Deferred.make<void>()
+      const coordinator = yield* SessionRunCoordinator.make({
+        drain: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+      }).pipe(Scope.provide(scope))
+
+      const run = yield* coordinator.run("session").pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      const idle = yield* coordinator.awaitIdle("session").pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+      yield* Scope.close(scope, Exit.void)
+
+      const runExit = yield* Fiber.await(run)
+      const idleExit = yield* Fiber.await(idle)
+      expect(Exit.isFailure(runExit) && Cause.hasInterruptsOnly(runExit.cause)).toBeTrue()
+      expect(Exit.isSuccess(idleExit)).toBeTrue()
+    }),
+  )
+
+  it.effect("does not start work after its owning scope closes", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      let runs = 0
+      const coordinator = yield* SessionRunCoordinator.make({
+        drain: () => Effect.sync(() => runs++),
+      }).pipe(Scope.provide(scope))
+      yield* Scope.close(scope, Exit.void)
+
+      yield* coordinator.wake("session")
+      yield* coordinator.awaitIdle("session")
+      const runExit = yield* coordinator.run("session").pipe(Effect.exit)
+
+      expect(Exit.isFailure(runExit) && Cause.hasInterruptsOnly(runExit.cause)).toBeTrue()
+      expect(runs).toBe(0)
+    }),
   )
 
   it.effect("does not cancel the owner when one joined waiter is interrupted", () =>

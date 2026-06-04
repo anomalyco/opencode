@@ -36,7 +36,7 @@ next safe provider-turn boundary. `queue` inputs form a FIFO of future activitie
 that open one at a time. A location-scoped `SessionRunCoordinator` coalesces process-local wakeups
 around settlement races. Explicit `run` resumes perform at least one provider
 attempt; advisory `wake` notifications call the provider only for eligible inbox
-work or an unsettled durable attempt. Steers coalesce into the active activity at
+work. Steers coalesce into the active activity at
 safe provider boundaries; queued inputs open later activities one at a time in
 FIFO order.
 
@@ -55,11 +55,25 @@ Next reviewed slices:
 - integrate the new BackgroundJob service with V2 tool execution: support background
   bash jobs and background agent dispatch with durable status observation,
   completion delivery, and explicit cancellation / continuation semantics
-- revisit the V2 bash enablement product policy before broad exposure: the current
-  exact-action authored `bash` rule requirement is a conservative safety default,
-  not a settled UX decision
 - add compaction, interruption, retries, and stale-owner fencing
   only as their slices become concrete
+
+### Deferred durable activity recovery
+
+Do not infer that ambiguous provider work is safe to retry from an advisory wake.
+The first inbox-driven runner intentionally omits outer provider-attempt markers
+until they have a concrete consumer and a complete recovery policy.
+
+Design post-crash activity recovery as one explicit slice. It should model:
+
+- durable activity identity and settlement
+- queue-opener reservation and steer assignment
+- provider-attempt preparation versus provider-dispatch ambiguity
+- required post-tool continuation across process loss
+- explicit `retry` and `abandon` decisions for unknown outcomes
+- bounded automatic retry only where provider and tool idempotency make it safe
+- retry budget, backoff, visible recovery status, startup discovery, and future
+  clustered ownership fencing
 
 ## Rework compaction - Aiden?
 
@@ -125,8 +139,8 @@ failure appears during canary work:
   process-local
 - stream-cap websearch body collection before parsing
 - add ripgrep execution timeout and bounded line framing
-- validate managed tool-output payload size during reads and cleanup
 - materialize or consistently reject unresolved URL and file attachment sources
+- decide stateless OpenAI Responses hosted-tool continuation behavior; reconstructed hosted output can replay as a stored `item_reference` when `store !== false`, while `store: false` intentionally omits the unavailable reference path
 - decide whether to preserve deprecated `@opencode-ai/llm` orchestration exports
 - preserve or alias renamed filesystem SDK generated type names if compatibility
   consumers require them

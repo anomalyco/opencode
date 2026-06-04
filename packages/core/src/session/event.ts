@@ -157,29 +157,6 @@ export namespace Step {
   export type Failed = typeof Failed.Type
 }
 
-/** Durable orchestration facts for one outer `llm.stream(...)` provider attempt. */
-export namespace Turn {
-  export const Started = EventV2.define({
-    type: "session.next.turn.started",
-    ...options,
-    schema: {
-      ...Base,
-    },
-  })
-  export type Started = typeof Started.Type
-
-  export const Settled = EventV2.define({
-    type: "session.next.turn.settled",
-    ...options,
-    schema: {
-      ...Base,
-      turnID: EventV2.ID,
-      outcome: Schema.Literals(["completed", "failed", "interrupted"]),
-    },
-  })
-  export type Settled = typeof Settled.Type
-}
-
 export namespace Text {
   export const Started = EventV2.define({
     type: "session.next.text.started",
@@ -319,20 +296,6 @@ export namespace Tool {
   })
   export type Progress = typeof Progress.Type
 
-  /**
-   * Connected-client-only running-tool state. Like Text.Delta, this never
-   * advances the durable aggregate cursor and is never replayed.
-   */
-  export const ProgressLive = EventV2.define({
-    type: "session.next.tool.progress.live",
-    schema: {
-      ...ToolBase,
-      structured: ToolOutput.Structured,
-      content: Schema.Array(ToolOutput.Content),
-    },
-  })
-  export type ProgressLive = typeof ProgressLive.Type
-
   export const Success = EventV2.define({
     type: "session.next.tool.success",
     ...options,
@@ -428,8 +391,6 @@ const DurableDefinitions = [
   Synthetic,
   Shell.Started,
   Shell.Ended,
-  Turn.Started,
-  Turn.Settled,
   Step.Started,
   Step.Ended,
   Step.Failed,
@@ -448,7 +409,7 @@ const DurableDefinitions = [
   Compaction.Delta,
   Compaction.Ended,
 ] as const
-const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Tool.ProgressLive, Reasoning.Delta] as const
+const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta] as const
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
 export type DurableEvent = typeof Durable.Type

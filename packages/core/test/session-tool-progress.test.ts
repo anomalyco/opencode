@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { asc, eq } from "drizzle-orm"
-import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
@@ -14,7 +14,6 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable, SessionMessageTable } from "@opencode-ai/core/session/sql"
-import { ToolProgress } from "@opencode-ai/core/session/tool-progress"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { testEffect } from "./lib/effect"
 
@@ -27,39 +26,8 @@ const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("pr
 
 const content = (text: string) => [ToolOutput.text({ type: "text", text })]
 
-describe("ToolProgress", () => {
-  it.effect("publishes live updates to connected clients without replaying them", () =>
-    Effect.gen(function* () {
-      const service = yield* EventV2.Service
-      const sessionID = SessionV2.ID.make("ses_tool_progress_publish")
-      const assistantMessageID = EventV2.ID.make("evt_tool_progress_publish")
-      const progress = ToolProgress.create(service, { sessionID, assistantMessageID, callID: "call-publish" })
-      const subscription = yield* service.subscribe(SessionEvent.Tool.ProgressLive).pipe(
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.forkScoped,
-      )
-      yield* Effect.yieldNow
-
-      const live = yield* progress.live({ structured: { phase: "streaming" }, content: content("live") })
-      const checkpoint = yield* progress.checkpoint({ structured: { phase: "checkpoint" }, content: content("saved") })
-      const replay = yield* service.aggregateEvents({ aggregateID: sessionID }).pipe(Stream.take(1), Stream.runCollect)
-
-      expect(Array.from(yield* Fiber.join(subscription))).toEqual([live])
-      expect(Schema.is(SessionEvent.All)(live)).toBe(true)
-      expect(Schema.is(SessionEvent.Durable)(live)).toBe(false)
-      expect(live).not.toHaveProperty("seq")
-      expect(live).not.toHaveProperty("version")
-      expect(checkpoint).toMatchObject({
-        type: SessionEvent.Tool.Progress.type,
-        seq: 0,
-        data: { sessionID, assistantMessageID, callID: "call-publish", structured: { phase: "checkpoint" } },
-      })
-      expect(Array.from(replay)).toEqual([{ cursor: 0, event: checkpoint }])
-    }),
-  )
-
-  it.effect("projects only checkpoints and keeps final settlements durable", () =>
+describe("Tool.Progress", () => {
+  it.effect("projects durable progress and keeps final settlements durable", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       const service = yield* EventV2.Service
@@ -78,7 +46,6 @@ describe("ToolProgress", () => {
       })
 
       yield* start("call-success")
-      yield* service.publish(SessionEvent.Tool.ProgressLive, { sessionID, timestamp, assistantMessageID, callID: "call-success", structured: { phase: "live" }, content: content("live") })
       expect((yield* readAssistant).content[0]).toMatchObject({ state: { status: "running", structured: {}, content: [] } })
 
       yield* service.publish(SessionEvent.Tool.Progress, { sessionID, timestamp, assistantMessageID, callID: "call-success", structured: { phase: "checkpoint" }, content: content("saved") })
@@ -95,7 +62,6 @@ describe("ToolProgress", () => {
       expect(Schema.is(SessionEvent.Durable)(failed)).toBe(true)
 
       const rows = yield* db.select({ type: EventTable.type }).from(EventTable).where(eq(EventTable.aggregate_id, sessionID)).orderBy(asc(EventTable.seq)).all().pipe(Effect.orDie)
-      expect(rows.map((row) => row.type)).not.toContain(EventV2.versionedType(SessionEvent.Tool.ProgressLive.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Progress.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Success.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Failed.type, 1))

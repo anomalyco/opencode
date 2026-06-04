@@ -1,6 +1,6 @@
 export * as SessionRunCoordinator from "./run-coordinator"
 
-import { Cause, Context, Deferred, Effect, FiberSet, Layer, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Scope } from "effect"
 import { SessionRunner } from "./runner"
 import { SessionSchema } from "./schema"
 
@@ -32,7 +32,7 @@ type Entry<A, E> = {
   readonly done: Deferred.Deferred<A, E>
   mode: Mode
   rerun?: Mode
-  successor?: Entry<A, E>
+  explicit?: Deferred.Deferred<A, E>
 }
 
 const strongest = (left: Mode | undefined, right: Mode): Mode => (left === "run" || right === "run" ? "run" : "wake")
@@ -46,11 +46,20 @@ export const make = <Key, A, E>(options: {
     const active = new Map<Key, Entry<A, E>>()
     const scope = yield* Effect.scope
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
-    yield* Effect.addFinalizer(() => Effect.sync(() => active.clear()))
+    const shutdown = Deferred.makeUnsafe<void>()
+    let closed = false
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        closed = true
+        Deferred.doneUnsafe(shutdown, Effect.void)
+        active.clear()
+      }),
+    )
 
-    const makeEntry = (mode: Mode): Entry<A, E> => ({
+    const makeEntry = (mode: Mode, explicit?: Deferred.Deferred<A, E>): Entry<A, E> => ({
       done: Deferred.makeUnsafe<A, E>(),
       mode,
+      explicit,
     })
 
     const start = (key: Key, entry: Entry<A, E>, mode: Mode) => {
@@ -61,6 +70,11 @@ export const make = <Key, A, E>(options: {
       Effect.suspend(() => options.drain(key, mode)).pipe(
         Effect.exit,
         Effect.flatMap((exit) => {
+          if (closed) return Deferred.done(entry.done, exit).pipe(Effect.asVoid)
+          if (mode === "run" && entry.explicit !== undefined) {
+            Deferred.doneUnsafe(entry.explicit, exit)
+            entry.explicit = undefined
+          }
           if (exit._tag === "Success") {
             if (active.get(key) !== entry) return Deferred.done(entry.done, exit).pipe(Effect.asVoid)
             if (entry.rerun !== undefined) {
@@ -73,10 +87,10 @@ export const make = <Key, A, E>(options: {
             return Deferred.done(entry.done, exit).pipe(Effect.asVoid)
           }
 
-          const successor = active.get(key) === entry && entry.rerun !== undefined ? makeEntry(entry.rerun) : undefined
+          const successor =
+            active.get(key) === entry && entry.rerun !== undefined ? makeEntry(entry.rerun, entry.explicit) : undefined
           if (successor === undefined) active.delete(key)
           else {
-            entry.successor = successor
             active.set(key, successor)
           }
           if (successor !== undefined) start(key, successor, successor.mode)
@@ -90,6 +104,7 @@ export const make = <Key, A, E>(options: {
 
     const wake = (key: Key) =>
       Effect.sync(() => {
+        if (closed) return
         const entry = active.get(key)
         if (entry !== undefined) {
           entry.rerun = strongest(entry.rerun, "wake")
@@ -104,10 +119,14 @@ export const make = <Key, A, E>(options: {
     const awaitIdle = (key: Key): Effect.Effect<void, E> =>
       Effect.gen(function* () {
         let firstFailure: Cause.Cause<E> | undefined
-        while (true) {
+        while (!closed) {
           const entry = active.get(key)
           if (entry === undefined) break
-          const exit = yield* Deferred.await(entry.done).pipe(Effect.exit)
+          const exit = yield* Effect.raceFirst(
+            Deferred.await(entry.done).pipe(Effect.exit),
+            Deferred.await(shutdown).pipe(Effect.as(Exit.void)),
+          )
+          if (closed) break
           if (exit._tag === "Failure" && firstFailure === undefined) firstFailure = exit.cause
         }
         if (firstFailure !== undefined) return yield* Effect.failCause(firstFailure)
@@ -117,30 +136,26 @@ export const make = <Key, A, E>(options: {
 
     function run(key: Key): Effect.Effect<A, E> {
       return Effect.uninterruptibleMask((restore) => {
+        if (closed) return Effect.interrupt
         const entry = active.get(key)
         if (entry !== undefined) {
           if (entry.mode === "wake") {
             entry.rerun = "run"
-            return restore(awaitSuccessor(entry))
+            entry.explicit ??= Deferred.makeUnsafe<A, E>()
+            return restore(awaitRun(entry.explicit))
           }
-          return restore(Deferred.await(entry.done))
+          return restore(awaitRun(entry.done))
         }
 
         const next = makeEntry("run")
         active.set(key, next)
         start(key, next, "run")
-        return restore(Deferred.await(next.done))
+        return restore(awaitRun(next.done))
       })
     }
 
-    function awaitSuccessor(entry: Entry<A, E>): Effect.Effect<A, E> {
-      return Deferred.await(entry.done).pipe(
-        Effect.catchCause((cause) =>
-          Effect.suspend(() => {
-            return entry.successor === undefined ? Effect.failCause(cause) : awaitSuccessor(entry.successor)
-          }),
-        ),
-      )
+    function awaitRun(done: Deferred.Deferred<A, E>): Effect.Effect<A, E> {
+      return Effect.raceFirst(Deferred.await(done), Deferred.await(shutdown).pipe(Effect.andThen(Effect.interrupt)))
     }
   })
 

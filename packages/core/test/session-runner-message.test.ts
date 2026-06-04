@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Message } from "@opencode-ai/llm"
+import { Message, Model } from "@opencode-ai/llm"
+import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -12,6 +13,7 @@ import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => EventV2.ID.make(`evt_${value}`)
+const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
 
 describe("toLLMMessages", () => {
   test("maps every top-level V2 Session message type", () => {
@@ -56,7 +58,7 @@ describe("toLLMMessages", () => {
         summary: "Earlier work",
         time: { created },
       }),
-    ])
+    ], model)
 
     expect(messages.map((message) => message.role)).toEqual(["user", "user", "user", "user"])
     expect(messages[0]).toEqual(
@@ -135,7 +137,11 @@ describe("toLLMMessages", () => {
             type: "tool",
             id: "hosted",
             name: "web_search",
-            provider: { executed: true, metadata: { fake: { continuation: "hosted" } } },
+            provider: {
+              executed: true,
+              metadata: { fake: { continuation: "hosted-call" } },
+              resultMetadata: { fake: { continuation: "hosted-result" } },
+            },
             state: new SessionMessage.ToolStateCompleted({
               status: "completed",
               input: { query: "Effect" },
@@ -161,7 +167,7 @@ describe("toLLMMessages", () => {
         ],
         time: { created, completed: created },
       }),
-    ])
+    ], model)
 
     expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
     expect(messages[0]?.content).toEqual([
@@ -181,14 +187,14 @@ describe("toLLMMessages", () => {
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: { fake: { continuation: "hosted" } },
+        providerMetadata: { fake: { continuation: "hosted-call" } },
       },
       {
         type: "tool-result",
         id: "hosted",
         name: "web_search",
         providerExecuted: true,
-        providerMetadata: { fake: { continuation: "hosted" } },
+        providerMetadata: { fake: { continuation: "hosted-result" } },
         result: { type: "text", value: "Found it" },
       },
       {
@@ -241,13 +247,113 @@ describe("toLLMMessages", () => {
         ],
         time: { created, completed: created },
       }),
-    ])
+    ], model)
 
     expect(messages[0]?.content).toEqual([
       {
         type: "reasoning",
         text: "Think",
         providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+      },
+    ])
+  })
+
+  test("drops provider-native continuation metadata after a model switch", () => {
+    const messages = toLLMMessages(
+      [
+        new SessionMessage.Assistant({
+          id: id("assistant-old-model"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("old-model"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            new SessionMessage.AssistantReasoning({
+              type: "reasoning",
+              id: "reasoning-old-model",
+              text: "Visible thought",
+              providerMetadata: { anthropic: { signature: "sig_old" } },
+            }),
+            new SessionMessage.AssistantTool({
+              type: "tool",
+              id: "hosted-old-model",
+              name: "web_search",
+              provider: {
+                executed: true,
+                metadata: { openai: { itemId: "hosted-old-model" } },
+                resultMetadata: { openai: { itemId: "hosted-old-model" } },
+              },
+              state: new SessionMessage.ToolStateCompleted({
+                status: "completed",
+                input: { query: "Effect" },
+                content: [],
+                structured: {},
+                result: { type: "json", value: { status: "completed" } },
+              }),
+              time: { created, completed: created },
+            }),
+            new SessionMessage.AssistantTool({
+              type: "tool",
+              id: "local-old-model",
+              name: "read",
+              provider: {
+                executed: false,
+                metadata: { fake: { call: "old" } },
+                resultMetadata: { fake: { result: "old" } },
+              },
+              state: new SessionMessage.ToolStateCompleted({
+                status: "completed",
+                input: { path: "README.md" },
+                content: [],
+                structured: { text: "Hello" },
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Visible thought" },
+      {
+        type: "tool-call",
+        id: "hosted-old-model",
+        name: "web_search",
+        input: { query: "Effect" },
+        providerExecuted: true,
+        providerMetadata: undefined,
+      },
+      {
+        type: "tool-result",
+        id: "hosted-old-model",
+        name: "web_search",
+        result: { type: "json", value: { status: "completed" } },
+        providerExecuted: true,
+        cache: undefined,
+        metadata: undefined,
+        providerMetadata: undefined,
+      },
+      {
+        type: "tool-call",
+        id: "local-old-model",
+        name: "read",
+        input: { path: "README.md" },
+        providerExecuted: false,
+        providerMetadata: undefined,
+      },
+    ])
+    expect(messages[1]?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "local-old-model",
+        name: "read",
+        result: { type: "json", value: { text: "Hello" } },
+        providerExecuted: false,
+        cache: undefined,
+        metadata: undefined,
+        providerMetadata: undefined,
       },
     ])
   })

@@ -216,6 +216,7 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const { db } = yield* Database.Service
+    yield* events.beforeCommit((event) => SessionInput.guardReservedID(db, event))
     yield* events.project(SessionV1.Event.Created, (event) =>
       Effect.gen(function* () {
         const stored = yield* db

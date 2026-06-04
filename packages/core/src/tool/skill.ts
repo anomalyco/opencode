@@ -7,6 +7,7 @@ import { Cause, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "../fs-util"
 import { PluginBoot } from "../plugin/boot"
 import { SkillV2 } from "../skill"
+import { ToolOutputStore } from "../tool-output-store"
 import { ToolRegistry } from "../tool-registry"
 
 export const name = "skill"
@@ -20,6 +21,8 @@ export const Success = Schema.Struct({
   name: Schema.String,
   directory: Schema.String,
   output: Schema.String,
+  truncated: Schema.Boolean,
+  resource: ToolOutputStore.Resource.pipe(Schema.optional),
 })
 
 export const description = (skills: ReadonlyArray<SkillV2.Info>) =>
@@ -65,6 +68,7 @@ export const layer = Layer.effectDiscard(
     const fs = yield* FSUtil.Service
     const boot = yield* PluginBoot.Service
     const skills = yield* SkillV2.Service
+    const resources = yield* ToolOutputStore.Service
     yield* boot.wait()
     const available = yield* skills.list()
     const definition = Tool.make({
@@ -77,7 +81,7 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
-        execute: ({ parameters, assertPermission }) =>
+        execute: ({ parameters, sessionID, call, assertPermission }) =>
           Effect.gen(function* () {
             const current = yield* skills.list()
             const skill = current.find((skill) => skill.name === parameters.name)
@@ -89,7 +93,18 @@ export const layer = Layer.effectDiscard(
                 .filter((file) => path.basename(file) !== "SKILL.md")
                 .toSorted()
                 .slice(0, FILE_LIMIT)
-              return { name: skill.name, directory, output: toModelOutput(skill, files) }
+              const output = yield* resources.truncate({
+                sessionID,
+                toolCallID: call.id,
+                content: toModelOutput(skill, files),
+              })
+              return {
+                name: skill.name,
+                directory,
+                output: output.content,
+                truncated: output.truncated,
+                ...(output.truncated ? { resource: output.resource } : {}),
+              }
             }).pipe(
               Effect.catchCause((cause) =>
                 Effect.fail(

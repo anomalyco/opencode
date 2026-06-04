@@ -64,7 +64,7 @@ export const layer = Layer.effectDiscard(
             const external = plan.target.externalDirectory
             if (external) yield* assertPermission(LocationMutation.externalDirectoryPermission(external))
             yield* assertPermission({ action: "edit", resources: [plan.target.resource], save: ["*"] })
-            return yield* files.write({ plan, content: parameters.content })
+            return yield* files.writeTextPreservingBom({ plan, content: parameters.content })
           }).pipe(
             Effect.catchCause((cause) =>
               Effect.fail(

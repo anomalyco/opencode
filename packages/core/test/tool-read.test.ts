@@ -11,6 +11,7 @@ import { testEffect } from "./lib/effect"
 
 const assertions: PermissionV2.AssertInput[] = []
 const reads: FileSystem.ReadInput[] = []
+const textPageInputs: FileSystem.TextPageInput[] = []
 const pages: FileSystem.ListTarget[] = []
 const pageInputs: Pick<FileSystem.ListPageInput, "offset" | "limit">[] = []
 let resolvedInput: FileSystem.ReadInput | undefined
@@ -69,6 +70,18 @@ const filesystem = Layer.succeed(
       Effect.sync(() => {
         reads.push({ path: RelativePath.make("README.md") })
         return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
+      }),
+    readTextPageResolved: (_target, page = {}) =>
+      Effect.sync(() => {
+        textPageInputs.push(page)
+        return new FileSystem.TextPage({
+          type: "text-page",
+          content: "hello",
+          mime: "text/plain",
+          offset: page.offset ?? 1,
+          truncated: true,
+          next: (page.offset ?? 1) + 1,
+        })
       }),
     resolveRoot: () => Effect.die("unused"),
     revalidateRoot: Effect.succeed,
@@ -314,7 +327,7 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("settles missing and oversized files as typed tool errors", () =>
+  it.effect("settles missing files as typed tool errors", () =>
     Effect.gen(function* () {
       allow = true
       reads.length = 0
@@ -331,16 +344,31 @@ describe("ReadTool", () => {
         }),
       ).toEqual({ type: "error", value: "Unable to read missing.txt" })
 
+      expect(reads).toEqual([])
+    }),
+  )
+
+  it.effect("reads large UTF-8 text files as bounded pages with continuation", () =>
+    Effect.gen(function* () {
+      textPageInputs.length = 0
+      allow = true
       resolveFailure = undefined
       listResolveFailure = new Error("not a directory")
-      size = 50 * 1024 + 1
+      size = FileSystem.MAX_READ_BYTES + 1
+      real = "/project/large.txt"
+      afterApproval = () => {}
+      const registry = yield* ToolRegistry.Service
+
       expect(
         yield* registry.execute({
           sessionID,
-          call: { type: "tool-call", id: "call-large", name: "read", input: { path: "large.txt" } },
+          call: { type: "tool-call", id: "call-large", name: "read", input: { path: "large.txt", offset: 2, limit: 1 } },
         }),
-      ).toEqual({ type: "error", value: "Unable to read large.txt" })
-      expect(reads).toEqual([])
+      ).toEqual({
+        type: "json",
+        value: { type: "text-page", content: "hello", mime: "text/plain", offset: 2, truncated: true, next: 3 },
+      })
+      expect(textPageInputs).toEqual([{ offset: 2, limit: 1 }])
     }),
   )
 
@@ -354,22 +382,9 @@ describe("ReadTool", () => {
       size = 5
       real = "/project/README.md"
       afterApproval = () => {
-        size = 50 * 1024 + 1
-      }
-      const registry = yield* ToolRegistry.Service
-
-      expect(
-        yield* registry.execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-grown", name: "read", input: { path: "README.md" } },
-        }),
-      ).toEqual({ type: "error", value: "Unable to read README.md" })
-      expect(reads).toEqual([])
-
-      size = 5
-      afterApproval = () => {
         real = "/outside/README.md"
       }
+      const registry = yield* ToolRegistry.Service
       expect(
         yield* registry.execute({
           sessionID,

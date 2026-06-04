@@ -1,4 +1,4 @@
-import { Message, ToolCallPart, ToolOutput, ToolResultPart, type ContentPart } from "@opencode-ai/llm"
+import { Message, ToolCallPart, ToolOutput, ToolResultPart, type ContentPart, type Model, type ProviderMetadata } from "@opencode-ai/llm"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
@@ -19,16 +19,16 @@ const toolInput = (tool: SessionMessage.AssistantTool) => {
   }
 }
 
-const toolCall = (tool: SessionMessage.AssistantTool): ContentPart =>
+const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined): ContentPart =>
   ToolCallPart.make({
     id: tool.id,
     name: tool.name,
     input: toolInput(tool),
     providerExecuted: tool.provider?.executed,
-    providerMetadata: tool.provider?.metadata,
+    providerMetadata,
   })
 
-const toolResult = (tool: SessionMessage.AssistantTool) => {
+const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
     // TODO: Materialize remote URL and managed file sources before provider-history lowering.
     // ToolOutput.toResultValue intentionally rejects unmaterialized sources rather than
@@ -42,7 +42,7 @@ const toolResult = (tool: SessionMessage.AssistantTool) => {
       name: tool.name,
       result,
       providerExecuted: tool.provider?.executed,
-      providerMetadata: tool.provider?.metadata,
+      providerMetadata,
     })
   }
   if (tool.state.status === "error") {
@@ -55,28 +55,34 @@ const toolResult = (tool: SessionMessage.AssistantTool) => {
           : { error: tool.state.error, content: tool.state.content, structured: tool.state.structured },
       resultType: "error",
       providerExecuted: tool.provider?.executed,
-      providerMetadata: tool.provider?.metadata,
+      providerMetadata,
     })
   }
 }
 
-const assistant = (message: SessionMessage.Assistant) => {
+const assistant = (message: SessionMessage.Assistant, model: Model) => {
+  const sameModel = String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
-    if (item.type === "reasoning") return [{ type: "reasoning", text: item.text, providerMetadata: item.providerMetadata }]
-    const call = toolCall(item)
-    const result = toolResult(item)
+    if (item.type === "reasoning")
+      return sameModel
+        ? [{ type: "reasoning", text: item.text, providerMetadata: item.providerMetadata }]
+        : item.text.length > 0
+          ? [{ type: "text", text: item.text }]
+          : []
+    const call = toolCall(item, sameModel ? item.provider?.metadata : undefined)
+    const result = toolResult(item, sameModel ? item.provider?.resultMetadata ?? item.provider?.metadata : undefined)
     return item.provider?.executed === true && result ? [call, result] : [call]
   })
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
-    .map(toolResult)
+    .map((item) => toolResult(item, sameModel ? item.provider?.resultMetadata ?? item.provider?.metadata : undefined))
     .filter((message) => message !== undefined)
     .map(Message.tool)
   return [Message.make({ id: message.id, role: "assistant", content, metadata: message.metadata }), ...results]
 }
 
-function toLLMMessage(message: SessionMessage.Message): Message[] {
+function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -106,7 +112,7 @@ function toLLMMessage(message: SessionMessage.Message): Message[] {
         }),
       ]
     case "assistant":
-      return assistant(message)
+      return assistant(message, model)
     case "compaction":
       return [
         Message.make({
@@ -120,4 +126,5 @@ function toLLMMessage(message: SessionMessage.Message): Message[] {
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
-export const toLLMMessages = (messages: readonly SessionMessage.Message[]) => messages.flatMap(toLLMMessage)
+export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) =>
+  messages.flatMap((message) => toLLMMessage(message, model))

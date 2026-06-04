@@ -3,7 +3,9 @@ export * as SystemContext from "./system-context"
 import { Effect, Schema } from "effect"
 import { Hash } from "./util/hash"
 
-export const Key = Schema.String.pipe(Schema.brand("SystemContext.Key"))
+export const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._/-]*$/)).pipe(
+  Schema.brand("SystemContext.Key"),
+)
 export type Key = typeof Key.Type
 
 export const unavailable = Symbol.for("@opencode/SystemContext.Unavailable")
@@ -71,24 +73,26 @@ export const value = <E, R>(component: Component<E, R>): Component<E, R> => comp
 
 export function struct<E, R>(components: Readonly<Record<string, Component<E, R>>>): SystemContext<E, R> {
   const values = Object.values(components)
-  const keys = new Set<Key>()
-  for (const component of values) {
-    if (keys.has(component.key)) throw new DuplicateKeyError({ key: component.key })
-    keys.add(component.key)
-  }
+  assertUniqueKeys(values)
   return { components: values }
 }
 
 export const load = <E, R>(context: SystemContext<E, R>) =>
-  Effect.forEach(context.components, (component) =>
-    component.load.pipe(
-      Effect.map((result): Entry =>
-        result === unavailable
-          ? { _tag: "Unavailable", key: component.key }
-          : { _tag: "Available", key: component.key, ...result, hash: Hash.sha256(result.update) },
+  Effect.sync(() => assertUniqueKeys(context.components)).pipe(
+    Effect.andThen(
+      Effect.forEach(context.components, (component) =>
+        component.load.pipe(
+          Effect.map(
+            (result): Entry =>
+              result === unavailable
+                ? { _tag: "Unavailable", key: component.key }
+                : { _tag: "Available", key: component.key, ...result, hash: Hash.sha256(result.update) },
+          ),
+        ),
       ),
     ),
-  ).pipe(Effect.map((entries): Snapshot => ({ entries })))
+    Effect.map((entries): Snapshot => ({ entries })),
+  )
 
 export function initialize(snapshot: Snapshot): Initialized {
   return {
@@ -102,7 +106,9 @@ export function initialize(snapshot: Snapshot): Initialized {
 export function refresh(snapshot: Snapshot, previous: Checkpoint): Refreshed {
   return {
     changes: snapshot.entries.flatMap((entry) =>
-      entry._tag === "Available" && previous[entry.key] !== entry.hash ? [{ key: entry.key, text: entry.update }] : [],
+      entry._tag === "Available" && getCheckpoint(previous, entry.key) !== entry.hash
+        ? [{ key: entry.key, text: entry.update }]
+        : [],
     ),
     checkpoint: nextCheckpoint(snapshot, previous),
   }
@@ -116,7 +122,20 @@ function nextCheckpoint(snapshot: Snapshot, previous: Checkpoint) {
   return Object.fromEntries(
     snapshot.entries.flatMap((entry) => {
       if (entry._tag === "Available") return [[entry.key, entry.hash]]
-      return previous[entry.key] === undefined ? [] : [[entry.key, previous[entry.key]]]
+      const hash = getCheckpoint(previous, entry.key)
+      return hash === undefined ? [] : [[entry.key, hash]]
     }),
   )
+}
+
+function getCheckpoint(checkpoint: Checkpoint, key: Key) {
+  return Object.hasOwn(checkpoint, key) ? checkpoint[key] : undefined
+}
+
+function assertUniqueKeys(components: ReadonlyArray<Component<unknown, unknown>>) {
+  const keys = new Set<Key>()
+  for (const component of components) {
+    if (keys.has(component.key)) throw new DuplicateKeyError({ key: component.key })
+    keys.add(component.key)
+  }
 }

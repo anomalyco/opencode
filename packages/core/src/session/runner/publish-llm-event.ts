@@ -52,7 +52,7 @@ const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultV
 export const createLLMEventPublisher = (events: EventV2.Interface, input: Input) => {
   const tools = new Map<
     string,
-    { readonly assistantMessageID: EventV2.ID; readonly name: string; inputEnded: boolean; called: boolean; settled: boolean; providerExecuted: boolean }
+    { readonly assistantMessageID: EventV2.ID; readonly name: string; inputEnded: boolean; called: boolean; settled: boolean; providerExecuted: boolean; providerMetadata?: ProviderMetadata }
   >()
   const timestamp = DateTime.now
   let assistantMessageID: EventV2.ID | undefined
@@ -162,9 +162,12 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* flushFragments()
   })
 
-  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(function* (message: string) {
+  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(function* (
+    message: string,
+    hostedOnly = false,
+  ) {
     for (const [callID, tool] of tools) {
-      if (tool.settled) continue
+      if (tool.settled || (hostedOnly && !tool.providerExecuted)) continue
       tool.settled = true
       yield* events.publish(SessionEvent.Tool.Failed, {
         sessionID: input.sessionID,
@@ -172,7 +175,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         assistantMessageID: tool.assistantMessageID,
         callID,
         error: { type: "unknown", message },
-        provider: { executed: tool.providerExecuted },
+        provider: {
+          executed: tool.providerExecuted,
+          ...(tool.providerMetadata === undefined ? {} : { metadata: tool.providerMetadata }),
+        },
       })
     }
   })
@@ -248,6 +254,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         if (tool.called) return yield* Effect.die(`Duplicate tool call: ${event.id}`)
         tool.called = true
         tool.providerExecuted = event.providerExecuted === true
+        tool.providerMetadata = event.providerMetadata
         yield* events.publish(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,

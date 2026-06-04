@@ -1,7 +1,7 @@
 export * as SessionRunner from "./index"
 
 import type { LLMError } from "@opencode-ai/llm"
-import { Context, Duration, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import { SessionSchema } from "../schema"
 import type { MessageDecodeError } from "../error"
 import { SessionRunnerModel } from "./model"
@@ -14,31 +14,7 @@ export class StepLimitExceededError extends Schema.TaggedErrorClass<StepLimitExc
   },
 ) {}
 
-export class ProviderStreamTimeoutError extends Schema.TaggedErrorClass<ProviderStreamTimeoutError>()(
-  "SessionRunner.ProviderStreamTimeoutError",
-  {
-    kind: Schema.Literals(["inactivity", "absolute"]),
-    duration: Schema.String,
-  },
-) {
-  override get message() {
-    return `Provider stream ${this.kind} timeout after ${this.duration}`
-  }
-}
-
-export interface TimeoutConfig {
-  readonly inactivity: Duration.Duration
-  readonly absolute: Duration.Duration
-}
-
-export class TimeoutService extends Context.Service<TimeoutService, TimeoutConfig>()("@opencode/v2/SessionRunnerTimeout") {}
-
-export const timeoutDefaultLayer = Layer.succeed(
-  TimeoutService,
-  TimeoutService.of({ inactivity: Duration.seconds(60), absolute: Duration.minutes(10) }),
-)
-
-export type RunError = LLMError | SessionRunnerModel.Error | MessageDecodeError | StepLimitExceededError | ProviderStreamTimeoutError
+export type RunError = LLMError | SessionRunnerModel.Error | MessageDecodeError | StepLimitExceededError
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {

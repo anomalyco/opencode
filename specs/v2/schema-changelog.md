@@ -6,29 +6,30 @@ This document covers meaningful contract changes introduced on the `feat/opencod
 
 ## Earlier Branch History
 
-### Effect-Native Session Event Stream And Projection Schemas
+### Replayable Session Event Refinement And Cursor Stream
 
 Affected schema:
 
-- New synchronized `session.next.*` event family in `packages/core/src/session/event.ts`.
-- New projected V2 Session-message union in `packages/core/src/session/message.ts`.
-- Internal replay cursor returned by `sessions.events({ sessionID, after? })`.
+- Existing synchronized `session.next.*` event family in `packages/core/src/session/event.ts`.
+- Existing projected V2 Session-message union in `packages/core/src/session/message.ts`.
+- New explicit durable-event union and internal replay cursor returned by `sessions.events({ sessionID, after? })`.
 
 Change:
 
-- Add durable Session events for agent and model switches, prompted user input, synthetic context, shell lifecycle, provider turns, assistant steps, complete text, complete reasoning, structured tool lifecycle, retries, and compaction.
-- Keep text deltas, reasoning deltas, tool-input deltas, and live tool progress explicitly ephemeral.
-- Add projected message variants for user, assistant, shell, compaction, synthetic, and switch records.
+- Keep the existing Session lifecycle event family and projected-message union rather than introducing them in this branch.
+- Stop synchronizing text deltas, reasoning deltas, and tool-input deltas; keep them explicitly ephemeral.
+- Add an explicit durable-event union for replay-safe consumers.
+- Add replay-and-tail aggregate cursors backed by durable Session-event sequence.
 - Encode synchronized event payloads before writing JSON storage and decode them while replaying so schema transforms remain explicit at the durable boundary.
 
 Reason:
 
-- Embedded Session execution needs a replayable durable log and a derived chronological read model.
+- Embedded Session execution needs a reconnect-safe replay stream over the existing durable log and derived chronological read model.
 - Fragment streams are useful to connected renderers but must not advance durable cursors or inflate synchronized storage.
 
 Compatibility:
 
-- `session.next.*` schemas are experimental V2 contracts.
+- The `session.next.*` lifecycle event family predates this branch; this branch refines its experimental V2 durability and replay contracts.
 - Durable replay cursors are per-aggregate event sequences; ephemeral deltas are intentionally absent after reconnect.
 
 ### Deterministic IDs From External Keys
@@ -51,27 +52,23 @@ Compatibility:
 - Existing generated Session and Event IDs retain their current prefixes and generation behavior.
 - Deterministic constructors are additive internal helpers; public ID schemas remain strings with their existing prefixes.
 
-### Durable Step And Outer-Turn Settlement
+### Durable Step Settlement Ownership
 
 Affected schema:
 
 - `session.next.step.ended` and `session.next.step.failed` synchronized event version `2`.
-- New `session.next.turn.started` and `session.next.turn.settled` durable events.
 
 Change:
 
 - Bind step settlement to an explicit `assistantMessageID`.
-- Record one outer provider-attempt marker and a terminal `completed`, `failed`, or `interrupted` outcome.
 
 Reason:
 
 - Provider-local call identifiers can repeat across turns.
-- Runner recovery needs an explicit durable watermark for attempts interrupted after input promotion or before final settlement.
 
 Compatibility:
 
 - Step settlement uses synchronized event version `2` because the durable payload changed.
-- Outer-turn events are additive experimental contracts.
 
 ### Durable Session Input Inbox
 
@@ -261,7 +258,6 @@ Reason:
 Compatibility:
 
 - These are additive experimental V2 contracts.
-- V2 `bash` now requires an explicit exact-action authored `ask` or `allow` rule; catch-all and remembered approvals do not opt into shell authority.
 - Policy authors should account for canonical resource forms; originating tool source metadata remains optional until every registry call carries its durable assistant owner.
 
 ### Initial Core V2 Built-In Tool Schemas
@@ -284,17 +280,14 @@ Compatibility:
 - These are additive V2 built-ins.
 - Richer launch-follow-up leaves such as `apply_patch`, skill loading, task dispatch, and LSP remain separate slices.
 
-### Bash Explicit Opt-In And Advisory Warnings
+### Bash Advisory Warnings
 
 Affected schema:
 
-- V2 bash enablement policy.
 - Optional `warnings` in the `bash` tool success payload.
 
 Change:
 
-- Deny bash unless configured agent rules contain an exact-action matching `bash` rule with `ask` or `allow`.
-- Prevent catch-all authored allows and remembered approvals from opting into shell authority.
 - Return advisory warning strings when best-effort command-argument scanning detects external absolute paths; keep structured external `workdir` approval enforced.
 
 Reason:
@@ -303,7 +296,6 @@ Reason:
 
 Compatibility:
 
-- Agents relying only on catch-all allows no longer execute bash.
 - Consumers rendering bash success should tolerate optional warning strings.
 
 ### V2 Session HTTP And Generated SDK Contracts
@@ -327,7 +319,7 @@ Reason:
 Compatibility:
 
 - These are experimental V2 routes.
-- Prompt admission now returns a user-shaped admission receipt and may return a conflict error when one message ID is reused for different input.
+- Prompt admission now returns the admitted user-shaped message and may return a conflict error when one message ID is reused for different input.
 - SDK Location GET rewriting preserves existing flat query behavior and adds nested compatibility parameters.
 
 ## 2026-06-03: Durable Session Message Pagination
@@ -388,16 +380,22 @@ Change:
 
 - Add optional reasoning `providerMetadata`.
 - Add optional durable tool `result` and project it into settled tool message state.
+- Preserve projected tool-call metadata separately from optional settlement-result metadata.
+- Replay provider-native reasoning and tool metadata only when the historical assistant model matches the selected continuation model.
 
 Reason:
 
 - Provider continuation requires signed or encrypted reasoning metadata on later turns.
 - Provider-executed hosted tool results must survive projection so replay can keep hosted calls and results inline in assistant content.
+- Recovery settlement must not erase provider-native call metadata needed to reconstruct a valid continuation request.
 
 Compatibility:
 
 - Added durable-event fields are optional so previously recorded experimental events remain decodable.
 - Projected settled tool state gains model-facing result data when available.
+- Projected assistant tools gain optional result-side provider metadata; the existing metadata slot remains the backward-compatible call-side slot.
+- OpenAI Responses lowers reconstructed provider-executed hosted results to stored item references instead of rejecting assistant history.
+- Bedrock Converse signatures, Gemini `thoughtSignature`, and OpenAI-compatible Chat `reasoning_content` now round-trip through canonical continuation parts.
 
 ## 2026-06-03: Projected Assistant Ownership And Full-Value Parts
 
@@ -510,28 +508,28 @@ Compatibility:
 - This is an additive internal error contract.
 - No database, HTTP, or generated SDK schema changes are required.
 
-## 2026-06-03: Provider Stream Runtime Deadlines
+## 2026-06-03: Provider Stream Watchdog Policy Deferred
 
 Affected schema:
 
 - No database, durable-event, HTTP, or generated SDK schema changes.
-- New internal `SessionRunner.ProviderStreamTimeoutError` tagged error.
+- Internal Session-runner provider-stream policy.
 
 Change:
 
-- Add a 60-second per-event inactivity timeout and a 10-minute absolute provider-stream deadline.
-- Flush durable full-value fragment checkpoints before surfacing either timeout.
-- Durably fail recorded unsettled local tools, publish the existing failed assistant-step payload, and settle the outer turn as `failed`.
+- Do not impose a universal provider-stream inactivity or absolute timeout.
+- Remove the internal timeout error and hardcoded watchdog service.
+- Defer provider timeout, retry, watchdog, durable failure-reporting, and drain-chain-release policy to a configurable design slice.
 
 Reason:
 
-- A silent provider or a provider that dribbles fragments forever must not hold one Session drain chain indefinitely.
-- Existing durable failure boundaries already express timeout settlement without changing synchronized event payloads.
+- V1 had no universal processor inactivity watchdog.
+- Providers and autonomous workloads have different runtime characteristics, so one hardcoded default is premature.
 
 Compatibility:
 
 - No migration or generated artifact regeneration is required.
-- Embedded runner callers may now receive `SessionRunner.ProviderStreamTimeoutError` when a provider exceeds runtime policy.
+- Embedded runner callers do not receive a runner-defined provider-stream timeout error.
 
 ## 2026-06-03: Keyed Coalescing Durable Tail Signals
 
@@ -567,7 +565,7 @@ Affected schema:
 Change:
 
 - Accept `{ patchText: string }` using the `*** Begin Patch` envelope.
-- Return ordered applied-operation receipts carrying `type`, canonical `target`, and permission-facing `resource`.
+- Return ordered applied-operation records carrying `type`, canonical `target`, and permission-facing `resource`.
 - Resolve and approve every target before reading approved update/delete contents.
 - Preflight update/delete correctness before committing operations sequentially.
 - Report already-applied resources explicitly when a later commit fails.
@@ -637,10 +635,31 @@ Change:
 - Give `apply_patch` add hunks create-only semantics, make sequential commits uninterruptible after preflight, and reject malformed patch grammar eagerly.
 - Wait for initial plugin boot before materializing the `skill` built-in, discover conventional config-root skill directories, and resolve current skills again during execution.
 - Sanitize provider and model public API URLs by stripping credentials, queries, and fragments.
-- Restrict default `webfetch` destinations to globally routable literal IP URLs until hostname connections can be pinned to validated DNS results.
+- Keep V1-like `webfetch` network semantics: approve the requested HTTP(S) URL, allow ordinary hostnames, and delegate redirects to the HTTP transport.
 - Keep V2 request bodies required in generated OpenAPI and SDK types.
 
 Compatibility:
 
 - No database migration is required.
 - Pre-launch `session.next.*` databases remain disposable experimental state rather than compatibility targets; reset experimental V2 data when upgrading across incompatible event-schema iterations.
+- V1 returns fetched images as attachments. The first Core V2 typed settlement remains text-only, so V2 continues to reject fetched images and other non-text files until attachment settlement is designed explicitly.
+
+## 2026-06-03: Defer V2 Bash Background Execution
+
+Affected schema:
+
+- Core V2 model-facing `bash` tool parameters and success payload.
+
+Change:
+
+- Remove the optional `background` bash parameter and process-local background settlement shape from the shipped tool.
+- Retain the internal `BackgroundJob` prototype for a later integration slice.
+
+Reason:
+
+- The model has no registered observation or cancellation tool for background bash jobs, and process-local status is not a sufficient remote contract.
+
+Compatibility:
+
+- Foreground V2 bash execution is unchanged.
+- Reintroduce background bash only with durable status observation, completion delivery, and explicit cancellation semantics.

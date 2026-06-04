@@ -5,7 +5,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
-import { externalID, type ExternalID, withStatics } from "./schema"
+import { externalID, type ExternalID, NonNegativeInt, withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 
 export const ID = Schema.String.pipe(
@@ -16,6 +16,13 @@ export const ID = Schema.String.pipe(
   })),
 )
 export type ID = typeof ID.Type
+
+/**
+ * Durable aggregate continuation position for embedded replay streams.
+ * TODO: Decide whether a future HTTP / SDK surface should expose an opaque cursor instead.
+ */
+export const Cursor = NonNegativeInt.pipe(Schema.brand("EventV2.Cursor"))
+export type Cursor = typeof Cursor.Type
 
 export type Definition<Type extends string = string, DataSchema extends Schema.Top = Schema.Top> = {
   readonly type: Type
@@ -41,6 +48,7 @@ export type Payload<D extends Definition = Definition> = {
 
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 type AnyProjector = (event: Payload) => Effect.Effect<void>
+export type CommitGuard = (event: Payload) => Effect.Effect<void>
 export type Listener = (event: Payload) => Effect.Effect<void>
 export type Sync = (event: Payload) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -54,7 +62,7 @@ export type SerializedEvent = {
 }
 
 export type CursorEvent<E extends Payload = Payload> = {
-  readonly cursor: number
+  readonly cursor: Cursor
   readonly event: E
 }
 
@@ -138,9 +146,10 @@ export interface Interface {
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
-  readonly aggregateEvents: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<CursorEvent>
+  readonly aggregateEvents: (input: { readonly aggregateID: string; readonly after?: Cursor }) => Stream.Stream<CursorEvent>
   readonly sync: (handler: Sync) => Effect.Effect<Unsubscribe>
   readonly listen: (listener: Listener) => Effect.Effect<Unsubscribe>
+  readonly beforeCommit: (guard: CommitGuard) => Effect.Effect<void>
   readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
   readonly replay: (
     event: SerializedEvent,
@@ -167,6 +176,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
     const synchronized = new Map<string, Set<PubSub.PubSub<void>>>()
     const typed = new Map<string, PubSub.PubSub<Payload>>()
     const projectors = new Map<string, AnyProjector[]>()
+    const commitGuards = new Array<CommitGuard>()
     const listeners = new Array<Listener>()
     const syncHandlers = new Array<Sync>()
     const { db } = yield* Database.Service
@@ -257,6 +267,9 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
                               message: `Sequence mismatch for aggregate ${aggregateID}: expected ${latest + 1}, got ${seq}`,
                             }),
                           )
+                        }
+                        for (const guard of commitGuards) {
+                          yield* guard(event)
                         }
                         for (const projector of list) {
                           yield* projector({ ...event, seq } as Payload)
@@ -435,7 +448,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
         throw new InvalidSyncEventError({ type: event.type, message: `Unknown sync event type ${event.type}` })
       }
       return {
-        cursor: event.seq,
+        cursor: Cursor.make(event.seq),
         event: {
           id: event.id,
           type: definition.type,
@@ -490,7 +503,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
         return subscription
       })
 
-    const streamEvents = (input: { readonly aggregateID: string; readonly after?: number }): Stream.Stream<CursorEvent> =>
+    const streamEvents = (input: { readonly aggregateID: string; readonly after?: Cursor }): Stream.Stream<CursorEvent> =>
       Stream.unwrap(
         Effect.gen(function* () {
           const synchronized = yield* subscribeSynchronized(input.aggregateID)
@@ -529,6 +542,11 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
         })
       })
 
+    const beforeCommit = (guard: CommitGuard): Effect.Effect<void> =>
+      Effect.sync(() => {
+        commitGuards.push(guard)
+      })
+
     const project = <D extends Definition>(definition: D, projector: Projector<D>): Effect.Effect<void> =>
       Effect.sync(() => {
         const list = projectors.get(definition.type) ?? []
@@ -536,7 +554,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
         projectors.set(definition.type, list)
       })
 
-    return Service.of({ publish, subscribe, all: streamAll, aggregateEvents: streamEvents, sync, listen, project, replay, replayAll, remove, claim })
+    return Service.of({ publish, subscribe, all: streamAll, aggregateEvents: streamEvents, sync, listen, beforeCommit, project, replay, replayAll, remove, claim })
   }),
 )
 

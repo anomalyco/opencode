@@ -64,6 +64,24 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("preserves exactly one BOM for text writes and normalizes created text", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const preservedPath = path.join(directory, "preserved.txt")
+        yield* Effect.promise(() => fs.writeFile(preservedPath, "\uFEFFbefore"))
+        const preserved = yield* (yield* LocationMutation.Service).resolve({ path: "preserved.txt" })
+        const created = yield* (yield* LocationMutation.Service).resolve({ path: "created.txt" })
+        const files = yield* FileMutation.Service
+
+        yield* files.writeTextPreservingBom({ plan: preserved, content: "\uFEFFafter" })
+        yield* files.writeTextPreservingBom({ plan: created, content: "\uFEFF\uFEFF\uFEFFcreated" })
+
+        expect(yield* Effect.promise(() => fs.readFile(preservedPath, "utf8"))).toBe("\uFEFFafter")
+        expect(yield* Effect.promise(() => fs.readFile(created.target.canonical, "utf8"))).toBe("\uFEFFcreated")
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("rejects create when a prospective target appears after planning", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

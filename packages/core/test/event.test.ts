@@ -292,14 +292,14 @@ describe("EventV2", () => {
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
-      const fiber = yield* events.aggregateEvents({ aggregateID, after: 0 }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events.aggregateEvents({ aggregateID, after: EventV2.Cursor.make(0) }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "two" })
 
       expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual([
-        [1, { id: aggregateID, text: "one" }],
-        [2, { id: aggregateID, text: "two" }],
+        [EventV2.Cursor.make(1), { id: aggregateID, text: "one" }],
+        [EventV2.Cursor.make(2), { id: aggregateID, text: "two" }],
       ])
     }),
   )
@@ -314,8 +314,8 @@ describe("EventV2", () => {
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
 
       expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, (event.event.data as { text: string }).text])).toEqual([
-        [0, "zero"],
-        [1, "one"],
+        [EventV2.Cursor.make(0), "zero"],
+        [EventV2.Cursor.make(1), "one"],
       ])
     }),
   )
@@ -344,7 +344,7 @@ describe("EventV2", () => {
         yield* Deferred.succeed(continueRead, undefined)
 
         expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual([
-          [0, { id: aggregateID, text: "during handoff" }],
+          [EventV2.Cursor.make(0), { id: aggregateID, text: "during handoff" }],
         ])
       }).pipe(Effect.provide(Layer.mergeAll(database, eventLayer)))
     }),
@@ -363,7 +363,7 @@ describe("EventV2", () => {
       }
 
       expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual(
-        Array.from({ length: count }, (_, index) => [index, { id: aggregateID, text: String(index) }]),
+        Array.from({ length: count }, (_, index) => [EventV2.Cursor.make(index), { id: aggregateID, text: String(index) }]),
       )
     }),
   )

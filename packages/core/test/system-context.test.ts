@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { Hash } from "@opencode-ai/core/util/hash"
 
@@ -87,7 +87,10 @@ describe("SystemContext", () => {
 
     const initialized = SystemContext.initialize(await Effect.runPromise(SystemContext.load(context)))
     available = true
-    const refreshed = SystemContext.refresh(await Effect.runPromise(SystemContext.load(context)), initialized.checkpoint)
+    const refreshed = SystemContext.refresh(
+      await Effect.runPromise(SystemContext.load(context)),
+      initialized.checkpoint,
+    )
 
     expect(initialized).toEqual({ baseline: [], checkpoint: {} })
     expect(refreshed.changes).toEqual([
@@ -128,6 +131,23 @@ describe("SystemContext", () => {
     })
   })
 
+  test("ignores inherited checkpoint properties", async () => {
+    const context = SystemContext.struct({
+      date: SystemContext.value({
+        key: key("core/date"),
+        load: Effect.succeed({ baseline: "Today's date is 2026-06-03.", update: "The current date is 2026-06-03." }),
+      }),
+    })
+    const previous = Object.create({
+      "core/date": Hash.sha256("The current date is 2026-06-03."),
+    }) as SystemContext.Checkpoint
+
+    const refreshed = SystemContext.refresh(await Effect.runPromise(SystemContext.load(context)), previous)
+
+    expect(refreshed.changes).toEqual([{ key: key("core/date"), text: "The current date is 2026-06-03." }])
+    expect(Object.hasOwn(refreshed.checkpoint, "core/date")).toBe(true)
+  })
+
   test("preserves unexpected loader failures", async () => {
     const context = SystemContext.struct({
       broken: SystemContext.value({
@@ -146,5 +166,23 @@ describe("SystemContext", () => {
         two: SystemContext.value({ key: key("core/date"), load: Effect.succeed({ baseline: "two", update: "two" }) }),
       }),
     ).toThrow(new SystemContext.DuplicateKeyError({ key: key("core/date") }))
+  })
+
+  test("rejects duplicate component keys at the interpreter boundary", async () => {
+    const component = SystemContext.value({
+      key: key("core/date"),
+      load: Effect.succeed({ baseline: "date", update: "date" }),
+    })
+    const context: SystemContext.SystemContext = { components: [component, component] }
+
+    await expect(Effect.runPromise(SystemContext.load(context))).rejects.toBeInstanceOf(SystemContext.DuplicateKeyError)
+  })
+
+  test("requires namespaced component keys", () => {
+    const decode = Schema.decodeUnknownSync(SystemContext.Key)
+
+    expect(decode("core/date")).toBe(key("core/date"))
+    expect(() => decode("date")).toThrow()
+    expect(() => decode("core/")).toThrow()
   })
 })

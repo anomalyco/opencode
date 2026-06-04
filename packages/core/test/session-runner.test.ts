@@ -16,6 +16,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { QuestionV2 } from "@opencode-ai/core/question"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -32,13 +33,13 @@ import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { DateTime, Deferred, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
-import * as TestClock from "effect/testing/TestClock"
-import { and, asc, eq } from "drizzle-orm"
+import { Cause, DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
+const questions = QuestionV2.layer.pipe(Layer.provide(events))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
 const requests: LLMRequest[] = []
@@ -130,11 +131,6 @@ const echo = Layer.effectDiscard(
   ),
 ).pipe(Layer.provide(registry))
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
-const timeoutConfig = {
-  inactivity: Duration.minutes(60),
-  absolute: Duration.minutes(60),
-}
-const timeout = Layer.succeed(SessionRunner.TimeoutService, SessionRunner.TimeoutService.of(timeoutConfig))
 const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -142,7 +138,6 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
-  Layer.provide(timeout),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -162,6 +157,7 @@ const it = testEffect(
   Layer.mergeAll(
     database,
     events,
+    questions,
     projector,
     store,
     client,
@@ -208,8 +204,6 @@ const setup = Effect.gen(function* () {
   toolExecutionsStarted = undefined
   activeToolExecutions = 0
   maxActiveToolExecutions = 0
-  timeoutConfig.inactivity = Duration.minutes(60)
-  timeoutConfig.absolute = Duration.minutes(60)
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
@@ -256,23 +250,6 @@ const replaySessionProjection = (id: SessionV2.ID) =>
         data: event.data,
       })),
     )
-  })
-
-const turnOutcomes = (id: SessionV2.ID) =>
-  Effect.gen(function* () {
-    const { db } = yield* Database.Service
-    return (yield* db
-      .select({ data: EventTable.data })
-      .from(EventTable)
-      .where(
-        and(
-          eq(EventTable.aggregate_id, id),
-          eq(EventTable.type, EventV2.versionedType(SessionEvent.Turn.Settled.type, SessionEvent.Turn.Settled.sync!.version)),
-        ),
-      )
-      .orderBy(asc(EventTable.seq))
-      .all()
-      .pipe(Effect.orDie)).map((event) => event.data.outcome)
   })
 
 type FragmentKind = "text" | "reasoning" | "tool input"
@@ -395,7 +372,12 @@ const verifyPartialFlushOnFailure = (kind: FragmentKind) =>
     expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
     expect(yield* session.context(sessionID)).toMatchObject([
       { type: "user", text: prompt },
-      { type: "assistant", content: [fixture.expectedContent] },
+      {
+        type: "assistant",
+        finish: "error",
+        error: { type: "unknown", message: "Provider unavailable" },
+        content: [fixture.expectedContent],
+      },
     ])
   })
 
@@ -699,6 +681,7 @@ describe("SessionRunnerLLM", () => {
           name: "web_search",
           input: { query: "Effect" },
           providerExecuted: true,
+          providerMetadata: { openai: { itemId: "hosted-search" } },
         }),
         LLMEvent.toolResult({
           id: "hosted-search",
@@ -725,7 +708,7 @@ describe("SessionRunnerLLM", () => {
           name: "web_search",
           input: { query: "Effect" },
           providerExecuted: true,
-          providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
+          providerMetadata: { openai: { itemId: "hosted-search" } },
         },
         {
           type: "tool-result",
@@ -832,11 +815,27 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Echo twice" },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "first" }, content: [{ type: "text", text: "first" }] } }],
+          content: [
+            {
+              type: "tool",
+              id: "tool_0",
+              state: { status: "completed", structured: { text: "first" }, content: [{ type: "text", text: "first" }] },
+            },
+          ],
         },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "second" }, content: [{ type: "text", text: "second" }] } }],
+          content: [
+            {
+              type: "tool",
+              id: "tool_0",
+              state: {
+                status: "completed",
+                structured: { text: "second" },
+                content: [{ type: "text", text: "second" }],
+              },
+            },
+          ],
         },
       ])
 
@@ -846,11 +845,27 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Echo twice" },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "first" }, content: [{ type: "text", text: "first" }] } }],
+          content: [
+            {
+              type: "tool",
+              id: "tool_0",
+              state: { status: "completed", structured: { text: "first" }, content: [{ type: "text", text: "first" }] },
+            },
+          ],
         },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "tool_0", state: { status: "completed", structured: { text: "second" }, content: [{ type: "text", text: "second" }] } }],
+          content: [
+            {
+              type: "tool",
+              id: "tool_0",
+              state: {
+                status: "completed",
+                structured: { text: "second" },
+                content: [{ type: "text", text: "second" }],
+              },
+            },
+          ],
         },
       ])
     }),
@@ -1196,28 +1211,6 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("recovers an unsettled outer provider turn from a stale wake", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover unsettled turn" }), resume: false })
-      yield* events.publish(SessionEvent.Turn.Started, { sessionID, timestamp: yield* DateTime.now })
-
-      requests.length = 0
-      response = [
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
-        LLMEvent.finish({ reason: "stop" }),
-      ]
-
-      yield* (yield* SessionRunCoordinator.Service).wake(sessionID)
-      while (requests.length === 0) yield* Effect.yieldNow
-
-      expect(requests).toHaveLength(1)
-    }),
-  )
-
   it.effect("durably fails local tools left running by a prior process before continuing", () =>
     Effect.gen(function* () {
       yield* setup
@@ -1254,8 +1247,6 @@ describe("SessionRunnerLLM", () => {
         input: { text: "stale" },
         provider: { executed: false },
       })
-      yield* events.publish(SessionEvent.Turn.Started, { sessionID, timestamp: yield* DateTime.now })
-
       requests.length = 0
       response = []
       yield* session.resume(sessionID)
@@ -1283,7 +1274,11 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover interrupted hosted tool" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Recover interrupted hosted tool" }),
+        resume: false,
+      })
       yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID)
       const assistant = yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
@@ -1312,10 +1307,8 @@ describe("SessionRunnerLLM", () => {
         callID: "call-hosted-interrupted",
         tool: "web_search",
         input: { query: "stale" },
-        provider: { executed: true },
+        provider: { executed: true, metadata: { openai: { itemId: "call-hosted-interrupted" } } },
       })
-      yield* events.publish(SessionEvent.Turn.Started, { sessionID, timestamp: yield* DateTime.now })
-
       requests.length = 0
       response = []
       yield* session.resume(sessionID)
@@ -1323,7 +1316,12 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant"])
       expect(requests[0]?.messages[1]?.content).toMatchObject([
-        { type: "tool-call", id: "call-hosted-interrupted", providerExecuted: true },
+        {
+          type: "tool-call",
+          id: "call-hosted-interrupted",
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: "call-hosted-interrupted" } },
+        },
         { type: "tool-result", id: "call-hosted-interrupted", providerExecuted: true, result: { type: "error" } },
       ])
     }),
@@ -1334,7 +1332,11 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover interrupted tool input" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Recover interrupted tool input" }),
+        resume: false,
+      })
       yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID)
       const assistant = yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
@@ -1349,8 +1351,6 @@ describe("SessionRunnerLLM", () => {
         callID: "call-pending-interrupted",
         name: "echo",
       })
-      yield* events.publish(SessionEvent.Turn.Started, { sessionID, timestamp: yield* DateTime.now })
-
       requests.length = 0
       response = []
       yield* session.resume(sessionID)
@@ -1361,98 +1361,6 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Recover interrupted tool input" },
         { type: "assistant", content: [{ type: "tool", id: "call-pending-interrupted", state: { status: "error" } }] },
       ])
-    }),
-  )
-
-  it.effect("opens queued input after recovering an unsettled activity", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const recoveringSessionID = SessionV2.ID.make("ses_runner_recover_queue")
-      yield* insertSession(recoveringSessionID)
-      yield* session.prompt({
-        sessionID: recoveringSessionID,
-        prompt: new Prompt({ text: "Recover current activity" }),
-        resume: false,
-      })
-      yield* session.resume(recoveringSessionID)
-      yield* events.publish(SessionEvent.Turn.Started, {
-        sessionID: recoveringSessionID,
-        timestamp: yield* DateTime.now,
-      })
-      yield* session.prompt({
-        sessionID: recoveringSessionID,
-        prompt: new Prompt({ text: "Queue after recovery" }),
-        delivery: "queue",
-        resume: false,
-      })
-
-      requests.length = 0
-      responses = [
-        [
-          LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
-          LLMEvent.finish({ reason: "stop" }),
-        ],
-        [
-          LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
-          LLMEvent.finish({ reason: "stop" }),
-        ],
-      ]
-      const coordinator = yield* SessionRunCoordinator.Service
-      yield* coordinator.wake(recoveringSessionID)
-      yield* coordinator.awaitIdle(recoveringSessionID)
-
-      expect(requests).toHaveLength(2)
-      expect(userTexts(requests[0]!)).toEqual(["Recover current activity"])
-      expect(userTexts(requests[1]!)).toEqual(["Recover current activity", "Queue after recovery"])
-    }),
-  )
-
-  it.effect("explicitly resumes an unsettled activity before opening queued input", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const recoveringSessionID = SessionV2.ID.make("ses_runner_explicit_recover_queue")
-      yield* insertSession(recoveringSessionID)
-      yield* session.prompt({
-        sessionID: recoveringSessionID,
-        prompt: new Prompt({ text: "Recover explicit activity" }),
-        resume: false,
-      })
-      yield* session.resume(recoveringSessionID)
-      yield* events.publish(SessionEvent.Turn.Started, {
-        sessionID: recoveringSessionID,
-        timestamp: yield* DateTime.now,
-      })
-      yield* session.prompt({
-        sessionID: recoveringSessionID,
-        prompt: new Prompt({ text: "Queue after explicit recovery" }),
-        delivery: "queue",
-        resume: false,
-      })
-
-      requests.length = 0
-      responses = [
-        [
-          LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
-          LLMEvent.finish({ reason: "stop" }),
-        ],
-        [
-          LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
-          LLMEvent.finish({ reason: "stop" }),
-        ],
-      ]
-      yield* session.resume(recoveringSessionID)
-
-      expect(requests).toHaveLength(2)
-      expect(userTexts(requests[0]!)).toEqual(["Recover explicit activity"])
-      expect(userTexts(requests[1]!)).toEqual(["Recover explicit activity", "Queue after explicit recovery"])
     }),
   )
 
@@ -1499,7 +1407,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("recovers input promoted before request assembly from a later wake", () =>
+  it.effect("retries inbox input after prompt projection rolls back", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1666,6 +1574,64 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("interrupts runner continuation when a question is dismissed", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const registry = yield* ToolRegistry.Service
+      const questions = yield* QuestionV2.Service
+      const transform = yield* registry.transform()
+      yield* transform((editor) =>
+        editor.set("question", {
+          tool: Tool.make({
+            description: "Ask the user",
+            parameters: Schema.Struct({}),
+            success: Schema.Struct({}),
+          }),
+          execute: ({ sessionID }) => questions.ask({ sessionID, questions: [] }).pipe(Effect.as({}), Effect.orDie),
+        }),
+      )
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Ask then stop" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-question", name: "question", input: {} }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [],
+      ]
+
+      const run = yield* session.resume(sessionID).pipe(Effect.exit, Effect.forkChild)
+      let pending = yield* questions.list()
+      while (pending.length === 0) {
+        yield* Effect.yieldNow
+        pending = yield* questions.list()
+      }
+      yield* questions.reject(pending[0]!.id)
+      const exit = yield* Fiber.join(run)
+
+      expect(exit._tag).toBe("Failure")
+      if (exit._tag === "Failure") expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Ask then stop" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-question",
+              state: { status: "error", error: { type: "unknown", message: "Tool execution interrupted" } },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("awaits started local tools before surfacing provider stream failure", () =>
     Effect.gen(function* () {
       yield* setup
@@ -1700,110 +1666,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("fails a silent provider stream after the inactivity timeout", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Timeout silent provider" }), resume: false })
-      timeoutConfig.inactivity = Duration.seconds(1)
-      timeoutConfig.absolute = Duration.minutes(1)
-      responseStream = Stream.never
-
-      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* TestClock.adjust(Duration.seconds(1))
-
-      expect(yield* Fiber.join(run).pipe(Effect.flip)).toMatchObject({
-        _tag: "SessionRunner.ProviderStreamTimeoutError",
-        kind: "inactivity",
-      })
-      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
-      expect(yield* session.context(sessionID)).toMatchObject([
-        { type: "user", text: "Timeout silent provider" },
-        { type: "assistant", error: { type: "unknown", message: "Provider stream inactivity timeout after 1s" } },
-      ])
-    }),
-  )
-
-  it.effect("flushes partial output before failing the absolute provider stream deadline", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Timeout partial provider" }), resume: false })
-      timeoutConfig.inactivity = Duration.seconds(2)
-      timeoutConfig.absolute = Duration.seconds(1)
-      responseStream = Stream.concat(
-        Stream.fromIterable([
-          LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.textStart({ id: "text-before-timeout" }),
-          LLMEvent.textDelta({ id: "text-before-timeout", text: "Partial" }),
-        ]),
-        Stream.never,
-      )
-
-      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* TestClock.adjust(Duration.seconds(1))
-
-      expect(yield* Fiber.join(run).pipe(Effect.flip)).toMatchObject({
-        _tag: "SessionRunner.ProviderStreamTimeoutError",
-        kind: "absolute",
-      })
-      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
-      expect(yield* session.context(sessionID)).toMatchObject([
-        { type: "user", text: "Timeout partial provider" },
-        {
-          type: "assistant",
-          content: [{ type: "text", id: "text-before-timeout", text: "Partial" }],
-          error: { type: "unknown", message: "Provider stream absolute timeout after 1s" },
-        },
-      ])
-    }),
-  )
-
-  it.effect("durably fails blocked local tools when a provider stream times out", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Timeout blocked tool" }), resume: false })
-      executions.length = 0
-      timeoutConfig.inactivity = Duration.seconds(1)
-      timeoutConfig.absolute = Duration.minutes(1)
-      toolExecutionGate = yield* Deferred.make<void>()
-      responseStream = Stream.concat(
-        Stream.fromIterable([
-          LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.toolCall({ id: "call-before-timeout", name: "echo", input: { text: "blocked" } }),
-        ]),
-        Stream.never,
-      )
-
-      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      while (executions.length === 0) yield* Effect.yieldNow
-      yield* TestClock.adjust(Duration.seconds(1))
-      toolExecutionGate = undefined
-
-      expect(yield* Fiber.join(run).pipe(Effect.flip)).toMatchObject({
-        _tag: "SessionRunner.ProviderStreamTimeoutError",
-        kind: "inactivity",
-      })
-      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
-      expect(yield* session.context(sessionID)).toMatchObject([
-        { type: "user", text: "Timeout blocked tool" },
-        {
-          type: "assistant",
-          content: [
-            {
-              type: "tool",
-              id: "call-before-timeout",
-              state: { status: "error", error: { type: "unknown", message: "Tool execution interrupted" } },
-            },
-          ],
-          error: { type: "unknown", message: "Provider stream inactivity timeout after 1s" },
-        },
-      ])
-    }),
-  )
-
-  it.effect("durably fails blocked local tools before settling an interrupted provider turn", () =>
+  it.effect("durably fails blocked local tools when a provider turn is interrupted", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1825,7 +1688,6 @@ describe("SessionRunnerLLM", () => {
       toolExecutionGate = undefined
 
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
-      expect(yield* turnOutcomes(sessionID)).toEqual(["interrupted"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Interrupt blocked tool" },
         {
@@ -1875,7 +1737,6 @@ describe("SessionRunnerLLM", () => {
       toolExecutionGate = undefined
 
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
-      expect(yield* turnOutcomes(sessionID)).toEqual(["interrupted"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Interrupt tool settlement" },
         {
@@ -1990,7 +1851,6 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail durably" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },
@@ -2010,9 +1870,25 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail before step" },
+        { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },
+      ])
+    }),
+  )
+
+  it.effect("projects raw provider stream failures as terminal assistant step failures", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail raw stream durably" }), resume: false })
+      const failure = providerUnavailable()
+      responseStream = Stream.fail(failure)
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      yield* replaySessionProjection(sessionID)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail raw stream durably" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },
       ])
     }),
@@ -2022,7 +1898,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Do not continue failed provider" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Do not continue failed provider" }),
+        resume: false,
+      })
 
       requests.length = 0
       const executionCount = executions.length
@@ -2036,7 +1916,6 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(1)
       expect(executions.slice(executionCount)).toEqual(["settled"])
-      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
     }),
   )
 
@@ -2049,7 +1928,12 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       response = [
         LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolCall({ id: "call-hosted-provider-error", name: "web_search", input: { query: "effect" }, providerExecuted: true }),
+        LLMEvent.toolCall({
+          id: "call-hosted-provider-error",
+          name: "web_search",
+          input: { query: "effect" },
+          providerExecuted: true,
+        }),
         LLMEvent.providerError({ message: "Provider unavailable" }),
       ]
 
@@ -2058,7 +1942,68 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail hosted tool durably" },
-        { type: "assistant", content: [{ type: "tool", id: "call-hosted-provider-error", state: { status: "error" } }] },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "call-hosted-provider-error", state: { status: "error" } }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("durably fails a hosted tool left unresolved at normal provider EOF", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail hosted tool at EOF" }), resume: false })
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({
+          id: "call-hosted-eof",
+          name: "web_search",
+          input: { query: "effect" },
+          providerExecuted: true,
+        }),
+      ]
+
+      yield* session.resume(sessionID)
+      yield* replaySessionProjection(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail hosted tool at EOF" },
+        { type: "assistant", content: [{ type: "tool", id: "call-hosted-eof", state: { status: "error" } }] },
+      ])
+    }),
+  )
+
+  it.effect("durably fails a hosted tool left unresolved by a raw provider stream failure", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail hosted tool on raw failure" }), resume: false })
+      const failure = providerUnavailable()
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({
+            id: "call-hosted-raw-failure",
+            name: "web_search",
+            input: { query: "effect" },
+            providerExecuted: true,
+          }),
+        ]),
+        Stream.fail(failure),
+      )
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      yield* replaySessionProjection(sessionID)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail hosted tool on raw failure" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "unknown", message: "Provider unavailable" },
+          content: [{ type: "tool", id: "call-hosted-raw-failure", state: { status: "error" } }],
+        },
       ])
     }),
   )
@@ -2149,7 +2094,7 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Call provider tool" },
         {
           type: "assistant",
-          content: [{ type: "tool", id: "call-parsed", state: { status: "running", input: { query: "hello" } } }],
+          content: [{ type: "tool", id: "call-parsed", state: { status: "error", input: { query: "hello" } } }],
         },
       ])
     }),

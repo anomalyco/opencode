@@ -139,6 +139,33 @@ describe("WriteTool", () => {
     ),
   )
 
+  it.live("preserves exactly one BOM when overwriting existing files", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const preserved = path.join(tmp.path, "preserved.txt")
+        const deduplicated = path.join(tmp.path, "deduplicated.txt")
+        return Effect.promise(() =>
+          Promise.all([fs.writeFile(preserved, "\uFEFFbefore"), fs.writeFile(deduplicated, "\uFEFFbefore")]),
+        ).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                yield* registry.settle(call({ path: "preserved.txt", content: "after" }, "call-preserved"))
+                yield* registry.settle(call({ path: "deduplicated.txt", content: "\uFEFFafter" }, "call-deduplicated"))
+
+                expect(yield* Effect.promise(() => fs.readFile(preserved, "utf8"))).toBe("\uFEFFafter")
+                expect(yield* Effect.promise(() => fs.readFile(deduplicated, "utf8"))).toBe("\uFEFFafter")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("accepts an absolute file path inside the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Duration, Effect, Fiber, Layer, Schema } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
@@ -51,6 +51,12 @@ const resources = Layer.succeed(
 const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
 const webfetch = WebFetchTool.layer.pipe(Layer.provide(registry), Layer.provide(http), Layer.provide(resources))
 const it = testEffect(Layer.mergeAll(registry, permission, http, resources, webfetch))
+const fetchWebfetch = WebFetchTool.layer.pipe(
+  Layer.provide(registry),
+  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(resources),
+)
+const live = testEffect(Layer.mergeAll(registry, permission, FetchHttpClient.layer, resources, fetchWebfetch))
 
 const reset = () => {
   requests.length = 0
@@ -81,11 +87,11 @@ describe("WebFetchTool helpers", () => {
 })
 
 describe("WebFetchTool contribution", () => {
-  it.effect("registers and fetches a public HTTP URL without rewriting it", () =>
+  it.effect("registers and fetches an ordinary hostname HTTP URL without rewriting it", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* ToolRegistry.Service
-      const url = "http://1.1.1.1/public"
+      const url = "http://example.com/public"
 
       expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["webfetch"])
       expect(yield* registry.settle(call({ url, format: "text", timeout: 4 }))).toEqual({
@@ -102,67 +108,47 @@ describe("WebFetchTool contribution", () => {
     }),
   )
 
-  it.effect("rejects non-public and metadata targets before permission or transport", () =>
-    Effect.gen(function* () {
-      reset()
-      const registry = yield* ToolRegistry.Service
-      const urls = [
-        "http://127.0.0.1/loopback",
-        "http://10.0.0.1/private",
-        "http://169.254.1.1/link-local",
-        "http://169.254.169.254/latest/meta-data",
-        "http://100.100.100.200/latest/meta-data",
-        "http://224.0.0.1/multicast",
-        "http://100.64.0.1/cgnat",
-        "http://198.18.0.1/benchmark",
-        "http://240.0.0.1/reserved",
-        "http://0.0.0.0/unspecified",
-        "http://[::1]/loopback",
-        "http://[fc00::1]/private",
-        "http://[fe80::1]/link-local",
-        "http://[fec0::1]/site-local",
-        "http://[ff00::1]/multicast",
-        "http://[::127.0.0.1]/compatible-loopback",
-        "http://[::]/unspecified",
-        "http://metadata.google.internal/latest/meta-data",
-      ]
-
-      for (const url of urls) {
-        expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({ type: "error", value: `Unable to fetch ${url}` })
-      }
-      expect(requests).toEqual([])
-      expect(assertions).toEqual([])
-    }),
-  )
-
-  it.effect("rejects hostname URLs until validated DNS addresses can be pinned", () =>
+  it.effect("accepts localhost URLs with the same requested-URL permission check", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* ToolRegistry.Service
       const url = "http://localhost/private"
 
       expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({
-        type: "error",
-        value: `Unable to fetch ${url}`,
+        type: "text",
+        value: "hello",
       })
-      expect(assertions).toEqual([])
-      expect(requests).toEqual([])
+      expect(assertions).toEqual([
+        { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
+      ])
+      expect(requests.map((request) => request.url)).toEqual([url])
     }),
   )
 
-  it.effect("rejects redirects to private destinations", () =>
-    Effect.gen(function* () {
-      reset()
-      respond = () => Effect.succeed(new Response("", { status: 302, headers: { location: "http://127.0.0.1/private" } }))
-      const registry = yield* ToolRegistry.Service
-      const url = "https://1.1.1.1/redirect"
+  live.effect("follows redirects while approving only the requested URL", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: (request) =>
+            new URL(request.url).pathname === "/redirect"
+              ? new Response("", { status: 302, headers: { location: "/target" } })
+              : new Response("redirected", { headers: { "content-type": "text/plain" } }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          reset()
+          const registry = yield* ToolRegistry.Service
+          const url = new URL("/redirect", server.url).toString()
 
-      expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({
-        type: "error",
-        value: `Unable to fetch ${url}`,
-      })
-      expect(requests.map((request) => request.url)).toEqual([url])
-    }),
+          expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({ type: "text", value: "redirected" })
+          expect(assertions).toEqual([
+            { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
+          ])
+        }),
+      (server) => Effect.sync(() => server.stop(true)),
+    ),
   )
 
   it.effect("rejects non-HTTP schemes before permission or transport", () =>
@@ -252,7 +238,7 @@ describe("WebFetchTool contribution", () => {
     }),
   )
 
-  it.effect("rejects images and files instead of inventing attachment storage", () =>
+  it.effect("keeps images and files unsupported until typed settlement can carry attachments", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* ToolRegistry.Service

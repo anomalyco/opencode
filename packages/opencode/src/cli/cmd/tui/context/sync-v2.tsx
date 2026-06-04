@@ -228,7 +228,6 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           })
           break
         case "session.next.tool.progress":
-        case "session.next.tool.progress.live":
           update(event.properties.sessionID, (draft) => {
             const match = latestTool(ownedAssistant(draft, event.properties.assistantMessageID), event.properties.callID)
             if (match?.state.status !== "running") return

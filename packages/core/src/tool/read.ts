@@ -9,11 +9,14 @@ import { ToolOutputStore } from "../tool-output-store"
 import { ToolRegistry } from "../tool-registry"
 
 export const name = "read"
-const MAX_BYTES = 50 * 1024
 const LocationInput = Schema.Struct({
   ...FileSystem.ReadInput.fields,
-  offset: FileSystem.ListPageInput.fields.offset,
-  limit: FileSystem.ListPageInput.fields.limit,
+  offset: FileSystem.ListPageInput.fields.offset.annotate({
+    description: "The 1-based directory entry or text line offset to start reading from",
+  }),
+  limit: FileSystem.ListPageInput.fields.limit.annotate({
+    description: "The maximum number of directory entries or text lines to read",
+  }),
 })
 const ResourceInput = Schema.Struct({
   resource: Schema.String,
@@ -21,11 +24,11 @@ const ResourceInput = Schema.Struct({
   limit: PositiveInt.check(Schema.isLessThanOrEqualTo(ToolOutputStore.MAX_READ_BYTES)).pipe(Schema.optional),
 })
 const Input = Schema.Union([LocationInput, ResourceInput])
-const Success = Schema.Union([FileSystem.Content, FileSystem.ListPage, ToolOutputStore.Page])
+const Success = Schema.Union([FileSystem.Content, FileSystem.TextPage, FileSystem.ListPage, ToolOutputStore.Page])
 
 const definition = Tool.make({
   description:
-    "Read a text or binary file, list a directory page relative to the current location, or page through a managed tool-output resource by opaque URI.",
+    "Read a text or binary file, page through a large UTF-8 text file by line offset, list a directory page relative to the current location, or page through a managed tool-output resource by opaque URI.",
   parameters: Input,
   success: Success,
 })
@@ -59,8 +62,6 @@ export const layer = Layer.effectDiscard(
               return yield* filesystem.listPageResolved(final.target, { offset, limit })
             }
             const target = resolved.target
-            if (target.size > MAX_BYTES)
-              return yield* Effect.die(new Error(`File exceeds ${MAX_BYTES} byte read limit`))
             yield* assertPermission({
               action: name,
               resources: [target.resource],
@@ -69,9 +70,9 @@ export const layer = Layer.effectDiscard(
             const final = yield* filesystem.resolveReadPath(input)
             if (final.type !== "file" || final.target.resource !== target.resource || final.target.real !== target.real)
               return yield* Effect.die(new Error("File changed after permission approval"))
-            if (final.target.size > MAX_BYTES)
-              return yield* Effect.die(new Error(`File exceeds ${MAX_BYTES} byte read limit`))
-            return yield* filesystem.readResolved(final.target, MAX_BYTES)
+            if (final.target.size > FileSystem.MAX_READ_BYTES || input.offset !== undefined || input.limit !== undefined)
+              return yield* filesystem.readTextPageResolved(final.target, { offset: input.offset, limit: input.limit })
+            return yield* filesystem.readResolved(final.target, FileSystem.MAX_READ_BYTES)
           }).pipe(
             Effect.catchCause((cause) =>
               Effect.fail(

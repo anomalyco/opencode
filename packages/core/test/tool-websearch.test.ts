@@ -61,8 +61,11 @@ interface Request {
 
 const requests: Request[] = []
 const assertions: PermissionV2.AssertInput[] = []
+const truncations: ToolOutputStore.TruncateInput[] = []
 let responseBody = payload("search results")
 let config: WebSearchTool.Config = { enableExa: false, enableParallel: false }
+let truncate = (input: ToolOutputStore.TruncateInput): Effect.Effect<ToolOutputStore.TruncateResult> =>
+  Effect.succeed({ content: input.content, truncated: false })
 
 const http = Layer.succeed(
   HttpClient.HttpClient,
@@ -115,7 +118,7 @@ const resources = Layer.succeed(
   ToolOutputStore.Service.of({
     limits: () => Effect.die("unused"),
     write: () => Effect.die("unused"),
-    truncate: (input) => Effect.succeed({ content: input.content, truncated: false }),
+    truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
     read: () => Effect.die("unused"),
     cleanup: () => Effect.die("unused"),
   }),
@@ -134,6 +137,8 @@ describe("WebSearchTool contribution", () => {
     Effect.gen(function* () {
       requests.length = 0
       assertions.length = 0
+      truncations.length = 0
+      truncate = (input) => Effect.succeed({ content: input.content, truncated: false })
       responseBody = payload("exa results")
       config = { provider: "exa", enableExa: false, enableParallel: false }
       const registry = yield* ToolRegistry.Service
@@ -206,7 +211,7 @@ describe("WebSearchTool contribution", () => {
       expect(requests[0]?.body).not.toHaveProperty("params.arguments.model_name")
       expect(settled).toEqual({
         result: { type: "text", value: "parallel results" },
-        output: { structured: { provider: "parallel", text: "parallel results" }, content: [{ type: "text", text: "parallel results" }] },
+        output: { structured: { provider: "parallel", text: "parallel results", truncated: false }, content: [{ type: "text", text: "parallel results" }] },
       })
       expect(JSON.stringify(settled)).not.toContain("parallel-secret")
     }),
@@ -244,6 +249,40 @@ describe("WebSearchTool contribution", () => {
           call: { type: "tool-call", id: "call-empty", name: "websearch", input: { query: "nothing" } },
         }),
       ).toEqual({ type: "text", value: WebSearchTool.NO_RESULTS })
+    }),
+  )
+
+  it.effect("exposes managed overflow through typed structured output", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      assertions.length = 0
+      truncations.length = 0
+      responseBody = payload("full search results")
+      config = { provider: "exa", enableExa: false, enableParallel: false }
+      truncate = (input) =>
+        Effect.succeed({
+          content: "HEAD\n\n... output truncated; full content available as tool-output://opaque ...\n\nTAIL",
+          truncated: true,
+          resource: new ToolOutputStore.Resource({
+            uri: "tool-output://opaque",
+            mime: "text/plain",
+            size: input.content.length,
+          }),
+        })
+      const registry = yield* ToolRegistry.Service
+
+      const settled = yield* registry.settle({
+        sessionID,
+        call: { type: "tool-call", id: "call-overflow", name: "websearch", input: { query: "verbose" } },
+      })
+
+      expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("tool-output://opaque") })
+      expect(settled.output?.structured).toMatchObject({
+        provider: "exa",
+        truncated: true,
+        resource: { uri: "tool-output://opaque", mime: "text/plain" },
+      })
+      expect(truncations).toEqual([{ sessionID, toolCallID: "call-overflow", content: "full search results" }])
     }),
   )
 

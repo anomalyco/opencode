@@ -181,6 +181,9 @@ export const layer = Layer.effect(
       if (!text) return yield* Effect.fail(new ResourceNotFoundError({ uri: resourceUri }))
       const record = yield* Effect.sync(() => JSON.parse(text)).pipe(Effect.catch(() => Effect.void))
       if (!validRecord(record, id)) return yield* Effect.fail(new ResourceNotFoundError({ uri: resourceUri }))
+      const info = yield* fs.stat(contentPath(id)).pipe(Effect.catch(() => Effect.void))
+      if (!info || info.type !== "File" || Number(info.size) !== record.size)
+        return yield* Effect.fail(new ResourceNotFoundError({ uri: resourceUri }))
       return record
     })
 
@@ -302,7 +305,16 @@ export const layer = Layer.effect(
         const record = yield* Effect.try({ try: () => JSON.parse(text), catch: () => new globalThis.Error("Invalid metadata") }).pipe(
           Effect.catch(() => Effect.succeed(undefined)),
         )
-        if (!contentExists || !validRecord(record, id) || record.created < cutoff) yield* removePair(id)
+        const info = contentExists ? yield* fs.stat(contentPath(id)).pipe(Effect.catch(() => Effect.void)) : undefined
+        if (
+          !contentExists ||
+          !validRecord(record, id) ||
+          !info ||
+          info.type !== "File" ||
+          Number(info.size) !== record.size ||
+          record.created < cutoff
+        )
+          yield* removePair(id)
       }
     })
 

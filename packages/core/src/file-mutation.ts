@@ -11,6 +11,11 @@ export interface WriteInput {
   readonly content: string | Uint8Array
 }
 
+export interface TextWriteInput {
+  readonly plan: LocationMutation.Plan
+  readonly content: string
+}
+
 export interface ConditionalWriteInput extends WriteInput {
   readonly expected: Uint8Array
 }
@@ -50,6 +55,8 @@ export interface Interface {
   readonly create: (input: WriteInput) => Effect.Effect<WriteResult, TargetExistsError | LocationMutation.RevalidationError | FSUtil.Error>
   /** Write after immediately revalidating the planned target. */
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, LocationMutation.RevalidationError | FSUtil.Error>
+  /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
+  readonly writeTextPreservingBom: (input: TextWriteInput) => Effect.Effect<WriteResult, LocationMutation.RevalidationError | FSUtil.Error>
   /** Commit only if an existing target still has the expected bytes. */
   readonly writeIfUnchanged: (
     input: ConditionalWriteInput,
@@ -115,6 +122,17 @@ export const layer = Layer.effect(
       ),
     )
 
+    const writeTextPreservingBom = Effect.fn("FileMutation.writeTextPreservingBom")((input: TextWriteInput) =>
+      withValidatedTarget(input.plan)((target) =>
+        Effect.gen(function* () {
+          const next = splitBom(input.content)
+          const preserveBom = target.exists && hasUtf8Bom(yield* fs.readFile(target.canonical))
+          yield* fs.writeWithDirs(target.canonical, joinBom(next.text, preserveBom || next.bom))
+          return writeResult(target)
+        }),
+      ),
+    )
+
     const create = Effect.fn("FileMutation.create")((input: WriteInput) =>
       withValidatedTarget(input.plan)((target) =>
         Effect.gen(function* () {
@@ -147,9 +165,23 @@ export const layer = Layer.effect(
       ),
     )
 
-    return Service.of({ create, write, writeIfUnchanged, remove })
+    return Service.of({ create, write, writeTextPreservingBom, writeIfUnchanged, remove })
   }),
 )
+
+function splitBom(text: string) {
+  const stripped = text.replace(/^\uFEFF+/, "")
+  return { bom: stripped.length !== text.length, text: stripped }
+}
+
+function joinBom(text: string, bom: boolean) {
+  const stripped = splitBom(text).text
+  return bom ? `\uFEFF${stripped}` : stripped
+}
+
+function hasUtf8Bom(content: Uint8Array) {
+  return content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
+}
 
 function sameBytes(left: Uint8Array, right: Uint8Array) {
   if (left.length !== right.length) return false

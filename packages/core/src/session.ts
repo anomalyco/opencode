@@ -94,7 +94,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
   "Session.OperationUnavailableError",
   {
-    operation: Schema.Literals(["prompt", "compact", "wait"]),
+    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "switchModel", "compact", "wait"]),
   },
 ) {}
 
@@ -110,7 +110,7 @@ export type Error = NotFoundError | MessageDecodeError | OperationUnavailableErr
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
-  readonly move: (input: MoveInput) => Effect.Effect<void, NotFoundError>
+  readonly move: (input: MoveInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -130,10 +130,10 @@ export interface Interface {
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
   readonly events: (input: {
     sessionID: SessionSchema.ID
-    after?: number
+    after?: EventV2.Cursor
   }) => Stream.Stream<EventV2.CursorEvent<SessionEvent.DurableEvent>, NotFoundError>
-  readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, never>
-  readonly switchModel: (input: { sessionID: SessionSchema.ID; model: ModelV2.Ref }) => Effect.Effect<void, never>
+  readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, OperationUnavailableError>
+  readonly switchModel: (input: { sessionID: SessionSchema.ID; model: ModelV2.Ref }) => Effect.Effect<void, OperationUnavailableError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -146,13 +146,13 @@ export interface Interface {
     sessionID: SessionSchema.ID
     command: string
     resume?: boolean
-  }) => Effect.Effect<void, never>
+  }) => Effect.Effect<void, OperationUnavailableError>
   readonly skill: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
     skill: string
     resume?: boolean
-  }) => Effect.Effect<void, never>
+  }) => Effect.Effect<void, OperationUnavailableError>
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
@@ -385,10 +385,18 @@ export const layer = Layer.effect(
           }),
         ),
       ),
-      shell: Effect.fn("V2Session.shell")(function* () {}),
-      skill: Effect.fn("V2Session.skill")(function* () {}),
-      switchAgent: Effect.fn("V2Session.switchAgent")(function* () {}),
-      switchModel: Effect.fn("V2Session.switchModel")(function* () {}),
+      shell: Effect.fn("V2Session.shell")(function* () {
+        return yield* new OperationUnavailableError({ operation: "shell" })
+      }),
+      skill: Effect.fn("V2Session.skill")(function* () {
+        return yield* new OperationUnavailableError({ operation: "skill" })
+      }),
+      switchAgent: Effect.fn("V2Session.switchAgent")(function* () {
+        return yield* new OperationUnavailableError({ operation: "switchAgent" })
+      }),
+      switchModel: Effect.fn("V2Session.switchModel")(function* () {
+        return yield* new OperationUnavailableError({ operation: "switchModel" })
+      }),
       compact: Effect.fn("V2Session.compact")(function* (input) {
         yield* result.get(input.sessionID)
         return yield* new OperationUnavailableError({ operation: "compact" })
@@ -401,7 +409,9 @@ export const layer = Layer.effect(
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
       }),
-      move: Effect.fn("V2Session.move")(function* () {}),
+      move: Effect.fn("V2Session.move")(function* () {
+        return yield* new OperationUnavailableError({ operation: "move" })
+      }),
     })
 
     return result

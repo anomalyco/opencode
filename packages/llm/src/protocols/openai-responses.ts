@@ -291,6 +291,13 @@ const lowerReasoning = (part: ReasoningPart): OpenAIResponsesReasoningInput | un
   }
 }
 
+const hostedToolItemID = (part: ToolResultPart) => {
+  const openai = part.providerMetadata?.openai
+  return ProviderShared.isRecord(openai) && typeof openai.itemId === "string" && openai.itemId.length > 0
+    ? openai.itemId
+    : undefined
+}
+
 const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function* (
   part: LLMRequest["messages"][number]["content"][number],
 ) {
@@ -350,6 +357,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenAIResponsesReasoningInput> = {}
       const reasoningReferences = new Set<string>()
+      const hostedToolReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
         input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
@@ -382,13 +390,22 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
         }
         if (part.type === "tool-call") {
           flushText()
+          if (part.providerExecuted === true) continue
           input.push(lowerToolCall(part))
+          continue
+        }
+        if (part.type === "tool-result" && part.providerExecuted === true) {
+          flushText()
+          const itemID = hostedToolItemID(part)
+          if (store !== false && itemID && !hostedToolReferences.has(itemID)) input.push({ type: "item_reference", id: itemID })
+          if (itemID) hostedToolReferences.add(itemID)
           continue
         }
         return yield* ProviderShared.unsupportedContent("OpenAI Responses", "assistant", [
           "text",
           "reasoning",
           "tool-call",
+          "tool-result",
         ])
       }
       flushText()

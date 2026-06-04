@@ -20,6 +20,11 @@ export const ReadInput = Schema.Struct({
 })
 export type ReadInput = typeof ReadInput.Type
 
+export const MAX_READ_LINES = 2_000
+export const MAX_READ_BYTES = 50 * 1024
+const MAX_LINE_LENGTH = 2_000
+const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
+
 export class TextContent extends Schema.Class<TextContent>("FileSystem.TextContent")({
   type: Schema.Literal("text"),
   content: Schema.String,
@@ -35,6 +40,21 @@ export class BinaryContent extends Schema.Class<BinaryContent>("FileSystem.Binar
 
 export const Content = Schema.Union([TextContent, BinaryContent]).pipe(Schema.toTaggedUnion("type"))
 export type Content = typeof Content.Type
+
+export const TextPageInput = Schema.Struct({
+  offset: PositiveInt.pipe(Schema.optional),
+  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_READ_LINES)).pipe(Schema.optional),
+})
+export type TextPageInput = typeof TextPageInput.Type
+
+export class TextPage extends Schema.Class<TextPage>("FileSystem.TextPage")({
+  type: Schema.Literal("text-page"),
+  content: Schema.String,
+  mime: Schema.String,
+  offset: PositiveInt,
+  truncated: Schema.Boolean,
+  next: PositiveInt.pipe(Schema.optional),
+}) {}
 
 export class ReadTarget extends Schema.Class<ReadTarget>("FileSystem.ReadTarget")({
   real: Schema.String,
@@ -137,6 +157,7 @@ export interface Interface {
   readonly resolveReadPath: (input: ReadInput) => Effect.Effect<ReadPathTarget>
   readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
   readonly readResolved: (target: ReadTarget, maximumBytes?: number) => Effect.Effect<Content>
+  readonly readTextPageResolved: (target: ReadTarget, page?: TextPageInput) => Effect.Effect<TextPage>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   /** Select a contained canonical read root without asserting leaf policy. */
   readonly resolveRoot: (input?: ListInput) => Effect.Effect<RootTarget>
@@ -303,6 +324,100 @@ export const layer = Layer.effect(
         }),
       )
     })
+    const readTextPageResolved = Effect.fn("FileSystem.readTextPageResolved")(function* (
+      target: ReadTarget,
+      page: TextPageInput = {},
+    ) {
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
+          const info = yield* file.stat.pipe(Effect.orDie)
+          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
+            return yield* Effect.die(new Error("File changed after permission approval"))
+
+          const offset = page.offset ?? 1
+          const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
+          const lines: string[] = []
+          const decoder = new TextDecoder("utf-8", { fatal: true })
+          let pending = ""
+          let discard = false
+          let line = 1
+          let bytes = 0
+          let found = false
+          let truncated = false
+          let next: number | undefined
+
+          const append = (input: string) => {
+            if (line < offset) {
+              line++
+              return true
+            }
+            if (lines.length >= limit) {
+              truncated = true
+              next = line
+              return false
+            }
+            found = true
+            const text = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
+            const size = Buffer.byteLength(text, "utf-8") + (lines.length > 0 ? 1 : 0)
+            if (bytes + size > MAX_READ_BYTES) {
+              truncated = true
+              next = line
+              return false
+            }
+            lines.push(text)
+            bytes += size
+            line++
+            return true
+          }
+
+          let done = false
+          while (!done) {
+            const chunk = yield* file.readAlloc(64 * 1024).pipe(Effect.orDie)
+            if (Option.isNone(chunk)) break
+            if (chunk.value.includes(0)) return yield* Effect.die(new Error("Cannot page binary file"))
+            let text = decoder.decode(chunk.value, { stream: true })
+            while (true) {
+              const index = text.indexOf("\n")
+              if (index === -1) {
+                if (!discard) {
+                  pending += text
+                  if (pending.length > MAX_LINE_LENGTH) {
+                    pending = pending.slice(0, MAX_LINE_LENGTH + 1)
+                    discard = true
+                  }
+                }
+                break
+              }
+              const current = pending + (discard ? "" : text.slice(0, index))
+              pending = ""
+              discard = false
+              text = text.slice(index + 1)
+              if (!append(current.endsWith("\r") ? current.slice(0, -1) : current)) {
+                done = true
+                break
+              }
+            }
+          }
+          if (!done) {
+            const tail = decoder.decode()
+            if (!discard) pending += tail
+            if (pending && !append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)) done = true
+          }
+          if (!done && !found && offset !== 1) return yield* Effect.die(new Error(`Offset ${offset} is out of range`))
+
+          return new TextPage({
+            type: "text-page",
+            content: lines.join("\n"),
+            mime: FSUtil.mimeType(target.real),
+            offset,
+            truncated,
+            ...(next === undefined ? {} : { next }),
+          })
+        }),
+      )
+    })
     const resolveList = Effect.fn("FileSystem.resolveList")(function* (input: ListInput = {}) {
       const directory = yield* resolve(input.path, input.reference)
       const info = yield* fs.stat(directory.real).pipe(Effect.orDie)
@@ -394,6 +509,7 @@ export const layer = Layer.effect(
       resolveReadPath,
       resolveRead,
       readResolved,
+      readTextPageResolved,
       list: Effect.fn("FileSystem.list")(function* (input) {
         return yield* listResolved(yield* resolveList(input))
       }),

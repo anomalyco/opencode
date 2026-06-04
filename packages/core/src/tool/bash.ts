@@ -22,9 +22,11 @@ export const Parameters = Schema.Struct({
   workdir: Schema.String.pipe(Schema.optional).annotate({
     description: "Working directory. Defaults to the active Location; relative paths resolve from that Location.",
   }),
-  timeout: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_TIMEOUT_MS)).pipe(Schema.optional).annotate({
-    description: `Timeout in milliseconds. Defaults to ${DEFAULT_TIMEOUT_MS} and may not exceed ${MAX_TIMEOUT_MS}.`,
-  }),
+  timeout: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_TIMEOUT_MS))
+    .pipe(Schema.optional)
+    .annotate({
+      description: `Timeout in milliseconds. Defaults to ${DEFAULT_TIMEOUT_MS} and may not exceed ${MAX_TIMEOUT_MS}.`,
+    }),
   description: Schema.String.pipe(Schema.optional).annotate({
     description: "Concise description of the command's purpose",
   }),
@@ -46,7 +48,7 @@ const Success = Schema.Struct({
 
 type Success = typeof Success.Type
 
-const defaultShell = () => process.platform === "win32" ? process.env.COMSPEC ?? "cmd.exe" : "/bin/sh"
+const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
 
 const compactOutput = (stdout: string, stderr: string) => {
   const output = stdout && stderr ? `${stdout}\n\nstderr:\n${stderr}` : stderr ? `stderr:\n${stderr}` : stdout
@@ -60,7 +62,9 @@ const captureNotice = (stdoutTruncated: boolean, stderrTruncated: boolean) => {
 }
 
 const modelOutput = (output: Success) => {
-  const warnings = output.warnings?.length ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}` : ""
+  const warnings = output.warnings?.length
+    ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}`
+    : ""
   if (output.timedOut) return `${output.output}${warnings}\n\nCommand timed out before completion.`
   return `${output.output}${warnings}\n\nCommand exited with code ${output.exitCode}.`
 }
@@ -85,6 +89,9 @@ const definition = Tool.make({
 // TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.
+// TODO: Persist background job status and define restart recovery before exposing remote observation.
+// TODO: Re-add model-facing background launch only with owner-bound get/wait/cancel tools and completion delivery.
+// TODO: Add HTTP background-job observation only after durable status, restart recovery, and authorization are defined.
 // TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
 // TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
 // TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
@@ -118,26 +125,21 @@ export const layer = Layer.effectDiscard(
           Effect.gen(function* () {
             const plan = yield* mutation.resolve({ path: parameters.workdir ?? ".", kind: "directory" })
             const external = plan.target.externalDirectory
-            if (external) {
-              yield* assertPermission({
-                action: external.action,
-                resources: [external.resource],
-                save: [external.save],
-              })
-            }
-            const warnings = externalCommandDirectories(parameters.command, plan.target.canonical).map((directory) =>
-              `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`
+            if (external) yield* assertPermission(LocationMutation.externalDirectoryPermission(external))
+            const warnings = externalCommandDirectories(parameters.command, plan.target.canonical).map(
+              (directory) =>
+                `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
             )
             yield* assertPermission({ action: name, resources: [parameters.command], save: [parameters.command] })
 
             const target = yield* mutation.revalidate(plan)
-            if (!target.exists || target.type !== "Directory") throw new Error(`Working directory is not a directory: ${target.canonical}`)
+            if (!target.exists || target.type !== "Directory")
+              throw new Error(`Working directory is not a directory: ${target.canonical}`)
 
             const entries = yield* config.entries()
-            const shell = Object.assign(
-              {},
-              ...entries.flatMap((entry) => entry.type === "document" ? [entry.info] : []),
-            ).shell ?? defaultShell()
+            const shell =
+              Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : []))).shell ??
+              defaultShell()
             const command = ChildProcess.make(parameters.command, [], {
               cwd: target.canonical,
               shell,
@@ -146,17 +148,17 @@ export const layer = Layer.effectDiscard(
               forceKillAfter: Duration.seconds(3),
             })
             const timeout = parameters.timeout ?? DEFAULT_TIMEOUT_MS
-            const result = yield* appProcess.run(command, {
-              timeout: Duration.millis(timeout),
-              maxOutputBytes: MAX_CAPTURE_BYTES,
-              maxErrorBytes: MAX_CAPTURE_BYTES,
-            }).pipe(
-              Effect.catchTag("AppProcessError", (error) =>
-                isTimeout(error)
-                  ? Effect.succeed(undefined)
-                  : Effect.fail(error),
-              ),
-            )
+            const result = yield* appProcess
+              .run(command, {
+                timeout: Duration.millis(timeout),
+                maxOutputBytes: MAX_CAPTURE_BYTES,
+                maxErrorBytes: MAX_CAPTURE_BYTES,
+              })
+              .pipe(
+                Effect.catchTag("AppProcessError", (error) =>
+                  isTimeout(error) ? Effect.succeed(undefined) : Effect.fail(error),
+                ),
+              )
             if (!result) {
               return {
                 command: parameters.command,
@@ -184,11 +186,18 @@ export const layer = Layer.effectDiscard(
               ...(warnings.length ? { warnings } : {}),
               ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
               ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
-              ...(truncated.truncated && !result.stdoutTruncated && !result.stderrTruncated ? { resource: truncated.resource } : {}),
+              ...(truncated.truncated && !result.stdoutTruncated && !result.stderrTruncated
+                ? { resource: truncated.resource }
+                : {}),
             }
           }).pipe(
             Effect.catchCause((cause) =>
-              Effect.fail(new ToolFailure({ message: `Unable to execute command: ${parameters.command}`, error: Cause.squash(cause) })),
+              Effect.fail(
+                new ToolFailure({
+                  message: `Unable to execute command: ${parameters.command}`,
+                  error: Cause.squash(cause),
+                }),
+              ),
             ),
           ),
       }),

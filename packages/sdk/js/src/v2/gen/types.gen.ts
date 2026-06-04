@@ -24,8 +24,6 @@ export type Event =
   | EventSessionNextStepStarted
   | EventSessionNextStepEnded
   | EventSessionNextStepFailed
-  | EventSessionNextTurnStarted
-  | EventSessionNextTurnSettled
   | EventSessionNextTextStarted
   | EventSessionNextTextDelta
   | EventSessionNextTextEnded
@@ -37,7 +35,6 @@ export type Event =
   | EventSessionNextToolInputEnded
   | EventSessionNextToolCalled
   | EventSessionNextToolProgress
-  | EventSessionNextToolProgressLive
   | EventSessionNextToolSuccess
   | EventSessionNextToolFailed
   | EventSessionNextRetried
@@ -902,24 +899,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "session.next.turn.started"
-        properties: {
-          timestamp: number
-          sessionID: string
-        }
-      }
-    | {
-        id: string
-        type: "session.next.turn.settled"
-        properties: {
-          timestamp: number
-          sessionID: string
-          turnID: string
-          outcome: "completed" | "failed" | "interrupted"
-        }
-      }
-    | {
-        id: string
         type: "session.next.text.started"
         properties: {
           timestamp: number
@@ -1044,20 +1023,6 @@ export type GlobalEvent = {
     | {
         id: string
         type: "session.next.tool.progress"
-        properties: {
-          timestamp: number
-          sessionID: string
-          assistantMessageID: string
-          callID: string
-          structured: {
-            [key: string]: unknown
-          }
-          content: Array<ToolTextContent | ToolFileContent>
-        }
-      }
-    | {
-        id: string
-        type: "session.next.tool.progress.live"
         properties: {
           timestamp: number
           sessionID: string
@@ -1598,8 +1563,6 @@ export type GlobalEvent = {
     | SyncEventSessionNextStepStarted
     | SyncEventSessionNextStepEnded
     | SyncEventSessionNextStepFailed
-    | SyncEventSessionNextTurnStarted
-    | SyncEventSessionNextTurnSettled
     | SyncEventSessionNextTextStarted
     | SyncEventSessionNextTextEnded
     | SyncEventSessionNextReasoningStarted
@@ -3234,32 +3197,6 @@ export type SyncEventSessionNextStepFailed = {
   }
 }
 
-export type SyncEventSessionNextTurnStarted = {
-  type: "sync"
-  name: "session.next.turn.started.1"
-  id: string
-  seq: number
-  aggregateID: "sessionID"
-  data: {
-    timestamp: number
-    sessionID: string
-  }
-}
-
-export type SyncEventSessionNextTurnSettled = {
-  type: "sync"
-  name: "session.next.turn.settled.1"
-  id: string
-  seq: number
-  aggregateID: "sessionID"
-  data: {
-    timestamp: number
-    sessionID: string
-    turnID: string
-    outcome: "completed" | "failed" | "interrupted"
-  }
-}
-
 export type SyncEventSessionNextTextStarted = {
   type: "sync"
   name: "session.next.text.started.1"
@@ -3689,6 +3626,11 @@ export type SessionMessageAssistantTool = {
   provider?: {
     executed: boolean
     metadata?: {
+      [key: string]: {
+        [key: string]: unknown
+      }
+    }
+    resultMetadata?: {
       [key: string]: {
         [key: string]: unknown
       }
@@ -4174,26 +4116,6 @@ export type EventSessionNextStepFailed = {
   }
 }
 
-export type EventSessionNextTurnStarted = {
-  id: string
-  type: "session.next.turn.started"
-  properties: {
-    timestamp: number
-    sessionID: string
-  }
-}
-
-export type EventSessionNextTurnSettled = {
-  id: string
-  type: "session.next.turn.settled"
-  properties: {
-    timestamp: number
-    sessionID: string
-    turnID: string
-    outcome: "completed" | "failed" | "interrupted"
-  }
-}
-
 export type EventSessionNextTextStarted = {
   id: string
   type: "session.next.text.started"
@@ -4330,21 +4252,6 @@ export type EventSessionNextToolCalled = {
 export type EventSessionNextToolProgress = {
   id: string
   type: "session.next.tool.progress"
-  properties: {
-    timestamp: number
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    structured: {
-      [key: string]: unknown
-    }
-    content: Array<ToolTextContent | ToolFileContent>
-  }
-}
-
-export type EventSessionNextToolProgressLive = {
-  id: string
-  type: "session.next.tool.progress.live"
   properties: {
     timestamp: number
     sessionID: string
