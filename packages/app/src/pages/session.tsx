@@ -858,7 +858,6 @@ export default function Page() {
       () => sync.data.session_status[params.id ?? ""]?.type,
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
-        console.log("refreshing")
         refreshVcs()
       },
       { defer: true },
