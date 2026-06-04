@@ -752,7 +752,7 @@ function sectionIcon(section: Section): IconProps["name"] {
   if (section === "agents-md") return "review"
   if (section === "providers") return "providers"
   if (section === "agents") return "robot"
-  if (section === "skills") return "brain"
+  if (section === "skills") return "book"
   if (section === "plugins") return "code"
   const agent = extraAgents.find((item) => item.configSection === section)
   if (agent) return agent.icon
