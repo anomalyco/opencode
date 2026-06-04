@@ -6,7 +6,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { Location } from "./location"
-import { PermissionV2 } from "./permission"
+import { PermissionSchema } from "./permission/schema"
 import { Policy } from "./policy"
 import { AbsolutePath } from "./schema"
 import { ConfigAgent } from "./config/agent"
@@ -52,7 +52,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   username: Schema.String.pipe(Schema.optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
   }),
-  permissions: PermissionV2.Ruleset.pipe(Schema.optional).annotate({
+  permissions: PermissionSchema.Ruleset.pipe(Schema.optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
   }),
   agents: Schema.Record(Schema.String, ConfigAgent.Info).pipe(Schema.optional).annotate({
