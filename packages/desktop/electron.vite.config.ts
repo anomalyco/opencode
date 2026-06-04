@@ -107,11 +107,16 @@ export default defineConfig({
     },
   },
   renderer: {
+    resolve: {
+      alias: {
+        "@opencode-ai/ui/font-loader": path.resolve(import.meta.dirname, "../ui/src/font-loader.desktop.ts"),
+      },
+    },
     plugins: [appPlugin, sentry, preserveBackdropFilter()],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {
-      sourcemap: true,
+      sourcemap: false,
       rollupOptions: {
         input: {
           main: "src/renderer/index.html",

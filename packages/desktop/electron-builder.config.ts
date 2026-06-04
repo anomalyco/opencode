@@ -11,7 +11,7 @@ const config: Configuration = {
     output: "dist",
     buildResources: "resources",
   },
-  files: ["out/**/*", "package.json"],
+  files: ["out/**/*", "!**/*.map", "!out/renderer/assets/JetBrainsMonoNerdFontMono-Regular.woff2", "package.json"],
   extraResources: [
     {
       from: "resources/icons",
@@ -29,14 +29,14 @@ const config: Configuration = {
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
     hardenedRuntime: true,
-    target: ["dmg", "zip"],
+    target: ["dmg"],
   },
   dmg: {
     sign: false,
   },
   win: {
     icon: "resources/icons/icon.ico",
-    target: ["nsis", "zip"],
+    target: ["nsis"],
   },
   linux: {
     icon: "resources/icons",
