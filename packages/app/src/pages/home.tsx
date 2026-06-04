@@ -38,8 +38,8 @@ import { pathKey } from "@/utils/path-key"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
 import { ServerHealthIndicator } from "@/components/server/server-row"
-import { useServers } from "@/context/servers"
 import { useSettings } from "@/context/settings"
+import { useGlobal } from "@/context/global"
 
 const HOME_SESSION_LIMIT = 15
 const HOME_ROW =
@@ -431,7 +431,7 @@ function HomeProjectColumn(props: {
   openHelp: () => void
   language: ReturnType<typeof useLanguage>
 }) {
-  const servers = useServers()
+  const global = useGlobal()
   const layout = useLayout()
   const projects = createMemo(() => layout.projects.list())
   return (
@@ -454,7 +454,7 @@ function HomeProjectColumn(props: {
         </Show>
       </div>
       <Show
-        when={servers.list().length > 1}
+        when={global.servers.list().length > 1}
         fallback={
           <HomeProjectListViewport>
             <ProjectList
@@ -473,10 +473,10 @@ function HomeProjectColumn(props: {
           </HomeProjectListViewport>
         }
       >
-        <For each={servers.list()}>
+        <For each={global.servers.list()}>
           {(server) => {
             const key = ServerConnection.key(server)
-            const healthy = () => !!servers.health[key]?.healthy
+            const healthy = () => !!global.servers.health[key]?.healthy
             const [open, setOpen] = createSignal(true)
 
             return (
@@ -488,7 +488,7 @@ function HomeProjectColumn(props: {
                     onClick={() => setOpen((o) => !o)}
                   >
                     <div class="size-4 flex items-center justify-center">
-                      <ServerHealthIndicator health={servers.health[key]} />
+                      <ServerHealthIndicator health={global.servers.health[key]} />
                     </div>
                     <div class="flex flex-row items-center gap-1">
                       <span>{server.displayName ?? new URL(server.http.url).host}</span>
@@ -946,7 +946,7 @@ function LegacyHome() {
   const platform = usePlatform()
   const dialog = useDialog()
   const navigate = useNavigate()
-  const servers = useServers()
+  const global = useGlobal()
   const server = useServer()
   const language = useLanguage()
   const homedir = createMemo(() => sync.data.path.home)
@@ -958,7 +958,7 @@ function LegacyHome() {
   })
 
   const serverDotClass = createMemo(() => {
-    const healthy = servers.health[server.key]?.healthy
+    const healthy = global.servers.health[server.key]?.healthy
     if (healthy === true) return "bg-icon-success-base"
     if (healthy === false) return "bg-icon-critical-base"
     return "bg-border-weak-base"
