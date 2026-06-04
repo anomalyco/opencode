@@ -84,7 +84,7 @@ describe("DatabaseMigration", () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
-        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, workspace_id text)`)
         yield* db.run(sql`CREATE TABLE message (id text PRIMARY KEY)`)
         yield* db.run(sql`CREATE TABLE part (id text PRIMARY KEY)`)
         yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
@@ -92,6 +92,7 @@ describe("DatabaseMigration", () => {
           sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
         )
         yield* db.run(sql`CREATE INDEX event_aggregate_seq_idx ON event (aggregate_id, seq)`)
+        yield* db.run(sql`CREATE INDEX event_aggregate_type_seq_idx ON event (aggregate_id, type, seq)`)
         yield* db.run(
           sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
         )
@@ -102,7 +103,7 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`CREATE INDEX session_input_session_pending_delivery_seq_idx ON session_input (session_id, promoted_seq, delivery, seq)`,
         )
-        yield* db.run(sql`INSERT INTO session (id) VALUES ('session')`)
+        yield* db.run(sql`INSERT INTO session (id, workspace_id) VALUES ('session', 'wrk_old')`)
         yield* db.run(sql`INSERT INTO message (id) VALUES ('message')`)
         yield* db.run(sql`INSERT INTO part (id) VALUES ('part')`)
         yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 0)`)
@@ -118,7 +119,9 @@ describe("DatabaseMigration", () => {
 
         yield* DatabaseMigration.applyOnly(db, [eventSourcedSessionInputMigration])
 
-        expect(yield* db.all(sql`SELECT id FROM session`)).toEqual([{ id: "session" }])
+        expect(yield* db.all(sql`SELECT id, workspace_id FROM session`)).toEqual([
+          { id: "session", workspace_id: "wrk_old" },
+        ])
         expect(yield* db.all(sql`SELECT id FROM message`)).toEqual([{ id: "message" }])
         expect(yield* db.all(sql`SELECT id FROM part`)).toEqual([{ id: "part" }])
         expect(yield* db.all(sql`SELECT id FROM event`)).toEqual([])
@@ -133,6 +136,11 @@ describe("DatabaseMigration", () => {
             (index) => index.name === "session_message_session_seq_idx",
           ),
         ).toMatchObject({ unique: 1 })
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(event)`)).find(
+            (index) => index.name === "event_aggregate_type_seq_idx",
+          ),
+        ).toMatchObject({ unique: 0 })
       }),
     )
   })

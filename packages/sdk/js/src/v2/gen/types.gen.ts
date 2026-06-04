@@ -8463,9 +8463,9 @@ export type SyncStartData = {
 
 export type SyncStartErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * Bad request
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: BadRequestError
 }
 
 export type SyncStartError = SyncStartErrors[keyof SyncStartErrors]
@@ -9359,43 +9359,6 @@ export type V2SessionPromptResponses = {
 }
 
 export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPromptResponses]
-
-export type V2SessionInputsData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: never
-  url: "/api/session/{sessionID}/input"
-}
-
-export type V2SessionInputsErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError
-   */
-  404: SessionNotFoundError
-}
-
-export type V2SessionInputsError = V2SessionInputsErrors[keyof V2SessionInputsErrors]
-
-export type V2SessionInputsResponses = {
-  /**
-   * Success
-   */
-  200: {
-    data: Array<SessionInputAdmitted>
-  }
-}
-
-export type V2SessionInputsResponse = V2SessionInputsResponses[keyof V2SessionInputsResponses]
 
 export type V2SessionCompactData = {
   body?: never

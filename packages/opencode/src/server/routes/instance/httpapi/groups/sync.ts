@@ -48,7 +48,6 @@ export const SyncApi = HttpApi.make("sync")
         HttpApiEndpoint.post("start", SyncPaths.start, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Workspace sync started"),
-          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "sync.start",

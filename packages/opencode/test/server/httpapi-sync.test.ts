@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock } from "bun:test"
+import { afterEach, describe, expect, mock, spyOn } from "bun:test"
 import { Context, Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
@@ -25,31 +25,54 @@ afterEach(async () => {
 
 describe("sync HttpApi", () => {
   it.instance(
-    "rejects sync routes during the synchronized Session epoch cutover",
+    "serves sync routes",
     () =>
       Effect.gen(function* () {
         Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
         const tmp = yield* TestInstance
         const headers = { "x-opencode-directory": tmp.directory, "content-type": "application/json" }
-        const responses = yield* Effect.all([
-          requestInDirectory(SyncPaths.start, tmp.directory, { method: "POST", headers }),
-          requestInDirectory(SyncPaths.history, tmp.directory, { method: "POST", headers, body: JSON.stringify({}) }),
-          requestInDirectory(SyncPaths.replay, tmp.directory, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              directory: tmp.directory,
-              events: [{ id: "evt_test", aggregateID: "ses_test", seq: 0, type: "test.1", data: {} }],
-            }),
-          }),
-          requestInDirectory(SyncPaths.steal, tmp.directory, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ sessionID: "ses_test" }),
-          }),
-        ])
+        const info = spyOn(Log.create({ service: "server.sync" }), "info")
+        const session = yield* Session.use.create({ title: "sync" })
 
-        expect(responses.map((response) => response.status)).toEqual([400, 400, 400, 400])
+        const started = yield* requestInDirectory(SyncPaths.start, tmp.directory, { method: "POST", headers })
+        expect(started.status).toBe(200)
+        expect(yield* started.json).toBe(true)
+
+        const history = yield* requestInDirectory(SyncPaths.history, tmp.directory, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({}),
+        })
+        expect(history.status).toBe(200)
+        const rows = (yield* history.json) as Array<{
+          id: string
+          aggregate_id: string
+          seq: number
+          type: string
+          data: Record<string, unknown>
+        }>
+        expect(rows.map((row) => row.aggregate_id)).toContain(session.id)
+
+        const replayed = yield* requestInDirectory(SyncPaths.replay, tmp.directory, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            directory: tmp.directory,
+            events: rows
+              .filter((row) => row.aggregate_id === session.id)
+              .map((row) => ({
+                id: row.id,
+                aggregateID: row.aggregate_id,
+                seq: row.seq,
+                type: row.type,
+                data: row.data,
+              })),
+          }),
+        })
+        expect(replayed.status).toBe(200)
+        expect(yield* replayed.json).toEqual({ sessionID: session.id })
+        expect(info.mock.calls.some(([message]) => message === "sync replay requested")).toBe(true)
+        expect(info.mock.calls.some(([message]) => message === "sync replay complete")).toBe(true)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

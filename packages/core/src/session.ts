@@ -122,7 +122,6 @@ export interface Interface {
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly inputs: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInput.Admitted[], NotFoundError>
   readonly events: (input: {
     sessionID: SessionSchema.ID
     after?: EventV2.Cursor
@@ -351,10 +350,6 @@ export const layer = Layer.effect(
       context: Effect.fn("V2Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
-      }),
-      inputs: Effect.fn("V2Session.inputs")(function* (sessionID) {
-        yield* result.get(sessionID)
-        return yield* SessionInput.pending(db, sessionID)
       }),
       events: (input) =>
         Stream.unwrap(

@@ -62,11 +62,6 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
     })
 
     const warp = Effect.fn("WorkspaceHttpApi.warp")(function* (ctx: { payload: typeof WarpPayload.Type }) {
-      if (!Workspace.syncEnabled)
-        return yield* new ApiWorkspaceWarpError({
-          name: "WorkspaceWarpError",
-          data: { message: "Workspace warp is disabled during the synchronized Session epoch cutover" },
-        })
       yield* workspace
         .sessionWarp({
           workspaceID: ctx.payload.id,

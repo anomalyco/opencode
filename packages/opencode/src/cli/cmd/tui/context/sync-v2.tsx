@@ -5,7 +5,6 @@ import type {
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
-  SessionInputAdmitted,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -14,16 +13,6 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { SessionMessageID } from "@opencode-ai/core/session/message-id"
 
 const messageID = (id: string) => SessionMessageID.ID.fromCreatorEvent(EventV2.ID.make(id))
-
-const userMessage = (input: SessionInputAdmitted): SessionMessage => ({
-  id: input.id,
-  type: "user",
-  text: input.prompt.text,
-  files: input.prompt.files,
-  agents: input.prompt.agents,
-  references: input.prompt.references,
-  time: { created: input.timeCreated },
-})
 
 function activeAssistant(messages: SessionMessage[]) {
   const index = messages.findIndex((message) => message.type === "assistant" && !message.time.completed)
@@ -82,18 +71,6 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
 
     const event = useEvent()
     const sdk = useSDK()
-    const applied = new Set<string>()
-    let revision = 0
-
-    function duplicate(id: string) {
-      if (applied.has(id)) return true
-      applied.add(id)
-      if (applied.size <= 1000) return false
-      const oldest = applied.values().next()
-      if (!oldest.done) applied.delete(oldest.value)
-      return false
-    }
-
     function update(sessionID: string, fn: (messages: SessionMessage[]) => void) {
       setStore(
         "messages",
@@ -104,8 +81,6 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     }
 
     event.subscribe((event) => {
-      if (duplicate(event.id)) return
-      revision += 1
       switch (event.type) {
         case "session.next.agent.switched":
           update(event.properties.sessionID, (draft) => {
@@ -141,21 +116,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           })
           break
         }
-        case "session.next.prompt.admitted": {
-          update(event.properties.sessionID, (draft) => {
-            if (draft.some((message) => message.id === event.properties.messageID)) return
-            draft.unshift({
-              id: event.properties.messageID,
-              type: "user",
-              text: event.properties.prompt.text,
-              files: event.properties.prompt.files,
-              agents: event.properties.prompt.agents,
-              references: event.properties.prompt.references,
-              time: { created: event.properties.timestamp },
-            })
-          })
-          break
-        }
+        case "session.next.prompt.admitted":
         case "session.next.prompt.promoted":
           break
         case "session.next.synthetic":
@@ -392,26 +353,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       session: {
         message: {
           async sync(sessionID: string) {
-            const start = revision
-            const inputs = await sdk.client.v2.session.inputs({ sessionID })
             const response = await sdk.client.v2.session.messages({ sessionID })
-            const messages = response.data?.data ?? []
-            const projected = new Set(messages.map((message) => message.id))
-            const pending = (inputs.data?.data ?? [])
-              .filter((input) => !projected.has(input.id))
-              .toReversed()
-              .map(userMessage)
-            const live = revision === start ? [] : (store.messages[sessionID] ?? [])
-            const liveIDs = new Set(live.map((message) => message.id))
-            setStore(
-              "messages",
-              sessionID,
-              reconcile([
-                ...live,
-                ...pending.filter((message) => !liveIDs.has(message.id)),
-                ...messages.filter((message) => !liveIDs.has(message.id)),
-              ]),
-            )
+            setStore("messages", sessionID, reconcile(response.data?.data ?? []))
           },
           fromSession(sessionID: string) {
             const messages = store.messages[sessionID]

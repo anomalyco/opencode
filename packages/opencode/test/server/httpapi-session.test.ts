@@ -568,10 +568,6 @@ describe("session HttpApi", () => {
         })
         expect(prompt.status).toBe(404)
         expect(yield* responseJson(prompt)).toEqual(expected)
-
-        const inputs = yield* request(`/api/session/${missing}/input`, { headers })
-        expect(inputs.status).toBe(404)
-        expect(yield* responseJson(inputs)).toEqual(expected)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
@@ -620,12 +616,6 @@ describe("session HttpApi", () => {
           delivery: "steer",
           promoted_seq: null,
         })
-        expect(
-          yield* requestJson<{ data: PromptBody[] }>(`/api/session/${session.id}/input`, {
-            headers,
-          }),
-        ).toMatchObject({ data: [{ id: "msg_http_prompt", prompt: { text: "hello" }, delivery: "steer" }] })
-
         const conflict = yield* request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },

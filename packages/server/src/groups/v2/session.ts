@@ -125,19 +125,6 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
     ),
   )
   .add(
-    HttpApiEndpoint.get("inputs", "/api/session/:sessionID/input", {
-      params: { sessionID: SessionV2.ID },
-      success: Schema.Struct({ data: Schema.Array(SessionInput.Admitted) }),
-      error: SessionNotFoundError,
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "v2.session.inputs",
-        summary: "List pending v2 session inputs",
-        description: "Retrieve prompts that were durably admitted but have not entered context-eligible history yet.",
-      }),
-    ),
-  )
-  .add(
     HttpApiEndpoint.post("compact", "/api/session/:sessionID/compact", {
       params: { sessionID: SessionV2.ID },
       success: HttpApiSchema.NoContent,

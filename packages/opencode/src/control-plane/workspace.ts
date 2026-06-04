@@ -76,10 +76,6 @@ function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
 
 const log = Log.create({ service: "workspace-sync" })
 
-// Re-enable only with a persisted sync epoch fence. The V2 Session cutover clears
-// local synchronized history, so accepting an older remote epoch would restore it.
-export const syncEnabled = false
-
 export const CreateInput = Schema.Struct({
   id: Schema.optional(WorkspaceV2.ID),
   type: Info.fields.type,
@@ -482,7 +478,7 @@ export const layer = Layer.effect(
     })
 
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
-      if (!syncEnabled || !flags.experimentalWorkspaces) return
+      if (!flags.experimentalWorkspaces) return
 
       const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
         Effect.catch((error) =>
@@ -572,14 +568,13 @@ export const layer = Layer.effect(
       const env = {
         OPENCODE_AUTH_CONTENT: JSON.stringify(yield* auth.all()),
         OPENCODE_WORKSPACE_ID: config.id,
-        OPENCODE_EXPERIMENTAL_WORKSPACES: syncEnabled ? "true" : "false",
+        OPENCODE_EXPERIMENTAL_WORKSPACES: "true",
         OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
         OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
         OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
       }
 
       yield* WorkspaceAdapterRuntime.create(adapter, config, env)
-      if (!syncEnabled) return info
       yield* Effect.all(
         [
           waitEvent({
@@ -966,7 +961,6 @@ export const layer = Layer.effect(
     })
 
     const startWorkspaceSyncing = Effect.fn("Workspace.startWorkspaceSyncing")(function* (projectID: ProjectV2.ID) {
-      if (!syncEnabled) return
       const rows = yield* db
         .selectDistinct({ workspace: WorkspaceTable })
         .from(WorkspaceTable)

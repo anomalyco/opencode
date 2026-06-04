@@ -95,23 +95,6 @@ export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handle
         }),
       )
       .handle(
-        "inputs",
-        Effect.fn(function* (ctx) {
-          return {
-            data: yield* session.inputs(ctx.params.sessionID).pipe(
-              Effect.catchTag("Session.NotFoundError", (error) =>
-                Effect.fail(
-                  new SessionNotFoundError({
-                    sessionID: error.sessionID,
-                    message: `Session not found: ${error.sessionID}`,
-                  }),
-                ),
-              ),
-            ),
-          }
-        }),
-      )
-      .handle(
         "compact",
         Effect.fn(function* (ctx) {
           yield* session.compact({ sessionID: ctx.params.sessionID }).pipe(
