@@ -121,7 +121,7 @@ describe("LocationMutation", () => {
           const root = yield* Effect.promise(() => fs.realpath(outside))
           expect(plan.target).toMatchObject({
             canonical: path.join(root, "new.txt"),
-            resource: path.join(root, "new.txt"),
+            resource: path.join(root, "new.txt").replaceAll("\\", "/"),
           })
           expect(plan.target.externalDirectory).toMatchObject({
             directory: root,

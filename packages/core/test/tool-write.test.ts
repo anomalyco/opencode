@@ -306,7 +306,7 @@ describe("WriteTool", () => {
 })
 
 test("keeps the locked write schema, semantics docstring, and deferred UX TODOs visible", async () => {
-  const source = await fs.readFile(new URL("../src/tool/write.ts", import.meta.url), "utf8")
+  const source = (await fs.readFile(new URL("../src/tool/write.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
   const definition = await Effect.runPromise(
     withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => registry.definitions()),
   )

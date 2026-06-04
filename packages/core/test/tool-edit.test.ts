@@ -431,7 +431,7 @@ describe("EditTool", () => {
 })
 
 test("keeps the locked edit schema, semantics docstring, and deferred TODOs visible", async () => {
-  const source = await fs.readFile(new URL("../src/tool/edit.ts", import.meta.url), "utf8")
+  const source = (await fs.readFile(new URL("../src/tool/edit.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
   const definition = await Effect.runPromise(
     withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => registry.definitions()),
   )
