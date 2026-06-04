@@ -1,10 +1,10 @@
 import { Context, Effect, Layer } from "effect"
-import { eq, like, and, desc, lt, type SQL } from "@/storage/db"
-import * as Database from "@/storage/db"
-import { EventV2 } from "@opencode-ai/core/event"
+import { and, desc, eq, like, lt, type SQL } from "drizzle-orm"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { memoryTable } from "./memory.sql"
 import * as Log from "@opencode-ai/core/util/log"
-import { SessionEvent } from "@opencode-ai/core/session-event"
 
 const log = Log.create({ service: "memory.store" })
 
@@ -96,7 +96,8 @@ function generateID(): string {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const { db } = yield* Database.Service
+    const events = yield* EventV2Bridge.Service
 
     const store = Effect.fn("MemoryStore.store")(function* (input: {
       sessionID: string
@@ -111,7 +112,7 @@ export const layer = Layer.effect(
       const id = generateID()
       const now = Date.now()
 
-      Database.Client()
+      yield* db
         .insert(memoryTable)
         .values({
           id,
@@ -131,17 +132,18 @@ export const layer = Layer.effect(
           time_last_evolved: null,
           heartbeat_at: null,
         })
-        .run()
+        .pipe(Effect.orDie)
 
       return id
     })
 
     const get = Effect.fn("MemoryStore.get")(function* (id: string) {
-      const row = Database.Client()
+      const row = yield* db
         .select()
         .from(memoryTable)
         .where(eq(memoryTable.id, id))
-        .get() as MemoryRow | undefined
+        .get()
+        .pipe(Effect.orDie)
 
       return row
     })
@@ -156,20 +158,21 @@ export const layer = Layer.effect(
       const conditions: SQL[] = []
 
       if (input.query) {
-        conditions.push(like(memoryTable.title, `%${input.query}%`) as unknown as SQL)
+        conditions.push(like(memoryTable.title, `%${input.query}%`))
       }
 
       if (input.type_filter) {
-        conditions.push(eq(memoryTable.type, input.type_filter as "episodic" | "semantic" | "procedural" | "pattern") as unknown as SQL)
+        conditions.push(eq(memoryTable.type, input.type_filter as "episodic" | "semantic" | "procedural" | "pattern"))
       }
 
-      const rows = Database.Client()
+      const rows = yield* db
         .select()
         .from(memoryTable)
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(memoryTable.importance), desc(memoryTable.time_last_accessed))
         .limit(maxResults)
-        .all() as MemoryRow[]
+        .all()
+        .pipe(Effect.orDie)
 
       return rows.map((row) => {
         const contentMatch = input.query
@@ -228,35 +231,39 @@ export const layer = Layer.effect(
 
       if (Object.keys(setValues).length === 0) return
 
-      Database.Client()
+      yield* db
         .update(memoryTable)
         .set(setValues)
         .where(eq(memoryTable.id, id))
         .run()
+        .pipe(Effect.orDie)
     })
 
     const remove = Effect.fn("MemoryStore.remove")(function* (id: string) {
-      Database.Client()
+      yield* db
         .delete(memoryTable)
         .where(eq(memoryTable.id, id))
         .run()
+        .pipe(Effect.orDie)
     })
 
     const touchActive = Effect.fn("MemoryStore.touchActive")(function* (input: { minAccessCount: number }) {
       const now = Date.now()
 
-      const candidates = Database.Client()
+      const candidates = yield* db
         .select()
         .from(memoryTable)
         .where(lt(memoryTable.access_count, input.minAccessCount))
-        .all() as MemoryRow[]
+        .all()
+        .pipe(Effect.orDie)
 
       for (const row of candidates) {
-        Database.Client()
+        yield* db
           .update(memoryTable)
           .set({ access_count: input.minAccessCount, time_last_accessed: now })
           .where(eq(memoryTable.id, row.id))
           .run()
+          .pipe(Effect.orDie)
       }
 
       return candidates.length
@@ -267,13 +274,14 @@ export const layer = Layer.effect(
       sessionID: string,
       _messages: any[],
     ) {
-      const rows = Database.Client()
+      const rows = yield* db
         .select()
         .from(memoryTable)
         .where(eq(memoryTable.session_id, sessionID))
         .orderBy(desc(memoryTable.importance))
         .limit(5)
-        .all() as MemoryRow[]
+        .all()
+        .pipe(Effect.orDie)
 
       if (rows.length === 0) return null
 
@@ -297,7 +305,7 @@ export const layer = Layer.effect(
       const id = generateID()
       const now = Date.now()
 
-      Database.Client()
+      yield* db
         .insert(memoryTable)
         .values({
           id,
@@ -317,7 +325,7 @@ export const layer = Layer.effect(
           time_last_evolved: null,
           heartbeat_at: null,
         })
-        .run()
+        .pipe(Effect.orDie)
 
       log.info("recorded tool error", { tool: data.tool, sessionID: data.sessionID })
     })
@@ -328,7 +336,7 @@ export const layer = Layer.effect(
       const id = generateID()
       const now = Date.now()
 
-      Database.Client()
+      yield* db
         .insert(memoryTable)
         .values({
           id,
@@ -348,7 +356,7 @@ export const layer = Layer.effect(
           time_last_evolved: null,
           heartbeat_at: null,
         })
-        .run()
+        .pipe(Effect.orDie)
 
       log.info("recorded compaction", { sessionID: data.sessionID })
     })
@@ -402,6 +410,9 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(EventV2Bridge.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+)
 
 export * as MemoryStore from "./memory-store"
