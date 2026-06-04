@@ -112,7 +112,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: opencode-preview-cli
-          path: packages/cli/dist/lildax-*
+          path: packages/cli/dist/cli-*
 
     outputs:
       version: ${{ needs.version.outputs.version }}
