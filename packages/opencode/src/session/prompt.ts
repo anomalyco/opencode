@@ -1029,18 +1029,54 @@ export const layer = Layer.effect(
                   synthetic: true,
                   text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
                 },
-                {
-                  id: part.id,
-                  messageID: info.id,
-                  sessionID: input.sessionID,
-                  type: "file",
-                  url:
-                    `data:${mime};base64,` +
-                    Buffer.from(yield* fsys.readFile(filepath).pipe(Effect.catch(Effect.die))).toString("base64"),
-                  mime,
-                  filename: part.filename!,
-                  source: part.source,
-                },
+                ...(yield* Effect.gen(function* () {
+                  const args = { filePath: filepath }
+                  const output = { title: part.filename ?? path.basename(filepath), output: "Binary read successfully", metadata: {} }
+                  const exit = yield* Effect.gen(function* () {
+                    yield* plugin.trigger(
+                      "tool.execute.before",
+                      { tool: read.id, sessionID: input.sessionID, callID: part.id },
+                      { args },
+                    )
+                    const bytes = yield* fsys.readFile(args.filePath)
+                    yield* plugin.trigger(
+                      "tool.execute.after",
+                      { tool: read.id, sessionID: input.sessionID, callID: part.id, args },
+                      output,
+                    )
+                    return bytes
+                  }).pipe(Effect.exit)
+                  if (Exit.isFailure(exit)) {
+                    const error = Cause.squash(exit.cause)
+                    const message = error instanceof Error ? error.message : String(error)
+                    log.error("failed to read binary file", { error, filepath: args.filePath })
+                    yield* events.publish(Session.Event.Error, {
+                      sessionID: input.sessionID,
+                      error: new NamedError.Unknown({ message }).toObject(),
+                    })
+                    return [
+                      {
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "text" as const,
+                        synthetic: true,
+                        text: `Read tool failed to read ${args.filePath} with the following error: ${message}`,
+                      },
+                    ]
+                  }
+                  return [
+                    {
+                      id: part.id,
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "file" as const,
+                      url: `data:${mime};base64,` + Buffer.from(exit.value).toString("base64"),
+                      mime,
+                      filename: part.filename!,
+                      source: part.source,
+                    },
+                  ]
+                })),
               ]
             }
           }

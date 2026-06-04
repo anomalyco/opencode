@@ -1896,6 +1896,75 @@ noLLMServer.instance(
 )
 
 noLLMServer.instance(
+  "fires tool.execute.before for image file parts",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const pluginFile = path.join(dir, "plugin.ts")
+      const beforeMarker = path.join(dir, "read-before-marker.json")
+      const afterMarker = path.join(dir, "read-after-marker.json")
+      const image = path.join(dir, "hook-test.png")
+
+      yield* writeText(
+        pluginFile,
+        [
+          "export default async () => ({",
+          '  "tool.execute.before": async (input, output) => {',
+          '    if (input.tool !== "read") return',
+          `    await Bun.write(${JSON.stringify(beforeMarker)}, JSON.stringify(output.args))`,
+          "  },",
+          '  "tool.execute.after": async (input, output) => {',
+          '    if (input.tool !== "read") return',
+          `    await Bun.write(${JSON.stringify(afterMarker)}, JSON.stringify({ args: input.args, output }))`,
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+      )
+      yield* writeConfig(dir, { ...cfg, plugin: [pathToFileURL(pluginFile).href] })
+      yield* Effect.promise(() => Bun.write(image, new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 1, 2, 3])))
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "describe @hook-test.png" },
+          {
+            type: "file",
+            mime: "image/png",
+            url: `file://${image}`,
+            filename: "hook-test.png",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const beforeMarkerExists = yield* Effect.sync(() => Bun.file(beforeMarker).exists())
+      const afterMarkerExists = yield* Effect.sync(() => Bun.file(afterMarker).exists())
+      expect(beforeMarkerExists).toBe(true)
+      expect(afterMarkerExists).toBe(true)
+
+      const beforeData = yield* Effect.promise(() => Bun.file(beforeMarker).json() as Promise<{ filePath: string }>)
+      const afterData = yield* Effect.promise(() =>
+        Bun.file(afterMarker).json() as Promise<{
+          args: { filePath: string }
+          output: { output: string }
+        }>,
+      )
+      expect(beforeData.filePath).toBe(image)
+      expect(afterData.args.filePath).toBe(image)
+      expect(afterData.output.output).toBe("Binary read successfully")
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
   "keeps stored part order stable when file resolution is async",
   () =>
     Effect.gen(function* () {
