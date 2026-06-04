@@ -204,7 +204,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)
       const previous = contents.at(-1)
-      if (previous?.role === "user") contents[contents.length - 1] = { role: "user", parts: [...previous.parts, { text: part.text }] }
+      if (previous?.role === "user")
+        contents[contents.length - 1] = { role: "user", parts: [...previous.parts, { text: part.text }] }
       else contents.push({ role: "user", parts: [{ text: part.text }] })
       continue
     }
@@ -405,7 +406,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata: part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+          providerMetadata: part.thoughtSignature
+            ? googleMetadata({ thoughtSignature: part.thoughtSignature })
+            : undefined,
         }),
       )
       hasToolCalls = true

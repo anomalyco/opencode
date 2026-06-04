@@ -28,7 +28,9 @@ describe("WebSearchTool provider selection", () => {
   })
 
   test("supports an explicit operational override", () => {
-    expect(WebSearchTool.selectProvider(sessionID, { enableExa: false, enableParallel: false }, "parallel")).toBe("parallel")
+    expect(WebSearchTool.selectProvider(sessionID, { enableExa: false, enableParallel: false }, "parallel")).toBe(
+      "parallel",
+    )
     expect(WebSearchTool.selectProvider(sessionID, { enableExa: false, enableParallel: false }, "exa")).toBe("exa")
   })
 
@@ -47,9 +49,11 @@ describe("WebSearchTool MCP response parser", () => {
   })
 
   test("parses SSE JSON-RPC responses and ignores non-JSON frames", async () => {
-    expect(await Effect.runPromise(WebSearchTool.parseResponse(`data: [DONE]\nevent: message\ndata: ${payload("search results")}\n\n`))).toBe(
-      "search results",
-    )
+    expect(
+      await Effect.runPromise(
+        WebSearchTool.parseResponse(`data: [DONE]\nevent: message\ndata: ${payload("search results")}\n\n`),
+      ),
+    ).toBe("search results")
   })
 })
 
@@ -151,7 +155,13 @@ describe("WebSearchTool contribution", () => {
             type: "tool-call",
             id: "call-exa",
             name: "websearch",
-            input: { query: "effect typescript", numResults: 3, livecrawl: "preferred", type: "fast", contextMaxCharacters: 2500 },
+            input: {
+              query: "effect typescript",
+              numResults: 3,
+              livecrawl: "preferred",
+              type: "fast",
+              contextMaxCharacters: 2500,
+            },
           },
         }),
       ).toEqual({ type: "text", value: "exa results" })
@@ -161,7 +171,14 @@ describe("WebSearchTool contribution", () => {
           action: "websearch",
           resources: ["effect typescript"],
           save: ["*"],
-          metadata: { query: "effect typescript", numResults: 3, livecrawl: "preferred", type: "fast", contextMaxCharacters: 2500, provider: "exa" },
+          metadata: {
+            query: "effect typescript",
+            numResults: 3,
+            livecrawl: "preferred",
+            type: "fast",
+            contextMaxCharacters: 2500,
+            provider: "exa",
+          },
         },
       ])
       expect(requests).toEqual([
@@ -174,7 +191,13 @@ describe("WebSearchTool contribution", () => {
             method: "tools/call",
             params: {
               name: "web_search_exa",
-              arguments: { query: "effect typescript", type: "fast", numResults: 3, livecrawl: "preferred", contextMaxCharacters: 2500 },
+              arguments: {
+                query: "effect typescript",
+                type: "fast",
+                numResults: 3,
+                livecrawl: "preferred",
+                contextMaxCharacters: 2500,
+              },
             },
           },
         },
@@ -211,7 +234,10 @@ describe("WebSearchTool contribution", () => {
       expect(requests[0]?.body).not.toHaveProperty("params.arguments.model_name")
       expect(settled).toEqual({
         result: { type: "text", value: "parallel results" },
-        output: { structured: { provider: "parallel", text: "parallel results", truncated: false }, content: [{ type: "text", text: "parallel results" }] },
+        output: {
+          structured: { provider: "parallel", text: "parallel results", truncated: false },
+          content: [{ type: "text", text: "parallel results" }],
+        },
       })
       expect(JSON.stringify(settled)).not.toContain("parallel-secret")
     }),

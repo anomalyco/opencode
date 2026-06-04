@@ -1,4 +1,11 @@
-import { ToolOutput as LLMToolOutput, type LLMEvent, type ProviderMetadata, type ToolOutput as LLMToolOutputType, type ToolResultValue, type Usage } from "@opencode-ai/llm"
+import {
+  ToolOutput as LLMToolOutput,
+  type LLMEvent,
+  type ProviderMetadata,
+  type ToolOutput as LLMToolOutputType,
+  type ToolResultValue,
+  type Usage,
+} from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
@@ -52,7 +59,15 @@ const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultV
 export const createLLMEventPublisher = (events: EventV2.Interface, input: Input) => {
   const tools = new Map<
     string,
-    { readonly assistantMessageID: EventV2.ID; readonly name: string; inputEnded: boolean; called: boolean; settled: boolean; providerExecuted: boolean; providerMetadata?: ProviderMetadata }
+    {
+      readonly assistantMessageID: EventV2.ID
+      readonly name: string
+      inputEnded: boolean
+      called: boolean
+      settled: boolean
+      providerExecuted: boolean
+      providerMetadata?: ProviderMetadata
+    }
   >()
   const timestamp = DateTime.now
   let assistantMessageID: EventV2.ID | undefined
@@ -60,14 +75,19 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
-    assistantMessageID = (yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp })).id
+    assistantMessageID = (yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp }))
+      .id
     return assistantMessageID
   })
-  const currentAssistantMessageID = () => assistantMessageID === undefined
-    ? Effect.die("Tool event before assistant step start")
-    : Effect.succeed(assistantMessageID)
+  const currentAssistantMessageID = () =>
+    assistantMessageID === undefined
+      ? Effect.die("Tool event before assistant step start")
+      : Effect.succeed(assistantMessageID)
 
-  const fragments = (name: string, ended: (id: string, value: string, providerMetadata?: ProviderMetadata) => Effect.Effect<void>) => {
+  const fragments = (
+    name: string,
+    ended: (id: string, value: string, providerMetadata?: ProviderMetadata) => Effect.Effect<void>,
+  ) => {
     const chunks = new Map<string, string[]>()
     const start = (id: string) =>
       Effect.suspend(() => {
@@ -139,7 +159,14 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     if (tools.has(event.id)) return yield* Effect.die(`Duplicate tool input start: ${event.id}`)
     const assistantMessageID = yield* currentAssistantMessageID()
-    tools.set(event.id, { assistantMessageID, name: event.name, inputEnded: false, called: false, settled: false, providerExecuted: false })
+    tools.set(event.id, {
+      assistantMessageID,
+      name: event.name,
+      inputEnded: false,
+      called: false,
+      settled: false,
+      providerExecuted: false,
+    })
     yield* toolInput.start(event.id)
     yield* events.publish(SessionEvent.Tool.Input.Started, {
       sessionID: input.sessionID,
@@ -153,7 +180,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const endToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     const tool = tools.get(event.id)
     if (!tool) return yield* Effect.die(`Tool input end before start: ${event.id}`)
-    if (tool.name !== event.name) return yield* Effect.die(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`)
+    if (tool.name !== event.name)
+      return yield* Effect.die(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`)
     if (tool.inputEnded) return yield* Effect.die(`Duplicate tool input end: ${event.id}`)
     yield* toolInput.end(event.id)
   })
@@ -190,7 +218,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "text-start":
         yield* text.start(event.id)
-        yield* events.publish(SessionEvent.Text.Started, { sessionID: input.sessionID, timestamp: yield* timestamp, textID: event.id })
+        yield* events.publish(SessionEvent.Text.Started, {
+          sessionID: input.sessionID,
+          timestamp: yield* timestamp,
+          textID: event.id,
+        })
         return
       case "text-delta":
         yield* text.append(event.id, event.text)
@@ -231,7 +263,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "tool-input-delta": {
         const tool = tools.get(event.id)
         if (!tool) return yield* Effect.die(`Tool input delta before start: ${event.id}`)
-        if (tool.name !== event.name) return yield* Effect.die(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`)
+        if (tool.name !== event.name)
+          return yield* Effect.die(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.inputEnded) return yield* Effect.die(`Tool input delta after end: ${event.id}`)
         yield* toolInput.append(event.id, event.text)
         yield* events.publish(SessionEvent.Tool.Input.Delta, {
@@ -250,7 +283,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         if (!tools.has(event.id)) yield* startToolInput(event)
         const tool = tools.get(event.id)!
         if (!tool.inputEnded) yield* endToolInput(event)
-        if (tool.name !== event.name) return yield* Effect.die(`Tool call name changed for ${event.id}: ${tool.name} -> ${event.name}`)
+        if (tool.name !== event.name)
+          return yield* Effect.die(`Tool call name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.called) return yield* Effect.die(`Duplicate tool call: ${event.id}`)
         tool.called = true
         tool.providerExecuted = event.providerExecuted === true
@@ -272,7 +306,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "tool-result": {
         const tool = tools.get(event.id)
         if (!tool?.called) return yield* Effect.die(`Tool result before call: ${event.id}`)
-        if (tool.name !== event.name) return yield* Effect.die(`Tool result name changed for ${event.id}: ${tool.name} -> ${event.name}`)
+        if (tool.name !== event.name)
+          return yield* Effect.die(`Tool result name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.settled) {
           if (event.result.type === "error") return
           return yield* Effect.die(`Duplicate tool result: ${event.id}`)
@@ -309,7 +344,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "tool-error": {
         const tool = tools.get(event.id)
         if (!tool?.called) return yield* Effect.die(`Tool error before call: ${event.id}`)
-        if (tool.name !== event.name) return yield* Effect.die(`Tool error name changed for ${event.id}: ${tool.name} -> ${event.name}`)
+        if (tool.name !== event.name)
+          return yield* Effect.die(`Tool error name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.settled) return yield* Effect.die(`Duplicate tool error: ${event.id}`)
         tool.settled = true
         yield* events.publish(SessionEvent.Tool.Failed, {

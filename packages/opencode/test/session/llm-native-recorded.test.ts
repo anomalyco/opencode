@@ -280,20 +280,18 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
   )
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
   const recordedHttp = HttpRecorder.cassetteLayer(scenario.cassette, {
-        directory: FIXTURES_DIR,
-        mode: shouldRecord ? "record" : "replay",
-        metadata: {
-          provider: scenario.providerID,
-          protocol: scenario.protocol,
-          route: scenario.protocol,
-          tags: scenario.tags,
-        },
-        redactor: recordingRedactor,
-      })
+    directory: FIXTURES_DIR,
+    mode: shouldRecord ? "record" : "replay",
+    metadata: {
+      provider: scenario.providerID,
+      protocol: scenario.protocol,
+      route: scenario.protocol,
+      tags: scenario.tags,
+    },
+    redactor: recordingRedactor,
+  })
   const recordedClient = LLMClient.layer.pipe(
-    Layer.provide(
-      Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(recordedHttp)), WebSocketExecutor.layer),
-    ),
+    Layer.provide(Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(recordedHttp)), WebSocketExecutor.layer)),
   )
 
   return Layer.mergeAll(

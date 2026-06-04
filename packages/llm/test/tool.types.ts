@@ -27,7 +27,9 @@ Tool.make({
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.NumberFromString }),
   execute: () => Effect.succeed({ forecast: 1 }),
-  toModelOutput: ({ callID, parameters, output }) => [{ type: "text", text: `${callID}:${parameters.city}:${output.forecast}` }],
+  toModelOutput: ({ callID, parameters, output }) => [
+    { type: "text", text: `${callID}:${parameters.city}:${output.forecast}` },
+  ],
 })
 
 LLM.stream(request)

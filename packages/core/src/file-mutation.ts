@@ -52,17 +52,23 @@ export interface RemoveResult {
 
 export interface Interface {
   /** Create only while the planned target remains absent. */
-  readonly create: (input: WriteInput) => Effect.Effect<WriteResult, TargetExistsError | LocationMutation.RevalidationError | FSUtil.Error>
+  readonly create: (
+    input: WriteInput,
+  ) => Effect.Effect<WriteResult, TargetExistsError | LocationMutation.RevalidationError | FSUtil.Error>
   /** Write after immediately revalidating the planned target. */
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, LocationMutation.RevalidationError | FSUtil.Error>
   /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
-  readonly writeTextPreservingBom: (input: TextWriteInput) => Effect.Effect<WriteResult, LocationMutation.RevalidationError | FSUtil.Error>
+  readonly writeTextPreservingBom: (
+    input: TextWriteInput,
+  ) => Effect.Effect<WriteResult, LocationMutation.RevalidationError | FSUtil.Error>
   /** Commit only if an existing target still has the expected bytes. */
   readonly writeIfUnchanged: (
     input: ConditionalWriteInput,
   ) => Effect.Effect<WriteResult, StaleContentError | LocationMutation.RevalidationError | FSUtil.Error>
   /** Remove after immediately revalidating the planned target. */
-  readonly remove: (input: RemoveInput) => Effect.Effect<RemoveResult, LocationMutation.RevalidationError | FSUtil.Error>
+  readonly remove: (
+    input: RemoveInput,
+  ) => Effect.Effect<RemoveResult, LocationMutation.RevalidationError | FSUtil.Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileMutation") {}
@@ -92,12 +98,15 @@ export const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const mutation = yield* LocationMutation.Service
     const locks = KeyedMutex.makeUnsafe<string>()
-    const withTargetLock = (target: string) => <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      locks.withLock(target)(Effect.uninterruptible(effect))
+    const withTargetLock =
+      (target: string) =>
+      <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        locks.withLock(target)(Effect.uninterruptible(effect))
 
-    const withValidatedTarget = (plan: LocationMutation.Plan) => <A, E, R>(
-      commit: (target: LocationMutation.Target) => Effect.Effect<A, E, R>,
-    ) => withTargetLock(plan.target.canonical)(mutation.revalidate(plan).pipe(Effect.flatMap(commit)))
+    const withValidatedTarget =
+      (plan: LocationMutation.Plan) =>
+      <A, E, R>(commit: (target: LocationMutation.Target) => Effect.Effect<A, E, R>) =>
+        withTargetLock(plan.target.canonical)(mutation.revalidate(plan).pipe(Effect.flatMap(commit)))
 
     const writeResult = (target: LocationMutation.Target, existed = target.exists): WriteResult => ({
       operation: "write",
@@ -138,7 +147,8 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           if (target.exists) return yield* new TargetExistsError({ path: target.canonical })
           yield* fs.ensureDir(dirname(target.canonical))
-          if (typeof input.content === "string") yield* fs.writeFileString(target.canonical, input.content, { flag: "wx" })
+          if (typeof input.content === "string")
+            yield* fs.writeFileString(target.canonical, input.content, { flag: "wx" })
           else yield* fs.writeFile(target.canonical, input.content, { flag: "wx" })
           return writeResult(target, false)
         }),

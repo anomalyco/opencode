@@ -105,7 +105,8 @@ export const parseJson = (route: string, input: string, message: string) =>
  */
 export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) => parts.map((part) => part.text).join("\n")
 
-const escapeSystemUpdateText = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+const escapeSystemUpdateText = (text: string) =>
+  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
 
 /**
  * Stable fallback representation for chronological `Message.system(...)`

@@ -136,7 +136,9 @@ describe("llm constructors", () => {
   })
 
   test("builds chronological text-only system updates separately from the initial system prompt", () => {
-    const update = Message.system([{ type: "text", text: "Use parameterized SQL.", cache: new CacheHint({ type: "ephemeral" }) }])
+    const update = Message.system([
+      { type: "text", text: "Use parameterized SQL.", cache: new CacheHint({ type: "ephemeral" }) },
+    ])
     const request = LLM.request({
       model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       system: "Initial operator prompt.",

@@ -59,11 +59,13 @@ const filesystem = Layer.effect(
     return FSUtil.Service.of({
       ...fs,
       readFile: (target) =>
-        fs.readFile(target).pipe(
-          Effect.tap((content) =>
-            Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, content)))),
+        fs
+          .readFile(target)
+          .pipe(
+            Effect.tap((content) =>
+              Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, content)))),
+            ),
           ),
-        ),
       writeWithDirs: (target, content, mode) =>
         Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
     })
@@ -369,7 +371,10 @@ describe("EditTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.gen(function* () {
-              expect(result).toEqual({ type: "error", value: "File changed after permission approval. Read it again before editing." })
+              expect(result).toEqual({
+                type: "error",
+                value: "File changed after permission approval. Read it again before editing.",
+              })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("newer\n")
               expect(writes).toEqual([])
             }),

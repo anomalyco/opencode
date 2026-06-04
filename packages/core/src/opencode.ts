@@ -30,10 +30,10 @@ const DefaultSessions = SessionV2.layer.pipe(
 
 // TODO: Accept explicit storage so tests and embeddings can select disposable or application-owned persistence.
 export const layer = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      return Service.of({ sessions: yield* SessionV2.Service })
-    }),
-  ).pipe(Layer.provide(DefaultSessions))
+  Service,
+  Effect.gen(function* () {
+    return Service.of({ sessions: yield* SessionV2.Service })
+  }),
+).pipe(Layer.provide(DefaultSessions))
 
 // TODO: Add OpenCode.create(...) as the Promise facade over the same embedded API semantics.

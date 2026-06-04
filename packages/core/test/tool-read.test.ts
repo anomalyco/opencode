@@ -362,7 +362,12 @@ describe("ReadTool", () => {
       expect(
         yield* registry.execute({
           sessionID,
-          call: { type: "tool-call", id: "call-large", name: "read", input: { path: "large.txt", offset: 2, limit: 1 } },
+          call: {
+            type: "tool-call",
+            id: "call-large",
+            name: "read",
+            input: { path: "large.txt", offset: 2, limit: 1 },
+          },
         }),
       ).toEqual({
         type: "json",

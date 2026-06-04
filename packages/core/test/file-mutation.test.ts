@@ -89,7 +89,9 @@ describe("FileMutation", () => {
         const plan = yield* (yield* LocationMutation.Service).resolve({ path: "appeared.txt" })
         yield* Effect.promise(() => fs.writeFile(targetPath, "winner"))
 
-        expect(yield* (yield* FileMutation.Service).create({ plan, content: "replacement" }).pipe(Effect.flip)).toMatchObject({
+        expect(
+          yield* (yield* FileMutation.Service).create({ plan, content: "replacement" }).pipe(Effect.flip),
+        ).toMatchObject({
           _tag: "LocationMutation.RevalidationError",
         })
         expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("winner")
@@ -105,8 +107,20 @@ describe("FileMutation", () => {
         const plan = yield* (yield* LocationMutation.Service).resolve({ path: "remove.txt" })
         const result = yield* (yield* FileMutation.Service).remove({ plan })
 
-        expect(result).toEqual({ operation: "remove", target: plan.target.canonical, resource: "remove.txt", existed: true })
-        expect(yield* Effect.promise(() => fs.stat(targetPath).then(() => true, () => false))).toBe(false)
+        expect(result).toEqual({
+          operation: "remove",
+          target: plan.target.canonical,
+          resource: "remove.txt",
+          existed: true,
+        })
+        expect(
+          yield* Effect.promise(() =>
+            fs.stat(targetPath).then(
+              () => true,
+              () => false,
+            ),
+          ),
+        ).toBe(false)
       }).pipe(provide(directory)),
     ),
   )
@@ -119,7 +133,12 @@ describe("FileMutation", () => {
           const plan = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
           const result = yield* (yield* FileMutation.Service).write({ plan, content: "external" })
 
-          expect(result).toEqual({ operation: "write", target: plan.target.canonical, resource: plan.target.resource, existed: false })
+          expect(result).toEqual({
+            operation: "write",
+            target: plan.target.canonical,
+            resource: plan.target.resource,
+            existed: false,
+          })
           expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("external")
         }).pipe(provide(directory)),
       ),
@@ -135,8 +154,20 @@ describe("FileMutation", () => {
           const plan = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
           const result = yield* (yield* FileMutation.Service).remove({ plan })
 
-          expect(result).toEqual({ operation: "remove", target: plan.target.canonical, resource: plan.target.resource, existed: true })
-          expect(yield* Effect.promise(() => fs.stat(targetPath).then(() => true, () => false))).toBe(false)
+          expect(result).toEqual({
+            operation: "remove",
+            target: plan.target.canonical,
+            resource: plan.target.resource,
+            existed: true,
+          })
+          expect(
+            yield* Effect.promise(() =>
+              fs.stat(targetPath).then(
+                () => true,
+                () => false,
+              ),
+            ),
+          ).toBe(false)
         }).pipe(provide(directory)),
       ),
     ),
@@ -155,10 +186,19 @@ describe("FileMutation", () => {
             await fs.symlink(outside, parent)
           })
 
-          expect(yield* (yield* FileMutation.Service).write({ plan, content: "escape" }).pipe(Effect.flip)).toMatchObject({
+          expect(
+            yield* (yield* FileMutation.Service).write({ plan, content: "escape" }).pipe(Effect.flip),
+          ).toMatchObject({
             _tag: "LocationMutation.RevalidationError",
           })
-          expect(yield* Effect.promise(() => fs.stat(path.join(outside, "new.txt")).then(() => true, () => false))).toBe(false)
+          expect(
+            yield* Effect.promise(() =>
+              fs.stat(path.join(outside, "new.txt")).then(
+                () => true,
+                () => false,
+              ),
+            ),
+          ).toBe(false)
         }).pipe(provide(directory)),
       ),
     ),
@@ -233,7 +273,9 @@ describe("FileMutation", () => {
           const expected = new TextEncoder().encode("initial")
           const first = yield* files.writeIfUnchanged({ plan, expected, content: "first" }).pipe(Effect.forkChild)
           yield* Deferred.await(firstStarted)
-          const second = yield* files.writeIfUnchanged({ plan, expected, content: "second" }).pipe(Effect.flip, Effect.forkChild)
+          const second = yield* files
+            .writeIfUnchanged({ plan, expected, content: "second" })
+            .pipe(Effect.flip, Effect.forkChild)
 
           yield* Deferred.succeed(releaseFirst, undefined)
           yield* Fiber.join(first)

@@ -327,7 +327,10 @@ describe("Bedrock Converse route", () => {
         }),
       )
       expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: [{ reasoningContent: { reasoningText: { text: "Let me think.", signature: "sig_1" } } }] },
+        {
+          role: "assistant",
+          content: [{ reasoningContent: { reasoningText: { text: "Let me think.", signature: "sig_1" } } }],
+        },
       ])
     }),
   )

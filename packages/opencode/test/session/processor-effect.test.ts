@@ -1004,7 +1004,8 @@ itProviderError.live("session.processor effect tests fail provider-executed erro
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
         const settlements: Array<typeof SessionEvent.Tool.Failed.Type> = []
         const off = yield* events.listen((event) => {
-          if (event.type === SessionEvent.Tool.Failed.type) settlements.push(event as typeof SessionEvent.Tool.Failed.Type)
+          if (event.type === SessionEvent.Tool.Failed.type)
+            settlements.push(event as typeof SessionEvent.Tool.Failed.Type)
           return Effect.void
         })
         const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
@@ -1059,7 +1060,8 @@ itFragmentFailure.live("session.processor effect tests flush partial v2 fragment
         let reasoning: string | undefined
         const off = yield* events.listen((event) => {
           seen.push(event.type)
-          if (event.type === SessionEvent.Text.Ended.type) text = (event.data as typeof SessionEvent.Text.Ended.data.Type).text
+          if (event.type === SessionEvent.Text.Ended.type)
+            text = (event.data as typeof SessionEvent.Text.Ended.data.Type).text
           if (event.type === SessionEvent.Reasoning.Ended.type)
             reasoning = (event.data as typeof SessionEvent.Reasoning.Ended.data.Type).text
           return Effect.void

@@ -243,7 +243,10 @@ const bedrockMetadata = (metadata: Record<string, unknown>): ProviderMetadata =>
 
 const reasoningSignature = (part: ReasoningPart) => {
   const bedrock = part.providerMetadata?.bedrock
-  return part.encrypted ?? (ProviderShared.isRecord(bedrock) && typeof bedrock.signature === "string" ? bedrock.signature : undefined)
+  return (
+    part.encrypted ??
+    (ProviderShared.isRecord(bedrock) && typeof bedrock.signature === "string" ? bedrock.signature : undefined)
+  )
 }
 
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
@@ -294,7 +297,8 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
       const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)
       const content = textWithCache(breakpoints, part.text, part.cache)
       const previous = messages.at(-1)
-      if (previous?.role === "user") messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
       else messages.push({ role: "user", content })
       continue
     }
@@ -532,7 +536,9 @@ const step = (state: ParserState, event: BedrockEvent) =>
             Lifecycle.textEnd(state.lifecycle, events, `text-${index}`),
             events,
             `reasoning-${index}`,
-            state.reasoningSignatures[index] ? bedrockMetadata({ signature: state.reasoningSignatures[index] }) : undefined,
+            state.reasoningSignatures[index]
+              ? bedrockMetadata({ signature: state.reasoningSignatures[index] })
+              : undefined,
           )
       events.push(...resultEvents)
       return [

@@ -55,12 +55,19 @@ describe("OpenAI Chat route", () => {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({
           model,
-          messages: [Message.user("Before."), Message.system("Treat <admin> & data literally."), Message.assistant("After.")],
+          messages: [
+            Message.user("Before."),
+            Message.system("Treat <admin> & data literally."),
+            Message.assistant("After."),
+          ],
         }),
       )
 
       expect(prepared.body.messages).toEqual([
-        { role: "user", content: "Before.\n<system-update>\nTreat &lt;admin&gt; &amp; data literally.\n</system-update>" },
+        {
+          role: "user",
+          content: "Before.\n<system-update>\nTreat &lt;admin&gt; &amp; data literally.\n</system-update>",
+        },
         { role: "assistant", content: "After." },
       ])
     }),
@@ -71,7 +78,12 @@ describe("OpenAI Chat route", () => {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({
           model,
-          messages: [Message.assistant([{ type: "reasoning", text: "thinking" }, { type: "text", text: "Hello" }])],
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "thinking" },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
         }),
       )
 

@@ -6,7 +6,8 @@ export type ExternalID = {
   readonly key: string
 }
 
-export const externalID = (prefix: string, input: ExternalID) => `${prefix}_${Hash.sha256(JSON.stringify([input.namespace, input.key]))}`
+export const externalID = (prefix: string, input: ExternalID) =>
+  `${prefix}_${Hash.sha256(JSON.stringify([input.namespace, input.key]))}`
 
 /**
  * Integer greater than zero.

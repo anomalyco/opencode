@@ -343,7 +343,10 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Responses", message)
       const previous = input.at(-1)
       if (previous && "role" in previous && previous.role === "user")
-        input[input.length - 1] = { role: "user", content: [...previous.content, { type: "input_text", text: part.text }] }
+        input[input.length - 1] = {
+          role: "user",
+          content: [...previous.content, { type: "input_text", text: part.text }],
+        }
       else input.push({ role: "user", content: [{ type: "input_text", text: part.text }] })
       continue
     }
@@ -397,7 +400,8 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
           const itemID = hostedToolItemID(part)
-          if (store !== false && itemID && !hostedToolReferences.has(itemID)) input.push({ type: "item_reference", id: itemID })
+          if (store !== false && itemID && !hostedToolReferences.has(itemID))
+            input.push({ type: "item_reference", id: itemID })
           if (itemID) hostedToolReferences.add(itemID)
           continue
         }

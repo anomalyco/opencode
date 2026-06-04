@@ -10,9 +10,15 @@ export const name = "glob"
 
 export const Parameters = Schema.Struct({
   pattern: LocationSearch.FilesInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
-  path: LocationSearch.FilesInput.fields.path.annotate({ description: "Relative directory to search. Defaults to the active Location." }),
-  reference: LocationSearch.FilesInput.fields.reference.annotate({ description: "Named project reference to search instead of the active Location" }),
-  limit: LocationSearch.FilesInput.fields.limit.annotate({ description: `Maximum results to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})` }),
+  path: LocationSearch.FilesInput.fields.path.annotate({
+    description: "Relative directory to search. Defaults to the active Location.",
+  }),
+  reference: LocationSearch.FilesInput.fields.reference.annotate({
+    description: "Named project reference to search instead of the active Location",
+  }),
+  limit: LocationSearch.FilesInput.fields.limit.annotate({
+    description: `Maximum results to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})`,
+  }),
 })
 
 type ModelOutput = typeof LocationSearch.FilesResult.Encoded
@@ -21,14 +27,18 @@ type ModelOutput = typeof LocationSearch.FilesResult.Encoded
 export const toModelOutput = (output: ModelOutput) => {
   const lines = output.items.length === 0 ? ["No files found"] : output.items.map((item) => item.resource)
   if (output.truncated) {
-    lines.push("", `(Results are truncated: showing first ${output.items.length} results. Consider using a more specific path or pattern.)`)
+    lines.push(
+      "",
+      `(Results are truncated: showing first ${output.items.length} results. Consider using a more specific path or pattern.)`,
+    )
   }
   if (output.partial) lines.push("", "(Results may be incomplete because some discovered files could not be read.)")
   return lines.join("\n")
 }
 
 const definition = Tool.make({
-  description: "Find files by glob pattern within the active Location or a named project reference. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
+  description:
+    "Find files by glob pattern within the active Location or a named project reference. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
   parameters: Parameters,
   success: LocationSearch.FilesResult,
   toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
@@ -66,7 +76,12 @@ export const layer = Layer.effectDiscard(
             return yield* search.files(parameters, root)
           }).pipe(
             Effect.catchCause((cause) =>
-              Effect.fail(new ToolFailure({ message: `Unable to find files matching ${parameters.pattern}`, error: Cause.squash(cause) })),
+              Effect.fail(
+                new ToolFailure({
+                  message: `Unable to find files matching ${parameters.pattern}`,
+                  error: Cause.squash(cause),
+                }),
+              ),
             ),
           ),
       }),

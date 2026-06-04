@@ -150,7 +150,9 @@ export const layer = Layer.effectDiscard(
 
             const { body, contentType } = yield* Effect.gen(function* () {
               const response = yield* execute(http, parameters.url, parameters.format).pipe(
-                Effect.catchIf(isCloudflareChallenge, () => execute(http, parameters.url, parameters.format, "opencode")),
+                Effect.catchIf(isCloudflareChallenge, () =>
+                  execute(http, parameters.url, parameters.format, "opencode"),
+                ),
               )
               const contentType = response.headers["content-type"] || ""
               const mime = mimeFrom(contentType)

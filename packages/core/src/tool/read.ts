@@ -70,7 +70,11 @@ export const layer = Layer.effectDiscard(
             const final = yield* filesystem.resolveReadPath(input)
             if (final.type !== "file" || final.target.resource !== target.resource || final.target.real !== target.real)
               return yield* Effect.die(new Error("File changed after permission approval"))
-            if (final.target.size > FileSystem.MAX_READ_BYTES || input.offset !== undefined || input.limit !== undefined)
+            if (
+              final.target.size > FileSystem.MAX_READ_BYTES ||
+              input.offset !== undefined ||
+              input.limit !== undefined
+            )
               return yield* filesystem.readTextPageResolved(final.target, { offset: input.offset, limit: input.limit })
             return yield* filesystem.readResolved(final.target, FileSystem.MAX_READ_BYTES)
           }).pipe(

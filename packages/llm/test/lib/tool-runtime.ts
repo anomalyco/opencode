@@ -117,7 +117,11 @@ const appendText = (
 ) => {
   const last = content.at(-1)
   if (last?.type === type) {
-    content[content.length - 1] = { ...last, text: `${last.text}${text}`, providerMetadata: providerMetadata ?? last.providerMetadata }
+    content[content.length - 1] = {
+      ...last,
+      text: `${last.text}${text}`,
+      providerMetadata: providerMetadata ?? last.providerMetadata,
+    }
     return
   }
   content.push({ type, text, providerMetadata })

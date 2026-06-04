@@ -10,11 +10,21 @@ import { ToolRegistry } from "../tool-registry"
 export const name = "grep"
 
 export const Parameters = Schema.Struct({
-  pattern: LocationSearch.GrepInput.fields.pattern.annotate({ description: "Regex pattern to search for in file contents" }),
-  path: LocationSearch.GrepInput.fields.path.annotate({ description: "Relative file or directory to search. Defaults to the active Location." }),
-  reference: LocationSearch.GrepInput.fields.reference.annotate({ description: "Named project reference to search instead of the active Location" }),
-  include: LocationSearch.GrepInput.fields.include.annotate({ description: 'File glob to include in the search (for example, "*.js" or "*.{ts,tsx}")' }),
-  limit: LocationSearch.GrepInput.fields.limit.annotate({ description: `Maximum matches to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})` }),
+  pattern: LocationSearch.GrepInput.fields.pattern.annotate({
+    description: "Regex pattern to search for in file contents",
+  }),
+  path: LocationSearch.GrepInput.fields.path.annotate({
+    description: "Relative file or directory to search. Defaults to the active Location.",
+  }),
+  reference: LocationSearch.GrepInput.fields.reference.annotate({
+    description: "Named project reference to search instead of the active Location",
+  }),
+  include: LocationSearch.GrepInput.fields.include.annotate({
+    description: 'File glob to include in the search (for example, "*.js" or "*.{ts,tsx}")',
+  }),
+  limit: LocationSearch.GrepInput.fields.limit.annotate({
+    description: `Maximum matches to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})`,
+  }),
 })
 
 type Success = typeof LocationSearch.GrepResult.Encoded
@@ -32,14 +42,18 @@ export const toModelOutput = (output: Success) => {
     lines.push(`  Line ${match.line}: ${match.lines}${match.linePreviewTruncated ? "..." : ""}`)
   }
   if (output.truncated) {
-    lines.push("", `(Results are truncated: showing first ${output.items.length} matches. Consider using a more specific path or pattern.)`)
+    lines.push(
+      "",
+      `(Results are truncated: showing first ${output.items.length} matches. Consider using a more specific path or pattern.)`,
+    )
   }
   if (output.partial) lines.push("", "(Some paths were inaccessible and skipped)")
   return lines.join("\n")
 }
 
 const definition = Tool.make({
-  description: "Search file contents by regular expression within the active Location or a named project reference. Use a relative path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise relative file resources, line numbers, and bounded line previews.",
+  description:
+    "Search file contents by regular expression within the active Location or a named project reference. Use a relative path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise relative file resources, line numbers, and bounded line previews.",
   parameters: Parameters,
   success: LocationSearch.GrepResult,
   toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
@@ -79,9 +93,10 @@ export const layer = Layer.effectDiscard(
           }).pipe(
             Effect.catchCause((cause) => {
               const error = Cause.squash(cause)
-              const message = error instanceof Ripgrep.InvalidPatternError
-                ? `Invalid grep pattern ${JSON.stringify(parameters.pattern)}: ${error.message}`
-                : `Unable to grep for ${parameters.pattern}`
+              const message =
+                error instanceof Ripgrep.InvalidPatternError
+                  ? `Invalid grep pattern ${JSON.stringify(parameters.pattern)}: ${error.message}`
+                  : `Unable to grep for ${parameters.pattern}`
               return Effect.fail(new ToolFailure({ message, error }))
             }),
           ),

@@ -193,7 +193,8 @@ export const ToolOutput = Object.assign(
         type: "content",
         value: output.content.map((item) => {
           if (item.type === "text") return { type: "text", text: item.text }
-          if (item.source.type !== "data") throw new Error("Unmaterialized tool file source reached provider conversion")
+          if (item.source.type !== "data")
+            throw new Error("Unmaterialized tool file source reached provider conversion")
           return { type: "media", mediaType: item.mime, data: item.source.data, filename: item.name }
         }),
       }

@@ -46,12 +46,12 @@ export type Event =
   | EventSessionError
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
-  | EventPermissionV2Asked
-  | EventPermissionV2Replied
   | EventFileEdited
   | EventAccountAdded
   | EventAccountRemoved
   | EventAccountSwitched
+  | EventPermissionV2Asked
+  | EventPermissionV2Replied
   | EventFileWatcherUpdated
   | EventPtyCreated
   | EventPtyUpdated
@@ -1165,30 +1165,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "permission.v2.asked"
-        properties: {
-          id: string
-          sessionID: string
-          action: string
-          resources: Array<string>
-          save?: Array<string>
-          metadata?: {
-            [key: string]: unknown
-          }
-          source?: PermissionV2Source
-        }
-      }
-    | {
-        id: string
-        type: "permission.v2.replied"
-        properties: {
-          sessionID: string
-          requestID: string
-          reply: PermissionV2Reply
-        }
-      }
-    | {
-        id: string
         type: "file.edited"
         properties: {
           file: string
@@ -1215,6 +1191,30 @@ export type GlobalEvent = {
           serviceID: string
           from?: string
           to?: string
+        }
+      }
+    | {
+        id: string
+        type: "permission.v2.asked"
+        properties: {
+          id: string
+          sessionID: string
+          action: string
+          resources: Array<string>
+          save?: Array<string>
+          metadata?: {
+            [key: string]: unknown
+          }
+          source?: PermissionV2Source
+        }
+      }
+    | {
+        id: string
+        type: "permission.v2.replied"
+        properties: {
+          sessionID: string
+          requestID: string
+          reply: PermissionV2Reply
         }
       }
     | {
@@ -2893,14 +2893,6 @@ export type SessionNextRetryError = {
   }
 }
 
-export type PermissionV2Source = {
-  type: "tool"
-  messageID: string
-  callID: string
-}
-
-export type PermissionV2Reply = "once" | "always" | "reject"
-
 export type AuthOAuthCredential = {
   type: "oauth"
   refresh: string
@@ -2924,6 +2916,14 @@ export type AuthInfo = {
   description: string
   credential: AuthCredential
 }
+
+export type PermissionV2Source = {
+  type: "tool"
+  messageID: string
+  callID: string
+}
+
+export type PermissionV2Reply = "once" | "always" | "reject"
 
 export type QuestionV2Option = {
   /**
@@ -4404,32 +4404,6 @@ export type EventInstallationUpdateAvailable = {
   }
 }
 
-export type EventPermissionV2Asked = {
-  id: string
-  type: "permission.v2.asked"
-  properties: {
-    id: string
-    sessionID: string
-    action: string
-    resources: Array<string>
-    save?: Array<string>
-    metadata?: {
-      [key: string]: unknown
-    }
-    source?: PermissionV2Source
-  }
-}
-
-export type EventPermissionV2Replied = {
-  id: string
-  type: "permission.v2.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    reply: PermissionV2Reply
-  }
-}
-
 export type EventFileEdited = {
   id: string
   type: "file.edited"
@@ -4461,6 +4435,32 @@ export type EventAccountSwitched = {
     serviceID: string
     from?: string
     to?: string
+  }
+}
+
+export type EventPermissionV2Asked = {
+  id: string
+  type: "permission.v2.asked"
+  properties: {
+    id: string
+    sessionID: string
+    action: string
+    resources: Array<string>
+    save?: Array<string>
+    metadata?: {
+      [key: string]: unknown
+    }
+    source?: PermissionV2Source
+  }
+}
+
+export type EventPermissionV2Replied = {
+  id: string
+  type: "permission.v2.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    reply: PermissionV2Reply
   }
 }
 

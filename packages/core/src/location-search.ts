@@ -83,7 +83,10 @@ export class GrepResult extends Schema.Class<GrepResult>("LocationSearch.GrepRes
 
 export interface Interface {
   readonly files: (input: FilesInput, root?: FileSystem.RootTarget) => Effect.Effect<FilesResult, Ripgrep.Error>
-  readonly grep: (input: GrepInput, root?: FileSystem.RootTarget) => Effect.Effect<GrepResult, Ripgrep.Error | Ripgrep.InvalidPatternError>
+  readonly grep: (
+    input: GrepInput,
+    root?: FileSystem.RootTarget,
+  ) => Effect.Effect<GrepResult, Ripgrep.Error | Ripgrep.InvalidPatternError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/LocationSearch") {}

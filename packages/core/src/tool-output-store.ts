@@ -33,14 +33,20 @@ export class Page extends Schema.Class<Page>("ToolOutputStore.Page")({
   next: NonNegativeInt.pipe(Schema.optional),
 }) {}
 
-export class AccessDeniedError extends Schema.TaggedErrorClass<AccessDeniedError>()("ToolOutputStore.AccessDeniedError", {
-  uri: Schema.String,
-  sessionID: SessionSchema.ID,
-}) {}
+export class AccessDeniedError extends Schema.TaggedErrorClass<AccessDeniedError>()(
+  "ToolOutputStore.AccessDeniedError",
+  {
+    uri: Schema.String,
+    sessionID: SessionSchema.ID,
+  },
+) {}
 
-export class InvalidResourceError extends Schema.TaggedErrorClass<InvalidResourceError>()("ToolOutputStore.InvalidResourceError", {
-  uri: Schema.String,
-}) {}
+export class InvalidResourceError extends Schema.TaggedErrorClass<InvalidResourceError>()(
+  "ToolOutputStore.InvalidResourceError",
+  {
+    uri: Schema.String,
+  },
+) {}
 
 export class ResourceNotFoundError extends Schema.TaggedErrorClass<ResourceNotFoundError>()(
   "ToolOutputStore.ResourceNotFoundError",
@@ -88,7 +94,9 @@ export interface Interface {
   readonly limits: () => Effect.Effect<{ readonly maxLines: number; readonly maxBytes: number }>
   readonly write: (input: WriteInput) => Effect.Effect<Resource>
   readonly truncate: (input: TruncateInput) => Effect.Effect<TruncateResult>
-  readonly read: (input: ReadInput) => Effect.Effect<Page, AccessDeniedError | InvalidResourceError | ResourceNotFoundError>
+  readonly read: (
+    input: ReadInput,
+  ) => Effect.Effect<Page, AccessDeniedError | InvalidResourceError | ResourceNotFoundError>
   readonly cleanup: () => Effect.Effect<void>
 }
 
@@ -153,11 +161,17 @@ const preview = (text: string, maxLines: number, maxBytes: number) => {
   const sampled =
     lines.length <= maxLines
       ? text
-      : [lines.slice(0, headLines).join("\n"), ...(tailLines > 0 ? [lines.slice(lines.length - tailLines).join("\n")] : [])].join("\n")
+      : [
+          lines.slice(0, headLines).join("\n"),
+          ...(tailLines > 0 ? [lines.slice(lines.length - tailLines).join("\n")] : []),
+        ].join("\n")
   if (Buffer.byteLength(sampled, "utf-8") <= maxBytes) {
     return lines.length <= maxLines
       ? { head: sampled, tail: "" }
-      : { head: lines.slice(0, headLines).join("\n"), tail: tailLines > 0 ? lines.slice(lines.length - tailLines).join("\n") : "" }
+      : {
+          head: lines.slice(0, headLines).join("\n"),
+          tail: tailLines > 0 ? lines.slice(lines.length - tailLines).join("\n") : "",
+        }
   }
   const headBytes = Math.ceil(maxBytes / 2)
   const tailBytes = Math.floor(maxBytes / 2)
@@ -192,7 +206,7 @@ export const layer = Layer.effect(
       const entries = yield* config.value.entries().pipe(Effect.catch(() => Effect.succeed([] as Config.Entry[])))
       const configured = Object.assign(
         {},
-        ...entries.flatMap((entry) => entry.type === "document" ? [entry.info.tool_output ?? {}] : []),
+        ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info.tool_output ?? {}] : [])),
       )
       return { maxLines: configured.max_lines ?? MAX_LINES, maxBytes: configured.max_bytes ?? MAX_BYTES }
     })
@@ -218,7 +232,12 @@ export const layer = Layer.effect(
         Effect.onError(() => fs.remove(contentPath(id)).pipe(Effect.catch(() => Effect.void))),
         Effect.orDie,
       )
-      return new Resource({ uri: resourceUri, mime: record.mime, ...(record.name === undefined ? {} : { name: record.name }), size })
+      return new Resource({
+        uri: resourceUri,
+        mime: record.mime,
+        ...(record.name === undefined ? {} : { name: record.name }),
+        size,
+      })
     })
 
     const truncate = Effect.fn("ToolOutputStore.truncate")(function* (input: TruncateInput) {
@@ -281,12 +300,14 @@ export const layer = Layer.effect(
     const cleanup = Effect.fn("ToolOutputStore.cleanup")(function* () {
       const entries = yield* fs.readDirectory(directory).pipe(Effect.catch(() => Effect.succeed([])))
       const cutoff = Date.now() - Duration.toMillis(RETENTION)
-      const ids = new Set(entries.flatMap((entry) => {
-        const match = entry.match(/^([0-9a-f]{12}[0-9A-Za-z]{14})\.(?:json|txt)$/)
-        return match ? [match[1]] : []
-      }))
+      const ids = new Set(
+        entries.flatMap((entry) => {
+          const match = entry.match(/^([0-9a-f]{12}[0-9A-Za-z]{14})\.(?:json|txt)$/)
+          return match ? [match[1]] : []
+        }),
+      )
       const removeIfPresent = (target: string) =>
-        fs.existsSafe(target).pipe(Effect.flatMap((exists) => exists ? fs.remove(target) : Effect.void))
+        fs.existsSafe(target).pipe(Effect.flatMap((exists) => (exists ? fs.remove(target) : Effect.void)))
       const removePair = (id: string) =>
         Effect.gen(function* () {
           yield* removeIfPresent(contentPath(id))
@@ -298,13 +319,19 @@ export const layer = Layer.effect(
         if (!text) {
           if (!contentExists) continue
           const info = yield* fs.stat(contentPath(id)).pipe(Effect.catch(() => Effect.void))
-          const modified = info ? info.mtime.pipe(Option.map((date) => date.getTime()), Option.getOrElse(() => 0)) : 0
+          const modified = info
+            ? info.mtime.pipe(
+                Option.map((date) => date.getTime()),
+                Option.getOrElse(() => 0),
+              )
+            : 0
           if (modified < cutoff) yield* removePair(id)
           continue
         }
-        const record = yield* Effect.try({ try: () => JSON.parse(text), catch: () => new globalThis.Error("Invalid metadata") }).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
-        )
+        const record = yield* Effect.try({
+          try: () => JSON.parse(text),
+          catch: () => new globalThis.Error("Invalid metadata"),
+        }).pipe(Effect.catch(() => Effect.succeed(undefined)))
         const info = contentExists ? yield* fs.stat(contentPath(id)).pipe(Effect.catch(() => Effect.void)) : undefined
         if (
           !contentExists ||

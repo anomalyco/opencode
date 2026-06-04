@@ -383,7 +383,9 @@ describe("SessionV2.prompt", () => {
       yield* SessionInput.promoteSteers(db, events, sessionID)
 
       expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 0 })
-      expect(yield* session.messages({ sessionID })).toMatchObject([{ id: messageID, type: "user", text: "Reserved prompt" }])
+      expect(yield* session.messages({ sessionID })).toMatchObject([
+        { id: messageID, type: "user", text: "Reserved prompt" },
+      ])
     }),
   )
 

@@ -1,5 +1,10 @@
 import { Effect, JsonSchema, Schema } from "effect"
-import type { ToolCallPart, ToolContent, ToolDefinition as ToolDefinitionClass, ToolOutput as ToolOutputType } from "./schema"
+import type {
+  ToolCallPart,
+  ToolContent,
+  ToolDefinition as ToolDefinitionClass,
+  ToolOutput as ToolOutputType,
+} from "./schema"
 import { ToolDefinition, ToolFailure, ToolOutput, toolText } from "./schema"
 
 /**
@@ -51,7 +56,11 @@ export interface Tool<Parameters extends ToolSchema<any>, Success extends ToolSc
   /** @internal */
   readonly _encode: (value: Schema.Schema.Type<Success>) => Effect.Effect<unknown, Schema.SchemaError>
   /** @internal */
-  readonly _project: (parameters: Schema.Schema.Type<Parameters>, callID: ToolCallPart["id"], output: unknown) => ToolOutputType
+  readonly _project: (
+    parameters: Schema.Schema.Type<Parameters>,
+    callID: ToolCallPart["id"],
+    output: unknown,
+  ) => ToolOutputType
   /** @internal */
   readonly _legacyResult: boolean
   /** @internal */

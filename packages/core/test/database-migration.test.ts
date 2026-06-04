@@ -34,7 +34,10 @@ describe("DatabaseMigration", () => {
     const layers = [Database.layerFromPath(filename), Database.layerFromPath(filename)]
 
     await Effect.runPromise(
-      Effect.all(layers.map((layer) => Effect.scoped(Layer.build(layer))), { concurrency: "unbounded" }),
+      Effect.all(
+        layers.map((layer) => Effect.scoped(Layer.build(layer))),
+        { concurrency: "unbounded" },
+      ),
     )
   })
   if (process.platform === "linux") {

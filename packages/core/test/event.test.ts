@@ -13,7 +13,9 @@ import { testEffect } from "./lib/effect"
 
 const locationLayer = Layer.succeed(
   Location.Service,
-  Location.Service.of(location({ directory: AbsolutePath.make("project"), workspaceID: WorkspaceV2.ID.make("wrk_test") })),
+  Location.Service.of(
+    location({ directory: AbsolutePath.make("project"), workspaceID: WorkspaceV2.ID.make("wrk_test") }),
+  ),
 )
 const eventLayer = Layer.mergeAll(EventV2.defaultLayer, Database.defaultLayer)
 const it = testEffect(eventLayer.pipe(Layer.provideMerge(locationLayer)))
@@ -89,7 +91,9 @@ describe("EventV2", () => {
       expect(EventV2.ID.fromExternal(input)).toBe(EventV2.ID.fromExternal(input))
       expect(EventV2.ID.fromExternal(input)).toMatch(/^evt_[a-f0-9]{64}$/)
       expect(EventV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(EventV2.ID.fromExternal(input))
-      expect(EventV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(EventV2.ID.fromExternal({ namespace: "a", key: "b:c" }))
+      expect(EventV2.ID.fromExternal({ namespace: "a:b", key: "c" })).not.toBe(
+        EventV2.ID.fromExternal({ namespace: "a", key: "b:c" }),
+      )
     }),
   )
 
@@ -105,7 +109,10 @@ describe("EventV2", () => {
       expect(event.type).toBe("test.message")
       expect(event).not.toHaveProperty("version")
       expect(event.data).toEqual({ text: "hello" })
-      expect(event.location).toEqual({ directory: AbsolutePath.make("project"), workspaceID: WorkspaceV2.ID.make("wrk_test") })
+      expect(event.location).toEqual({
+        directory: AbsolutePath.make("project"),
+        workspaceID: WorkspaceV2.ID.make("wrk_test"),
+      })
     }),
   )
 
@@ -292,7 +299,9 @@ describe("EventV2", () => {
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
-      const fiber = yield* events.aggregateEvents({ aggregateID, after: EventV2.Cursor.make(0) }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events
+        .aggregateEvents({ aggregateID, after: EventV2.Cursor.make(0) })
+        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "two" })
@@ -309,11 +318,18 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
-      const fiber = yield* events.aggregateEvents({ aggregateID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events
+        .aggregateEvents({ aggregateID })
+        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
 
-      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, (event.event.data as { text: string }).text])).toEqual([
+      expect(
+        Array.from(yield* Fiber.join(fiber)).map((event) => [
+          event.cursor,
+          (event.event.data as { text: string }).text,
+        ]),
+      ).toEqual([
         [EventV2.Cursor.make(0), "zero"],
         [EventV2.Cursor.make(1), "one"],
       ])
@@ -336,7 +352,9 @@ describe("EventV2", () => {
       yield* Effect.gen(function* () {
         const events = yield* EventV2.Service
         const aggregateID = EventV2.ID.create()
-        const fiber = yield* events.aggregateEvents({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        const fiber = yield* events
+          .aggregateEvents({ aggregateID })
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
         yield* Deferred.await(readStarted)
 
         pause = false
@@ -355,7 +373,9 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
       const count = 64
-      const fiber = yield* events.aggregateEvents({ aggregateID }).pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events
+        .aggregateEvents({ aggregateID })
+        .pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       for (let index = 0; index < count; index++) {
@@ -363,7 +383,10 @@ describe("EventV2", () => {
       }
 
       expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual(
-        Array.from({ length: count }, (_, index) => [EventV2.Cursor.make(index), { id: aggregateID, text: String(index) }]),
+        Array.from({ length: count }, (_, index) => [
+          EventV2.Cursor.make(index),
+          { id: aggregateID, text: String(index) },
+        ]),
       )
     }),
   )
@@ -372,7 +395,9 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
-      const fiber = yield* events.aggregateEvents({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events
+        .aggregateEvents({ aggregateID })
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(Message, { text: "live only" })
@@ -450,47 +475,49 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("replay rejects an envelope aggregate that differs from its payload without mutating the payload aggregate", () =>
-    Effect.gen(function* () {
-      const events = yield* EventV2.Service
-      const { db } = yield* Database.Service
-      const envelopeAggregateID = EventV2.ID.create()
-      const payloadAggregateID = EventV2.ID.create()
-      const received = new Array<EventV2.Payload>()
-      yield* events.publish(SyncMessage, { id: payloadAggregateID, text: "seed" })
-      yield* events.project(SyncMessage, (event) =>
-        Effect.sync(() => {
-          received.push(event)
-        }),
-      )
+  it.effect(
+    "replay rejects an envelope aggregate that differs from its payload without mutating the payload aggregate",
+    () =>
+      Effect.gen(function* () {
+        const events = yield* EventV2.Service
+        const { db } = yield* Database.Service
+        const envelopeAggregateID = EventV2.ID.create()
+        const payloadAggregateID = EventV2.ID.create()
+        const received = new Array<EventV2.Payload>()
+        yield* events.publish(SyncMessage, { id: payloadAggregateID, text: "seed" })
+        yield* events.project(SyncMessage, (event) =>
+          Effect.sync(() => {
+            received.push(event)
+          }),
+        )
 
-      const exit = yield* events
-        .replay({
-          id: EventV2.ID.create(),
-          type: EventV2.versionedType(SyncMessage.type, 1),
-          seq: 1,
-          aggregateID: envelopeAggregateID,
-          data: { id: payloadAggregateID, text: "replayed" },
-        })
-        .pipe(Effect.exit)
-      const rows = yield* db
-        .select()
-        .from(EventTable)
-        .where(eq(EventTable.aggregate_id, payloadAggregateID))
-        .all()
-        .pipe(Effect.orDie)
-      const sequence = yield* db
-        .select({ seq: EventSequenceTable.seq })
-        .from(EventSequenceTable)
-        .where(eq(EventSequenceTable.aggregate_id, payloadAggregateID))
-        .get()
-        .pipe(Effect.orDie)
+        const exit = yield* events
+          .replay({
+            id: EventV2.ID.create(),
+            type: EventV2.versionedType(SyncMessage.type, 1),
+            seq: 1,
+            aggregateID: envelopeAggregateID,
+            data: { id: payloadAggregateID, text: "replayed" },
+          })
+          .pipe(Effect.exit)
+        const rows = yield* db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, payloadAggregateID))
+          .all()
+          .pipe(Effect.orDie)
+        const sequence = yield* db
+          .select({ seq: EventSequenceTable.seq })
+          .from(EventSequenceTable)
+          .where(eq(EventSequenceTable.aggregate_id, payloadAggregateID))
+          .get()
+          .pipe(Effect.orDie)
 
-      expect(String(exit)).toContain("Aggregate mismatch")
-      expect(received).toHaveLength(0)
-      expect(rows).toHaveLength(1)
-      expect(sequence).toEqual({ seq: 0 })
-    }),
+        expect(String(exit)).toContain("Aggregate mismatch")
+        expect(received).toHaveLength(0)
+        expect(rows).toHaveLength(1)
+        expect(sequence).toEqual({ seq: 0 })
+      }),
   )
 
   it.effect("replay defects on sequence mismatch", () =>
@@ -750,16 +777,18 @@ describe("EventV2", () => {
         { ownerID: "owner-1" },
       )
 
-      const exit = yield* events.replay(
-        {
-          id: EventV2.ID.create(),
-          type: EventV2.versionedType(SyncMessage.type, 1),
-          seq: 1,
-          aggregateID,
-          data: { id: aggregateID, text: "conflict" },
-        },
-        { ownerID: "owner-2", strictOwner: true },
-      ).pipe(Effect.exit)
+      const exit = yield* events
+        .replay(
+          {
+            id: EventV2.ID.create(),
+            type: EventV2.versionedType(SyncMessage.type, 1),
+            seq: 1,
+            aggregateID,
+            data: { id: aggregateID, text: "conflict" },
+          },
+          { ownerID: "owner-2", strictOwner: true },
+        )
+        .pipe(Effect.exit)
 
       expect(String(exit)).toContain("Replay owner mismatch")
     }),

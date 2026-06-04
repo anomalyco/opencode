@@ -12,7 +12,9 @@ describe("KeyedMutex", () => {
       const secondStarted = yield* Deferred.make<void>()
 
       const first = yield* mutex
-        .withLock("shared")(Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))))
+        .withLock("shared")(
+          Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+        )
         .pipe(Effect.forkChild)
       yield* Deferred.await(firstStarted)
       const second = yield* mutex.withLock("shared")(Deferred.succeed(secondStarted, undefined)).pipe(Effect.forkChild)
@@ -53,7 +55,9 @@ describe("KeyedMutex", () => {
       const releaseFirst = yield* Deferred.make<void>()
 
       const first = yield* mutex
-        .withLock("shared")(Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))))
+        .withLock("shared")(
+          Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+        )
         .pipe(Effect.forkChild)
       yield* Deferred.await(firstStarted)
       const interrupted = yield* mutex.withLock("shared")(Effect.void).pipe(Effect.forkChild)

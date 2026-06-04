@@ -7,7 +7,15 @@ import { asSchema, type ModelMessage, type Tool } from "ai"
 import { Cause, Effect, FiberSet, Queue } from "effect"
 import * as Stream from "effect/Stream"
 import { FetchHttpClient } from "effect/unstable/http"
-import { LLMRequest, Tool as NativeTool, ToolFailure, ToolRuntime, toDefinitions, type JsonSchema, type LLMEvent } from "@opencode-ai/llm"
+import {
+  LLMRequest,
+  Tool as NativeTool,
+  ToolFailure,
+  ToolRuntime,
+  toDefinitions,
+  type JsonSchema,
+  type LLMEvent,
+} from "@opencode-ai/llm"
 import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
 
@@ -80,17 +88,17 @@ export function stream(input: StreamInput): StreamResult {
   // translation belongs here, not split across both packages.
   const tools = nativeTools(input.tools, input)
   const request = LLMNative.request({
-      model: input.model,
-      apiKey: current.apiKey,
-      baseURL: current.baseURL,
-      messages: ProviderTransform.message(input.messages, input.model, input.providerOptions ?? {}),
-      toolChoice: input.toolChoice,
-      temperature: input.temperature,
-      topP: input.topP,
-      topK: input.topK,
-      maxOutputTokens: input.maxOutputTokens,
-      providerOptions: ProviderTransform.providerOptions(input.model, input.providerOptions ?? {}),
-      headers: { ...providerHeaders(input.provider.options.headers), ...input.headers },
+    model: input.model,
+    apiKey: current.apiKey,
+    baseURL: current.baseURL,
+    messages: ProviderTransform.message(input.messages, input.model, input.providerOptions ?? {}),
+    toolChoice: input.toolChoice,
+    temperature: input.temperature,
+    topP: input.topP,
+    topK: input.topK,
+    maxOutputTokens: input.maxOutputTokens,
+    providerOptions: ProviderTransform.providerOptions(input.model, input.providerOptions ?? {}),
+    headers: { ...providerHeaders(input.provider.options.headers), ...input.headers },
   })
   const stream = Stream.scoped(
     Stream.unwrap(

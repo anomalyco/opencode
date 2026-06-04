@@ -363,11 +363,15 @@ const validateNativeSystemUpdate = Effect.fn("AnthropicMessages.validateNativeSy
   const previous = messages[index - 1]
   const next = messages[index + 1]
   if (!previous)
-    return yield* invalid("Anthropic Messages chronological system updates cannot be the first message; use LLMRequest.system")
+    return yield* invalid(
+      "Anthropic Messages chronological system updates cannot be the first message; use LLMRequest.system",
+    )
   if (previous.role === "system")
     return yield* invalid("Anthropic Messages chronological system updates cannot be consecutive")
   if (endsInLocalToolUse(previous))
-    return yield* invalid("Anthropic Messages chronological system updates cannot appear between a local tool call and its tool result")
+    return yield* invalid(
+      "Anthropic Messages chronological system updates cannot appear between a local tool call and its tool result",
+    )
   if (previous.role !== "user" && previous.role !== "tool" && !endsInServerToolUse(previous))
     return yield* invalid(
       "Anthropic Messages chronological system updates must follow a user message, tool result, or assistant server tool use",
@@ -375,7 +379,9 @@ const validateNativeSystemUpdate = Effect.fn("AnthropicMessages.validateNativeSy
   if (next?.role === "system")
     return yield* invalid("Anthropic Messages chronological system updates cannot be consecutive")
   if (next && next.role !== "assistant")
-    return yield* invalid("Anthropic Messages chronological system updates must end the messages array or immediately precede an assistant message")
+    return yield* invalid(
+      "Anthropic Messages chronological system updates must end the messages array or immediately precede an assistant message",
+    )
 })
 
 const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
@@ -409,7 +415,8 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       const part = yield* ProviderShared.wrappedSystemUpdate("Anthropic Messages", message)
       const block = { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
       const previous = messages.at(-1)
-      if (previous?.role === "user") messages[messages.length - 1] = { role: "user", content: [...previous.content, block] }
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: [...previous.content, block] }
       else messages.push({ role: "user", content: [block] })
       continue
     }

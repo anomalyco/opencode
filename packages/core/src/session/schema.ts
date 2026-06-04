@@ -15,7 +15,7 @@ export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
     const create = () => schema.make("ses_" + Identifier.descending())
     return {
       create,
-      descending: (id?: string) => id === undefined ? create() : schema.make(id),
+      descending: (id?: string) => (id === undefined ? create() : schema.make(id)),
       fromExternal: (input: ExternalID) => schema.make(externalID("ses", input)),
     }
   }),

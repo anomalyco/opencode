@@ -86,13 +86,10 @@ describe("SkillDiscovery.pull", () => {
   })
 
   test("downloads safe nested files under the skill root", async () => {
-    const result = await pull(
-      [{ name: "deploy", files: ["SKILL.md", "references/guide.md"] }],
-      {
-        [`${base}deploy/SKILL.md`]: "# Deploy",
-        [`${base}deploy/references/guide.md`]: "# Guide",
-      },
-    )
+    const result = await pull([{ name: "deploy", files: ["SKILL.md", "references/guide.md"] }], {
+      [`${base}deploy/SKILL.md`]: "# Deploy",
+      [`${base}deploy/references/guide.md`]: "# Guide",
+    })
     try {
       expect(result.directories).toHaveLength(1)
       expect(result.requests.toSorted()).toEqual(

@@ -47,7 +47,7 @@ const appCache: Partial<Record<string, CachedApp>> = {}
 export async function disposeApps() {
   const apps = Object.values(appCache)
   for (const key of Object.keys(appCache)) delete appCache[key]
-  await Promise.all(apps.flatMap((app) => app === undefined ? [] : [app.dispose()]))
+  await Promise.all(apps.flatMap((app) => (app === undefined ? [] : [app.dispose()])))
 }
 
 function app(modules: Runtime, options: CallOptions) {

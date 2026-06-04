@@ -132,8 +132,14 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: EventV2.Cursor
   }) => Stream.Stream<EventV2.CursorEvent<SessionEvent.DurableEvent>, NotFoundError>
-  readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, OperationUnavailableError>
-  readonly switchModel: (input: { sessionID: SessionSchema.ID; model: ModelV2.Ref }) => Effect.Effect<void, OperationUnavailableError>
+  readonly switchAgent: (input: {
+    sessionID: SessionSchema.ID
+    agent: string
+  }) => Effect.Effect<void, OperationUnavailableError>
+  readonly switchModel: (input: {
+    sessionID: SessionSchema.ID
+    model: ModelV2.Ref
+  }) => Effect.Effect<void, OperationUnavailableError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -318,7 +324,9 @@ export const layer = Layer.effect(
           ? yield* db
               .select({ seq: SessionMessageTable.seq })
               .from(SessionMessageTable)
-              .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)))
+              .where(
+                and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)),
+              )
               .get()
               .pipe(Effect.orDie)
           : undefined

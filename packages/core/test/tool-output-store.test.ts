@@ -47,9 +47,10 @@ describe("ToolOutputStore", () => {
   it.live("returns under-limit text unchanged without writing a resource", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
-        expect(
-          yield* store.truncate({ sessionID, toolCallID: "call-short", content: "line one\nline two" }),
-        ).toEqual({ content: "line one\nline two", truncated: false })
+        expect(yield* store.truncate({ sessionID, toolCallID: "call-short", content: "line one\nline two" })).toEqual({
+          content: "line one\nline two",
+          truncated: false,
+        })
       }),
     ),
   )
@@ -92,7 +93,12 @@ describe("ToolOutputStore", () => {
   it.live("keeps one-line previews bounded", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
-        const result = yield* store.truncate({ sessionID, toolCallID: "call-one-line", content: "one\ntwo\nthree", maxLines: 1 })
+        const result = yield* store.truncate({
+          sessionID,
+          toolCallID: "call-one-line",
+          content: "one\ntwo\nthree",
+          maxLines: 1,
+        })
 
         expect(result.truncated).toBe(true)
         if (!result.truncated) throw new Error("expected truncation")
@@ -105,7 +111,12 @@ describe("ToolOutputStore", () => {
   it.live("pages reads within the bounded managed-resource limit", () =>
     withStore(({ root, store, fs }) =>
       Effect.gen(function* () {
-        const resource = yield* store.write({ sessionID, toolCallID: "call-page", content: "0123456789", name: "out.txt" })
+        const resource = yield* store.write({
+          sessionID,
+          toolCallID: "call-page",
+          content: "0123456789",
+          name: "out.txt",
+        })
         const first = yield* store.read({ sessionID, uri: resource.uri, limit: 4 })
         const second = yield* store.read({ sessionID, uri: resource.uri, offset: first.next, limit: 4 })
         const last = yield* store.read({ sessionID, uri: resource.uri, offset: second.next, limit: 4 })
@@ -114,7 +125,13 @@ describe("ToolOutputStore", () => {
         expect(second).toMatchObject({ content: "4567", offset: 4, truncated: true, next: 8 })
         expect(last).toMatchObject({ content: "89", offset: 8, truncated: false })
         expect(last.resource).toEqual({ uri: resource.uri, mime: "text/plain", name: "out.txt", size: 10 })
-        expect(JSON.parse(yield* fs.readFileString(path.join(root, "tool-output", "managed", `${resource.uri.slice("tool-output://".length)}.json`)))).toMatchObject({
+        expect(
+          JSON.parse(
+            yield* fs.readFileString(
+              path.join(root, "tool-output", "managed", `${resource.uri.slice("tool-output://".length)}.json`),
+            ),
+          ),
+        ).toMatchObject({
           sessionID,
           toolCallID: "call-page",
         })
@@ -165,9 +182,9 @@ describe("ToolOutputStore", () => {
       ({ store }) =>
         Effect.gen(function* () {
           expect(yield* store.limits()).toEqual({ maxLines: 2, maxBytes: 1_000 })
-          expect((yield* store.truncate({ sessionID, toolCallID: "call-config", content: "one\ntwo\nthree" })).truncated).toBe(
-            true,
-          )
+          expect(
+            (yield* store.truncate({ sessionID, toolCallID: "call-config", content: "one\ntwo\nthree" })).truncated,
+          ).toBe(true)
         }),
       new Config.Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
     ),
@@ -186,7 +203,10 @@ describe("ToolOutputStore", () => {
         const unrelatedManaged = path.join(directory, "unrelated.txt")
         const record = JSON.parse(yield* fs.readFileString(oldMetadata))
 
-        yield* fs.writeFileString(oldMetadata, JSON.stringify({ ...record, created: Date.now() - 8 * 24 * 60 * 60 * 1_000 }))
+        yield* fs.writeFileString(
+          oldMetadata,
+          JSON.stringify({ ...record, created: Date.now() - 8 * 24 * 60 * 60 * 1_000 }),
+        )
         yield* fs.writeFileString(unrelated, "keep")
         yield* fs.writeFileString(unrelatedManaged, "keep")
         yield* store.cleanup()

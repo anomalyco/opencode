@@ -493,10 +493,12 @@ describe("session HttpApi", () => {
           direction: "next",
         })
 
-        const nextMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${messageCursor}`, { headers })
-        expect((yield* json<{ items: SessionMessage.Message[] }>(nextMessagePage)).items.map((message) => message.id)).toEqual([
-          firstMessage.id,
-        ])
+        const nextMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${messageCursor}`, {
+          headers,
+        })
+        expect(
+          (yield* json<{ items: SessionMessage.Message[] }>(nextMessagePage)).items.map((message) => message.id),
+        ).toEqual([firstMessage.id])
 
         const legacyMessageCursor = Buffer.from(
           JSON.stringify({ id: secondMessage.id, time: 1, order: "desc", direction: "next" }),
@@ -504,9 +506,9 @@ describe("session HttpApi", () => {
         const legacyMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${legacyMessageCursor}`, {
           headers,
         })
-        expect((yield* json<{ items: SessionMessage.Message[] }>(legacyMessagePage)).items.map((message) => message.id)).toEqual([
-          firstMessage.id,
-        ])
+        expect(
+          (yield* json<{ items: SessionMessage.Message[] }>(legacyMessagePage)).items.map((message) => message.id),
+        ).toEqual([firstMessage.id])
 
         const messageCursorWithOrder = yield* request(
           `/api/session/${session.id}/message?cursor=${messageCursor}&order=asc`,

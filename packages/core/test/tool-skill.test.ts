@@ -45,7 +45,12 @@ describe("SkillTool", () => {
           let bootWaited = false
           const boot = Layer.succeed(
             PluginBoot.Service,
-            PluginBoot.Service.of({ wait: () => Effect.sync(() => { bootWaited = true }) }),
+            PluginBoot.Service.of({
+              wait: () =>
+                Effect.sync(() => {
+                  bootWaited = true
+                }),
+            }),
           )
           const permission = Layer.succeed(
             PermissionV2.Service,

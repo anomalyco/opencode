@@ -447,7 +447,11 @@ export const layer = Layer.effect(
       const canonical = yield* fs.realPath(target.absolute).pipe(Effect.orDie)
       if (canonical !== target.real) return yield* Effect.die(new Error("Search root changed after approval"))
       const info = yield* fs.stat(canonical).pipe(Effect.orDie)
-      if (info.type !== (target.type === "file" ? "File" : "Directory") || info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
+      if (
+        info.type !== (target.type === "file" ? "File" : "Directory") ||
+        info.dev !== target.dev ||
+        Option.getOrUndefined(info.ino) !== target.ino
+      )
         return yield* Effect.die(new Error("Search root identity changed after approval"))
       return target
     })

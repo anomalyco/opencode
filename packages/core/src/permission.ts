@@ -200,9 +200,9 @@ export const layer = Layer.effect(
           const item = { request, deferred }
           if (pending.has(request.id)) return yield* EffectRuntime.die(`Duplicate pending permission ID: ${request.id}`)
           pending.set(request.id, item)
-          yield* events.publish(Event.Asked, request).pipe(
-            EffectRuntime.onError(() => EffectRuntime.sync(() => pending.delete(request.id))),
-          )
+          yield* events
+            .publish(Event.Asked, request)
+            .pipe(EffectRuntime.onError(() => EffectRuntime.sync(() => pending.delete(request.id))))
           return item
         }),
       )
@@ -236,69 +236,73 @@ export const layer = Layer.effect(
       ),
     )
 
-    const reply = EffectRuntime.fn("PermissionV2.reply")((input: ReplyInput) => EffectRuntime.uninterruptible(EffectRuntime.gen(function* () {
-      const existing = pending.get(input.requestID)
-      if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-      yield* events.publish(Event.Replied, {
-        sessionID: existing.request.sessionID,
-        requestID: existing.request.id,
-        reply: input.reply,
-      })
-
-      if (input.reply === "reject") {
-        yield* Deferred.fail(
-          existing.deferred,
-          input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
-        )
-        pending.delete(input.requestID)
-        for (const [id, item] of pending) {
-          if (item.request.sessionID !== existing.request.sessionID) continue
+    const reply = EffectRuntime.fn("PermissionV2.reply")((input: ReplyInput) =>
+      EffectRuntime.uninterruptible(
+        EffectRuntime.gen(function* () {
+          const existing = pending.get(input.requestID)
+          if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
           yield* events.publish(Event.Replied, {
-            sessionID: item.request.sessionID,
-            requestID: item.request.id,
-            reply: "reject",
+            sessionID: existing.request.sessionID,
+            requestID: existing.request.id,
+            reply: input.reply,
           })
-          yield* Deferred.fail(item.deferred, new RejectedError())
-          pending.delete(id)
-        }
-        return
-      }
 
-      if (input.reply === "always" && existing.request.save?.length) {
-        yield* saved.add({
-          projectID: location.project.id,
-          action: existing.request.action,
-          resources: existing.request.save,
-        })
-      }
-      yield* Deferred.succeed(existing.deferred, undefined)
-      pending.delete(input.requestID)
-      if (input.reply !== "always" || !existing.request.save?.length) return
+          if (input.reply === "reject") {
+            yield* Deferred.fail(
+              existing.deferred,
+              input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
+            )
+            pending.delete(input.requestID)
+            for (const [id, item] of pending) {
+              if (item.request.sessionID !== existing.request.sessionID) continue
+              yield* events.publish(Event.Replied, {
+                sessionID: item.request.sessionID,
+                requestID: item.request.id,
+                reply: "reject",
+              })
+              yield* Deferred.fail(item.deferred, new RejectedError())
+              pending.delete(id)
+            }
+            return
+          }
 
-      const rememberedRules = yield* savedRules()
-      for (const [id, item] of pending) {
-        const input = { ...item.request }
-        const rules = yield* configured(item.request.sessionID).pipe(
-          EffectRuntime.catchTag("Session.NotFoundError", () => EffectRuntime.succeed(undefined)),
-        )
-        if (!rules) continue
-        if (denied(input, rules)) continue
-        const effective = [...rules, ...rememberedRules]
-        if (
-          !item.request.resources.every(
-            (resource) => evaluate(item.request.action, resource, effective).effect === "allow",
-          )
-        )
-          continue
-        yield* events.publish(Event.Replied, {
-          sessionID: item.request.sessionID,
-          requestID: item.request.id,
-          reply: "always",
-        })
-        yield* Deferred.succeed(item.deferred, undefined)
-        pending.delete(id)
-      }
-    })))
+          if (input.reply === "always" && existing.request.save?.length) {
+            yield* saved.add({
+              projectID: location.project.id,
+              action: existing.request.action,
+              resources: existing.request.save,
+            })
+          }
+          yield* Deferred.succeed(existing.deferred, undefined)
+          pending.delete(input.requestID)
+          if (input.reply !== "always" || !existing.request.save?.length) return
+
+          const rememberedRules = yield* savedRules()
+          for (const [id, item] of pending) {
+            const input = { ...item.request }
+            const rules = yield* configured(item.request.sessionID).pipe(
+              EffectRuntime.catchTag("Session.NotFoundError", () => EffectRuntime.succeed(undefined)),
+            )
+            if (!rules) continue
+            if (denied(input, rules)) continue
+            const effective = [...rules, ...rememberedRules]
+            if (
+              !item.request.resources.every(
+                (resource) => evaluate(item.request.action, resource, effective).effect === "allow",
+              )
+            )
+              continue
+            yield* events.publish(Event.Replied, {
+              sessionID: item.request.sessionID,
+              requestID: item.request.id,
+              reply: "always",
+            })
+            yield* Deferred.succeed(item.deferred, undefined)
+            pending.delete(id)
+          }
+        }),
+      ),
+    )
 
     const list = EffectRuntime.fn("PermissionV2.list")(function* () {
       return Array.from(pending.values(), (item) => item.request)

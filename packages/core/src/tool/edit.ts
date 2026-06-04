@@ -112,7 +112,9 @@ export const layer = Layer.effectDiscard(
                 const error = Cause.squash(cause)
                 return Effect.fail(
                   error instanceof FileMutation.StaleContentError
-                    ? new ToolFailure({ message: "File changed after permission approval. Read it again before editing." })
+                    ? new ToolFailure({
+                        message: "File changed after permission approval. Read it again before editing.",
+                      })
                     : new ToolFailure({ message: `Unable to edit ${parameters.path}`, error }),
                 )
               }),
@@ -123,7 +125,9 @@ export const layer = Layer.effectDiscard(
               return yield* new ToolFailure({ message: "No changes to apply: oldString and newString are identical." })
             }
             if (parameters.oldString === "") {
-              return yield* new ToolFailure({ message: "oldString must not be empty. Use write to create or overwrite a file." })
+              return yield* new ToolFailure({
+                message: "oldString must not be empty. Use write to create or overwrite a file.",
+              })
             }
 
             const plan = yield* unableToEdit(mutation.resolve({ path: parameters.path, kind: "file" }))
@@ -158,7 +162,11 @@ export const layer = Layer.effectDiscard(
                 : source.text.replace(oldString, newString)
             const next = splitBom(replaced)
             const result = yield* unableToEdit(
-              files.writeIfUnchanged({ plan, expected: source.content, content: joinBom(next.text, source.bom || next.bom) }),
+              files.writeIfUnchanged({
+                plan,
+                expected: source.content,
+                content: joinBom(next.text, source.bom || next.bom),
+              }),
             )
             return { ...result, replacements } satisfies Success
           })

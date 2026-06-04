@@ -34,7 +34,9 @@ The current year is ${new Date().getFullYear()}. Use this year when searching fo
 
 export const Parameters = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
-  numResults: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_NUM_RESULTS))).annotate({ description: `Number of search results to return (default: 8, maximum: ${MAX_NUM_RESULTS})` }),
+  numResults: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_NUM_RESULTS))).annotate({
+    description: `Number of search results to return (default: 8, maximum: ${MAX_NUM_RESULTS})`,
+  }),
   livecrawl: Schema.optional(Schema.Literals(["fallback", "preferred"])).annotate({
     description:
       "Live crawl mode - 'fallback': use live crawling as backup if cached unavailable, 'preferred': prioritize live crawling (default: 'fallback')",
@@ -42,9 +44,11 @@ export const Parameters = Schema.Struct({
   type: Schema.optional(Schema.Literals(["auto", "fast", "deep"])).annotate({
     description: "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search",
   }),
-  contextMaxCharacters: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_CONTEXT_CHARACTERS))).annotate({
-    description: `Maximum characters for context string optimized for models (default: 10000, maximum: ${MAX_CONTEXT_CHARACTERS})`,
-  }),
+  contextMaxCharacters: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_CONTEXT_CHARACTERS))).annotate(
+    {
+      description: `Maximum characters for context string optimized for models (default: 10000, maximum: ${MAX_CONTEXT_CHARACTERS})`,
+    },
+  ),
 })
 
 export const Provider = Schema.Literals(["exa", "parallel"])
@@ -63,13 +67,11 @@ export class ConfigService extends Context.Service<ConfigService, Config>()("@op
 /** Isolates the retained product environment contract from the generic tool implementation. */
 export const defaultConfigLayer = Layer.sync(ConfigService, () =>
   ConfigService.of({
-    provider: process.env.OPENCODE_WEBSEARCH_PROVIDER === "exa" || process.env.OPENCODE_WEBSEARCH_PROVIDER === "parallel"
-      ? process.env.OPENCODE_WEBSEARCH_PROVIDER
-      : undefined,
-    enableExa:
-      truthy("OPENCODE_EXPERIMENTAL") ||
-      truthy("OPENCODE_ENABLE_EXA") ||
-      truthy("OPENCODE_EXPERIMENTAL_EXA"),
+    provider:
+      process.env.OPENCODE_WEBSEARCH_PROVIDER === "exa" || process.env.OPENCODE_WEBSEARCH_PROVIDER === "parallel"
+        ? process.env.OPENCODE_WEBSEARCH_PROVIDER
+        : undefined,
+    enableExa: truthy("OPENCODE_EXPERIMENTAL") || truthy("OPENCODE_ENABLE_EXA") || truthy("OPENCODE_EXPERIMENTAL_EXA"),
     enableParallel: truthy("OPENCODE_ENABLE_PARALLEL") || truthy("OPENCODE_EXPERIMENTAL_PARALLEL"),
     exaApiKey: process.env.EXA_API_KEY,
     parallelApiKey: process.env.PARALLEL_API_KEY,
@@ -162,9 +164,15 @@ const callMcp = <F extends Schema.Struct.Fields>(
     return yield* Effect.gen(function* () {
       const response = yield* HttpClient.filterStatusOk(http).execute(request)
       const body = yield* response.text
-      if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES) return yield* Effect.die(new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`))
+      if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES)
+        return yield* Effect.die(new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`))
       return yield* parseResponse(body)
-    }).pipe(Effect.timeoutOrElse({ duration: Duration.seconds(25), orElse: () => Effect.die(new Error(`${tool} request timed out`)) }))
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: Duration.seconds(25),
+        orElse: () => Effect.die(new Error(`${tool} request timed out`)),
+      }),
+    )
   })
 
 const Success = Schema.Struct({
@@ -201,30 +209,31 @@ export const layer = Layer.effectDiscard(
               metadata: { ...parameters, provider },
             })
 
-            const text = provider === "exa"
-              ? yield* callMcp(http, exaUrl(config.exaApiKey), "web_search_exa", ExaArgs, {
-                  query: parameters.query,
-                  type: parameters.type || "auto",
-                  numResults: parameters.numResults || 8,
-                  livecrawl: parameters.livecrawl || "fallback",
-                  contextMaxCharacters: parameters.contextMaxCharacters,
-                })
-              : yield* callMcp(
-                  http,
-                  PARALLEL_URL,
-                  "web_search",
-                  ParallelArgs,
-                  {
-                    objective: parameters.query,
-                    search_queries: [parameters.query],
-                    session_id: sessionID,
-                    // V2 invocation context does not safely expose the model yet.
-                  },
-                  {
-                    "User-Agent": `opencode/${InstallationVersion}`,
-                    ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
-                  },
-                )
+            const text =
+              provider === "exa"
+                ? yield* callMcp(http, exaUrl(config.exaApiKey), "web_search_exa", ExaArgs, {
+                    query: parameters.query,
+                    type: parameters.type || "auto",
+                    numResults: parameters.numResults || 8,
+                    livecrawl: parameters.livecrawl || "fallback",
+                    contextMaxCharacters: parameters.contextMaxCharacters,
+                  })
+                : yield* callMcp(
+                    http,
+                    PARALLEL_URL,
+                    "web_search",
+                    ParallelArgs,
+                    {
+                      objective: parameters.query,
+                      search_queries: [parameters.query],
+                      session_id: sessionID,
+                      // V2 invocation context does not safely expose the model yet.
+                    },
+                    {
+                      "User-Agent": `opencode/${InstallationVersion}`,
+                      ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
+                    },
+                  )
             const truncated = yield* resources.truncate({ sessionID, toolCallID: call.id, content: text ?? NO_RESULTS })
             return {
               provider,
@@ -234,7 +243,12 @@ export const layer = Layer.effectDiscard(
             }
           }).pipe(
             Effect.catchCause((cause) =>
-              Effect.fail(new ToolFailure({ message: `Unable to search the web for ${parameters.query}`, error: Cause.squash(cause) })),
+              Effect.fail(
+                new ToolFailure({
+                  message: `Unable to search the web for ${parameters.query}`,
+                  error: Cause.squash(cause),
+                }),
+              ),
             ),
           )
         },

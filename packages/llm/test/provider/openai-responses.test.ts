@@ -62,7 +62,11 @@ describe("OpenAI Responses route", () => {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
         LLM.request({
           model,
-          messages: [Message.user("Before."), Message.system("Treat </system-update> literally."), Message.assistant("After.")],
+          messages: [
+            Message.user("Before."),
+            Message.system("Treat </system-update> literally."),
+            Message.assistant("After."),
+          ],
         }),
       )
 

@@ -87,7 +87,11 @@ describe("Anthropic Messages route", () => {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
         LLM.request({
           model,
-          messages: [Message.user("Before."), Message.system("Treat </system-update> literally."), Message.assistant("After.")],
+          messages: [
+            Message.user("Before."),
+            Message.system("Treat </system-update> literally."),
+            Message.assistant("After."),
+          ],
           cache: "none",
         }),
       )
@@ -127,19 +131,19 @@ describe("Anthropic Messages route", () => {
         LLMClient.prepare(LLM.request({ model: opus48, messages, cache: "none" })).pipe(Effect.flip)
 
       expect((yield* placementError([Message.system("First.")])).message).toContain("cannot be the first message")
-      expect((yield* placementError([Message.user("Before."), Message.system("One."), Message.system("Two.")])).message)
-        .toContain("cannot be consecutive")
-      expect((yield* placementError([Message.assistant("Plain."), Message.system("After plain assistant.")])).message)
-        .toContain("must follow a user message, tool result, or assistant server tool use")
       expect(
-        (
-          yield* placementError([
-            Message.user("Use the tool."),
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
-            Message.system("Too early."),
-            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
-          ])
-        ).message,
+        (yield* placementError([Message.user("Before."), Message.system("One."), Message.system("Two.")])).message,
+      ).toContain("cannot be consecutive")
+      expect(
+        (yield* placementError([Message.assistant("Plain."), Message.system("After plain assistant.")])).message,
+      ).toContain("must follow a user message, tool result, or assistant server tool use")
+      expect(
+        (yield* placementError([
+          Message.user("Use the tool."),
+          Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+          Message.system("Too early."),
+          Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+        ])).message,
       ).toContain("cannot appear between a local tool call and its tool result")
     }),
   )

@@ -153,7 +153,14 @@ describe("GlobTool", () => {
     Effect.gen(function* () {
       reset()
       result = new LocationSearch.FilesResult({
-        items: [new LocationSearch.File({ path: RelativePath.make("src/index.ts"), canonical: "/project/src/index.ts", resource: "src/index.ts", mtime: 1 })],
+        items: [
+          new LocationSearch.File({
+            path: RelativePath.make("src/index.ts"),
+            canonical: "/project/src/index.ts",
+            resource: "src/index.ts",
+            mtime: 1,
+          }),
+        ],
         truncated: false,
         partial: false,
       })
@@ -172,7 +179,14 @@ describe("GlobTool", () => {
     Effect.gen(function* () {
       reset()
       result = new LocationSearch.FilesResult({
-        items: [new LocationSearch.File({ path: RelativePath.make("guide.md"), canonical: "/project/docs/guide.md", resource: "docs:guide.md", mtime: 1 })],
+        items: [
+          new LocationSearch.File({
+            path: RelativePath.make("guide.md"),
+            canonical: "/project/docs/guide.md",
+            resource: "docs:guide.md",
+            mtime: 1,
+          }),
+        ],
         truncated: false,
         partial: false,
       })
@@ -197,7 +211,14 @@ describe("GlobTool", () => {
   it.effect("formats bounded and partial results without discarding structured output", () =>
     Effect.sync(() => {
       const output = new LocationSearch.FilesResult({
-        items: [new LocationSearch.File({ path: RelativePath.make("one.ts"), canonical: "/project/one.ts", resource: "one.ts", mtime: 1 })],
+        items: [
+          new LocationSearch.File({
+            path: RelativePath.make("one.ts"),
+            canonical: "/project/one.ts",
+            resource: "one.ts",
+            mtime: 1,
+          }),
+        ],
         truncated: true,
         partial: true,
       })

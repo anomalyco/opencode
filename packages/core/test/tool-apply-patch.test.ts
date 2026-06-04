@@ -33,7 +33,9 @@ const permission = Layer.succeed(
         assertions.push(input)
         if (input.action === "edit") editApproved = true
       }).pipe(
-        Effect.andThen(input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void),
+        Effect.andThen(
+          input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
+        ),
       ),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
@@ -67,7 +69,10 @@ const filesystem = Layer.effect(
       remove: (target, options) => {
         if (failRemoveTarget && path.basename(target) === failRemoveTarget) return Effect.die("forced remove failure")
         if (blockRemoveTarget && path.basename(target) === blockRemoveTarget && removeStarted && releaseRemove)
-          return Deferred.succeed(removeStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseRemove)), Effect.andThen(fs.remove(target, options)))
+          return Deferred.succeed(removeStarted, undefined).pipe(
+            Effect.andThen(Deferred.await(releaseRemove)),
+            Effect.andThen(fs.remove(target, options)),
+          )
         return fs.remove(target, options)
       },
     })
@@ -98,7 +103,13 @@ const call = (patchText: string, id = "call-apply-patch") => ({
   call: { type: "tool-call" as const, id, name: "apply_patch", input: { patchText } },
 })
 
-const exists = (target: string) => Effect.promise(() => fs.stat(target).then(() => true, () => false))
+const exists = (target: string) =>
+  Effect.promise(() =>
+    fs.stat(target).then(
+      () => true,
+      () => false,
+    ),
+  )
 const it = testEffect(Layer.empty)
 
 describe("ApplyPatchTool", () => {
@@ -109,13 +120,17 @@ describe("ApplyPatchTool", () => {
         reset()
         const update = path.join(tmp.path, "update.txt")
         const remove = path.join(tmp.path, "remove.txt")
-        return Effect.promise(() => Promise.all([fs.writeFile(update, "before\n"), fs.writeFile(remove, "remove\n")])).pipe(
+        return Effect.promise(() =>
+          Promise.all([fs.writeFile(update, "before\n"), fs.writeFile(remove, "remove\n")]),
+        ).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["apply_patch"])
                 const settled = yield* registry.settle(
-                  call("*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Update File: update.txt\n@@\n-before\n+after\n*** Delete File: remove.txt\n*** End Patch"),
+                  call(
+                    "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Update File: update.txt\n@@\n-before\n+after\n*** Delete File: remove.txt\n*** End Patch",
+                  ),
                 )
                 expect(settled.result).toEqual({
                   type: "text",
@@ -132,7 +147,9 @@ describe("ApplyPatchTool", () => {
                   { sessionID, action: "edit", resources: ["nested/new.txt", "update.txt", "remove.txt"], save: ["*"] },
                 ])
                 expect(readsBeforeEditApproval).toBe(0)
-                expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "nested/new.txt"), "utf8"))).toBe("created\n")
+                expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "nested/new.txt"), "utf8"))).toBe(
+                  "created\n",
+                )
                 expect(yield* Effect.promise(() => fs.readFile(update, "utf8"))).toBe("after\n")
                 expect(yield* exists(remove)).toBe(false)
               }),
@@ -155,7 +172,11 @@ describe("ApplyPatchTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(call("*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch")),
+                  yield* registry.execute(
+                    call(
+                      "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch",
+                    ),
+                  ),
                 ).toEqual({ type: "error", value: "apply_patch moves are not supported yet" })
                 expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
                 expect(assertions).toEqual([])
@@ -179,7 +200,9 @@ describe("ApplyPatchTool", () => {
             withTool(active.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(call(`*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`)),
+                  yield* registry.execute(
+                    call(`*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`),
+                  ),
                 ).toMatchObject({ type: "text" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
                 expect(readsBeforeEditApproval).toBe(0)
@@ -190,7 +213,9 @@ describe("ApplyPatchTool", () => {
         )
       },
       ([active, outside]) =>
-        Effect.promise(() => Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined)),
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
     ),
   )
 
@@ -201,12 +226,18 @@ describe("ApplyPatchTool", () => {
         reset()
         const first = path.join(outside.path, "first.txt")
         const second = path.join(outside.path, "second.txt")
-        return Effect.promise(() => Promise.all([fs.writeFile(first, "before\n"), fs.writeFile(second, "before\n")])).pipe(
+        return Effect.promise(() =>
+          Promise.all([fs.writeFile(first, "before\n"), fs.writeFile(second, "before\n")]),
+        ).pipe(
           Effect.andThen(
             withTool(active.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(call(`*** Begin Patch\n*** Update File: ${first}\n@@\n-before\n+after\n*** Update File: ${second}\n@@\n-before\n+after\n*** End Patch`)),
+                  yield* registry.execute(
+                    call(
+                      `*** Begin Patch\n*** Update File: ${first}\n@@\n-before\n+after\n*** Update File: ${second}\n@@\n-before\n+after\n*** End Patch`,
+                    ),
+                  ),
                 ).toMatchObject({ type: "text" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
                 expect(assertions[0]?.resources).toEqual([
@@ -218,7 +249,9 @@ describe("ApplyPatchTool", () => {
         )
       },
       ([active, outside]) =>
-        Effect.promise(() => Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined)),
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
     ),
   )
 
@@ -230,7 +263,11 @@ describe("ApplyPatchTool", () => {
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
             expect(
-              yield* registry.execute(call("*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: missing.txt\n@@\n-before\n+after\n*** End Patch")),
+              yield* registry.execute(
+                call(
+                  "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: missing.txt\n@@\n-before\n+after\n*** End Patch",
+                ),
+              ),
             ).toEqual({ type: "error", value: "Unable to apply patch at missing.txt" })
             expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
           }),
@@ -251,7 +288,9 @@ describe("ApplyPatchTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(call("*** Begin Patch\n*** Add File: existing.txt\n+replacement\n*** End Patch")),
+                  yield* registry.execute(
+                    call("*** Begin Patch\n*** Add File: existing.txt\n+replacement\n*** End Patch"),
+                  ),
                 ).toEqual({ type: "error", value: "Unable to apply patch at existing.txt" })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("sentinel\n")
               }),
@@ -276,8 +315,13 @@ describe("ApplyPatchTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch")),
-                ).toEqual({ type: "error", value: "Patch partially applied before failing at second.txt. Applied: first.txt" })
+                  yield* registry.execute(
+                    call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch"),
+                  ),
+                ).toEqual({
+                  type: "error",
+                  value: "Patch partially applied before failing at second.txt. Applied: first.txt",
+                })
                 expect(yield* exists(first)).toBe(false)
                 expect(yield* exists(second)).toBe(true)
               }),
@@ -303,7 +347,11 @@ describe("ApplyPatchTool", () => {
           yield* Effect.promise(() => Promise.all([fs.writeFile(first, "first"), fs.writeFile(second, "second")]))
           yield* withTool(tmp.path, (registry) =>
             Effect.gen(function* () {
-              const run = yield* registry.execute(call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch")).pipe(Effect.forkChild)
+              const run = yield* registry
+                .execute(
+                  call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch"),
+                )
+                .pipe(Effect.forkChild)
               yield* Deferred.await(removeStarted!)
               const interrupt = yield* Fiber.interrupt(run).pipe(Effect.forkChild)
               yield* Deferred.succeed(releaseRemove!, undefined)

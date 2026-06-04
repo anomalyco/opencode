@@ -232,7 +232,10 @@ export interface Interface {
   }
 
   readonly model: {
-    readonly get: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<ModelV2.Info, ProviderNotFoundError | ModelNotFoundError>
+    readonly get: (
+      providerID: ProviderV2.ID,
+      modelID: ModelV2.ID,
+    ) => Effect.Effect<ModelV2.Info, ProviderNotFoundError | ModelNotFoundError>
     readonly all: () => Effect.Effect<ModelV2.Info[]>
     readonly available: () => Effect.Effect<ModelV2.Info[]>
     readonly default: () => Effect.Effect<Option.Option<ModelV2.Info>>

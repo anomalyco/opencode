@@ -3,7 +3,12 @@ export * as Patch from "./patch"
 export type Hunk =
   | { readonly type: "add"; readonly path: string; readonly contents: string }
   | { readonly type: "delete"; readonly path: string }
-  | { readonly type: "update"; readonly path: string; readonly movePath?: string; readonly chunks: ReadonlyArray<UpdateFileChunk> }
+  | {
+      readonly type: "update"
+      readonly path: string
+      readonly movePath?: string
+      readonly chunks: ReadonlyArray<UpdateFileChunk>
+    }
 
 export interface UpdateFileChunk {
   readonly oldLines: ReadonlyArray<string>
@@ -166,7 +171,12 @@ function seek(lines: ReadonlyArray<string>, pattern: ReadonlyArray<string>, star
   return -1
 }
 
-function matches(lines: ReadonlyArray<string>, pattern: ReadonlyArray<string>, offset: number, compare: (left: string, right: string) => boolean) {
+function matches(
+  lines: ReadonlyArray<string>,
+  pattern: ReadonlyArray<string>,
+  offset: number,
+  compare: (left: string, right: string) => boolean,
+) {
   return pattern.every((line, index) => compare(lines[offset + index]!, line))
 }
 
@@ -174,6 +184,14 @@ const exact = (left: string, right: string) => left === right
 const rstrip = (left: string, right: string) => left.trimEnd() === right.trimEnd()
 const trim = (left: string, right: string) => left.trim() === right.trim()
 const normalized = (left: string, right: string) => normalize(left.trim()) === normalize(right.trim())
-const normalize = (value: string) => value.replace(/[‘’‚‛]/g, "'").replace(/[“”„‟]/g, '"').replace(/[‐‑‒–—―]/g, "-").replace(/…/g, "...").replace(/ /g, " ")
-const splitBom = (text: string) => text.startsWith("\uFEFF") ? { bom: true, text: text.slice(1) } : { bom: false, text }
-const stripHeredoc = (input: string) => input.match(/^(?:cat\s+)?<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*$/)?.[2] ?? input
+const normalize = (value: string) =>
+  value
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/[“”„‟]/g, '"')
+    .replace(/[‐‑‒–—―]/g, "-")
+    .replace(/…/g, "...")
+    .replace(/ /g, " ")
+const splitBom = (text: string) =>
+  text.startsWith("\uFEFF") ? { bom: true, text: text.slice(1) } : { bom: false, text }
+const stripHeredoc = (input: string) =>
+  input.match(/^(?:cat\s+)?<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*$/)?.[2] ?? input

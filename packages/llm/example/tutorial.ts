@@ -105,18 +105,22 @@ const streamWithTools = Effect.gen(function* () {
   })
   const events = Array.from(yield* LLM.stream(request).pipe(Stream.runCollect))
   for (const event of events) {
-      if (event.type === "tool-call") console.log("tool call", event.name, event.input)
-      if (event.type === "text-delta") process.stdout.write(event.text)
-      if (event.type !== "tool-call" || event.providerExecuted) continue
-      const dispatched = yield* ToolRuntime.dispatch(tools, event)
-      console.log("tool result", event.name, dispatched.result)
+    if (event.type === "tool-call") console.log("tool call", event.name, event.input)
+    if (event.type === "text-delta") process.stdout.write(event.text)
+    if (event.type !== "tool-call" || event.providerExecuted) continue
+    const dispatched = yield* ToolRuntime.dispatch(tools, event)
+    console.log("tool result", event.name, dispatched.result)
 
-      // A durable agent would persist these messages before starting another
-      // raw model turn. This tutorial keeps the boundary visible instead.
-      const followUp = LLM.updateRequest(request, {
-        messages: [...request.messages, Message.assistant([event]), Message.tool({ ...event, result: dispatched.result })],
-      })
-      console.log("follow-up history messages:", followUp.messages.length)
+    // A durable agent would persist these messages before starting another
+    // raw model turn. This tutorial keeps the boundary visible instead.
+    const followUp = LLM.updateRequest(request, {
+      messages: [
+        ...request.messages,
+        Message.assistant([event]),
+        Message.tool({ ...event, result: dispatched.result }),
+      ],
+    })
+    console.log("follow-up history messages:", followUp.messages.length)
   }
 })
 

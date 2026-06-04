@@ -13,7 +13,9 @@ const permission = Layer.succeed(
   PermissionV2.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
-        Effect.andThen(input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void),
+        Effect.andThen(
+          input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
+        ),
       ),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),

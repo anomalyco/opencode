@@ -11,7 +11,9 @@ import { ToolRegistry } from "../tool-registry"
 export const name = "apply_patch"
 
 export const Parameters = Schema.Struct({
-  patchText: Schema.String.annotate({ description: "The full patch text describing add, update, and delete operations" }),
+  patchText: Schema.String.annotate({
+    description: "The full patch text describing add, update, and delete operations",
+  }),
 })
 
 export const Applied = Schema.Struct({
@@ -24,7 +26,12 @@ export const Success = Schema.Struct({ applied: Schema.Array(Applied) })
 export type Success = typeof Success.Type
 
 export const toModelOutput = (output: Success) =>
-  ["Applied patch sequentially:", ...output.applied.map((item) => `${item.type === "add" ? "A" : item.type === "delete" ? "D" : "M"} ${item.resource}`)].join("\n")
+  [
+    "Applied patch sequentially:",
+    ...output.applied.map(
+      (item) => `${item.type === "add" ? "A" : item.type === "delete" ? "D" : "M"} ${item.resource}`,
+    ),
+  ].join("\n")
 
 const definition = Tool.make({
   description:
@@ -36,9 +43,23 @@ const definition = Tool.make({
 
 type Planned = { readonly hunk: Patch.Hunk; readonly plan: LocationMutation.Plan }
 type Prepared =
-  | { readonly type: "add"; readonly hunk: Extract<Patch.Hunk, { readonly type: "add" }>; readonly plan: LocationMutation.Plan }
-  | { readonly type: "delete"; readonly hunk: Extract<Patch.Hunk, { readonly type: "delete" }>; readonly plan: LocationMutation.Plan }
-  | { readonly type: "update"; readonly hunk: Extract<Patch.Hunk, { readonly type: "update" }>; readonly plan: LocationMutation.Plan; readonly source: Uint8Array; readonly content: string }
+  | {
+      readonly type: "add"
+      readonly hunk: Extract<Patch.Hunk, { readonly type: "add" }>
+      readonly plan: LocationMutation.Plan
+    }
+  | {
+      readonly type: "delete"
+      readonly hunk: Extract<Patch.Hunk, { readonly type: "delete" }>
+      readonly plan: LocationMutation.Plan
+    }
+  | {
+      readonly type: "update"
+      readonly hunk: Extract<Patch.Hunk, { readonly type: "update" }>
+      readonly plan: LocationMutation.Plan
+      readonly source: Uint8Array
+      readonly content: string
+    }
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -53,9 +74,10 @@ export const layer = Layer.effectDiscard(
         execute: ({ parameters, assertPermission }) => {
           const applied: Array<typeof Applied.Type> = []
           const fail = (path: string, cause: unknown) => {
-            const prefix = applied.length === 0
-              ? `Unable to apply patch at ${path}`
-              : `Patch partially applied before failing at ${path}. Applied: ${applied.map((item) => item.resource).join(", ")}`
+            const prefix =
+              applied.length === 0
+                ? `Unable to apply patch at ${path}`
+                : `Patch partially applied before failing at ${path}. Applied: ${applied.map((item) => item.resource).join(", ")}`
             return new ToolFailure({ message: prefix, error: cause })
           }
           return Effect.gen(function* () {
@@ -69,7 +91,8 @@ export const layer = Layer.effectDiscard(
             if (move) return yield* new ToolFailure({ message: "apply_patch moves are not supported yet" })
 
             const planned: Planned[] = []
-            for (const hunk of hunks) planned.push({ hunk, plan: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
+            for (const hunk of hunks)
+              planned.push({ hunk, plan: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
             const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()
             for (const { plan } of planned) {
               const external = plan.target.externalDirectory
@@ -78,7 +101,11 @@ export const layer = Layer.effectDiscard(
             for (const external of externalDirectories.values()) {
               yield* assertPermission(LocationMutation.externalDirectoryPermission(external))
             }
-            yield* assertPermission({ action: "edit", resources: [...new Set(planned.map(({ plan }) => plan.target.resource))], save: ["*"] })
+            yield* assertPermission({
+              action: "edit",
+              resources: [...new Set(planned.map(({ plan }) => plan.target.resource))],
+              save: ["*"],
+            })
 
             const prepared: Prepared[] = []
             for (const { hunk, plan } of planned) {
@@ -89,33 +116,51 @@ export const layer = Layer.effectDiscard(
                 continue
               }
               const target = yield* mutation.revalidate(plan)
-              if (!target.exists || target.type !== "File") return yield* fail(hunk.path, new Error("Target file does not exist"))
+              if (!target.exists || target.type !== "File")
+                return yield* fail(hunk.path, new Error("Target file does not exist"))
               if (hunk.type === "delete") {
                 prepared.push({ type: hunk.type, hunk, plan })
                 continue
               }
               const source = yield* fs.readFile(target.canonical)
-              const update = Patch.derive(hunk.path, hunk.chunks, new TextDecoder("utf-8", { ignoreBOM: true }).decode(source))
+              const update = Patch.derive(
+                hunk.path,
+                hunk.chunks,
+                new TextDecoder("utf-8", { ignoreBOM: true }).decode(source),
+              )
               prepared.push({ type: hunk.type, hunk, plan, source, content: Patch.joinBom(update.content, update.bom) })
             }
 
             yield* Effect.uninterruptible(
-              Effect.forEach(prepared, (change) =>
-                Effect.gen(function* () {
-                  if (change.type === "add") {
-                    const result = yield* files.create({ plan: change.plan, content: change.hunk.contents.endsWith("\n") || change.hunk.contents === "" ? change.hunk.contents : `${change.hunk.contents}\n` })
+              Effect.forEach(
+                prepared,
+                (change) =>
+                  Effect.gen(function* () {
+                    if (change.type === "add") {
+                      const result = yield* files.create({
+                        plan: change.plan,
+                        content:
+                          change.hunk.contents.endsWith("\n") || change.hunk.contents === ""
+                            ? change.hunk.contents
+                            : `${change.hunk.contents}\n`,
+                      })
+                      applied.push({ type: change.type, resource: result.resource, target: result.target })
+                      return
+                    }
+                    if (change.type === "delete") {
+                      const result = yield* files.remove({ plan: change.plan })
+                      applied.push({ type: change.type, resource: result.resource, target: result.target })
+                      return
+                    }
+                    const result = yield* files.writeIfUnchanged({
+                      plan: change.plan,
+                      expected: change.source,
+                      content: change.content,
+                    })
                     applied.push({ type: change.type, resource: result.resource, target: result.target })
-                    return
-                  }
-                  if (change.type === "delete") {
-                    const result = yield* files.remove({ plan: change.plan })
-                    applied.push({ type: change.type, resource: result.resource, target: result.target })
-                    return
-                  }
-                  const result = yield* files.writeIfUnchanged({ plan: change.plan, expected: change.source, content: change.content })
-                  applied.push({ type: change.type, resource: result.resource, target: result.target })
-                }).pipe(Effect.catchCause((cause) => Effect.fail(fail(change.hunk.path, Cause.squash(cause))))),
-              { discard: true }),
+                  }).pipe(Effect.catchCause((cause) => Effect.fail(fail(change.hunk.path, Cause.squash(cause))))),
+                { discard: true },
+              ),
             )
             return { applied }
           }).pipe(

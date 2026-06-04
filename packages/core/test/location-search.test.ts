@@ -27,11 +27,11 @@ function provide(directory: string, projectReferences = inertReferences) {
   )
   const filesystem = FileSystem.layer.pipe(Layer.provide(dependencies))
   const search = LocationSearch.layer.pipe(
-      Layer.provide(filesystem),
-      Layer.provide(Ripgrep.layer.pipe(Layer.provide(dependencies))),
-      Layer.provide(FSUtil.defaultLayer),
-      Layer.provide(dependencies),
-    )
+    Layer.provide(filesystem),
+    Layer.provide(Ripgrep.layer.pipe(Layer.provide(dependencies))),
+    Layer.provide(FSUtil.defaultLayer),
+    Layer.provide(dependencies),
+  )
   return Effect.provide(Layer.merge(filesystem, search))
 }
 
@@ -138,10 +138,9 @@ describe("LocationSearch", () => {
           RelativePath.make("visible.txt"),
         ])
         expect((yield* search.files({ pattern: ".env" })).items).toEqual([])
-        expect((yield* search.grep({ pattern: "needle", include: "*" })).items.map((item) => item.path).sort()).toEqual([
-          RelativePath.make("nested/visible.txt"),
-          RelativePath.make("visible.txt"),
-        ])
+        expect((yield* search.grep({ pattern: "needle", include: "*" })).items.map((item) => item.path).sort()).toEqual(
+          [RelativePath.make("nested/visible.txt"), RelativePath.make("visible.txt")],
+        )
       }).pipe(provide(directory)),
     ),
   )
@@ -191,7 +190,9 @@ describe("LocationSearch", () => {
   it.live("rejects oversized ripgrep JSON records before durable projection", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => fs.writeFile(path.join(directory, "huge.txt"), `needle ${"x".repeat(Ripgrep.MAX_RECORD_BYTES)}\n`))
+        yield* Effect.promise(() =>
+          fs.writeFile(path.join(directory, "huge.txt"), `needle ${"x".repeat(Ripgrep.MAX_RECORD_BYTES)}\n`),
+        )
         const exit = yield* (yield* LocationSearch.Service).grep({ pattern: "needle" }).pipe(Effect.exit)
 
         expect(Exit.isFailure(exit)).toBe(true)
@@ -243,7 +244,9 @@ describe("LocationSearch", () => {
           await fs.symlink(outside, source)
         })
 
-        expect(Exit.isFailure(yield* (yield* LocationSearch.Service).files({ pattern: "*" }, approved).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(yield* (yield* LocationSearch.Service).files({ pattern: "*" }, approved).pipe(Effect.exit)),
+        ).toBe(true)
         yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
       }).pipe(provide(directory)),
     ),

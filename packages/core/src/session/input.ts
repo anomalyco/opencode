@@ -126,7 +126,8 @@ export const equivalent = (
 ) => input.delivery === expected.delivery && matchesPrompt(input, expected)
 
 const matchesPrompt = (input: Admitted, expected: { readonly sessionID: SessionSchema.ID; readonly prompt: Prompt }) =>
-  input.sessionID === expected.sessionID && JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
+  input.sessionID === expected.sessionID &&
+  JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
 
 export const guardReservedID = Effect.fn("SessionInput.guardReservedID")(function* (
   db: DatabaseService,

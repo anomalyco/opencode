@@ -1,6 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice, ToolContent, ToolOutput, toolFileSourceFromUri, toDefinitions } from "../src"
+import {
+  GenerationOptions,
+  LLM,
+  LLMEvent,
+  LLMRequest,
+  LLMResponse,
+  ToolChoice,
+  ToolContent,
+  ToolOutput,
+  toolFileSourceFromUri,
+  toDefinitions,
+} from "../src"
 import { Auth, LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
@@ -188,10 +199,12 @@ describe("LLMClient tools", () => {
         execute: () => Effect.succeed({ ok: true }),
       })
 
-      expect((yield* ToolRuntime.dispatch({ text }, LLMEvent.toolCall({ id: "call_text", name: "text", input: {} }))).output)
-        .toEqual({ structured: "hello", content: [{ type: "text", text: "hello" }] })
-      expect((yield* ToolRuntime.dispatch({ json }, LLMEvent.toolCall({ id: "call_json", name: "json", input: {} }))).output)
-        .toEqual({ structured: { ok: true }, content: [] })
+      expect(
+        (yield* ToolRuntime.dispatch({ text }, LLMEvent.toolCall({ id: "call_text", name: "text", input: {} }))).output,
+      ).toEqual({ structured: "hello", content: [{ type: "text", text: "hello" }] })
+      expect(
+        (yield* ToolRuntime.dispatch({ json }, LLMEvent.toolCall({ id: "call_json", name: "json", input: {} }))).output,
+      ).toEqual({ structured: { ok: true }, content: [] })
     }),
   )
 
@@ -204,12 +217,16 @@ describe("LLMClient tools", () => {
         source: { type: "data", data: "AAAA" },
         mime: "image/png",
       })
-      expect(decode({ type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" })).toEqual({
+      expect(
+        decode({ type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" }),
+      ).toEqual({
         type: "file",
         source: { type: "url", url: "https://example.test/image.png" },
         mime: "image/png",
       })
-      expect(decode({ type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" })).toEqual({
+      expect(
+        decode({ type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" }),
+      ).toEqual({
         type: "file",
         source: { type: "file", uri: "file:///tmp/image.png" },
         mime: "image/png",
@@ -226,16 +243,29 @@ describe("LLMClient tools", () => {
       ).toEqual({ type: "content", value: [{ type: "media", mediaType: "image/png", data: "AAAA" }] })
       expect(
         ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" }]),
+          ToolOutput.make({}, [
+            { type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" },
+          ]),
         ),
-      ).toEqual({ type: "error", value: 'Tool file source "url" must be materialized to inline data before provider conversion' })
+      ).toEqual({
+        type: "error",
+        value: 'Tool file source "url" must be materialized to inline data before provider conversion',
+      })
       expect(
         ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" }]),
+          ToolOutput.make({}, [
+            { type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" },
+          ]),
         ),
-      ).toEqual({ type: "error", value: 'Tool file source "file" must be materialized to inline data before provider conversion' })
+      ).toEqual({
+        type: "error",
+        value: 'Tool file source "file" must be materialized to inline data before provider conversion',
+      })
       expect(toolFileSourceFromUri("data:image/png;base64,AAAA")).toEqual({ type: "data", data: "AAAA" })
-      expect(toolFileSourceFromUri("https://example.test/image.png")).toEqual({ type: "url", url: "https://example.test/image.png" })
+      expect(toolFileSourceFromUri("https://example.test/image.png")).toEqual({
+        type: "url",
+        url: "https://example.test/image.png",
+      })
       expect(toolFileSourceFromUri("file:///tmp/image.png")).toEqual({ type: "file", uri: "file:///tmp/image.png" })
       expect(() => toolFileSourceFromUri("opaque-value")).toThrow("Unsupported tool file URI")
       expect(() =>

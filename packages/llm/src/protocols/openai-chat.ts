@@ -226,7 +226,9 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
     reasoning_content:
-      reasoning.length > 0 ? reasoning.map((part) => part.text).join("") : openAICompatibleReasoningContent(message.native?.openaiCompatible),
+      reasoning.length > 0
+        ? reasoning.map((part) => part.text).join("")
+        : openAICompatibleReasoningContent(message.native?.openaiCompatible),
   }
 })
 

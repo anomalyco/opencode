@@ -1979,7 +1979,11 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail hosted tool on raw failure" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Fail hosted tool on raw failure" }),
+        resume: false,
+      })
       const failure = providerUnavailable()
       responseStream = Stream.concat(
         Stream.fromIterable([

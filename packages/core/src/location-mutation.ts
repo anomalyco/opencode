@@ -241,7 +241,13 @@ export const layer = Layer.effect(
       const directory =
         boundary.exists && boundary.type === "Directory" ? boundary.canonical : boundary.authority.canonical
       const resource = slash(path.join(directory, "*"))
-      return { action: "external_directory" as const, directory, resource, save: resource, authority: boundary.authority }
+      return {
+        action: "external_directory" as const,
+        directory,
+        resource,
+        save: resource,
+        authority: boundary.authority,
+      }
     })
 
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {

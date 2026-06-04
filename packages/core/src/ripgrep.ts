@@ -34,7 +34,7 @@ const RawMatch = Schema.Struct({
   }),
 })
 
-export type Match = typeof RawMatch.Type["data"]
+export type Match = (typeof RawMatch.Type)["data"]
 
 export class Error extends Schema.TaggedErrorClass<Error>()("Ripgrep.Error", {
   message: Schema.String,
@@ -77,7 +77,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 const failure = (message: string, cause?: unknown) => new Error({ message, cause })
 
-const isInvalidPattern = (stderr: string) => stderr.includes("regex parse error") || stderr.includes("error parsing regex")
+const isInvalidPattern = (stderr: string) =>
+  stderr.includes("regex parse error") || stderr.includes("error parsing regex")
 
 export const layer = Layer.effect(
   Service,
@@ -126,7 +127,13 @@ export const layer = Layer.effect(
         }),
       )
       const abortable = input.signal ? program.pipe(Effect.raceFirst(waitForAbort(input.signal))) : program
-      return abortable.pipe(Effect.mapError((cause) => cause instanceof Error || cause instanceof InvalidPatternError ? cause : failure("ripgrep execution failed", cause)))
+      return abortable.pipe(
+        Effect.mapError((cause) =>
+          cause instanceof Error || cause instanceof InvalidPatternError
+            ? cause
+            : failure("ripgrep execution failed", cause),
+        ),
+      )
     }
 
     return Service.of({
@@ -143,9 +150,7 @@ export const layer = Layer.effect(
             ".",
           ],
           parse: (line) => Effect.succeed(line.replace(/^\.\//, "")),
-        }).pipe(
-          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
-        ),
+        }).pipe(Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause)))),
       grep: (input) =>
         run<Match>({
           ...input,
@@ -167,11 +172,16 @@ export const layer = Layer.effect(
               : Effect.try({
                   try: () => JSON.parse(line) as unknown,
                   catch: (cause) => failure("Invalid ripgrep JSON output", cause),
-                })).pipe(
+                })
+            ).pipe(
               Effect.flatMap((json) => {
-                if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match") return Effect.succeed(undefined)
+                if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
+                  return Effect.succeed(undefined)
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => ({ ...match.data, submatches: match.data.submatches.slice(0, MAX_SUBMATCHES) })),
+                  Effect.map((match) => ({
+                    ...match.data,
+                    submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
+                  })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
                 )
               }),

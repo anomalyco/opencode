@@ -43,7 +43,9 @@ function latestTool(assistant: SessionMessageAssistant | undefined, callID?: str
 }
 
 function latestText(assistant: SessionMessageAssistant | undefined, textID: string) {
-  return assistant?.content.findLast((item): item is SessionMessageAssistantText => item.type === "text" && item.id === textID)
+  return assistant?.content.findLast(
+    (item): item is SessionMessageAssistantText => item.type === "text" && item.id === textID,
+  )
 }
 
 function latestReasoning(assistant: SessionMessageAssistant | undefined, reasoningID: string) {
@@ -208,19 +210,28 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.tool.input.delta":
           update(event.properties.sessionID, (draft) => {
-            const match = latestTool(ownedAssistant(draft, event.properties.assistantMessageID), event.properties.callID)
+            const match = latestTool(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.callID,
+            )
             if (match?.state.status === "pending") match.state.input += event.properties.delta
           })
           break
         case "session.next.tool.input.ended":
           update(event.properties.sessionID, (draft) => {
-            const match = latestTool(ownedAssistant(draft, event.properties.assistantMessageID), event.properties.callID)
+            const match = latestTool(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.callID,
+            )
             if (match?.state.status === "pending") match.state.input = event.properties.text
           })
           break
         case "session.next.tool.called":
           update(event.properties.sessionID, (draft) => {
-            const match = latestTool(ownedAssistant(draft, event.properties.assistantMessageID), event.properties.callID)
+            const match = latestTool(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.callID,
+            )
             if (!match) return
             match.time.ran = event.properties.timestamp
             match.provider = event.properties.provider
@@ -229,7 +240,10 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.tool.progress":
           update(event.properties.sessionID, (draft) => {
-            const match = latestTool(ownedAssistant(draft, event.properties.assistantMessageID), event.properties.callID)
+            const match = latestTool(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.callID,
+            )
             if (match?.state.status !== "running") return
             match.state.structured = event.properties.structured
             match.state.content = [...event.properties.content]
@@ -237,7 +251,10 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.tool.success":
           update(event.properties.sessionID, (draft) => {
-            const match = latestTool(ownedAssistant(draft, event.properties.assistantMessageID), event.properties.callID)
+            const match = latestTool(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.callID,
+            )
             if (match?.state.status !== "running") return
             match.state = {
               status: "completed",
@@ -252,7 +269,10 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.tool.failed":
           update(event.properties.sessionID, (draft) => {
-            const match = latestTool(ownedAssistant(draft, event.properties.assistantMessageID), event.properties.callID)
+            const match = latestTool(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.callID,
+            )
             if (!match || (match.state.status !== "pending" && match.state.status !== "running")) return
             match.state = {
               status: "error",
@@ -287,7 +307,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
             const match = latestReasoning(activeAssistant(draft), event.properties.reasoningID)
             if (match) {
               match.text = event.properties.text
-              if (event.properties.providerMetadata !== undefined) match.providerMetadata = event.properties.providerMetadata
+              if (event.properties.providerMetadata !== undefined)
+                match.providerMetadata = event.properties.providerMetadata
             }
           })
           break

@@ -107,7 +107,11 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
 
     await wait(() => {
       const assistant = sync.session.message.fromSession("session-1")[0]
-      return assistant?.type === "assistant" && assistant.content[0]?.type === "tool" && assistant.content[0].state.status === "error"
+      return (
+        assistant?.type === "assistant" &&
+        assistant.content[0]?.type === "tool" &&
+        assistant.content[0].state.status === "error"
+      )
     })
 
     const assistant = sync.session.message.fromSession("session-1")[0]

@@ -43,7 +43,7 @@ const filesystem = Layer.succeed(
           real: `/project/${input.path ?? "."}`,
           directory: "/project",
           root: "/project",
-          resource: input.reference === undefined ? input.path ?? "." : `${input.reference}:${input.path ?? "."}`,
+          resource: input.reference === undefined ? (input.path ?? ".") : `${input.reference}:${input.path ?? "."}`,
           reference: input.reference,
           type: "directory",
           dev: 1,
@@ -87,7 +87,12 @@ const permission = Layer.succeed(
   }),
 )
 const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
-const grep = GrepTool.layer.pipe(Layer.provide(registry), Layer.provide(filesystem), Layer.provide(search), Layer.provide(permission))
+const grep = GrepTool.layer.pipe(
+  Layer.provide(registry),
+  Layer.provide(filesystem),
+  Layer.provide(search),
+  Layer.provide(permission),
+)
 const it = testEffect(Layer.mergeAll(registry, filesystem, search, permission, grep))
 const sessionID = SessionV2.ID.make("ses_grep_tool_test")
 
@@ -136,7 +141,12 @@ function provideLive(directory: string, projectReferences = references({})) {
     Layer.provide(dependencies),
   )
   const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
-  const grep = GrepTool.layer.pipe(Layer.provide(registry), Layer.provide(filesystem), Layer.provide(search), Layer.provide(permission))
+  const grep = GrepTool.layer.pipe(
+    Layer.provide(registry),
+    Layer.provide(filesystem),
+    Layer.provide(search),
+    Layer.provide(permission),
+  )
   return Layer.mergeAll(registry, filesystem, search, permission, grep)
 }
 
@@ -178,7 +188,9 @@ describe("GrepTool", () => {
         resources: ["guide"],
         metadata: { root: "manual:docs", reference: "manual", path: RelativePath.make("docs"), include: "*.md" },
       })
-      expect(searches).toEqual([{ pattern: "guide", path: RelativePath.make("docs"), reference: "manual", include: "*.md" }])
+      expect(searches).toEqual([
+        { pattern: "guide", path: RelativePath.make("docs"), reference: "manual", include: "*.md" },
+      ])
     }),
   )
 
@@ -218,7 +230,8 @@ describe("GrepTool", () => {
       expect(settlement.output?.structured).toEqual(result)
       expect(settlement.result).toEqual({
         type: "text",
-        value: "Found 1 matches\nsrc/index.ts:\n  Line 3: needle preview...\n\n(Results are truncated: showing first 1 matches. Consider using a more specific path or pattern.)\n\n(Some paths were inaccessible and skipped)",
+        value:
+          "Found 1 matches\nsrc/index.ts:\n  Line 3: needle preview...\n\n(Results are truncated: showing first 1 matches. Consider using a more specific path or pattern.)\n\n(Some paths were inaccessible and skipped)",
       })
     }),
   )
@@ -226,7 +239,10 @@ describe("GrepTool", () => {
   it.effect("returns a useful tool error for an invalid regex", () =>
     Effect.gen(function* () {
       reset()
-      searchFailure = new Ripgrep.InvalidPatternError({ pattern: "[", message: "regex parse error: unclosed character class" })
+      searchFailure = new Ripgrep.InvalidPatternError({
+        pattern: "[",
+        message: "regex parse error: unclosed character class",
+      })
 
       expect(yield* execute({ pattern: "[" })).toEqual({
         type: "error",
@@ -261,7 +277,9 @@ describe("GrepTool", () => {
             type: "text",
             value: "Found 1 matches\ndocs:guide.md:\n  Line 1: needle docs\n",
           })
-        }).pipe(Effect.provide(provideLive(tmp.path, references({ docs: { name: "docs", kind: "local", path: docs } }))))
+        }).pipe(
+          Effect.provide(provideLive(tmp.path, references({ docs: { name: "docs", kind: "local", path: docs } }))),
+        )
       }),
     ),
   )

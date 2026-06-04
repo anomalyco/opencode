@@ -426,7 +426,9 @@ export const layer = Layer.effect(
           case "tool-input-delta":
             {
               const toolCall = yield* ensureToolCall(value)
-              const assistantMessageID = flags.experimentalEventSystem ? yield* requireV2AssistantMessage(toolCall.call) : undefined
+              const assistantMessageID = flags.experimentalEventSystem
+                ? yield* requireV2AssistantMessage(toolCall.call)
+                : undefined
               if (assistantMessageID) {
                 yield* events.publish(SessionEvent.Tool.Input.Delta, {
                   sessionID: ctx.sessionID,
@@ -589,12 +591,19 @@ export const layer = Layer.effect(
               const content = [
                 ToolOutput.text({ type: "text", text: output.output }),
                 ...(output.attachments?.map((item: SessionV1.FilePart) =>
-                  ToolOutput.file({ type: "file", source: toolFileSourceFromUri(item.url), mime: item.mime, name: item.filename }),
+                  ToolOutput.file({
+                    type: "file",
+                    source: toolFileSourceFromUri(item.url),
+                    mime: item.mime,
+                    name: item.filename,
+                  }),
                 ) ?? []),
               ]
               const unsupported = content.find((item) => item.type === "file" && item.source.type !== "data")
               if (unsupported?.type === "file") {
-                const error = new Error(`Tool attachment source "${unsupported.source.type}" must be materialized before durable V2 settlement`)
+                const error = new Error(
+                  `Tool attachment source "${unsupported.source.type}" must be materialized before durable V2 settlement`,
+                )
                 yield* events.publish(SessionEvent.Tool.Failed, {
                   sessionID: ctx.sessionID,
                   assistantMessageID,
@@ -611,19 +620,20 @@ export const layer = Layer.effect(
                 })
                 yield* failToolCall(value.id, error)
                 return
-              } else yield* events.publish(SessionEvent.Tool.Success, {
-                sessionID: ctx.sessionID,
-                assistantMessageID,
-                callID: value.id,
-                structured: output.metadata,
-                content,
-                result: value.result,
-                provider: {
-                  executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
-                  ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
-                },
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
+              } else
+                yield* events.publish(SessionEvent.Tool.Success, {
+                  sessionID: ctx.sessionID,
+                  assistantMessageID,
+                  callID: value.id,
+                  structured: output.metadata,
+                  content,
+                  result: value.result,
+                  provider: {
+                    executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+                    ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+                  },
+                  timestamp: DateTime.makeUnsafe(Date.now()),
+                })
             }
             yield* completeToolCall(value.id, output)
             return

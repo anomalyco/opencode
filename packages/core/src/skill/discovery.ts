@@ -151,11 +151,10 @@ export const layer = Layer.effect(
           }),
           ({ skill, root, files }) =>
             Effect.gen(function* () {
-              yield* Effect.forEach(
-                files,
-                (file) => download(file.url, file.destination),
-                { concurrency: fileConcurrency, discard: true },
-              )
+              yield* Effect.forEach(files, (file) => download(file.url, file.destination), {
+                concurrency: fileConcurrency,
+                discard: true,
+              })
               return (yield* fs.exists(path.join(root, "SKILL.md")).pipe(Effect.orDie)) ||
                 (yield* fs.exists(path.join(root, `${skill.name}.md`)).pipe(Effect.orDie))
                 ? [AbsolutePath.make(root)]

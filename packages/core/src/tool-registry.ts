@@ -1,6 +1,16 @@
 export * as ToolRegistry from "./tool-registry"
 
-import { Tool, ToolFailure, ToolOutput, ToolResultValue as ToolResult, type Tool as TypedTool, type ToolCall, type ToolResultValue, type ToolSchema, type ToolSettlement } from "@opencode-ai/llm"
+import {
+  Tool,
+  ToolFailure,
+  ToolOutput,
+  ToolResultValue as ToolResult,
+  type Tool as TypedTool,
+  type ToolCall,
+  type ToolResultValue,
+  type ToolSchema,
+  type ToolSettlement,
+} from "@opencode-ai/llm"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import { castDraft, enableMapSet } from "immer"
 import { PermissionV2 } from "./permission"
@@ -35,10 +45,15 @@ export type AuthorizeInput<Parameters = unknown> = Invocation & {
   readonly parameters: Parameters
 }
 
-export type Entry<Parameters extends ToolSchema<any> = ToolSchema<any>, Success extends ToolSchema<any> = ToolSchema<any>> = {
+export type Entry<
+  Parameters extends ToolSchema<any> = ToolSchema<any>,
+  Success extends ToolSchema<any> = ToolSchema<any>,
+> = {
   readonly tool: TypedTool<Parameters, Success>
   readonly authorize?: (input: AuthorizeInput<Schema.Schema.Type<Parameters>>) => Effect.Effect<void, ToolFailure>
-  readonly execute?: (input: AuthorizeInput<Schema.Schema.Type<Parameters>>) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
+  readonly execute?: (
+    input: AuthorizeInput<Schema.Schema.Type<Parameters>>,
+  ) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
 }
 
 type Data = {
@@ -48,7 +63,10 @@ type Data = {
 export type Editor = {
   readonly list: () => ReadonlyArray<readonly [string, Entry]>
   readonly get: (name: string) => Entry | undefined
-  readonly set: <Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(name: string, entry: Entry<Parameters, Success>) => void
+  readonly set: <Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(
+    name: string,
+    entry: Entry<Parameters, Success>,
+  ) => void
   readonly remove: (name: string) => void
 }
 
@@ -65,84 +83,91 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 enableMapSet()
 
 export const layer = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const permission = yield* PermissionV2.Service
-      const state = State.create<Data, Editor>({
-        initial: () => ({ entries: new Map() }),
-        editor: (draft) => ({
-          list: () => Array.from(draft.entries.entries()) as Array<[string, Entry]>,
-          get: (name) => draft.entries.get(name) as Entry | undefined,
-          set: (name, entry) => {
-            draft.entries.set(name, castDraft(entry) as typeof draft.entries extends Map<string, infer Value> ? Value : never)
-          },
-          remove: (name) => {
-            draft.entries.delete(name)
-          },
-        }),
-      })
+  Service,
+  Effect.gen(function* () {
+    const permission = yield* PermissionV2.Service
+    const state = State.create<Data, Editor>({
+      initial: () => ({ entries: new Map() }),
+      editor: (draft) => ({
+        list: () => Array.from(draft.entries.entries()) as Array<[string, Entry]>,
+        get: (name) => draft.entries.get(name) as Entry | undefined,
+        set: (name, entry) => {
+          draft.entries.set(
+            name,
+            castDraft(entry) as typeof draft.entries extends Map<string, infer Value> ? Value : never,
+          )
+        },
+        remove: (name) => {
+          draft.entries.delete(name)
+        },
+      }),
+    })
 
-      const definitions = Effect.fn("ToolRegistry.definitions")(function* () {
-        return Tool.toDefinitions(Object.fromEntries(Array.from(state.get().entries, ([name, entry]) => [name, entry.tool])))
-      })
+    const definitions = Effect.fn("ToolRegistry.definitions")(function* () {
+      return Tool.toDefinitions(
+        Object.fromEntries(Array.from(state.get().entries, ([name, entry]) => [name, entry.tool])),
+      )
+    })
 
-      const invocation = (input: ExecuteInput): Invocation => ({
-        ...input,
-        // Source needs the durable owning assistant message ID, which the registry does not receive yet.
-        assertPermission: (request) => permission.assert({ ...request, sessionID: input.sessionID }),
-      })
+    const invocation = (input: ExecuteInput): Invocation => ({
+      ...input,
+      // Source needs the durable owning assistant message ID, which the registry does not receive yet.
+      assertPermission: (request) => permission.assert({ ...request, sessionID: input.sessionID }),
+    })
 
-      const settle = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput) {
-        const entry = state.get().entries.get(input.call.name)
-        if (!entry) return { result: { type: "error" as const, value: `Unknown tool: ${input.call.name}` } }
-        if (!entry.execute && !entry.tool.execute)
-          return { result: { type: "error" as const, value: `Tool has no execute handler: ${input.call.name}` } }
+    const settle = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput) {
+      const entry = state.get().entries.get(input.call.name)
+      if (!entry) return { result: { type: "error" as const, value: `Unknown tool: ${input.call.name}` } }
+      if (!entry.execute && !entry.tool.execute)
+        return { result: { type: "error" as const, value: `Tool has no execute handler: ${input.call.name}` } }
 
-        return yield* entry.tool._decode(input.call.input).pipe(
-          Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
-          Effect.flatMap((parameters) => {
-            const context = { ...invocation(input), parameters }
-            const execute = entry.execute?.(context) ??
-              entry.tool.execute!(parameters, { id: input.call.id, name: input.call.name })
-            return (entry.authorize === undefined ? execute : entry.authorize(context).pipe(Effect.andThen(execute))).pipe(
-              Effect.flatMap((value) =>
-                entry.tool._encode(value).pipe(
-                  Effect.mapError(
-                    (error) =>
-                      new ToolFailure({
-                        message: `Tool returned an invalid value for its success schema: ${error.message}`,
-                      }),
-                  ),
+      return yield* entry.tool._decode(input.call.input).pipe(
+        Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
+        Effect.flatMap((parameters) => {
+          const context = { ...invocation(input), parameters }
+          const execute =
+            entry.execute?.(context) ?? entry.tool.execute!(parameters, { id: input.call.id, name: input.call.name })
+          return (
+            entry.authorize === undefined ? execute : entry.authorize(context).pipe(Effect.andThen(execute))
+          ).pipe(
+            Effect.flatMap((value) =>
+              entry.tool._encode(value).pipe(
+                Effect.mapError(
+                  (error) =>
+                    new ToolFailure({
+                      message: `Tool returned an invalid value for its success schema: ${error.message}`,
+                    }),
                 ),
               ),
-              Effect.map((value): ToolSettlement => {
-                if (entry.tool._legacyResult && ToolResult.is(value))
-                  return { result: value, output: ToolOutput.fromResultValue(value) }
-                const output = entry.tool._project(parameters, input.call.id, value)
-                const result = ToolOutput.toResultValue(output)
-                return result.type === "error" ? { result } : { result, output }
-              }),
-            )
-          }),
-          Effect.catchTag("LLM.ToolFailure", (failure) =>
-            Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
-          ),
-        )
-      })
-
-      const execute = Effect.fn("ToolRegistry.execute")(function* (input: ExecuteInput) {
-        return (yield* settle(input)).result
-      })
-
-      return Service.of({
-        transform: state.transform,
-        contribute: Effect.fn("ToolRegistry.contribute")(function* (update) {
-          const transform = yield* state.transform()
-          yield* transform(update)
+            ),
+            Effect.map((value): ToolSettlement => {
+              if (entry.tool._legacyResult && ToolResult.is(value))
+                return { result: value, output: ToolOutput.fromResultValue(value) }
+              const output = entry.tool._project(parameters, input.call.id, value)
+              const result = ToolOutput.toResultValue(output)
+              return result.type === "error" ? { result } : { result, output }
+            }),
+          )
         }),
-        definitions,
-        execute,
-        settle,
-      })
-    }),
-  )
+        Effect.catchTag("LLM.ToolFailure", (failure) =>
+          Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
+        ),
+      )
+    })
+
+    const execute = Effect.fn("ToolRegistry.execute")(function* (input: ExecuteInput) {
+      return (yield* settle(input)).result
+    })
+
+    return Service.of({
+      transform: state.transform,
+      contribute: Effect.fn("ToolRegistry.contribute")(function* (update) {
+        const transform = yield* state.transform()
+        yield* transform(update)
+      }),
+      definitions,
+      execute,
+      settle,
+    })
+  }),
+)
