@@ -90,7 +90,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
             <div class="px-2 text-14-medium text-text-base">{language.t("dialog.model.unpaid.addMore.title")}</div>
             <div class="w-full">
               <List
-                class="w-full px-3"
+                class="w-full px-3 [&_[data-slot=list-scroll]]:overflow-visible"
                 key={(p) => p.id}
                 items={providers.popular}
                 activeIcon="plus-small"
