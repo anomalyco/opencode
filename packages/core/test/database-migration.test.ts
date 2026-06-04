@@ -99,14 +99,22 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`CREATE TABLE session_input (seq integer PRIMARY KEY AUTOINCREMENT, id text NOT NULL UNIQUE, session_id text NOT NULL, prompt text NOT NULL, delivery text NOT NULL, promoted_seq integer, time_created integer NOT NULL)`,
         )
-        yield* db.run(sql`CREATE INDEX session_input_session_pending_delivery_seq_idx ON session_input (session_id, promoted_seq, delivery, seq)`)
+        yield* db.run(
+          sql`CREATE INDEX session_input_session_pending_delivery_seq_idx ON session_input (session_id, promoted_seq, delivery, seq)`,
+        )
         yield* db.run(sql`INSERT INTO session (id) VALUES ('session')`)
         yield* db.run(sql`INSERT INTO message (id) VALUES ('message')`)
         yield* db.run(sql`INSERT INTO part (id) VALUES ('part')`)
         yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 0)`)
-        yield* db.run(sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_old', 'session', 0, 'old.1', '{}')`)
-        yield* db.run(sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('msg_old', 'session', 'user', 0, 1, 1, '{}')`)
-        yield* db.run(sql`INSERT INTO session_input (id, session_id, prompt, delivery, time_created) VALUES ('msg_pending', 'session', '{}', 'steer', 1)`)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_old', 'session', 0, 'old.1', '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('msg_old', 'session', 'user', 0, 1, 1, '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, prompt, delivery, time_created) VALUES ('msg_pending', 'session', '{}', 'steer', 1)`,
+        )
 
         yield* DatabaseMigration.applyOnly(db, [eventSourcedSessionInputMigration])
 
@@ -117,15 +125,9 @@ describe("DatabaseMigration", () => {
         expect(yield* db.all(sql`SELECT aggregate_id FROM event_sequence`)).toEqual([])
         expect(yield* db.all(sql`SELECT id FROM session_message`)).toEqual([])
         expect(yield* db.all(sql`SELECT id FROM session_input`)).toEqual([])
-        expect((yield* db.all<{ name: string }>(sql`PRAGMA table_info(session_input)`)).map((column) => column.name)).toEqual([
-          "id",
-          "session_id",
-          "prompt",
-          "delivery",
-          "admitted_seq",
-          "promoted_seq",
-          "time_created",
-        ])
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA table_info(session_input)`)).map((column) => column.name),
+        ).toEqual(["id", "session_id", "prompt", "delivery", "admitted_seq", "promoted_seq", "time_created"])
       }),
     )
   })

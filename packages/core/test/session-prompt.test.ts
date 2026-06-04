@@ -330,7 +330,9 @@ describe("SessionV2.prompt", () => {
 
       expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1))).toBe(1)
       expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
-      expect(yield* session.messages({ sessionID })).toMatchObject([{ id: messageID, type: "user", text: "Promote once" }])
+      expect(yield* session.messages({ sessionID })).toMatchObject([
+        { id: messageID, type: "user", text: "Promote once" },
+      ])
     }),
   )
 
@@ -351,7 +353,11 @@ describe("SessionV2.prompt", () => {
 
       yield* events.remove(sessionID)
       yield* db.delete(SessionInputTable).where(eq(SessionInputTable.session_id, sessionID)).run().pipe(Effect.orDie)
-      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, sessionID)).run().pipe(Effect.orDie)
+      yield* db
+        .delete(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
       yield* events.replayAll(
         recorded.map((event) => ({
           id: event.id,

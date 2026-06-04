@@ -197,7 +197,18 @@ test("sync v2 hydrates pending inputs without duplicating projected messages", a
   const events = createEventSource()
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session/session-1/input")
-      return json({ data: [{ id: "msg_pending", sessionID: "session-1", admittedSeq: 0, prompt: { text: "pending" }, delivery: "queue", timeCreated: 0 }] })
+      return json({
+        data: [
+          {
+            id: "msg_pending",
+            sessionID: "session-1",
+            admittedSeq: 0,
+            prompt: { text: "pending" },
+            delivery: "queue",
+            timeCreated: 0,
+          },
+        ],
+      })
     if (url.pathname === "/api/session/session-1/message")
       return json({ data: [{ id: "msg_visible", type: "user", text: "visible", time: { created: 1 } }] })
   })
