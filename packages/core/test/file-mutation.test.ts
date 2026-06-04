@@ -268,11 +268,14 @@ describe("FileMutation", () => {
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
         const secondFinished = yield* Deferred.make<void>()
-        const firstPath = path.join(yield* Effect.promise(() => fs.realpath(directory)), "first.txt")
         const secondPath = path.join(directory, "second.txt")
-        const filesystem = instrumentWrites((write, target) =>
-          target === firstPath
-            ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst)), Effect.andThen(write))
+        let writes = 0
+        const filesystem = instrumentWrites((write) =>
+          ++writes === 1
+            ? Deferred.succeed(firstStarted, undefined).pipe(
+                Effect.andThen(Deferred.await(releaseFirst)),
+                Effect.andThen(write),
+              )
             : write.pipe(Effect.andThen(Deferred.succeed(secondFinished, undefined))),
         )
 
