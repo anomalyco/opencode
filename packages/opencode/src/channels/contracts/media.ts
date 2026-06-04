@@ -5,6 +5,7 @@ export interface MediaPart {
   readonly data: Uint8Array
   readonly filename?: string
   readonly mimeType?: string
+  readonly ref?: string
 }
 
 export interface MediaSender {
