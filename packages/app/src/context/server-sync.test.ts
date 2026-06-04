@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
+import { planReconnectRefresh } from "./global-sync/reconnect-refresh"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 
 describe("pickDirectoriesToEvict", () => {
@@ -74,6 +75,30 @@ describe("estimateRootSessionTotal", () => {
 
   test("keeps exact total when limited fetch is under limit", () => {
     expect(estimateRootSessionTotal({ count: 9, limit: 10, limited: true })).toBe(9)
+  })
+})
+
+describe("planReconnectRefresh", () => {
+  test("queues global and every materialized child directory", () => {
+    const plan = planReconnectRefresh({
+      directories: ["/repo", "/repo-sandbox///"],
+      forceSessions: false,
+      hasSessionMeta: () => true,
+    })
+
+    expect(plan.refreshGlobal).toBe(true)
+    expect(plan.bootstrapDirectories).toEqual(["/repo", "/repo-sandbox///"])
+    expect(plan.forceSessionDirectories).toEqual([])
+  })
+
+  test("forces only directories with prior session metadata when requested", () => {
+    const plan = planReconnectRefresh({
+      directories: ["/repo///", "/other", "/repo-sandbox"],
+      forceSessions: true,
+      hasSessionMeta: (key) => key === "/repo" || key === "/repo-sandbox",
+    })
+
+    expect(plan.forceSessionDirectories.map(String)).toEqual(["/repo", "/repo-sandbox"])
   })
 })
 

@@ -1,5 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
@@ -26,7 +26,13 @@ import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { displayName, getProjectAvatarSource, projectForSession, sortedRootSessions } from "@/pages/layout/helpers"
+import {
+  displayName,
+  getProjectAvatarSource,
+  projectForSession,
+  routeProjectRoot,
+  sortedRootSessions,
+} from "@/pages/layout/helpers"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { messageAgentColor } from "@/utils/agent"
@@ -77,12 +83,22 @@ function HomeDesign() {
   // Selected project is URL-addressable via `/?project=<base64(worktree)>` so other
   // surfaces (e.g. the mobile bottom bar) can deep-link straight into a project's
   // session list. Selection stays in-memory free; the query param is the source of truth.
-  const selectedDirectory = createMemo(() => {
+  const rawProjectParam = createMemo(() => {
     const raw = searchParams.project
-    return Array.isArray(raw) ? decode64(raw[0]) : decode64(raw)
+    return Array.isArray(raw) ? raw[0] : raw
   })
+  const selectedDirectory = createMemo(() => decode64(rawProjectParam()))
   const projects = createMemo(() => layout.projects.list())
-  const selectedProject = createMemo(() => projects().find((project) => project.worktree === selectedDirectory()))
+  const selectedRoot = createMemo(() => {
+    const directory = selectedDirectory()
+    if (!directory) return
+    return canonicalProjectRoot(directory)
+  })
+  const selectedProject = createMemo(() => {
+    const root = selectedRoot()
+    if (!root) return
+    return projects().find((project) => pathKey(project.worktree) === pathKey(root))
+  })
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
   const projectDirectories = createMemo(() => {
     const project = selectedProject()
@@ -128,13 +144,49 @@ function HomeDesign() {
   })
   const groups = createMemo(() => groupSessions(records(), language))
 
-  function setSelectedDirectory(directory: string | undefined) {
-    setSearchParams({ project: directory ? base64Encode(directory) : undefined })
+  createEffect(() => {
+    const raw = rawProjectParam()
+    if (!raw) return
+
+    const directory = selectedDirectory()
+    if (!directory) {
+      setSelectedDirectory(undefined, true)
+      return
+    }
+
+    const root = canonicalProjectRoot(directory)
+    if (!root) {
+      // `sync.ready` currently tracks the bootstrap query pending state. Wait until
+      // bootstrap has finished before deciding an unknown project param is invalid;
+      // sandbox routes need project metadata to canonicalize to their root.
+      if (!sync.ready) setSelectedDirectory(undefined, true)
+      return
+    }
+
+    layout.projects.open(root)
+    server.projects.touch(root)
+    if (root !== directory) setSelectedDirectory(root, true)
+  })
+
+  function canonicalProjectRoot(directory: string) {
+    return routeProjectRoot({
+      directory,
+      opened: projects(),
+      projects: sync.data.project,
+      workspaceOrder: {},
+    })
+  }
+
+  function setSelectedDirectory(directory: string | undefined, replace = false) {
+    setSearchParams({ project: directory ? base64Encode(directory) : undefined }, { replace })
   }
 
   function selectProject(directory: string) {
-    if (!projects().some((project) => project.worktree === directory)) return
-    setSelectedDirectory(directory)
+    const root = canonicalProjectRoot(directory)
+    if (!root || !projects().some((project) => pathKey(project.worktree) === pathKey(root))) return
+    layout.projects.open(root)
+    server.projects.touch(root)
+    setSelectedDirectory(root)
   }
 
   function clearSelectedProject() {

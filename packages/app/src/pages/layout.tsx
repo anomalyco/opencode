@@ -71,6 +71,7 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   latestRootSession,
+  routeProjectRoot,
   sortedRootSessions,
 } from "./layout/helpers"
 import {
@@ -1234,23 +1235,26 @@ export default function Layout(props: ParentProps) {
   }
 
   function projectRoot(directory: string) {
-    const key = pathKey(directory)
-    const project = layout.projects
-      .list()
-      .find((item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key))
-    if (project) return project.worktree
+    return routeRoot(directory) ?? directory
+  }
 
-    const known = Object.entries(store.workspaceOrder).find(
-      ([root, dirs]) => pathKey(root) === key || dirs.some((item) => pathKey(item) === key),
-    )
-    if (known) return known[0]
-
+  function routeRoot(directory: string, sessionID?: string) {
     const [child] = serverSync.child(directory, { bootstrap: false })
-    const id = child.project
-    if (!id) return directory
+    const session = sessionID
+      ? child.session.find((item) => item.id === sessionID && pathKey(item.directory) === pathKey(directory))
+      : undefined
+    return routeProjectRoot({
+      directory,
+      opened: layout.projects.list(),
+      projects: serverSync.data.project,
+      workspaceOrder: store.workspaceOrder,
+      projectID: child.project || session?.projectID,
+    })
+  }
 
-    const meta = serverSync.data.project.find((item) => item.id === id)
-    return meta?.worktree ?? directory
+  function routeSessionReady(directory: string, sessionID: string) {
+    const [child] = serverSync.child(directory, { bootstrap: false })
+    return child.session.some((item) => item.id === sessionID && pathKey(item.directory) === pathKey(directory))
   }
 
   function activeProjectRoot(directory: string) {
@@ -1774,10 +1778,12 @@ export default function Layout(props: ParentProps) {
   createEffect(
     on(
       () => {
-        return [pageReady(), route().slug, params.id, currentProject()?.worktree, currentDir()] as const
+        const dir = currentDir()
+        const id = params.id
+        return [pageReady(), layoutReady(), route().slug, id, dir, dir ? routeRoot(dir, id) : undefined] as const
       },
-      ([ready, slug, id, root, dir]) => {
-        if (!ready || !slug || !dir) {
+      ([ready, isLayoutReady, slug, id, dir, root]) => {
+        if (!ready || !isLayoutReady || !slug || !dir) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
           activeRoute.directory = ""
@@ -1785,6 +1791,10 @@ export default function Layout(props: ParentProps) {
         }
 
         if (!id) {
+          if (root) {
+            layout.projects.open(root)
+            if (server.projects.last() !== root) server.projects.touch(root)
+          }
           activeRoute.session = ""
           activeRoute.sessionProject = ""
           activeRoute.directory = ""
@@ -1793,6 +1803,11 @@ export default function Layout(props: ParentProps) {
 
         const session = `${slug}/${id}`
 
+        if (!routeSessionReady(dir, id)) {
+          activeRoute.sessionProject = ""
+          return
+        }
+
         if (!root) {
           activeRoute.session = session
           activeRoute.directory = dir
@@ -1800,6 +1815,7 @@ export default function Layout(props: ParentProps) {
           return
         }
 
+        layout.projects.open(root)
         if (server.projects.last() !== root) server.projects.touch(root)
 
         const changed = session !== activeRoute.session || dir !== activeRoute.directory

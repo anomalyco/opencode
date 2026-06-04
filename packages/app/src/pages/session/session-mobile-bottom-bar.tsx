@@ -1,12 +1,12 @@
 import { For, Show, createMemo } from "solid-js"
 import { useNavigate } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
+import { isProjectBottomBarActive, projectBottomBarHref } from "./session-mobile-bottom-bar-helpers"
 
 export type SessionMobileTab = "session" | "changes"
 
@@ -34,9 +34,10 @@ export function SessionMobileBottomBar(props: {
   // Deep-link into the project's session list (the addressable Home route),
   // NOT a brand-new session. Mark the project open/recent first so it stays in sync.
   function openProject(project: LocalProject) {
-    layout.projects.open(project.worktree)
-    server.projects.touch(project.worktree)
-    navigate(`/?project=${base64Encode(project.worktree)}`)
+    const root = project.worktree
+    layout.projects.open(root)
+    server.projects.touch(root)
+    navigate(projectBottomBarHref(project))
   }
 
   return (
@@ -61,9 +62,7 @@ export function SessionMobileBottomBar(props: {
                 // (worktree + sandboxes) so sessions running in a sandbox subdir still
                 // highlight their owning project, mirroring home.tsx's `directories()`.
                 const selected = createMemo(() => {
-                  const active = props.activeDirectory
-                  if (!active) return false
-                  return [project.worktree, ...(project.sandboxes ?? [])].includes(active)
+                  return isProjectBottomBarActive(props.activeDirectory, project)
                 })
                 return (
                   <button
