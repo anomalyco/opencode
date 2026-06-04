@@ -69,6 +69,7 @@ opencode-dev
 UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
+*.tsbuildinfo
 
 # Trellis workflow (developer-specific)
 .trellis/workspace/
