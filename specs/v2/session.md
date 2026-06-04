@@ -1,8 +1,5 @@
 # Session API
 
-See [`session-inbox-ordering.md`](./session-inbox-ordering.md) for the proposed
-prompt inbox, transcript ordering, and optimistic TUI rendering model.
-
 ## Current V2 Core Slice
 
 The Effect-native core facade treats prompt recording and execution as separate responsibilities:
