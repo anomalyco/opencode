@@ -1,10 +1,11 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
-import { useServer } from "./server"
+import { ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
@@ -68,6 +69,11 @@ type TabHandoff = {
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
+
+export type LayoutRoute =
+  | { type: "home" }
+  | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
+  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
 
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
   touch(key)
@@ -146,6 +152,21 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
+const currentRoute = (pathname: string): LayoutRoute => {
+  const parts = pathname.split("/").filter(Boolean)
+  if (parts.length === 0) return { type: "home" }
+
+  const dirBase64 = parts[0]
+  const dir = decode64(dirBase64)
+  if (!dir) return { type: "home" }
+
+  if (parts[1] !== "session") return { type: "home" }
+
+  const id = parts[2]
+  if (id) return { type: "session", dir, dirBase64, sessionId: id }
+  return { type: "dir-new-sesssion", dir, dirBase64 }
+}
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
@@ -153,6 +174,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const serverSync = useServerSync()
     const server = useServer()
     const platform = usePlatform()
+    const location = useLocation()
+    const route = createMemo(() => currentRoute(location.pathname))
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
@@ -557,6 +580,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     return {
+      route,
       ready,
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
