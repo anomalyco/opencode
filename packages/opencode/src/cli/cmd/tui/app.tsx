@@ -33,15 +33,11 @@ import { StartupLoading } from "@tui/component/startup-loading"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { SyncProviderV2 } from "@tui/context/sync-v2"
 import { LocalProvider, useLocal } from "@tui/context/local"
-import { DialogModel } from "@tui/component/dialog-model"
-import { useConnected } from "@tui/component/use-connected"
-import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
@@ -57,7 +53,6 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
-import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
@@ -77,7 +72,6 @@ import {
 } from "./keymap"
 
 import type { EventSource } from "./context/sdk"
-import { DialogVariant } from "./component/dialog-variant"
 
 const appBindingCommands = [
   "command.palette.show",
@@ -92,25 +86,14 @@ const appBindingCommands = [
   "session.quick_switch.7",
   "session.quick_switch.8",
   "session.quick_switch.9",
-  "model.list",
-  "model.cycle_recent",
-  "model.cycle_recent_reverse",
-  "model.cycle_favorite",
-  "model.cycle_favorite_reverse",
   "agent.list",
-  "mcp.list",
   "agent.cycle",
   "agent.cycle.reverse",
-  "variant.cycle",
-  "variant.list",
-  "provider.connect",
-  "console.org.switch",
   "opencode.status",
   "theme.switch",
   "theme.switch_mode",
   "theme.mode.lock",
   "help.show",
-  "docs.open",
   "app.debug",
   "app.console",
   "app.heap_snapshot",
@@ -447,7 +430,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     ),
   )
 
-  const connected = useConnected()
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -515,67 +497,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       })),
       {
-        name: "model.list",
-        title: "Switch model",
-        suggested: true,
-        category: "Agent",
-        slashName: "models",
-        run: () => {
-          dialog.replace(() => <DialogModel />)
-        },
-      },
-      {
-        name: "model.cycle_recent",
-        title: "Model cycle",
-        category: "Agent",
-        hidden: true,
-        run: () => {
-          local.model.cycle(1)
-        },
-      },
-      {
-        name: "model.cycle_recent_reverse",
-        title: "Model cycle reverse",
-        category: "Agent",
-        hidden: true,
-        run: () => {
-          local.model.cycle(-1)
-        },
-      },
-      {
-        name: "model.cycle_favorite",
-        title: "Favorite cycle",
-        category: "Agent",
-        hidden: true,
-        run: () => {
-          local.model.cycleFavorite(1)
-        },
-      },
-      {
-        name: "model.cycle_favorite_reverse",
-        title: "Favorite cycle reverse",
-        category: "Agent",
-        hidden: true,
-        run: () => {
-          local.model.cycleFavorite(-1)
-        },
-      },
-      {
         name: "agent.list",
         title: "Switch agent",
         category: "Agent",
         slashName: "agents",
         run: () => {
           dialog.replace(() => <DialogAgent />)
-        },
-      },
-      {
-        name: "mcp.list",
-        title: "Toggle MCPs",
-        category: "Agent",
-        slashName: "mcps",
-        run: () => {
-          dialog.replace(() => <DialogMcp />)
         },
       },
       {
@@ -588,24 +515,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "variant.cycle",
-        title: "Variant cycle",
-        category: "Agent",
-        run: () => {
-          local.model.variant.cycle()
-        },
-      },
-      {
-        name: "variant.list",
-        title: "Switch model variant",
-        category: "Agent",
-        hidden: local.model.variant.list().length === 0,
-        slashName: "variants",
-        run: () => {
-          dialog.replace(() => <DialogVariant />)
-        },
-      },
-      {
         name: "agent.cycle.reverse",
         title: "Agent cycle reverse",
         category: "Agent",
@@ -614,31 +523,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           local.agent.move(-1)
         },
       },
-      {
-        name: "provider.connect",
-        title: "Connect provider",
-        suggested: !connected(),
-        slashName: "connect",
-        run: () => {
-          dialog.replace(() => <DialogProviderList />)
-        },
-        category: "Provider",
-      },
-      ...(sync.data.console_state.switchableOrgCount > 1
-        ? [
-            {
-              name: "console.org.switch",
-              title: "Switch org",
-              suggested: Boolean(sync.data.console_state.activeOrgName),
-              slashName: "org",
-              slashAliases: ["orgs", "switch-org"],
-              run: () => {
-                dialog.replace(() => <DialogConsoleOrg />)
-              },
-              category: "Provider",
-            },
-          ]
-        : []),
       {
         name: "opencode.status",
         title: "View status",
@@ -682,15 +566,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         slashName: "help",
         run: () => {
           dialog.replace(() => <DialogHelp />)
-        },
-        category: "System",
-      },
-      {
-        name: "docs.open",
-        title: "Open docs",
-        run: () => {
-          open("https://opencode.ai/docs").catch(() => {})
-          dialog.clear()
         },
         category: "System",
       },
