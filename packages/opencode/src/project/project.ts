@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, ne, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -209,12 +209,40 @@ export const layer = Layer.effect(
                 .set({ project_id: newID })
                 .where(eq(WorkspaceTable.project_id, oldID))
                 .run()
+              yield* d.run(sql`
+                INSERT OR IGNORE INTO project_directory (project_id, directory, type, time_created)
+                SELECT
+                  ${newID},
+                  directory,
+                  type,
+                  time_created
+                FROM project_directory
+                WHERE project_id = ${oldID}
+              `)
+              yield* d
+                .delete(ProjectDirectoryTable)
+                .where(eq(ProjectDirectoryTable.project_id, oldID))
+                .run()
 
               if (oldProject) yield* d.delete(ProjectTable).where(eq(ProjectTable.id, oldID)).run()
             }),
           { behavior: "immediate" },
         )
         .pipe(Effect.orDie)
+    })
+
+    const migrateProjectWorktreeIds = Effect.fn("Project.migrateProjectWorktreeIds")(function* (
+      worktree: string,
+      projectID: ProjectV2.ID,
+    ) {
+      if (projectID === ProjectV2.ID.global) return
+      const rows = yield* db
+        .select({ id: ProjectTable.id })
+        .from(ProjectTable)
+        .where(and(eq(ProjectTable.worktree, AbsolutePath.make(worktree)), ne(ProjectTable.id, projectID)))
+        .all()
+        .pipe(Effect.orDie)
+      yield* Effect.forEach(rows, (row) => migrateProjectId(row.id, projectID), { discard: true })
     })
 
     const saveProjectDirectory = Effect.fn("Project.saveProjectDirectory")(function* (input: {
@@ -260,6 +288,7 @@ export const layer = Layer.effect(
       // Phase 2: upsert
       const projectID = ProjectV2.ID.make(data.id)
       yield* migrateProjectId(data.previous ? ProjectV2.ID.make(data.previous) : undefined, projectID)
+      yield* migrateProjectWorktreeIds(worktree, projectID)
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       const existing = row
         ? fromRow(row)

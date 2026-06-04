@@ -31,6 +31,7 @@ export const migrations = (
     import("./migration/20260603040000_session_message_projection_order"),
     import("./migration/20260603141458_session_input_inbox"),
     import("./migration/20260603160727_jittery_ezekiel_stane"),
+    import("./migration/20260604120000_dedupe_project_worktrees"),
     import("./migration/20260604172448_event_sourced_session_input"),
     import("./migration/20260605003541_add_session_context_snapshot"),
     import("./migration/20260605042240_add_context_epoch_agent"),

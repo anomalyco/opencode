@@ -11,6 +11,7 @@ import { migrations } from "@opencode-ai/core/database/migration.gen"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
+import dedupeProjectWorktreesMigration from "@opencode-ai/core/database/migration/20260604120000_dedupe_project_worktrees"
 import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -239,6 +240,50 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('fresh_projection', 'session', 'user', 7, 2, 2, '{}')`,
         )
         expect(yield* db.get(sql`SELECT id, seq FROM session_message`)).toEqual({ id: "fresh_projection", seq: 7 })
+      }),
+    )
+  })
+
+  test("deduplicates projects with the same worktree", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE project (id text PRIMARY KEY, worktree text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE session (id text PRIMARY KEY, project_id text NOT NULL, directory text NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE TABLE workspace (id text PRIMARY KEY, project_id text NOT NULL)`)
+        yield* db.run(
+          sql`CREATE TABLE project_directory (project_id text NOT NULL, directory text NOT NULL, type text NOT NULL, time_created integer NOT NULL, PRIMARY KEY (project_id, directory))`,
+        )
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated) VALUES ('old', '/repo', 1, 10), ('new', '/repo', 2, 20), ('other', '/other', 3, 30)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, directory) VALUES ('old-session', 'old', '/repo'), ('new-session', 'new', '/repo'), ('other-session', 'other', '/other')`,
+        )
+        yield* db.run(sql`INSERT INTO workspace (id, project_id) VALUES ('old-workspace', 'old')`)
+        yield* db.run(
+          sql`INSERT INTO project_directory (project_id, directory, type, time_created) VALUES ('old', '/repo/packages/app', 'root', 11), ('old', '/repo', 'main', 12), ('new', '/repo', 'main', 22)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [dedupeProjectWorktreesMigration])
+
+        expect(yield* db.all(sql`SELECT id, project_id FROM session ORDER BY id`)).toEqual([
+          { id: "new-session", project_id: "new" },
+          { id: "old-session", project_id: "new" },
+          { id: "other-session", project_id: "other" },
+        ])
+        expect(yield* db.all(sql`SELECT id, project_id FROM workspace`)).toEqual([
+          { id: "old-workspace", project_id: "new" },
+        ])
+        expect(yield* db.all(sql`SELECT id FROM project ORDER BY id`)).toEqual([{ id: "new" }, { id: "other" }])
+        expect(yield* db.all(sql`SELECT project_id, directory FROM project_directory ORDER BY directory`)).toEqual([
+          { project_id: "new", directory: "/repo" },
+          { project_id: "new", directory: "/repo/packages/app" },
+        ])
       }),
     )
   })
