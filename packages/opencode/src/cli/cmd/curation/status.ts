@@ -16,7 +16,13 @@ export const CurationStatusCommand = effectCmd({
     }),
   handler: Effect.fn("Cli.CurationStatus")(function* (args) {
     const { db } = yield* Database.Service
-    const runs = db.select().from(curationLogTable).orderBy(desc(curationLogTable.time_started)).limit(args.limit).all()
+    const runs = (yield* db
+      .select()
+      .from(curationLogTable)
+      .orderBy(desc(curationLogTable.time_started))
+      .limit(args.limit)
+      .all()
+      .pipe(Effect.orDie))
 
     if (runs.length === 0) {
       return yield* fail("No curation runs recorded yet. Run `opencode curation run` to start one.")

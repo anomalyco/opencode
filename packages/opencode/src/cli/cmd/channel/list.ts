@@ -15,7 +15,8 @@ export const ChannelListCommand = effectCmd({
     }
     for (const ch of channels) {
       const status = ch.enabled ? "enabled" : "disabled"
-      console.log(`${ch.name} type=${ch.type} status=${status} url=${ch.webhook_url}`)
+      const configStr = ch.config !== undefined ? JSON.stringify(ch.config) : "{}"
+      console.log(`${ch.name} type=${ch.type} status=${status} config=${configStr}`)
     }
   }),
 })

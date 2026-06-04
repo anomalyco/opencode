@@ -30,12 +30,12 @@ export const ChannelAddCommand = effectCmd({
     const channel = yield* svc.create({
       type: args.type,
       name: args.name,
-      webhook_url: args.url,
+      config: { webhook_url: args.url },
     })
     console.log(`Channel added:`)
     console.log(`  name: ${channel.name}`)
     console.log(`  type: ${channel.type}`)
-    console.log(`  url: ${channel.webhook_url}`)
+    console.log(`  url: ${args.url}`)
     console.log(`  status: ${channel.enabled ? "enabled" : "disabled"}`)
   }),
 })
