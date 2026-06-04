@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
@@ -21,6 +21,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -28,7 +29,7 @@ afterEach(async () => {
 
 const ref = {
   providerID: ProviderV2.ID.make("test"),
-  modelID: ProviderV2.ModelID.make("test-model"),
+  modelID: ModelV2.ID.make("test-model"),
 }
 
 const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
@@ -69,7 +70,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     model: ref,
     time: { created: Date.now() },
   })
-  const assistant: SessionLegacy.Assistant = {
+  const assistant: SessionV1.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     parentID: user.id,
@@ -81,6 +82,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     modelID: ref.modelID,
     providerID: ref.providerID,
+    variant: "xhigh",
     time: { created: Date.now() },
   }
   yield* session.updateMessage(assistant)
@@ -99,7 +101,7 @@ function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void;
   }
 }
 
-function reply(input: SessionPrompt.PromptInput, text: string): SessionLegacy.WithParts {
+function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithParts {
   const id = MessageID.ascending()
   return {
     info: {
@@ -242,6 +244,7 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).toBe(child.id)
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
+      expect(seen?.variant).toBe("xhigh")
     }),
   )
 
@@ -515,6 +518,80 @@ describe("tool.task", () => {
       expect(result.metadata.background).toBe(true)
       expect(result.output).toContain(`state="running"`)
       expect(job?.status).toBe("running")
+    }),
+  )
+
+  background.instance("background task completion waits for running updates", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const first = defer<void>()
+      const second = defer<void>()
+      const updated = defer<SessionPrompt.PromptInput>()
+      const injected = defer<SessionPrompt.PromptInput>()
+      let prompts = 0
+      const promptOps: TaskPromptOps = {
+        ...stubOps(),
+        prompt: (input) => {
+          if (input.sessionID === chat.id) {
+            injected.resolve(input)
+            return Effect.succeed(reply(input, "done"))
+          }
+          prompts++
+          if (prompts === 1) return Effect.promise(() => first.promise).pipe(Effect.as(reply(input, "first done")))
+          updated.resolve(input)
+          return Effect.promise(() => second.promise).pipe(Effect.as(reply(input, "second done")))
+        },
+      }
+      const context = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const started = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        context,
+      )
+      const result = yield* def.execute(
+        {
+          description: "add investigation scope",
+          prompt: "also inspect cancellation",
+          subagent_type: "general",
+          task_id: started.metadata.sessionId,
+        },
+        context,
+      )
+
+      expect((yield* Effect.promise(() => updated.promise)).parts).toEqual([
+        { type: "text", text: "also inspect cancellation" },
+      ])
+      expect(result.metadata.sessionId).toBe(started.metadata.sessionId)
+      expect(result.metadata.background).toBe(true)
+      expect(result.output).toContain("Background task updated")
+      first.resolve()
+      expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
+
+      second.resolve()
+      const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
+      expect(waited.info?.status).toBe("completed")
+      expect(waited.info?.output).toBe("second done")
+      const notification = yield* Effect.promise(() => injected.promise)
+      expect(notification.variant).toBe("xhigh")
+      expect(notification.parts[0]?.type).toBe("text")
+      if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
     }),
   )
 

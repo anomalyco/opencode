@@ -1,4 +1,5 @@
 import os from "os"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -21,11 +22,12 @@ import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
@@ -99,10 +101,13 @@ function googleVertexAnthropicBaseURL(project: string | undefined, location: str
 
 type BundledSDK = {
   languageModel(modelId: string): LanguageModelV3
+  chat?: (modelId: string) => LanguageModelV3
+  responses?: (modelId: string) => LanguageModelV3
 }
 
 const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>> = {
   "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
+  "@ai-sdk/amazon-bedrock/mantle": () => import("@ai-sdk/amazon-bedrock/mantle").then((m) => m.createBedrockMantle),
   "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((m) => m.createAnthropic),
   "@ai-sdk/azure": () => import("@ai-sdk/azure").then((m) => m.createAzure),
   "@ai-sdk/google": () => import("@ai-sdk/google").then((m) => m.createGoogleGenerativeAI),
@@ -129,7 +134,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
 }
 
-type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
+type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
 type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
 type CustomDiscoverModels = () => Promise<Record<string, Model>>
 type CustomLoader = (provider: Info) => Effect.Effect<{
@@ -142,7 +147,7 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
 
 type CustomDep = {
   auth: (id: string) => Effect.Effect<Auth.Info | undefined>
-  config: () => Effect.Effect<Config.Info>
+  config: () => Effect.Effect<ConfigV1.Info>
   env: () => Effect.Effect<Record<string, string | undefined>>
   get: (key: string) => Effect.Effect<string | undefined>
 }
@@ -153,6 +158,12 @@ function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
   if (sdk.messages) return sdk.messages(modelID)
   if (sdk.chat) return sdk.chat(modelID)
   return sdk.languageModel(modelID)
+}
+
+function selectBedrockMantleLanguageModel(sdk: BundledSDK, modelID: string) {
+  if (modelID === "openai.gpt-oss-safeguard-20b" || modelID === "openai.gpt-oss-safeguard-120b")
+    return sdk.chat?.(modelID) ?? sdk.languageModel(modelID)
+  return sdk.responses?.(modelID) ?? sdk.languageModel(modelID)
 }
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
@@ -330,7 +341,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: true,
         options: providerOptions,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
+          if (model?.api.npm === "@ai-sdk/amazon-bedrock/mantle") return selectBedrockMantleLanguageModel(sdk, modelID)
+
           // Skip region prefixing if model already has a cross-region inference profile prefix
           // Models from models.dev may already include prefixes like us., eu., global., etc.
           const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
@@ -652,7 +665,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             for (const m of result.models) {
               if (!input.models[m.id]) {
                 models[m.id] = {
-                  id: ProviderV2.ModelID.make(m.id),
+                  id: ModelV2.ID.make(m.id),
                   providerID: ProviderV2.ID.make("gitlab"),
                   name: `Agent Platform (${m.name})`,
                   family: "",
@@ -908,7 +921,7 @@ const ProviderLimit = Schema.Struct({
 })
 
 export const Model = Schema.Struct({
-  id: ProviderV2.ModelID,
+  id: ModelV2.ID,
   providerID: ProviderV2.ID,
   api: ProviderApiInfo,
   name: Schema.String,
@@ -966,7 +979,7 @@ export function defaultModelIDs<T extends { models: Record<string, { id: string 
 
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
   providerID: ProviderV2.ID,
-  modelID: ProviderV2.ModelID,
+  modelID: ModelV2.ID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
   cause: Schema.optional(Schema.Defect),
 }) {
@@ -1004,20 +1017,14 @@ export type Error = ModelNotFoundError | InitError | NoProvidersError | NoModels
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderV2.ID, Info>>
   readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
-  readonly getModel: (
-    providerID: ProviderV2.ID,
-    modelID: ProviderV2.ModelID,
-  ) => Effect.Effect<Model, ModelNotFoundError>
+  readonly getModel: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Model, ModelNotFoundError>
   readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
   readonly closest: (
     providerID: ProviderV2.ID,
     query: string[],
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
-  readonly defaultModel: () => Effect.Effect<
-    { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID },
-    DefaultModelError
-  >
+  readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
 }
 
 interface State {
@@ -1068,7 +1075,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
-    id: ProviderV2.ModelID.make(model.id),
+    id: ModelV2.ID.make(model.id),
     providerID: ProviderV2.ID.make(provider.id),
     name: model.name,
     family: model.family,
@@ -1126,7 +1133,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
       const base = fromModelsDevModel(provider, model)
       models[id] = {
         ...base,
-        id: ProviderV2.ModelID.make(id),
+        id: ModelV2.ID.make(id),
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
         options: opts.provider?.body
@@ -1151,7 +1158,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
-function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelID, enableExperimentalModels: boolean) {
+function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
   const available = provider
     ? Object.keys(provider.models).filter((id) => {
         const model = provider.models[id]
@@ -1183,7 +1190,7 @@ function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelI
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const config = yield* Config.Service
     const auth = yield* Auth.Service
     const env = yield* Env.Service
@@ -1267,7 +1274,7 @@ export const layer = Layer.effect(
                 id,
                 {
                   ...model,
-                  id: ProviderV2.ModelID.make(id),
+                  id: ModelV2.ID.make(id),
                   providerID,
                 },
               ]),
@@ -1302,7 +1309,7 @@ export const layer = Layer.effect(
               return existingModel?.name ?? modelID
             })
             const parsedModel: Model = {
-              id: ProviderV2.ModelID.make(modelID),
+              id: ModelV2.ID.make(modelID),
               api: {
                 id: apiID,
                 npm: apiNpm,
@@ -1617,7 +1624,9 @@ export const layer = Layer.effect(
 
           // Strip openai itemId metadata following what codex does
           if (
-            (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
+            (model.api.npm === "@ai-sdk/openai" ||
+              model.api.npm === "@ai-sdk/azure" ||
+              model.api.npm === "@ai-sdk/amazon-bedrock/mantle") &&
             opts.body &&
             opts.method === "POST"
           ) {
@@ -1689,7 +1698,7 @@ export const layer = Layer.effect(
       InstanceState.use(state, (s) => s.providers[providerID]),
     )
 
-    const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ProviderV2.ModelID) {
+    const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ModelV2.ID) {
       const s = yield* InstanceState.get(state)
       const provider = s.providers[providerID]
       if (!provider) {
@@ -1724,10 +1733,15 @@ export const layer = Layer.effect(
         async () => {
           const sdk = await resolveSDK(model, s, envs)
           const language = s.modelLoaders[model.providerID]
-            ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
-                ...provider.options,
-                ...model.options,
-              })
+            ? await s.modelLoaders[model.providerID](
+                sdk,
+                model.api.id,
+                {
+                  ...provider.options,
+                  ...model.options,
+                },
+                model,
+              )
             : sdk.languageModel(model.api.id)
           s.models.set(key, language)
           return language
@@ -1773,7 +1787,7 @@ export const layer = Layer.effect(
       if (experimental.model) {
         return {
           ...experimental.model,
-          id: ProviderV2.ModelID.make(experimental.model.id),
+          id: ModelV2.ID.make(experimental.model.id),
           providerID: ProviderV2.ID.make(experimental.model.providerID),
         }
       }
@@ -1827,16 +1841,16 @@ export const layer = Layer.effect(
 
       const s = yield* InstanceState.get(state)
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
-        Effect.map((x): { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }[] => {
+        Effect.map((x): { providerID: ProviderV2.ID; modelID: ModelV2.ID }[] => {
           if (!isRecord(x) || !Array.isArray(x.recent)) return []
           return x.recent.flatMap((item) => {
             if (!isRecord(item)) return []
             if (typeof item.providerID !== "string") return []
             if (typeof item.modelID !== "string") return []
-            return [{ providerID: ProviderV2.ID.make(item.providerID), modelID: ProviderV2.ModelID.make(item.modelID) }]
+            return [{ providerID: ProviderV2.ID.make(item.providerID), modelID: ModelV2.ID.make(item.modelID) }]
           })
         }),
-        Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }[])),
+        Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ModelV2.ID }[])),
       )
       for (const entry of recent) {
         const provider = s.providers[entry.providerID]
@@ -1861,7 +1875,7 @@ export const layer = Layer.effect(
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(Env.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Auth.defaultLayer),
@@ -1885,7 +1899,7 @@ export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
     providerID: ProviderV2.ID.make(providerID),
-    modelID: ProviderV2.ModelID.make(rest.join("/")),
+    modelID: ModelV2.ID.make(rest.join("/")),
   }
 }
 

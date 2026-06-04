@@ -1,4 +1,4 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
@@ -14,7 +14,7 @@ import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
@@ -23,7 +23,7 @@ import { InstanceStore } from "@/project/instance-store"
 
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
-  AppFileSystem.defaultLayer,
+  FSUtil.defaultLayer,
   Plugin.defaultLayer,
   Truncate.defaultLayer,
   Config.defaultLayer,
@@ -156,9 +156,9 @@ const each = (
   }
 }
 
-const capture = (requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">>, stop?: Error) => ({
+const capture = (requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">>, stop?: Error) => ({
   ...ctx,
-  ask: (req: Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">) =>
+  ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
     Effect.sync(() => {
       requests.push(req)
       if (stop) throw stop
@@ -223,7 +223,7 @@ describe("tool.shell permissions", () => {
       yield* runIn(
         tmp,
         Effect.gen(function* () {
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run(
             {
               command: "echo hello",
@@ -245,7 +245,7 @@ describe("tool.shell permissions", () => {
       yield* runIn(
         tmp,
         Effect.gen(function* () {
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run(
             {
               command: "echo foo && echo bar",
@@ -269,7 +269,7 @@ describe("tool.shell permissions", () => {
         runIn(
           projectRoot,
           Effect.gen(function* () {
-            const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
             yield* run(
               {
                 command: "Write-Host foo; if ($?) { Write-Host bar }",
@@ -298,7 +298,7 @@ describe("tool.shell permissions", () => {
             tmp,
             Effect.gen(function* () {
               const err = new Error("stop after permission")
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
                   {
@@ -324,7 +324,7 @@ describe("tool.shell permissions", () => {
       projectRoot,
       Effect.gen(function* () {
         const err = new Error("stop after permission")
-        const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
         const file = process.platform === "win32" ? `${process.env.WINDIR!.replaceAll("\\", "/")}/*` : "/etc/*"
         const want = process.platform === "win32" ? glob(path.join(process.env.WINDIR!, "*")) : "/etc/*"
         expect(
@@ -355,7 +355,7 @@ describe("tool.shell permissions", () => {
               projectRoot,
               Effect.gen(function* () {
                 const file = path.join(outerTmp, "outside.txt").replaceAll("\\", "/")
-                const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+                const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
                 yield* run(
                   {
                     command: `echo $(cat "${file}")`,
@@ -384,7 +384,7 @@ describe("tool.shell permissions", () => {
             projectRoot,
             Effect.gen(function* () {
               const err = new Error("stop after permission")
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
                   {
@@ -410,7 +410,7 @@ describe("tool.shell permissions", () => {
           runIn(
             projectRoot,
             Effect.gen(function* () {
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               const file = `${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini`
               yield* run(
                 {
@@ -441,7 +441,7 @@ describe("tool.shell permissions", () => {
               tmp,
               Effect.gen(function* () {
                 const err = new Error("stop after permission")
-                const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+                const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
                 expect(
                   yield* fail(
                     {
@@ -469,7 +469,7 @@ describe("tool.shell permissions", () => {
             projectRoot,
             Effect.gen(function* () {
               const err = new Error("stop after permission")
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
                   {
@@ -498,7 +498,7 @@ describe("tool.shell permissions", () => {
               tmp,
               Effect.gen(function* () {
                 const err = new Error("stop after permission")
-                const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+                const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
                 expect(
                   yield* fail(
                     {
@@ -526,7 +526,7 @@ describe("tool.shell permissions", () => {
             projectRoot,
             Effect.gen(function* () {
               const err = new Error("stop after permission")
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
                   {
@@ -561,7 +561,7 @@ describe("tool.shell permissions", () => {
                 projectRoot,
                 Effect.gen(function* () {
                   const err = new Error("stop after permission")
-                  const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+                  const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
                   const root = path.parse(process.env.WINDIR!).root.replace(/[\\/]+$/, "")
                   expect(
                     yield* fail(
@@ -594,7 +594,7 @@ describe("tool.shell permissions", () => {
           runIn(
             projectRoot,
             Effect.gen(function* () {
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               yield* run(
                 {
                   command: "Get-Content $env:WINDIR/win.ini",
@@ -621,7 +621,7 @@ describe("tool.shell permissions", () => {
             projectRoot,
             Effect.gen(function* () {
               const err = new Error("stop after permission")
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
                   {
@@ -650,7 +650,7 @@ describe("tool.shell permissions", () => {
             projectRoot,
             Effect.gen(function* () {
               const err = new Error("stop after permission")
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
                   {
@@ -678,7 +678,7 @@ describe("tool.shell permissions", () => {
           runIn(
             projectRoot,
             Effect.gen(function* () {
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               yield* run(
                 {
                   command: "Set-Location C:/Windows",
@@ -706,7 +706,7 @@ describe("tool.shell permissions", () => {
           runIn(
             projectRoot,
             Effect.gen(function* () {
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               yield* run(
                 {
                   command: "Write-Output ('a' * 3)",
@@ -732,7 +732,7 @@ describe("tool.shell permissions", () => {
         runIn(
           projectRoot,
           Effect.gen(function* () {
-            const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
             yield* run(
               {
                 command: `TYPE "${path.join(process.env.WINDIR!, "win.ini")}"`,
@@ -756,7 +756,7 @@ describe("tool.shell permissions", () => {
         tmp,
         Effect.gen(function* () {
           const err = new Error("stop after permission")
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           expect(
             yield* fail(
               {
@@ -780,7 +780,7 @@ describe("tool.shell permissions", () => {
         tmp,
         Effect.gen(function* () {
           const err = new Error("stop after permission")
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           expect(
             yield* fail(
               {
@@ -811,7 +811,7 @@ describe("tool.shell permissions", () => {
             const want = Filesystem.normalizePathPattern(path.join(outerTmp, "*"))
 
             for (const dir of forms(outerTmp)) {
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
                   {
@@ -843,7 +843,7 @@ describe("tool.shell permissions", () => {
             projectRoot,
             Effect.gen(function* () {
               const err = new Error("stop after permission")
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               const want = glob(path.join(os.tmpdir(), "*"))
               expect(
                 yield* fail(
@@ -872,7 +872,7 @@ describe("tool.shell permissions", () => {
             projectRoot,
             Effect.gen(function* () {
               const err = new Error("stop after permission")
-              const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               const want = glob(path.join(os.tmpdir(), "*"))
               expect(
                 yield* fail(
@@ -904,7 +904,7 @@ describe("tool.shell permissions", () => {
         tmp,
         Effect.gen(function* () {
           const err = new Error("stop after permission")
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           const filepath = path.join(outerTmp, "outside.txt")
           expect(
             yield* fail(
@@ -920,6 +920,12 @@ describe("tool.shell permissions", () => {
           expect(extDirReq).toBeDefined()
           expect(extDirReq!.patterns).toContain(expected)
           expect(extDirReq!.always).toContain(expected)
+          expect(extDirReq!.metadata).toMatchObject({
+            command: `cat ${filepath}`,
+            description: "Read external file",
+            directories: [outerTmp],
+            patterns: [expected],
+          })
         }),
       )
     }),
@@ -932,7 +938,7 @@ describe("tool.shell permissions", () => {
       yield* runIn(
         tmp,
         Effect.gen(function* () {
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run(
             {
               command: `rm -rf ${path.join(tmp, "nested")}`,
@@ -953,7 +959,7 @@ describe("tool.shell permissions", () => {
       yield* runIn(
         tmp,
         Effect.gen(function* () {
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run(
             {
               command: "git log --oneline -5",
@@ -975,7 +981,7 @@ describe("tool.shell permissions", () => {
       yield* runIn(
         tmp,
         Effect.gen(function* () {
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run(
             {
               command: "cd .",
@@ -997,7 +1003,7 @@ describe("tool.shell permissions", () => {
         tmp,
         Effect.gen(function* () {
           const err = new Error("stop after permission")
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           expect(
             yield* fail(
               { command: "echo test > output.txt", description: "Redirect test output" },
@@ -1018,7 +1024,7 @@ describe("tool.shell permissions", () => {
       yield* runIn(
         tmp,
         Effect.gen(function* () {
-          const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run({ command: "ls -la", description: "List" }, capture(requests))
           const bashReq = requests.find((r) => r.permission === "bash")
           expect(bashReq).toBeDefined()
@@ -1223,7 +1229,7 @@ describe("tool.shell truncation", () => {
         const filepath = (result.metadata as { outputPath?: string }).outputPath
         expect(filepath).toBeTruthy()
 
-        const saved = yield* (yield* AppFileSystem.Service).readFileString(filepath!)
+        const saved = yield* (yield* FSUtil.Service).readFileString(filepath!)
         const lines = saved.trim().split(/\r?\n/)
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")

@@ -1256,7 +1256,10 @@ export function Session() {
                   <PermissionPrompt request={permissions()[0]} />
                 </Show>
                 <Show when={permissions().length === 0 && questions().length > 0}>
-                  <QuestionPrompt request={questions()[0]} />
+                  <QuestionPrompt
+                    request={questions()[0]}
+                    directory={sync.session.get(questions()[0].sessionID)?.directory}
+                  />
                 </Show>
                 <Show when={session()?.parentID}>
                   <SubagentFooter />
@@ -2200,9 +2203,13 @@ function Task(props: ToolProps<typeof TaskTool>) {
   )
 
   const status = createMemo(() => sync.data.session_status[props.metadata.sessionId ?? ""])
-  const isRunning = createMemo(
-    () => props.part.state.status === "running" || (props.metadata.background === true && status() !== undefined),
-  )
+  const isRunning = createMemo(() => {
+    const value = status()
+    return (
+      props.part.state.status === "running" ||
+      (props.metadata.background === true && value !== undefined && value.type !== "idle")
+    )
+  })
   const retry = createMemo(() => {
     const value = status()
     if (value?.type !== "retry") return
