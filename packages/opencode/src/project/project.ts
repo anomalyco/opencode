@@ -1,9 +1,11 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, ne, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
+import { PermissionTable } from "@opencode-ai/core/permission/sql"
+import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
 import { which } from "@opencode-ai/core/util/which"
@@ -175,40 +177,85 @@ export const layer = Layer.effect(
     const migrateProjectId = Effect.fn("Project.migrateProjectId")(function* (
       oldID: ProjectV2.ID | undefined,
       newID: ProjectV2.ID,
+      opts?: { directory?: string },
     ) {
-      if (!oldID) return
+      const directory = opts?.directory
+      if (!oldID && !directory) return
       if (oldID === ProjectV2.ID.global) return
       if (oldID === newID) return
+
+      // Collect every old project id we should migrate away from: the explicit
+      // previous id (when the cache survived) plus any orphan projects whose
+      // worktree matches the current directory (when the cache was lost and a
+      // new id was derived from a rewritten git root commit).
+      const oldIDs: ProjectV2.ID[] = []
+      if (oldID) oldIDs.push(oldID)
+      if (directory !== undefined) {
+        const candidates = yield* db
+          .select({ id: ProjectTable.id })
+          .from(ProjectTable)
+          .where(
+            and(
+              eq(ProjectTable.worktree, AbsolutePath.make(directory)),
+              ne(ProjectTable.id, newID),
+              ne(ProjectTable.id, ProjectV2.ID.global),
+            ),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        for (const c of candidates) if (!oldIDs.includes(c.id)) oldIDs.push(c.id)
+      }
+      if (oldIDs.length === 0) return
+      if (directory !== undefined && oldIDs.length > (oldID ? 1 : 0)) {
+        log.info("migrateProjectId directory fallback", { directory, newID, candidateCount: oldIDs.length })
+      }
 
       yield* db
         .transaction(
           (d) =>
             Effect.gen(function* () {
-              const oldProject = yield* d.select().from(ProjectTable).where(eq(ProjectTable.id, oldID)).get()
+              // Re-home a project row to newID if it does not yet exist, using the
+              // first available candidate as the seed so worktree / vcs / icon
+              // metadata survive the migration.
               const newProject = yield* d.select().from(ProjectTable).where(eq(ProjectTable.id, newID)).get()
-              if (oldProject && !newProject) {
-                yield* d
-                  .insert(ProjectTable)
-                  .values({
-                    ...oldProject,
-                    id: newID,
-                    time_updated: Date.now(),
-                  })
-                  .run()
+              if (!newProject) {
+                for (const id of oldIDs) {
+                  const candidate = yield* d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
+                  if (!candidate) continue
+                  yield* d
+                    .insert(ProjectTable)
+                    .values({ ...candidate, id: newID, time_updated: Date.now() })
+                    .run()
+                  break
+                }
               }
-
-              yield* d
-                .update(SessionTable)
-                .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
-                .where(eq(SessionTable.project_id, oldID))
-                .run()
-              yield* d
-                .update(WorkspaceTable)
-                .set({ project_id: newID })
-                .where(eq(WorkspaceTable.project_id, oldID))
-                .run()
-
-              if (oldProject) yield* d.delete(ProjectTable).where(eq(ProjectTable.id, oldID)).run()
+              for (const id of oldIDs) {
+                const oldProject = yield* d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
+                // Migrate FK-owned rows before deleting the project: all four
+                // tables cascade-delete on project removal, so we must move
+                // their project_id out of the doomed range first.
+                yield* d
+                  .update(SessionTable)
+                  .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
+                  .where(eq(SessionTable.project_id, id))
+                  .run()
+                yield* d
+                  .update(WorkspaceTable)
+                  .set({ project_id: newID })
+                  .where(eq(WorkspaceTable.project_id, id))
+                  .run()
+                yield* d
+                  .update(PermissionTable)
+                  .set({ project_id: newID })
+                  .where(eq(PermissionTable.project_id, id))
+                  .run()
+                yield* d
+                  .update(ProjectDirectoryTable)
+                  .set({ project_id: newID })
+                  .where(eq(ProjectDirectoryTable.project_id, id))
+                  .run()
+                if (oldProject) yield* d.delete(ProjectTable).where(eq(ProjectTable.id, id)).run()
+              }
             }),
           { behavior: "immediate" },
         )
@@ -257,7 +304,11 @@ export const layer = Layer.effect(
 
       // Phase 2: upsert
       const projectID = ProjectV2.ID.make(data.id)
-      yield* migrateProjectId(data.previous ? ProjectV2.ID.make(data.previous) : undefined, projectID)
+      yield* migrateProjectId(
+        data.previous ? ProjectV2.ID.make(data.previous) : undefined,
+        projectID,
+        { directory: data.directory },
+      )
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       const existing = row
         ? fromRow(row)

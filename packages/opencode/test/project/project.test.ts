@@ -3,13 +3,16 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Project } from "@/project/project"
 import { $ } from "bun"
 import path from "path"
+import os from "os"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
+import { PermissionTable } from "@opencode-ai/core/permission/sql"
+import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { SessionID } from "@/session/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -23,10 +26,16 @@ import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const encoder = new TextEncoder()
 
-const layer = Layer.mergeAll(Project.defaultLayer, Database.defaultLayer, CrossSpawnSpawner.defaultLayer)
+const layer = Layer.mergeAll(
+  Project.defaultLayer,
+  ProjectV2.defaultLayer,
+  Database.defaultLayer,
+  CrossSpawnSpawner.defaultLayer,
+)
 const it = testEffect(layer)
 
 function remoteProjectID(remote: string) {
@@ -810,6 +819,369 @@ describe("Project.fromDirectory with bare repos", () => {
 
       const correctCache = path.join(barePath, "opencode")
       expect(yield* Effect.promise(() => Bun.file(correctCache).exists())).toBe(true)
+    }),
+  )
+})
+
+describe("Project.migrateProjectId directory fallback", () => {
+  it.live("migrates orphan projects whose worktree matches the current directory", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const projects = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      // Insert an orphan old project whose worktree matches the current dir.
+      const oldID = ProjectV2.ID.make("orphan-old-project-1")
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id: oldID,
+          worktree: AbsolutePath.make(tmp),
+          vcs: "git",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          sandboxes: [],
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const sessionID = crypto.randomUUID() as SessionID
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: oldID,
+          slug: sessionID,
+          directory: tmp,
+          title: "test",
+          version: "0.0.0-test",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const workspaceID = WorkspaceV2.ID.ascending()
+      yield* db
+        .insert(WorkspaceTable)
+        .values({ id: workspaceID, type: "local", name: "test", project_id: oldID })
+        .run()
+        .pipe(Effect.orDie)
+
+      const result = yield* projects.fromDirectory(tmp)
+
+      // Old project row should be gone, its sessions and workspaces moved.
+      expect(
+        yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, oldID)).get().pipe(Effect.orDie),
+      ).toBeUndefined()
+      expect(
+        (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
+          ?.project_id,
+      ).toBe(result.project.id)
+      expect(
+        (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
+          ?.project_id,
+      ).toBe(result.project.id)
+    }),
+  )
+
+  it.live("does not migrate anything when no project matches the current directory", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const projects = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      // No orphan projects inserted; the directory fallback should be a no-op.
+      const result = yield* projects.fromDirectory(tmp)
+      const matching = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.worktree, AbsolutePath.make(tmp)))
+        .all()
+        .pipe(Effect.orDie)
+
+      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      // Only the project we just resolved should be present for this directory.
+      expect(matching.length).toBe(1)
+      expect(matching[0].id).toBe(result.project.id)
+    }),
+  )
+
+  it.live("migrates every orphan project whose worktree matches the current directory", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const projects = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      const oldIDs = [
+        ProjectV2.ID.make("orphan-old-project-A"),
+        ProjectV2.ID.make("orphan-old-project-B"),
+        ProjectV2.ID.make("orphan-old-project-C"),
+      ]
+      for (const oldID of oldIDs) {
+        yield* db
+          .insert(ProjectTable)
+          .values({
+            id: oldID,
+            worktree: AbsolutePath.make(tmp),
+            vcs: "git",
+            time_created: Date.now(),
+            time_updated: Date.now(),
+            sandboxes: [],
+          })
+          .run()
+          .pipe(Effect.orDie)
+
+        const sessionID = crypto.randomUUID() as SessionID
+        yield* db
+          .insert(SessionTable)
+          .values({
+            id: sessionID,
+            project_id: oldID,
+            slug: sessionID,
+            directory: tmp,
+            title: "test",
+            version: "0.0.0-test",
+            time_created: Date.now(),
+            time_updated: Date.now(),
+          })
+          .run()
+          .pipe(Effect.orDie)
+      }
+
+      const result = yield* projects.fromDirectory(tmp)
+
+      for (const oldID of oldIDs) {
+        expect(
+          yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, oldID)).get().pipe(Effect.orDie),
+        ).toBeUndefined()
+      }
+
+      // All sessions previously linked to orphan ids now point at the new id.
+      const sessions = yield* db.select().from(SessionTable).all().pipe(Effect.orDie)
+      const orphanSessions = sessions.filter((s) => oldIDs.includes(s.project_id as ProjectV2.ID))
+      expect(orphanSessions.length).toBe(0)
+      // The new project should now own all migrated sessions.
+      const ownedSessions = sessions.filter((s) => s.project_id === result.project.id)
+      expect(ownedSessions.length).toBe(oldIDs.length)
+    }),
+  )
+
+  it.live("candidates with global id are excluded", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const projects = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      // Insert a global project row whose worktree matches the current dir.
+      // The candidates query must filter this out so the global row is not
+      // swept into the new project (P0-1: defensive against cascade-delete
+      // of legitimate global sessions).
+      const globalTimeCreated = Date.now() - 10_000
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id: ProjectV2.ID.global,
+          worktree: AbsolutePath.make(tmp),
+          vcs: "git",
+          time_created: globalTimeCreated,
+          time_updated: globalTimeCreated,
+          sandboxes: [],
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const result = yield* projects.fromDirectory(tmp)
+
+      // The global row must still exist, untouched.
+      const globalRow = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, ProjectV2.ID.global))
+        .get()
+        .pipe(Effect.orDie)
+      expect(globalRow).toBeDefined()
+      expect(globalRow?.time_created).toBe(globalTimeCreated)
+      expect(globalRow?.worktree).toBe(AbsolutePath.make(tmp))
+      // The newly resolved project must be distinct from global (this is a git dir).
+      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+    }),
+  )
+
+  it.live("permission and project_directory rows are preserved", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const projects = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      // Insert an orphan old project whose worktree matches the current dir.
+      const oldID = ProjectV2.ID.make("orphan-with-fk-1")
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id: oldID,
+          worktree: AbsolutePath.make(tmp),
+          vcs: "git",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          sandboxes: [],
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      // Pre-populate the FK-owned tables referencing oldID. Without the
+      // migration in P0-2, deleting the project row would cascade-drop these.
+      const permID = PermissionSaved.ID.create()
+      yield* db
+        .insert(PermissionTable)
+        .values({
+          id: permID,
+          project_id: oldID,
+          action: "read",
+          resource: "/secret",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(ProjectDirectoryTable)
+        .values({
+          project_id: oldID,
+          directory: AbsolutePath.make(tmp),
+          type: "root",
+          time_created: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const result = yield* projects.fromDirectory(tmp)
+
+      // Old project row gone.
+      expect(
+        yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, oldID)).get().pipe(Effect.orDie),
+      ).toBeUndefined()
+      // FK-owned rows survived and now reference the new project id.
+      const perm = yield* db
+        .select()
+        .from(PermissionTable)
+        .where(eq(PermissionTable.id, permID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(perm).toBeDefined()
+      expect(perm?.project_id).toBe(result.project.id)
+      const dir = yield* db
+        .select()
+        .from(ProjectDirectoryTable)
+        .where(
+          and(eq(ProjectDirectoryTable.project_id, result.project.id), eq(ProjectDirectoryTable.directory, tmp)),
+        )
+        .get()
+        .pipe(Effect.orDie)
+      expect(dir).toBeDefined()
+    }),
+  )
+})
+
+describe("ProjectV2.commit failure", () => {
+  it.live("logs warning and continues when writing the opencode cache fails", () =>
+    Effect.gen(function* () {
+      const projectV2 = yield* ProjectV2.Service
+
+      // Spy on the shared project logger created by core/project.ts.
+      const projectLogger = Log.create({ service: "project" })
+      const origWarn = projectLogger.warn.bind(projectLogger)
+      const warns: { msg?: unknown; extra?: Record<string, unknown> }[] = []
+      projectLogger.warn = ((msg?: unknown, extra?: Record<string, unknown>) => {
+        warns.push({ msg, extra })
+      }) as typeof origWarn
+      yield* Effect.addFinalizer(() => Effect.sync(() => { projectLogger.warn = origWarn }))
+
+      const bogusStore = path.join(os.tmpdir(), `definitely-missing-${Math.random().toString(36).slice(2)}`, "opencode")
+      const exit = yield* projectV2
+        .commit({ store: AbsolutePath.make(bogusStore), id: ProjectV2.ID.make("test-id") })
+        .pipe(Effect.exit)
+
+      // commit must not propagate the failure (backwards-compatible ignore).
+      expect(Exit.isSuccess(exit)).toBe(true)
+      // The failure must be observable through the logger.
+      expect(warns.length).toBeGreaterThan(0)
+      expect(warns[0].msg).toBe("failed to write opencode cache")
+    }),
+  )
+
+  // End-to-end: simulate the exact production bug pattern.
+  // 1. opencode creates a project whose id is derived from the root commit SHA1
+  //    (no remote, so previous + remote branches don't apply).
+  // 2. Cache file <git-common-dir>/opencode is written.
+  // 3. User rewrites git history (e.g. `git commit --amend` on root) which
+  //    changes the root commit SHA1 and thus re-derives a different project id.
+  // 4. Cache file is lost (e.g. AV quarantine, git clean, IDE rewrite).
+  // 5. opencode restarts and calls fromDirectory again with the same worktree.
+  //
+  // BEFORE the fix: orphan sessions stayed stranded under the old project id
+  // because migrateProjectId early-returned on oldID === undefined.
+  // AFTER the fix: directory-based fallback finds the orphan project and
+  // migrates session + workspace + permission + project_directory rows.
+  it.live("end-to-end: recaptures orphan sessions when project id drifts after history rewrite", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const database = yield* Database.Service
+      const db = database.db
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      // Step 1: initial fromDirectory - establishes project id from root commit
+      const initial = yield* project.fromDirectory(tmp)
+      const oldId = initial.project.id
+      expect(oldId).not.toBe(ProjectV2.ID.global)
+
+      // Step 2: simulate session creation by inserting a row under the old project id
+      const fakeSessionId = SessionID.make("ses_e2e_test_" + Math.random().toString(36).slice(2))
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: fakeSessionId,
+          project_id: oldId,
+          slug: "e2e-test",
+          directory: tmp,
+          title: "E2E test session",
+          version: "test",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+
+      // Step 3: rewrite root commit (changes SHA1, simulating rebase --root / filter-repo)
+      yield* Effect.promise(() =>
+        $`git -C ${tmp} commit --amend --allow-empty -m "rewritten root"`.quiet(),
+      )
+
+      // Step 4: lose the cache (simulates AV quarantine, git clean, etc.)
+      yield* Effect.promise(() => $`rm -f ${tmp}/.git/opencode`.quiet())
+
+      // Step 5: fromDirectory again - should compute a NEW project id because
+      // root commit changed AND cache is gone
+      const afterRewrite = yield* project.fromDirectory(tmp)
+      const newId = afterRewrite.project.id
+      expect(newId).not.toBe(oldId) // confirm drift actually happened
+      expect(newId).not.toBe(ProjectV2.ID.global)
+
+      // THE KEY ASSERTION: the previously-orphaned session must now be associated
+      // with the new project id (migrateProjectId directory-fallback found it).
+      const migratedSession = yield* db
+        .select()
+        .from(SessionTable)
+        .where(eq(SessionTable.id, fakeSessionId))
+        .get()
+      expect(migratedSession?.project_id).toBe(newId)
+
+      // And the orphan project record must be gone
+      const orphanProject = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, oldId))
+        .get()
+      expect(orphanProject).toBeUndefined()
     }),
   )
 })

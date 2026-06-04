@@ -1,7 +1,7 @@
 export * as ProjectV2 from "./project"
 export * as Project from "./project"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Layer, Schema } from "effect"
 import { asc, desc, eq } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath, withStatics } from "./schema"
@@ -11,6 +11,9 @@ import { Git } from "./git"
 import { LayerNode } from "./effect/layer-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectoryTable } from "./project/sql"
+import * as Log from "./util/log"
+
+const log = Log.create({ service: "project" })
 
 export const ID = Schema.String.pipe(
   Schema.brand("Project.ID"),
@@ -148,7 +151,18 @@ export const layer = Layer.effect(
     })
 
     const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
-      yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
+      yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(
+        Effect.tapCause((cause) =>
+          Effect.sync(() =>
+            log.warn("failed to write opencode cache", {
+              cause: Cause.pretty(cause),
+              store: input.store,
+              id: input.id,
+            }),
+          ),
+        ),
+        Effect.ignore,
+      )
     })
 
     return Service.of({ directories, resolve, commit })
