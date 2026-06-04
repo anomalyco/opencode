@@ -123,7 +123,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.agent.switched": (event) => {
         return adapter.appendMessage(
           new SessionMessage.AgentSwitched({
-            id: SessionMessage.ID.fromCreatorEvent(event.id),
+            id: event.data.messageID,
             type: "agent-switched",
             metadata: event.metadata,
             agent: event.data.agent,
@@ -134,7 +134,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.model.switched": (event) => {
         return adapter.appendMessage(
           new SessionMessage.ModelSwitched({
-            id: SessionMessage.ID.fromCreatorEvent(event.id),
+            id: event.data.messageID,
             type: "model-switched",
             metadata: event.metadata,
             model: event.data.model,
@@ -146,7 +146,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.prompted": (event) => {
         return adapter.appendMessage(
           new SessionMessage.User({
-            id: SessionMessage.ID.fromCreatorEvent(event.id),
+            id: event.data.messageID,
             type: "user",
             metadata: event.metadata,
             text: event.data.prompt.text,
@@ -164,7 +164,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           new SessionMessage.Synthetic({
             sessionID: event.data.sessionID,
             text: event.data.text,
-            id: SessionMessage.ID.fromCreatorEvent(event.id),
+            id: event.data.messageID,
             type: "synthetic",
             time: { created: event.data.timestamp },
           }),
@@ -173,7 +173,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.shell.started": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Shell({
-            id: SessionMessage.ID.fromCreatorEvent(event.id),
+            id: event.data.messageID,
             type: "shell",
             metadata: event.metadata,
             callID: event.data.callID,
@@ -208,7 +208,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
           yield* adapter.appendMessage(
             new SessionMessage.Assistant({
-              id: SessionMessage.ID.fromCreatorEvent(event.id),
+              id: event.data.assistantMessageID,
               type: "assistant",
               agent: event.data.agent,
               model: event.data.model,
@@ -220,7 +220,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.step.ended": (event) => {
-        return updateOwnedAssistant(SessionMessage.ID.fromCreatorEvent(event.data.assistantCreatorEventID), (draft) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = event.data.timestamp
           draft.finish = event.data.finish
           draft.cost = event.data.cost
@@ -229,54 +229,33 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.step.failed": (event) => {
-        return updateOwnedAssistant(SessionMessage.ID.fromCreatorEvent(event.data.assistantCreatorEventID), (draft) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = event.data.timestamp
           draft.finish = "error"
           draft.error = event.data.error
         })
       },
       "session.next.text.started": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.content.push(
-                  castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })),
-                )
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.content.push(
+            castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })),
+          )
         })
       },
       "session.next.text.delta": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestText(draft, event.data.textID)
-                if (match) match.text += event.data.delta
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestText(draft, event.data.textID)
+          if (match) match.text += event.data.delta
         })
       },
       "session.next.text.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestText(draft, event.data.textID)
-                if (match) match.text = event.data.text
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestText(draft, event.data.textID)
+          if (match) match.text = event.data.text
         })
       },
       "session.next.tool.input.started": (event) => {
-        return updateOwnedAssistant(SessionMessage.ID.fromCreatorEvent(event.data.assistantCreatorEventID), (draft) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.content.push(
             castDraft(
               new SessionMessage.AssistantTool({
@@ -292,13 +271,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.next.tool.input.delta": () => Effect.void,
       "session.next.tool.input.ended": (event) => {
-        return updateOwnedAssistant(SessionMessage.ID.fromCreatorEvent(event.data.assistantCreatorEventID), (draft) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && match.state.status === "pending") match.state.input = event.data.text
         })
       },
       "session.next.tool.called": (event) => {
-        return updateOwnedAssistant(SessionMessage.ID.fromCreatorEvent(event.data.assistantCreatorEventID), (draft) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match) {
             match.provider = event.data.provider
@@ -315,7 +294,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.tool.progress": (event) => {
-        return updateOwnedAssistant(SessionMessage.ID.fromCreatorEvent(event.data.assistantCreatorEventID), (draft) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && match.state.status === "running") {
             match.state.structured = event.data.structured
@@ -324,7 +303,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.tool.success": (event) => {
-        return updateOwnedAssistant(SessionMessage.ID.fromCreatorEvent(event.data.assistantCreatorEventID), (draft) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && match.state.status === "running") {
             match.provider = {
@@ -346,7 +325,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.tool.failed": (event) => {
-        return updateOwnedAssistant(SessionMessage.ID.fromCreatorEvent(event.data.assistantCreatorEventID), (draft) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && (match.state.status === "pending" || match.state.status === "running")) {
             match.provider = {
@@ -369,52 +348,31 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.reasoning.started": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.content.push(
-                  castDraft(
-                    new SessionMessage.AssistantReasoning({
-                      type: "reasoning",
-                      id: event.data.reasoningID,
-                      text: "",
-                      providerMetadata: event.data.providerMetadata,
-                    }),
-                  ),
-                )
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.content.push(
+            castDraft(
+              new SessionMessage.AssistantReasoning({
+                type: "reasoning",
+                id: event.data.reasoningID,
+                text: "",
+                providerMetadata: event.data.providerMetadata,
               }),
-            )
-          }
+            ),
+          )
         })
       },
       "session.next.reasoning.delta": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestReasoning(draft, event.data.reasoningID)
-                if (match) match.text += event.data.delta
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestReasoning(draft, event.data.reasoningID)
+          if (match) match.text += event.data.delta
         })
       },
       "session.next.reasoning.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestReasoning(draft, event.data.reasoningID)
-                if (match) {
-                  match.text = event.data.text
-                  if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
-                }
-              }),
-            )
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestReasoning(draft, event.data.reasoningID)
+          if (match) {
+            match.text = event.data.text
+            if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
           }
         })
       },
@@ -422,7 +380,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.compaction.started": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Compaction({
-            id: SessionMessage.ID.fromCreatorEvent(event.id),
+            id: event.data.messageID,
             type: "compaction",
             metadata: event.metadata,
             reason: event.data.reason,

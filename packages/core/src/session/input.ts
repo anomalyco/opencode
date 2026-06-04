@@ -1,6 +1,6 @@
 export * as SessionInput from "./input"
 
-import { and, asc, eq, inArray, isNull, lte } from "drizzle-orm"
+import { and, asc, eq, isNull, lte } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
@@ -25,7 +25,6 @@ export class Admitted extends Schema.Class<Admitted>("SessionInput.Admitted")({
   prompt: Prompt,
   delivery: Delivery,
   timeCreated: V2Schema.DateTimeUtcFromMillis,
-  state: Schema.Literals(["pending", "promoted"]),
   promotedSeq: NonNegativeInt.pipe(Schema.optional),
 }) {}
 
@@ -41,7 +40,6 @@ const fromRow = (row: typeof SessionInputTable.$inferSelect): Admitted =>
     prompt: decodePrompt(row.prompt),
     delivery: row.delivery,
     timeCreated: DateTime.makeUnsafe(row.time_created),
-    state: row.promoted_seq === null ? "pending" : "promoted",
     ...(row.promoted_seq === null ? {} : { promotedSeq: row.promoted_seq }),
   })
 
@@ -66,22 +64,34 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
 ) {
   const existing = yield* find(db, input.id)
   if (existing !== undefined) return existing
-  yield* events
+  const timestamp = yield* DateTime.now
+  return yield* events
     .publish(SessionEvent.PromptLifecycle.Admitted, {
       messageID: input.id,
       sessionID: input.sessionID,
-      timestamp: yield* DateTime.now,
+      timestamp,
       prompt: input.prompt,
       delivery: input.delivery,
     })
     .pipe(
+      Effect.flatMap((event) =>
+        event.seq === undefined
+          ? Effect.die("Prompt admission event is missing aggregate sequence")
+          : Effect.succeed(
+              new Admitted({
+                admittedSeq: event.seq,
+                id: input.id,
+                sessionID: input.sessionID,
+                prompt: input.prompt,
+                delivery: input.delivery,
+                timeCreated: timestamp,
+              }),
+            ),
+      ),
       Effect.catchDefect((defect) =>
-        find(db, input.id).pipe(Effect.flatMap((stored) => (stored ? Effect.void : Effect.die(defect)))),
+        find(db, input.id).pipe(Effect.flatMap((stored) => (stored ? Effect.succeed(stored) : Effect.die(defect)))),
       ),
     )
-  return yield* find(db, input.id).pipe(
-    Effect.flatMap((stored) => (stored ? Effect.succeed(stored) : Effect.die("Prompt admission was not stored"))),
-  )
 })
 
 export const latestSeq = Effect.fn("SessionInput.latestSeq")(function* (
@@ -134,11 +144,14 @@ export const projectAdmitted = Effect.fn("SessionInput.projectAdmitted")(functio
 
 export const projectPromoted = Effect.fn("SessionInput.projectPromoted")(function* (
   db: DatabaseService,
-  input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID; readonly promotedSeq: number },
+  input: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+    readonly prompt: Prompt
+    readonly timeCreated: DateTime.Utc
+    readonly promotedSeq: number
+  },
 ) {
-  const stored = yield* find(db, input.id)
-  if (!stored || stored.sessionID !== input.sessionID || stored.promotedSeq !== undefined)
-    return yield* Effect.die(new LifecycleConflict({ id: input.id }))
   const updated = yield* db
     .update(SessionInputTable)
     .set({ promoted_seq: input.promotedSeq })
@@ -149,19 +162,24 @@ export const projectPromoted = Effect.fn("SessionInput.projectPromoted")(functio
         isNull(SessionInputTable.promoted_seq),
       ),
     )
-    .returning({ id: SessionInputTable.id })
+    .returning()
     .get()
     .pipe(Effect.orDie)
   if (!updated) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  const stored = fromRow(updated)
+  if (
+    !matchesPrompt(stored, input) ||
+    DateTime.toEpochMillis(stored.timeCreated) !== DateTime.toEpochMillis(input.timeCreated)
+  )
+    return yield* Effect.die(new LifecycleConflict({ id: input.id }))
   return toMessage(stored)
 })
 
 export const hasPending = Effect.fn("SessionInput.hasPending")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  deliveries: ReadonlyArray<Delivery> = ["steer", "queue"],
+  delivery: Delivery,
 ) {
-  if (deliveries.length === 0) return false
   const row = yield* db
     .select({ id: SessionInputTable.id })
     .from(SessionInputTable)
@@ -169,7 +187,7 @@ export const hasPending = Effect.fn("SessionInput.hasPending")(function* (
       and(
         eq(SessionInputTable.session_id, sessionID),
         isNull(SessionInputTable.promoted_seq),
-        inArray(SessionInputTable.delivery, deliveries),
+        eq(SessionInputTable.delivery, delivery),
       ),
     )
     .limit(1)
@@ -195,15 +213,32 @@ export const guardReservedID = Effect.fn("SessionInput.guardReservedID")(functio
   db: DatabaseService,
   event: EventV2.Payload,
 ) {
-  if (Schema.is(SessionEvent.PromptLifecycle.Admitted)(event)) return
-  const id = Schema.is(SessionEvent.PromptLifecycle.Promoted)(event)
-    ? event.data.messageID
-    : SessionMessage.ID.fromCreatorEvent(event.id)
-  const admitted = yield* find(db, id)
+  if (
+    Schema.is(SessionEvent.PromptLifecycle.Admitted)(event) ||
+    Schema.is(SessionEvent.PromptLifecycle.Promoted)(event)
+  )
+    return
+  const id = reservedID(event)
+  if (id === undefined) return
+  const admitted = yield* db
+    .select({ id: SessionInputTable.id })
+    .from(SessionInputTable)
+    .where(eq(SessionInputTable.id, id))
+    .get()
+    .pipe(Effect.orDie)
   if (admitted === undefined) return
-  if (Schema.is(SessionEvent.PromptLifecycle.Promoted)(event)) return
   return yield* Effect.die(new LifecycleConflict({ id }))
 })
+
+const reservedID = (event: EventV2.Payload) => {
+  if (Schema.is(SessionEvent.Step.Started)(event)) return event.data.assistantMessageID
+  if (Schema.is(SessionEvent.AgentSwitched)(event)) return event.data.messageID
+  if (Schema.is(SessionEvent.ModelSwitched)(event)) return event.data.messageID
+  if (Schema.is(SessionEvent.Prompted)(event)) return event.data.messageID
+  if (Schema.is(SessionEvent.Synthetic)(event)) return event.data.messageID
+  if (Schema.is(SessionEvent.Shell.Started)(event)) return event.data.messageID
+  if (Schema.is(SessionEvent.Compaction.Started)(event)) return event.data.messageID
+}
 
 export const projectLegacyPrompted = Effect.fn("SessionInput.projectLegacyPrompted")(function* (
   db: DatabaseService,
@@ -216,7 +251,7 @@ export const projectLegacyPrompted = Effect.fn("SessionInput.projectLegacyPrompt
     readonly promotedSeq: number
   },
 ) {
-  yield* db
+  const inserted = yield* db
     .insert(SessionInputTable)
     .values({
       id: input.id,
@@ -228,24 +263,14 @@ export const projectLegacyPrompted = Effect.fn("SessionInput.projectLegacyPrompt
       time_created: DateTime.toEpochMillis(input.timeCreated),
     })
     .onConflictDoNothing()
-    .run()
+    .returning()
+    .get()
     .pipe(Effect.orDie)
-  const admitted = yield* find(db, input.id)
-  if (admitted === undefined || admitted.delivery !== input.delivery || !matchesPrompt(admitted, input))
+  if (!inserted) return yield* Effect.die("Prompt projection conflicts with admitted input")
+  const admitted = fromRow(inserted)
+  if (admitted.delivery !== input.delivery || !matchesPrompt(admitted, input))
     return yield* Effect.die("Prompt projection conflicts with admitted input")
-  yield* db
-    .update(SessionInputTable)
-    .set({ promoted_seq: input.promotedSeq })
-    .where(
-      and(
-        eq(SessionInputTable.id, input.id),
-        eq(SessionInputTable.session_id, input.sessionID),
-        isNull(SessionInputTable.promoted_seq),
-      ),
-    )
-    .run()
-    .pipe(Effect.orDie)
-  return yield* find(db, input.id)
+  return admitted
 })
 
 export const reconcileProjected = Effect.fn("SessionInput.reconcileProjected")(function* (
@@ -289,6 +314,8 @@ const publish = Effect.fn("SessionInput.publish")(function* (
         sessionID,
         timestamp: yield* DateTime.now,
         messageID: SessionMessage.ID.make(row.id),
+        prompt: decodePrompt(row.prompt),
+        timeCreated: DateTime.makeUnsafe(row.time_created),
       })
       .pipe(
         Effect.catchDefect((defect) =>
@@ -348,7 +375,7 @@ export const promoteNextQueued = Effect.fn("SessionInput.promoteNextQueued")(fun
   return row === undefined ? false : yield* publish(db, events, sessionID, [row]).pipe(Effect.as(true))
 })
 
-export const toMessage = (input: Admitted) =>
+const toMessage = (input: Admitted) =>
   new SessionMessage.User({
     id: input.id,
     type: "user",

@@ -806,6 +806,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           agent: string
         }
       }
@@ -815,6 +816,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           model: {
             id: string
             providerID: string
@@ -838,6 +840,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           prompt: Prompt
           delivery: "steer" | "queue"
         }
@@ -860,6 +863,8 @@ export type GlobalEvent = {
           timestamp: number
           sessionID: string
           messageID: string
+          prompt: Prompt
+          timeCreated: number
         }
       }
     | {
@@ -868,6 +873,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           text: string
         }
       }
@@ -877,6 +883,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           callID: string
           command: string
         }
@@ -897,6 +904,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           agent: string
           model: {
             id: string
@@ -912,7 +920,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           finish: string
           cost: number
           tokens: {
@@ -933,7 +941,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           error: SessionErrorUnknown
         }
       }
@@ -943,6 +951,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           textID: string
         }
       }
@@ -952,6 +961,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           textID: string
           delta: string
         }
@@ -962,6 +972,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           textID: string
           text: string
         }
@@ -972,6 +983,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           reasoningID: string
           providerMetadata?: {
             [key: string]: {
@@ -986,6 +998,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           reasoningID: string
           delta: string
         }
@@ -996,6 +1009,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          assistantMessageID: string
           reasoningID: string
           text: string
           providerMetadata?: {
@@ -1011,7 +1025,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           callID: string
           name: string
         }
@@ -1022,7 +1036,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           callID: string
           delta: string
         }
@@ -1033,7 +1047,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           callID: string
           text: string
         }
@@ -1044,7 +1058,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           callID: string
           tool: string
           input: {
@@ -1066,7 +1080,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           callID: string
           structured: {
             [key: string]: unknown
@@ -1080,7 +1094,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           callID: string
           structured: {
             [key: string]: unknown
@@ -1103,7 +1117,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
-          assistantCreatorEventID: string
+          assistantMessageID: string
           callID: string
           error: SessionErrorUnknown
           result?: unknown
@@ -1133,6 +1147,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           reason: "auto" | "manual"
         }
       }
@@ -3146,6 +3161,7 @@ export type SyncEventSessionNextAgentSwitched = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       agent: string
     }
   }
@@ -3162,6 +3178,7 @@ export type SyncEventSessionNextModelSwitched = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       model: {
         id: string
         providerID: string
@@ -3199,6 +3216,7 @@ export type SyncEventSessionNextPrompted = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       prompt: Prompt
       delivery: "steer" | "queue"
     }
@@ -3235,6 +3253,8 @@ export type SyncEventSessionNextPromptPromoted = {
       timestamp: number
       sessionID: string
       messageID: string
+      prompt: Prompt
+      timeCreated: number
     }
   }
 }
@@ -3250,6 +3270,7 @@ export type SyncEventSessionNextSynthetic = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       text: string
     }
   }
@@ -3266,6 +3287,7 @@ export type SyncEventSessionNextShellStarted = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       callID: string
       command: string
     }
@@ -3300,6 +3322,7 @@ export type SyncEventSessionNextStepStarted = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       agent: string
       model: {
         id: string
@@ -3322,7 +3345,7 @@ export type SyncEventSessionNextStepEnded = {
     data: {
       timestamp: number
       sessionID: string
-      assistantCreatorEventID: string
+      assistantMessageID: string
       finish: string
       cost: number
       tokens: {
@@ -3350,7 +3373,7 @@ export type SyncEventSessionNextStepFailed = {
     data: {
       timestamp: number
       sessionID: string
-      assistantCreatorEventID: string
+      assistantMessageID: string
       error: SessionErrorUnknown
     }
   }
@@ -3367,6 +3390,7 @@ export type SyncEventSessionNextTextStarted = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       textID: string
     }
   }
@@ -3383,6 +3407,7 @@ export type SyncEventSessionNextTextEnded = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       textID: string
       text: string
     }
@@ -3400,6 +3425,7 @@ export type SyncEventSessionNextReasoningStarted = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       reasoningID: string
       providerMetadata?: {
         [key: string]: {
@@ -3421,6 +3447,7 @@ export type SyncEventSessionNextReasoningEnded = {
     data: {
       timestamp: number
       sessionID: string
+      assistantMessageID: string
       reasoningID: string
       text: string
       providerMetadata?: {
@@ -3443,7 +3470,7 @@ export type SyncEventSessionNextToolInputStarted = {
     data: {
       timestamp: number
       sessionID: string
-      assistantCreatorEventID: string
+      assistantMessageID: string
       callID: string
       name: string
     }
@@ -3461,7 +3488,7 @@ export type SyncEventSessionNextToolInputEnded = {
     data: {
       timestamp: number
       sessionID: string
-      assistantCreatorEventID: string
+      assistantMessageID: string
       callID: string
       text: string
     }
@@ -3479,7 +3506,7 @@ export type SyncEventSessionNextToolCalled = {
     data: {
       timestamp: number
       sessionID: string
-      assistantCreatorEventID: string
+      assistantMessageID: string
       callID: string
       tool: string
       input: {
@@ -3508,7 +3535,7 @@ export type SyncEventSessionNextToolProgress = {
     data: {
       timestamp: number
       sessionID: string
-      assistantCreatorEventID: string
+      assistantMessageID: string
       callID: string
       structured: {
         [key: string]: unknown
@@ -3529,7 +3556,7 @@ export type SyncEventSessionNextToolSuccess = {
     data: {
       timestamp: number
       sessionID: string
-      assistantCreatorEventID: string
+      assistantMessageID: string
       callID: string
       structured: {
         [key: string]: unknown
@@ -3559,7 +3586,7 @@ export type SyncEventSessionNextToolFailed = {
     data: {
       timestamp: number
       sessionID: string
-      assistantCreatorEventID: string
+      assistantMessageID: string
       callID: string
       error: SessionErrorUnknown
       result?: unknown
@@ -3603,6 +3630,7 @@ export type SyncEventSessionNextCompactionStarted = {
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
       reason: "auto" | "manual"
     }
   }
@@ -3735,7 +3763,6 @@ export type SessionInputAdmitted = {
   prompt: Prompt
   delivery: "steer" | "queue"
   timeCreated: number
-  state: "pending" | "promoted"
   promotedSeq?: number
 }
 
@@ -4245,6 +4272,7 @@ export type EventSessionNextAgentSwitched = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     agent: string
   }
 }
@@ -4255,6 +4283,7 @@ export type EventSessionNextModelSwitched = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     model: {
       id: string
       providerID: string
@@ -4280,6 +4309,7 @@ export type EventSessionNextPrompted = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     prompt: Prompt
     delivery: "steer" | "queue"
   }
@@ -4304,6 +4334,8 @@ export type EventSessionNextPromptPromoted = {
     timestamp: number
     sessionID: string
     messageID: string
+    prompt: Prompt
+    timeCreated: number
   }
 }
 
@@ -4313,6 +4345,7 @@ export type EventSessionNextSynthetic = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     text: string
   }
 }
@@ -4323,6 +4356,7 @@ export type EventSessionNextShellStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     callID: string
     command: string
   }
@@ -4345,6 +4379,7 @@ export type EventSessionNextStepStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     agent: string
     model: {
       id: string
@@ -4361,7 +4396,7 @@ export type EventSessionNextStepEnded = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     finish: string
     cost: number
     tokens: {
@@ -4383,7 +4418,7 @@ export type EventSessionNextStepFailed = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     error: SessionErrorUnknown
   }
 }
@@ -4394,6 +4429,7 @@ export type EventSessionNextTextStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     textID: string
   }
 }
@@ -4404,6 +4440,7 @@ export type EventSessionNextTextDelta = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     textID: string
     delta: string
   }
@@ -4415,6 +4452,7 @@ export type EventSessionNextTextEnded = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     textID: string
     text: string
   }
@@ -4426,6 +4464,7 @@ export type EventSessionNextReasoningStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     reasoningID: string
     providerMetadata?: {
       [key: string]: {
@@ -4441,6 +4480,7 @@ export type EventSessionNextReasoningDelta = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     reasoningID: string
     delta: string
   }
@@ -4452,6 +4492,7 @@ export type EventSessionNextReasoningEnded = {
   properties: {
     timestamp: number
     sessionID: string
+    assistantMessageID: string
     reasoningID: string
     text: string
     providerMetadata?: {
@@ -4468,7 +4509,7 @@ export type EventSessionNextToolInputStarted = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     callID: string
     name: string
   }
@@ -4480,7 +4521,7 @@ export type EventSessionNextToolInputDelta = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     callID: string
     delta: string
   }
@@ -4492,7 +4533,7 @@ export type EventSessionNextToolInputEnded = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     callID: string
     text: string
   }
@@ -4504,7 +4545,7 @@ export type EventSessionNextToolCalled = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     callID: string
     tool: string
     input: {
@@ -4527,7 +4568,7 @@ export type EventSessionNextToolProgress = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     callID: string
     structured: {
       [key: string]: unknown
@@ -4542,7 +4583,7 @@ export type EventSessionNextToolSuccess = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     callID: string
     structured: {
       [key: string]: unknown
@@ -4566,7 +4607,7 @@ export type EventSessionNextToolFailed = {
   properties: {
     timestamp: number
     sessionID: string
-    assistantCreatorEventID: string
+    assistantMessageID: string
     callID: string
     error: SessionErrorUnknown
     result?: unknown
@@ -4598,6 +4639,7 @@ export type EventSessionNextCompactionStarted = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     reason: "auto" | "manual"
   }
 }

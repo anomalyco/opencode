@@ -67,12 +67,24 @@ describe("SessionProjector", () => {
 
       yield* events.publish(
         SessionEvent.Prompted,
-        { sessionID, timestamp: created, prompt: new Prompt({ text: "first" }), delivery: "steer" },
+        {
+          sessionID,
+          messageID: SessionMessage.ID.make("msg_first"),
+          timestamp: created,
+          prompt: new Prompt({ text: "first" }),
+          delivery: "steer",
+        },
         { id: EventV2.ID.make("evt_z") },
       )
       yield* events.publish(
         SessionEvent.Prompted,
-        { sessionID, timestamp: created, prompt: new Prompt({ text: "second" }), delivery: "steer" },
+        {
+          sessionID,
+          messageID: SessionMessage.ID.make("msg_second"),
+          timestamp: created,
+          prompt: new Prompt({ text: "second" }),
+          delivery: "steer",
+        },
         { id: EventV2.ID.make("evt_a") },
       )
 
@@ -143,6 +155,8 @@ describe("SessionProjector", () => {
         sessionID,
         timestamp: created,
         messageID: id,
+        prompt: new Prompt({ text: "promote me" }),
+        timeCreated: created,
       })
 
       expect(
@@ -173,11 +187,27 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
 
-      yield* events.publish(SessionEvent.AgentSwitched, { sessionID, timestamp: created, agent: "build" })
-      yield* events.publish(SessionEvent.ModelSwitched, { sessionID, timestamp: created, model })
-      yield* events.publish(SessionEvent.Synthetic, { sessionID, timestamp: created, text: "synthetic context" })
+      yield* events.publish(SessionEvent.AgentSwitched, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: created,
+        agent: "build",
+      })
+      yield* events.publish(SessionEvent.ModelSwitched, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: created,
+        model,
+      })
+      yield* events.publish(SessionEvent.Synthetic, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: created,
+        text: "synthetic context",
+      })
       yield* events.publish(SessionEvent.Shell.Started, {
         sessionID,
+        messageID: SessionMessage.ID.create(),
         timestamp: created,
         callID: "shell-1",
         command: "pwd",
@@ -188,7 +218,12 @@ describe("SessionProjector", () => {
         callID: "shell-1",
         output: "/project",
       })
-      yield* events.publish(SessionEvent.Compaction.Started, { sessionID, timestamp: created, reason: "manual" })
+      yield* events.publish(SessionEvent.Compaction.Started, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: created,
+        reason: "manual",
+      })
       yield* events.publish(SessionEvent.Compaction.Delta, { sessionID, timestamp: created, text: "partial" })
       yield* events.publish(SessionEvent.Compaction.Ended, {
         sessionID,
@@ -263,17 +298,65 @@ describe("SessionProjector", () => {
       })
 
       const exit = yield* events
-        .publish(
-          SessionEvent.Prompted,
-          { sessionID, timestamp: created, prompt: new Prompt({ text: "different" }), delivery: "steer" },
-          { id: SessionMessage.ID.toCreatorEvent(id) },
-        )
+        .publish(SessionEvent.Prompted, {
+          sessionID,
+          messageID: id,
+          timestamp: created,
+          prompt: new Prompt({ text: "different" }),
+          delivery: "steer",
+        })
         .pipe(Effect.exit)
 
       expect(String(exit)).toContain("SessionInput.LifecycleConflict")
       expect(
         yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie),
       ).toMatchObject({ promoted_seq: null })
+    }),
+  )
+
+  it.effect("rejects an assistant message ID that conflicts with an admitted inbox row", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const id = SessionMessage.ID.make("msg_conflict")
+      yield* SessionInput.admit(db, events, {
+        id,
+        sessionID,
+        prompt: new Prompt({ text: "admitted" }),
+        delivery: "steer",
+      })
+
+      const exit = yield* events
+        .publish(SessionEvent.Step.Started, {
+          sessionID,
+          timestamp: created,
+          assistantMessageID: id,
+          agent: "build",
+          model,
+        })
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("SessionInput.LifecycleConflict")
+      expect(
+        yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, id)).get().pipe(Effect.orDie),
+      ).toBeUndefined()
     }),
   )
 
@@ -303,11 +386,7 @@ describe("SessionProjector", () => {
       yield* SessionInput.admit(db, events, { id, sessionID, prompt, delivery: "queue" })
 
       const exit = yield* events
-        .publish(
-          SessionEvent.Prompted,
-          { sessionID, timestamp: created, prompt, delivery: "steer" },
-          { id: SessionMessage.ID.toCreatorEvent(id) },
-        )
+        .publish(SessionEvent.Prompted, { sessionID, messageID: id, timestamp: created, prompt, delivery: "steer" })
         .pipe(Effect.exit)
 
       expect(String(exit)).toContain("SessionInput.LifecycleConflict")
@@ -375,7 +454,7 @@ describe("SessionProjector", () => {
       yield* service.publish(SessionEvent.Step.Ended, {
         sessionID,
         timestamp: DateTime.makeUnsafe(1),
-        assistantCreatorEventID: EventV2.ID.make("evt_assistant_2"),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant_2"),
         finish: "stop",
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -435,6 +514,7 @@ describe("SessionProjector", () => {
       const service = yield* EventV2.Service
       yield* service.publish(SessionEvent.Text.Started, {
         sessionID,
+        assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
         timestamp: DateTime.makeUnsafe(3),
         textID: "text-stale",
       })
@@ -455,7 +535,7 @@ describe("SessionProjector", () => {
           type: "assistant",
           agent: "build",
           model,
-          content: [],
+          content: [new SessionMessage.AssistantText({ type: "text", id: "text-stale", text: "" })],
           time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
         }),
         new SessionMessage.Assistant({

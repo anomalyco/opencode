@@ -279,7 +279,6 @@ describe("SessionV2.create", () => {
           prompt: { text: "Replay lifecycle" },
           delivery: "steer",
           admittedSeq: 1,
-          state: "pending",
         })
         expect(yield* store.context(created.id)).toEqual([])
 
@@ -291,7 +290,6 @@ describe("SessionV2.create", () => {
           delivery: "steer",
           admittedSeq: 1,
           promotedSeq: 2,
-          state: "promoted",
         })
         expect(yield* store.context(created.id)).toMatchObject([
           { id: admitted.id, type: "user", text: "Replay lifecycle" },

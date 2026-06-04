@@ -53,6 +53,7 @@ export const AgentSwitched = EventV2.define({
   ...options,
   schema: {
     ...Base,
+    messageID: SessionMessageID.ID,
     agent: Schema.String,
   },
 })
@@ -63,6 +64,7 @@ export const ModelSwitched = EventV2.define({
   ...options,
   schema: {
     ...Base,
+    messageID: SessionMessageID.ID,
     model: ModelV2.Ref,
   },
 })
@@ -84,6 +86,7 @@ export const Prompted = EventV2.define({
   ...options,
   schema: {
     ...Base,
+    messageID: SessionMessageID.ID,
     prompt: Prompt,
     delivery: Schema.Literals(["steer", "queue"]),
   },
@@ -109,6 +112,8 @@ export namespace PromptLifecycle {
     schema: {
       ...Base,
       messageID: SessionMessageID.ID,
+      prompt: Prompt,
+      timeCreated: V2Schema.DateTimeUtcFromMillis,
     },
   })
   export type Promoted = typeof Promoted.Type
@@ -119,6 +124,7 @@ export const Synthetic = EventV2.define({
   ...options,
   schema: {
     ...Base,
+    messageID: SessionMessageID.ID,
     text: Schema.String,
   },
 })
@@ -130,6 +136,7 @@ export namespace Shell {
     ...options,
     schema: {
       ...Base,
+      messageID: SessionMessageID.ID,
       callID: Schema.String,
       command: Schema.String,
     },
@@ -154,6 +161,7 @@ export namespace Step {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       agent: Schema.String,
       model: ModelV2.Ref,
       snapshot: Schema.String.pipe(Schema.optional),
@@ -166,7 +174,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantCreatorEventID: EventV2.ID,
+      assistantMessageID: SessionMessageID.ID,
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
@@ -188,7 +196,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantCreatorEventID: EventV2.ID,
+      assistantMessageID: SessionMessageID.ID,
       error: UnknownError,
     },
   })
@@ -201,6 +209,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       textID: Schema.String,
     },
   })
@@ -211,6 +220,7 @@ export namespace Text {
     type: "session.next.text.delta",
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       textID: Schema.String,
       delta: Schema.String,
     },
@@ -222,6 +232,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       textID: Schema.String,
       text: Schema.String,
     },
@@ -235,6 +246,7 @@ export namespace Reasoning {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       reasoningID: Schema.String,
       providerMetadata: ProviderMetadata.pipe(Schema.optional),
     },
@@ -246,6 +258,7 @@ export namespace Reasoning {
     type: "session.next.reasoning.delta",
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       reasoningID: Schema.String,
       delta: Schema.String,
     },
@@ -257,6 +270,7 @@ export namespace Reasoning {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       reasoningID: Schema.String,
       text: Schema.String,
       providerMetadata: ProviderMetadata.pipe(Schema.optional),
@@ -268,7 +282,7 @@ export namespace Reasoning {
 export namespace Tool {
   const ToolBase = {
     ...Base,
-    assistantCreatorEventID: EventV2.ID,
+    assistantMessageID: SessionMessageID.ID,
     callID: Schema.String,
   }
 
@@ -395,6 +409,7 @@ export namespace Compaction {
     ...options,
     schema: {
       ...Base,
+      messageID: SessionMessageID.ID,
       reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
     },
   })

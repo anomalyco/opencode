@@ -16,7 +16,7 @@ Change:
 
 - Replace inbox-local admission sequence with event-sourced prompt admission and promotion sequences.
 - Give projected Session messages stable `msg_*` resource IDs distinct from `evt_*` creator event IDs.
-- Rename assistant ownership references to `assistantCreatorEventID`.
+- Give every message-producing event an explicit `msg_*` resource ID. Assistant steps propagate one `assistantMessageID` through assistant-owned events.
 - Reset incompatible unreleased beta event history, derived Session projections, workspace rows, and Session workspace links.
 
 Compatibility:
@@ -82,7 +82,7 @@ Affected schema:
 
 Change:
 
-- Bind step settlement to an explicit assistant creator event ID, now named `assistantCreatorEventID`.
+- Bind step settlement to an explicit assistant message ID.
 
 Reason:
 
@@ -431,7 +431,7 @@ Affected schema:
 Change:
 
 - Preserve stable IDs on projected assistant text parts.
-- Route durable tool projection updates through explicit owning assistant creator event IDs, now named `assistantCreatorEventID`, rather than provider-local call IDs alone.
+- Route durable tool projection updates through explicit owning assistant message IDs rather than provider-local call IDs alone.
 - Replay full-value text and tool-input end checkpoints while keeping fragment deltas ephemeral.
 
 Reason:

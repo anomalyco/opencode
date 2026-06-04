@@ -7,19 +7,21 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
 
 test.skip("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
-  const assistantCreatorEventID = EventV2.ID.create()
+  const assistantMessageID = SessionMessage.ID.create()
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
-      id: assistantCreatorEventID,
+      id: EventV2.ID.create(),
       type: "session.next.step.started",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(1),
         agent: "build",
         model: {
@@ -38,7 +40,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
       type: "session.next.step.ended",
       data: {
         sessionID,
-        assistantCreatorEventID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(2),
         finish: "stop",
         cost: 0,
@@ -62,6 +64,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
 test.skip("text ended populates assistant text content", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
+  const assistantMessageID = SessionMessage.ID.create()
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
@@ -69,6 +72,7 @@ test.skip("text ended populates assistant text content", () => {
       type: "session.next.step.started",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(1),
         agent: "build",
         model: {
@@ -86,6 +90,7 @@ test.skip("text ended populates assistant text content", () => {
       type: "session.next.text.started",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(2),
         textID: "text-1",
       },
@@ -98,6 +103,7 @@ test.skip("text ended populates assistant text content", () => {
       type: "session.next.text.ended",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(3),
         textID: "text-1",
         text: "hello assistant",
@@ -114,14 +120,15 @@ test.skip("tool completion stores completed timestamp", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
   const callID = "call"
-  const assistantCreatorEventID = EventV2.ID.create()
+  const assistantMessageID = SessionMessage.ID.create()
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
-      id: assistantCreatorEventID,
+      id: EventV2.ID.create(),
       type: "session.next.step.started",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(1),
         agent: "build",
         model: {
@@ -139,7 +146,7 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.input.started",
       data: {
         sessionID,
-        assistantCreatorEventID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(2),
         callID,
         name: "bash",
@@ -153,7 +160,7 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.called",
       data: {
         sessionID,
-        assistantCreatorEventID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(3),
         callID,
         tool: "bash",
@@ -169,7 +176,7 @@ test.skip("tool completion stores completed timestamp", () => {
       type: "session.next.tool.success",
       data: {
         sessionID,
-        assistantCreatorEventID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(4),
         callID,
         structured: {},
@@ -198,6 +205,7 @@ test.skip("compaction events reduce to compaction message", () => {
       type: "session.next.compaction.started",
       data: {
         sessionID,
+        messageID: SessionMessage.ID.create(),
         timestamp: DateTime.makeUnsafe(1),
         reason: "auto",
       },

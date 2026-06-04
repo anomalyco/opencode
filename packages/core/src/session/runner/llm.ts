@@ -13,7 +13,6 @@ import { ToolRegistry } from "../../tool-registry"
 import { SessionRunnerModel } from "./model"
 import { Database } from "../../database/database"
 import { SessionInput } from "../input"
-import { SessionMessage } from "../message"
 import { QuestionV2 } from "../../question"
 
 /**
@@ -107,7 +106,7 @@ export const layer = Layer.effect(
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID,
             timestamp: yield* DateTime.now,
-            assistantCreatorEventID: SessionMessage.ID.toCreatorEvent(message.id),
+            assistantMessageID: message.id,
             callID: tool.id,
             error: { type: "unknown", message: "Tool execution interrupted" },
             provider: {
@@ -202,7 +201,7 @@ export const layer = Layer.effect(
               events.publish(SessionEvent.Step.Failed, {
                 sessionID: session.id,
                 timestamp: yield* DateTime.now,
-                assistantCreatorEventID: yield* publisher.startAssistant(),
+                assistantMessageID: yield* publisher.startAssistant(),
                 error: { type: "unknown", message: llmFailure.reason.message },
               }),
             )
@@ -237,8 +236,8 @@ export const layer = Layer.effect(
       readonly force?: boolean
     }) {
       const session = yield* getSession(input.sessionID)
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
-      const hasQueue = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+      const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (input.force !== true && !hasSteer && !hasQueue) return
       let promotion: "steer" | "queue" | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
@@ -247,12 +246,12 @@ export const layer = Layer.effect(
         for (let step = 0; step < MAX_STEPS; step++) {
           needsContinuation = yield* runTurn(session, promotion)
           promotion = "steer"
-          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
+          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break
         }
         if (needsContinuation)
           return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
-        openActivity = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+        openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }
     })

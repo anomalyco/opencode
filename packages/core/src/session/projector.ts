@@ -19,7 +19,7 @@ type DatabaseService = Database.Interface["db"]
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
-export class PromptAlreadyProjected extends Error {}
+class PromptAlreadyProjected extends Error {}
 export class SessionAlreadyProjected extends Error {}
 
 type Usage = {
@@ -367,7 +367,7 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
-        const messageID = SessionMessage.ID.fromCreatorEvent(event.id)
+        const messageID = event.data.messageID
         const existing = yield* db
           .select({ id: SessionMessageTable.id })
           .from(SessionMessageTable)
@@ -376,15 +376,6 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         if (existing) return yield* Effect.die(new PromptAlreadyProjected())
         yield* run(db, event)
-        const row = yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, messageID))
-          .get()
-          .pipe(Effect.orDie)
-        if (!row) return yield* Effect.die("Prompt projection was not stored")
-        const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
-        if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
         if (event.seq === undefined)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
         yield* SessionInput.projectLegacyPrompted(db, {
@@ -421,6 +412,8 @@ export const layer = Layer.effectDiscard(
           yield* SessionInput.projectPromoted(db, {
             id: event.data.messageID,
             sessionID: event.data.sessionID,
+            prompt: event.data.prompt,
+            timeCreated: event.data.timeCreated,
             promotedSeq: event.seq,
           }),
         )

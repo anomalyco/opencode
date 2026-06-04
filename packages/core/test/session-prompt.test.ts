@@ -290,8 +290,6 @@ describe("SessionV2.prompt", () => {
       const { db } = yield* Database.Service
       const session = yield* SessionV2.Service
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Wait" }), resume: false })
-
-      expect(yield* SessionInput.hasPending(db, sessionID, [])).toBe(false)
     }),
   )
 
@@ -332,7 +330,7 @@ describe("SessionV2.prompt", () => {
       )
 
       expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1))).toBe(1)
-      expect(yield* admitted(messageID)).toMatchObject({ state: "promoted", promotedSeq: 1 })
+      expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Promote once" },
       ])
@@ -351,8 +349,8 @@ describe("SessionV2.prompt", () => {
 
       yield* SessionInput.promoteSteers(db, events, sessionID, cutoff)
 
-      expect(yield* admitted(first.id)).toMatchObject({ state: "promoted" })
-      expect(yield* admitted(second.id)).toMatchObject({ state: "pending" })
+      expect(yield* admitted(first.id)).toHaveProperty("promotedSeq")
+      expect(yield* admitted(second.id)).not.toHaveProperty("promotedSeq")
     }),
   )
 
@@ -400,11 +398,13 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const prompt = new Prompt({ text: "Historical prompt" })
-      yield* events.publish(
-        SessionEvent.Prompted,
-        { sessionID, timestamp: yield* DateTime.now, prompt, delivery: "steer" },
-        { id: SessionMessage.ID.toCreatorEvent(messageID) },
-      )
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        prompt,
+        delivery: "steer",
+      })
 
       const retried = yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
 
@@ -419,11 +419,13 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const prompt = new Prompt({ text: "Historical queued prompt" })
-      yield* events.publish(
-        SessionEvent.Prompted,
-        { sessionID, timestamp: yield* DateTime.now, prompt, delivery: "queue" },
-        { id: SessionMessage.ID.toCreatorEvent(messageID) },
-      )
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        prompt,
+        delivery: "queue",
+      })
 
       const retried = yield* session.prompt({ id: messageID, sessionID, prompt, delivery: "queue", resume: false })
 
@@ -437,11 +439,12 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      yield* events.publish(
-        SessionEvent.Synthetic,
-        { sessionID, timestamp: yield* DateTime.now, text: "Collision" },
-        { id: SessionMessage.ID.toCreatorEvent(messageID) },
-      )
+      yield* events.publish(SessionEvent.Synthetic, {
+        sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        text: "Collision",
+      })
 
       const failure = yield* session
         .prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Collision" }), resume: false })
@@ -462,11 +465,12 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
 
       const failure = yield* events
-        .publish(
-          SessionEvent.Synthetic,
-          { sessionID, timestamp: yield* DateTime.now, text: "Conflicting synthetic" },
-          { id: SessionMessage.ID.toCreatorEvent(messageID) },
-        )
+        .publish(SessionEvent.Synthetic, {
+          sessionID,
+          messageID,
+          timestamp: yield* DateTime.now,
+          text: "Conflicting synthetic",
+        })
         .pipe(Effect.catchDefect(Effect.succeed))
 
       expect(String(failure)).toContain("SessionInput.LifecycleConflict")
