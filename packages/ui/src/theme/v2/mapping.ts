@@ -1,4 +1,5 @@
-import type { V2ColorValue } from "./types"
+import type { V2ColorValue } from "../types"
+import { V2_AVATAR_DARK, V2_AVATAR_LIGHT } from "./avatar"
 
 const ref = (name: string): V2ColorValue => `var(--${name})`
 
@@ -52,24 +53,7 @@ const light: Record<string, V2ColorValue> = {
   "v2-state-bg-info": ref("v2-blue-100"),
   "v2-state-fg-info": ref("v2-blue-800"),
   "v2-state-border-info": ref("v2-blue-300"),
-  "v2-avatar-bg-orange": ref("v2-orange-700"),
-  "v2-avatar-border-orange": ref("v2-orange-800"),
-  "v2-avatar-bg-yellow": ref("v2-yellow-700"),
-  "v2-avatar-border-yellow": ref("v2-yellow-800"),
-  "v2-avatar-bg-cyan": ref("v2-cyan-700"),
-  "v2-avatar-border-cyan": ref("v2-cyan-800"),
-  "v2-avatar-bg-green": ref("v2-green-700"),
-  "v2-avatar-border-green": ref("v2-green-800"),
-  "v2-avatar-bg-red": ref("v2-red-700"),
-  "v2-avatar-border-red": ref("v2-red-800"),
-  "v2-avatar-bg-pink": ref("v2-pink-700"),
-  "v2-avatar-border-pink": ref("v2-pink-800"),
-  "v2-avatar-bg-blue": ref("v2-blue-700"),
-  "v2-avatar-border-blue": ref("v2-blue-800"),
-  "v2-avatar-bg-purple": ref("v2-purple-700"),
-  "v2-avatar-border-purple": ref("v2-purple-800"),
-  "v2-avatar-bg-gray": ref("v2-grey-700"),
-  "v2-avatar-border-gray": ref("v2-grey-800"),
+  ...V2_AVATAR_LIGHT,
   "v2-elevation-raised":
     "0px 2px 4px 0px var(--v2-alpha-dark-4), 0px 1px 2px -1px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
   "v2-elevation-floating":
@@ -140,24 +124,7 @@ const dark: Record<string, V2ColorValue> = {
   "v2-state-bg-info": ref("v2-blue-1200"),
   "v2-state-fg-info": ref("v2-blue-500"),
   "v2-state-border-info": ref("v2-blue-900"),
-  "v2-avatar-bg-orange": ref("v2-orange-1100"),
-  "v2-avatar-border-orange": ref("v2-orange-600"),
-  "v2-avatar-bg-yellow": ref("v2-yellow-1100"),
-  "v2-avatar-border-yellow": ref("v2-yellow-700"),
-  "v2-avatar-bg-cyan": ref("v2-cyan-1000"),
-  "v2-avatar-border-cyan": ref("v2-cyan-700"),
-  "v2-avatar-bg-green": ref("v2-green-1000"),
-  "v2-avatar-border-green": ref("v2-green-600"),
-  "v2-avatar-bg-red": ref("v2-red-1000"),
-  "v2-avatar-border-red": ref("v2-red-700"),
-  "v2-avatar-bg-pink": ref("v2-pink-1000"),
-  "v2-avatar-border-pink": ref("v2-pink-700"),
-  "v2-avatar-bg-blue": ref("v2-blue-900"),
-  "v2-avatar-border-blue": ref("v2-blue-500"),
-  "v2-avatar-bg-purple": ref("v2-purple-1000"),
-  "v2-avatar-border-purple": ref("v2-purple-600"),
-  "v2-avatar-bg-gray": ref("v2-grey-700"),
-  "v2-avatar-border-gray": ref("v2-grey-500"),
+  ...V2_AVATAR_DARK,
   "v2-elevation-raised":
     "0px 2px 4px 0px var(--v2-alpha-dark-30), 0px 1px 2px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
   "v2-elevation-floating":

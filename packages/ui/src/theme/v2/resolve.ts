@@ -1,8 +1,7 @@
-import { hexToOklch, oklchToHex, shift } from "./color"
-import { mapV2Semantics, mergeV2Tokens } from "./map-v2-semantics"
-import { OC2_V2_DARK_OVERRIDES, OC2_V2_LIGHT_OVERRIDES } from "./oc-2-v2-overrides"
-import type { DesktopTheme, HexColor, ResolvedV2Theme, ThemeVariant, V2ColorValue } from "./types"
-import { V2_PRIMITIVES_DEFAULT } from "./v2-primitives-default"
+import { hexToOklch, oklchToHex, shift } from "../color"
+import { mapV2Semantics, mergeV2Tokens } from "./mapping"
+import type { DesktopTheme, HexColor, ResolvedV2Theme, ThemeVariant, V2ColorValue } from "../types"
+import { V2_PRIMITIVES_DEFAULT } from "./default-primitives"
 
 const V2_STEPS = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200] as const
 
@@ -112,7 +111,7 @@ function readPalette(variant: ThemeVariant): PaletteInput {
   throw new Error("Theme variant requires `palette` or `seeds`")
 }
 
-/** Build v2 primitive ramps (100 = lightest). Alpha ramps stay on the OC-2 defaults. */
+/** Build v2 primitive ramps (100 = lightest). Alpha ramps are static in `v2/styles/colors.css`. */
 export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Record<string, V2ColorValue> {
   const colors = readPalette(variant)
   const grey = generateV2NeutralScale(colors.neutral, colors.ink, isDark)
@@ -139,17 +138,7 @@ export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Re
   }
 }
 
-export function resolveThemeVariantV2(
-  variant: ThemeVariant,
-  isDark: boolean,
-  themeId?: string,
-): ResolvedV2Theme {
-  if (themeId === "oc-2") {
-    const base = isDark ? OC2_V2_DARK_OVERRIDES : OC2_V2_LIGHT_OVERRIDES
-    const extra = variant.v2Overrides ?? {}
-    return { ...base, ...extra }
-  }
-
+export function resolveThemeVariantV2(variant: ThemeVariant, isDark: boolean): ResolvedV2Theme {
   const primitives = generateV2Primitives(variant, isDark)
   const semantics = mapV2Semantics(isDark)
   const overrides = variant.v2Overrides ?? {}
@@ -158,8 +147,8 @@ export function resolveThemeVariantV2(
 
 export function resolveThemeV2(theme: DesktopTheme): { light: ResolvedV2Theme; dark: ResolvedV2Theme } {
   return {
-    light: resolveThemeVariantV2(theme.light, false, theme.id),
-    dark: resolveThemeVariantV2(theme.dark, true, theme.id),
+    light: resolveThemeVariantV2(theme.light, false),
+    dark: resolveThemeVariantV2(theme.dark, true),
   }
 }
 
