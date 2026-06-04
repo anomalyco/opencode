@@ -141,6 +141,8 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
+`OPENCODE_CONFIG_DIRS` kan angi flere tilpassede konfigurasjonskataloger med samme skilletegn som systemets `PATH` (`:` på Linux/macOS, `;` på Windows). Katalogene lastes fra venstre mot høyre, så senere kataloger overstyrer tidligere kataloger. Hvis `OPENCODE_CONFIG_DIR` også er satt, legges den til sist og blir den tilpassede katalogen med høyest prioritet og globalt skrivemål.
+
 Den egendefinerte katalogen lastes inn etter den globale konfigurasjonen og `.opencode`-katalogene, slik at den **kan overstyre** innstillingene deres.
 
 ---

@@ -137,6 +137,8 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
+`OPENCODE_CONFIG_DIRS` 可使用與系統 `PATH` 相同的分隔符指定多個自訂設定目錄（Linux/macOS 使用 `:`，Windows 使用 `;`）。目錄會由左至右載入，因此後面的目錄會覆寫前面的目錄。如果也設定了 `OPENCODE_CONFIG_DIR`，它會附加到最後，並成為優先順序最高的自訂目錄與全域寫入目標。
+
 自訂目錄在全域設定和 `.opencode` 目錄之後載入，因此**可以覆寫**它們的設定。
 
 ---

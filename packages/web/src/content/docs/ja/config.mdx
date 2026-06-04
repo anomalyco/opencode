@@ -144,6 +144,8 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
+`OPENCODE_CONFIG_DIRS` は、システムの `PATH` と同じ区切り文字（Linux/macOS では `:`、Windows では `;`）で複数のカスタム設定ディレクトリを指定できます。ディレクトリは左から右に読み込まれるため、後のディレクトリが前のディレクトリを上書きします。`OPENCODE_CONFIG_DIR` も設定されている場合は最後に追加され、最優先のカスタムディレクトリかつグローバルな書き込み先になります。
+
 カスタムディレクトリはグローバル config ディレクトリと `.opencode` ディレクトリの後にロードされるため、それらの設定を**オーバーライド**できます。
 
 ---

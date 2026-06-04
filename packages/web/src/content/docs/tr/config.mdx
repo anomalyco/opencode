@@ -140,6 +140,8 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
+`OPENCODE_CONFIG_DIRS`, sistem `PATH` ile aynı ayırıcıyı kullanarak birden çok özel yapılandırma dizini belirtebilir (`:` Linux/macOS'ta, `;` Windows'ta). Dizinler soldan sağa yüklenir; bu nedenle sonraki dizinler öncekileri geçersiz kılar. `OPENCODE_CONFIG_DIR` de ayarlanmışsa en sona eklenir ve en yüksek öncelikli özel dizin ile global yazma hedefi olur.
+
 Özel dizin, genel yapılandırma ve `.opencode` dizinlerinden sonra yüklenir, böylece bunların ayarlarını **geçersiz kılabilir**.
 
 ---

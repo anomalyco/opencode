@@ -141,6 +141,8 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
+`OPENCODE_CONFIG_DIRS` può specificare più directory di configurazione personalizzate usando lo stesso separatore del `PATH` di sistema (`:` su Linux/macOS, `;` su Windows). Le directory vengono caricate da sinistra a destra, quindi quelle successive sovrascrivono le precedenti. Se `OPENCODE_CONFIG_DIR` è impostato, viene aggiunto per ultimo e diventa la directory personalizzata con priorità più alta e la destinazione globale di scrittura.
+
 La directory personalizzata viene caricata dopo la configurazione globale e le directory `.opencode`, quindi **puo sovrascrivere** le loro impostazioni.
 
 ---

@@ -141,6 +141,8 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
+`OPENCODE_CONFIG_DIRS` kan angive flere brugerdefinerede konfigurationsmapper med samme separator som systemets `PATH` (`:` på Linux/macOS, `;` på Windows). Mapper indlæses fra venstre mod højre, så senere mapper tilsidesætter tidligere mapper. Hvis `OPENCODE_CONFIG_DIR` også er sat, tilføjes den sidst og bliver den brugerdefinerede konfigurationsmappe med højeste prioritet og globalt skrivemål.
+
 Den brugerdefinerede mappe indlæses efter den globale konfig og `.opencode` mapper, så den **kan tilsidesætte** deres indstillinger.
 
 ---

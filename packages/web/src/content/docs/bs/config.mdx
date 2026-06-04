@@ -141,6 +141,8 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
+`OPENCODE_CONFIG_DIRS` može navesti više prilagođenih konfiguracijskih direktorija koristeći isti separator kao sistemski `PATH` (`:` na Linux/macOS, `;` na Windows). Direktoriji se učitavaju slijeva nadesno, pa kasniji direktoriji nadjačavaju ranije. Ako je postavljen i `OPENCODE_CONFIG_DIR`, dodaje se na kraj i postaje prilagođeni direktorij najvišeg prioriteta i globalni cilj za pisanje.
+
 Prilagođeni direktorij se učitava nakon direktorija globalne konfiguracije i `.opencode`, tako da **može nadjačati** njihove postavke.
 
 ---

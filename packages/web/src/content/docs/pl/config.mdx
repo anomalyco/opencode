@@ -140,6 +140,8 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
+`OPENCODE_CONFIG_DIRS` może wskazać wiele niestandardowych katalogów konfiguracyjnych, używając tego samego separatora co systemowy `PATH` (`:` w Linux/macOS, `;` w Windows). Katalogi są ładowane od lewej do prawej, więc późniejsze katalogi nadpisują wcześniejsze. Jeśli ustawiono także `OPENCODE_CONFIG_DIR`, zostanie dodany na końcu i stanie się niestandardowym katalogiem o najwyższym priorytecie oraz globalnym celem zapisu.
+
 Katalog niestandardowy jest ładowany po globalnej konfiguracji i katalogach `.opencode`, więc **może być łączony** z ich zawartością.
 
 ---
