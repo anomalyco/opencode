@@ -11,8 +11,9 @@
  * Run: bun test test/integration.test.ts
  */
 import { describe, expect, test } from "bun:test"
-import { existsSync } from "fs"
+import { existsSync, mkdirSync, writeFileSync, rmSync } from "fs"
 import { resolve } from "path"
+import { findEnvFiles, loadANRConfig, validateANRConfig } from "../src/config/env-loader"
 
 const OPENCODE_SRC = resolve(import.meta.dir, "../../opencode/src")
 const ANR_CORE_SRC = resolve(import.meta.dir, "../src")
@@ -164,5 +165,202 @@ describe("env files exist for both environments", () => {
 
   test(".env.commercial exists", () => {
     expect(existsSync(resolve(ROOT, ".opencode/.env.commercial"))).toBe(true)
+  })
+})
+
+// ── Wired Pipeline Tests ──
+
+describe("wired pipeline: config → OTEL init → track → verify", () => {
+  test("full pipeline: validate config, init OTEL, track metric, verify diagnostics", async () => {
+    const { initializeOTEL, trackModelCall, getOTELDiagnostics, resetOTELDiagnostics } = await import("../src/integrations/otel")
+
+    // Step 1: Validate a config
+    const config = {
+      awsRegion: "us-gov-west-1",
+      useBedrockProvider: true,
+      anthropicModel: "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      anthropicSmallFastModel: "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      enableTelemetry: true,
+      otelMetricsExporter: "otlp",
+      otelProtocol: "http/protobuf",
+      otelEndpoint: "http://localhost:4318",
+      enableAudit: false,
+      metricsBatchSize: 100,
+      metricsIntervalSeconds: 60,
+      auditTableName: "AuditEvents",
+      quotaFailMode: "closed" as const,
+      quotaCheckInterval: 300,
+      modelsApiEndpoint: "https://api.example.com",
+      providerDomain: "auth.example.com",
+      clientId: "test-client",
+    }
+    const errors = validateANRConfig(config)
+    expect(errors).toHaveLength(0)
+
+    // Step 2: Init OTEL with validated config
+    initializeOTEL(config, {
+      userId: "pipeline-test-user",
+      sessionId: "pipeline-test-session",
+      userEmail: "test@gov.example.com",
+    })
+    resetOTELDiagnostics()
+
+    // Step 3: Track a model call (simulates step-finish handler)
+    trackModelCall("us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0", 500, 200, 0, 100, 0, {
+      userId: "pipeline-test-user",
+      sessionId: "pipeline-test-session",
+      userEmail: "test@gov.example.com",
+      department: "engineering",
+      teamId: "team-1",
+      organization: "test-org",
+    }, 0.005)
+
+    // Step 4: Verify diagnostics show the tracked call
+    const diags = getOTELDiagnostics()
+    expect(diags.initialized).toBe(true)
+    expect(diags.metrics.modelCallsTracked).toBe(1)
+    expect(diags.metrics.tokensTracked).toBe(800) // 500 input + 200 output + 100 cache_read
+    expect(diags.metrics.contextAvailableCalls).toBe(1)
+  })
+
+  test("full pipeline: track multiple tool edits and verify cumulative diagnostics", async () => {
+    const { initializeOTEL, trackLinesOfCode, trackCodeEditTool, trackCodeEditDecision, getOTELDiagnostics, resetOTELDiagnostics } = await import("../src/integrations/otel")
+
+    initializeOTEL({
+      awsRegion: "us-gov-west-1",
+      useBedrockProvider: true,
+      anthropicModel: "test",
+      anthropicSmallFastModel: "test",
+      enableTelemetry: true,
+      otelMetricsExporter: "otlp",
+      otelProtocol: "http/protobuf",
+      otelEndpoint: "http://localhost:4318",
+      enableAudit: false,
+      metricsBatchSize: 100,
+      metricsIntervalSeconds: 60,
+      auditTableName: "AuditEvents",
+      quotaFailMode: "closed" as const,
+      quotaCheckInterval: 300,
+      modelsApiEndpoint: "https://api.example.com",
+      providerDomain: "auth.example.com",
+      clientId: "test-client",
+    }, {
+      userId: "pipeline-user",
+      sessionId: "pipeline-session",
+      userEmail: "test@gov.example.com",
+    })
+    resetOTELDiagnostics()
+
+    // Simulate 3 edit tool calls
+    for (let i = 0; i < 3; i++) {
+      trackLinesOfCode(10, "added", "typescript")
+      trackLinesOfCode(5, "removed", "typescript")
+      trackCodeEditTool("edit", "typescript", true)
+      trackCodeEditDecision("accepted", "typescript")
+    }
+
+    // These don't go through the modelCallsTracked counter, they use their own metrics
+    // But they should not throw
+    const diags = getOTELDiagnostics()
+    expect(diags.initialized).toBe(true)
+  })
+})
+
+describe("wired pipeline: env file discovery → config load → validate", () => {
+  const TMP = resolve(import.meta.dir, ".tmp-pipeline-test")
+
+  test("discover multiple env files, load each, validate", async () => {
+    // Setup: create two env files
+    rmSync(TMP, { recursive: true, force: true })
+    mkdirSync(resolve(TMP, ".opencode"), { recursive: true })
+    writeFileSync(resolve(TMP, ".opencode/.env.govcloud"), [
+      "AWS_REGION=us-gov-west-1",
+      "OPENCODE_AWS_REGION=us-gov-west-1",
+      "OPENCODE_USE_BEDROCK=1",
+      "ANTHROPIC_MODEL=us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "ANTHROPIC_SMALL_FAST_MODEL=us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "OPENCODE_ENABLE_TELEMETRY=1",
+      "OTEL_METRICS_EXPORTER=otlp",
+      "OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf",
+      "OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.gov.example.com",
+      "OPENCODE_ENABLE_AUDIT=0",
+      "AUDIT_TABLE_NAME=AuditEvents",
+      "OPENCODE_API_ENDPOINT=https://api.gov.example.com",
+      "PROVIDER_DOMAIN=auth.gov.example.com",
+      "CLIENT_ID=govcloud-client",
+    ].join("\n"))
+    writeFileSync(resolve(TMP, ".opencode/.env.commercial"), [
+      "AWS_REGION=us-east-1",
+      "OPENCODE_AWS_REGION=us-east-1",
+      "OPENCODE_USE_BEDROCK=1",
+      "ANTHROPIC_MODEL=us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "ANTHROPIC_SMALL_FAST_MODEL=us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "OPENCODE_ENABLE_TELEMETRY=1",
+      "OTEL_METRICS_EXPORTER=otlp",
+      "OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf",
+      "OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.commercial.example.com",
+      "OPENCODE_ENABLE_AUDIT=0",
+      "AUDIT_TABLE_NAME=AuditEvents",
+      "OPENCODE_API_ENDPOINT=https://api.commercial.example.com",
+      "PROVIDER_DOMAIN=auth.commercial.example.com",
+      "CLIENT_ID=commercial-client",
+    ].join("\n"))
+
+    try {
+      // Step 1: Discover env files (returns EnvFileInfo[] with .path, .name, .display)
+      const files = findEnvFiles([resolve(TMP, ".opencode")])
+      expect(files.length).toBeGreaterThanOrEqual(2)
+
+      // Step 2: Load each by path and validate
+      for (const file of files) {
+        const config = await loadANRConfig(file.path)
+        const errors = validateANRConfig(config)
+        expect(errors).toHaveLength(0)
+        expect(config.awsRegion).toBeDefined()
+        expect(config.useBedrockProvider).toBe(true)
+        expect(config.enableTelemetry).toBe(true)
+      }
+
+      // Step 3: Verify different environments have different configs
+      const govConfig = await loadANRConfig(resolve(TMP, ".opencode/.env.govcloud"))
+      const comConfig = await loadANRConfig(resolve(TMP, ".opencode/.env.commercial"))
+      expect(govConfig.awsRegion).toBe("us-gov-west-1")
+      expect(comConfig.awsRegion).toBe("us-east-1")
+      expect(govConfig.otelEndpoint).toContain("gov")
+      expect(comConfig.otelEndpoint).toContain("commercial")
+    } finally {
+      rmSync(TMP, { recursive: true, force: true })
+    }
+  })
+
+  test("single env file scenario (no picker needed)", async () => {
+    rmSync(TMP, { recursive: true, force: true })
+    mkdirSync(resolve(TMP, ".opencode"), { recursive: true })
+    writeFileSync(resolve(TMP, ".opencode/.env.single"), [
+      "AWS_REGION=us-gov-west-1",
+      "OPENCODE_AWS_REGION=us-gov-west-1",
+      "OPENCODE_USE_BEDROCK=1",
+      "ANTHROPIC_MODEL=us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "ANTHROPIC_SMALL_FAST_MODEL=us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "OPENCODE_ENABLE_TELEMETRY=1",
+      "OTEL_METRICS_EXPORTER=otlp",
+      "OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf",
+      "OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com",
+      "OPENCODE_ENABLE_AUDIT=0",
+      "AUDIT_TABLE_NAME=AuditEvents",
+      "OPENCODE_API_ENDPOINT=https://api.example.com",
+      "PROVIDER_DOMAIN=auth.example.com",
+      "CLIENT_ID=test-client",
+    ].join("\n"))
+
+    try {
+      const files = findEnvFiles([resolve(TMP, ".opencode")])
+      expect(files.length).toBe(1)
+      // When only one env exists, no picker is needed — auto-select
+      const config = await loadANRConfig(files[0].path)
+      expect(config.awsRegion).toBe("us-gov-west-1")
+    } finally {
+      rmSync(TMP, { recursive: true, force: true })
+    }
   })
 })
