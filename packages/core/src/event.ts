@@ -281,8 +281,17 @@ export const layerWith = (options?: LayerOptions) =>
                               stored?.id === event.id &&
                               stored.type === versionedType(definition.type, sync.version) &&
                               isDeepStrictEqual(stored.data, encoded)
-                            )
+                            ) {
+                              if (input.ownerID && row?.ownerID == null) {
+                                yield* db
+                                  .update(EventSequenceTable)
+                                  .set({ owner_id: input.ownerID })
+                                  .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+                                  .run()
+                                  .pipe(Effect.orDie)
+                              }
                               return
+                            }
                             yield* Effect.die(
                               new InvalidSyncEventError({
                                 type: event.type,

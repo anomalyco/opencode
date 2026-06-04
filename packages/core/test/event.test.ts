@@ -784,6 +784,39 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("exact replay claims an unowned aggregate", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      const published = yield* events.publish(SyncMessage, { id: aggregateID, text: "owned" })
+      const replayed = {
+        id: published.id,
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: published.seq!,
+        aggregateID,
+        data: published.data,
+      }
+
+      yield* events.replay(replayed, { ownerID: "owner-a", strictOwner: true })
+      const row = yield* db
+        .select({ ownerID: EventSequenceTable.owner_id })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(row?.ownerID).toBe("owner-a")
+      const exit = yield* events
+        .replay(
+          { ...replayed, id: EventV2.ID.create(), seq: 1, data: { id: aggregateID, text: "conflict" } },
+          { ownerID: "owner-b", strictOwner: true },
+        )
+        .pipe(Effect.exit)
+      expect(String(exit)).toContain("Replay owner mismatch")
+    }),
+  )
+
   it.effect("replay with owner claims an unowned sequence", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

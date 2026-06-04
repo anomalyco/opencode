@@ -1,5 +1,6 @@
 import { useEvent } from "@tui/context/event"
 import type {
+  Event,
   SessionMessage,
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
@@ -54,6 +55,11 @@ function latestReasoning(assistant: SessionMessageAssistant | undefined, reasoni
   )
 }
 
+function prepend(messages: SessionMessage[], message: SessionMessage) {
+  if (messages.some((item) => item.id === message.id)) return
+  messages.unshift(message)
+}
+
 export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext({
   name: "SyncV2",
   init: () => {
@@ -68,6 +74,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
     const event = useEvent()
     const sdk = useSDK()
     const applied = new Set<string>()
+    const buffering = new Map<string, Event[]>()
+    const syncing = new Map<string, Promise<void>>()
 
     function duplicate(id: string) {
       if (applied.has(id)) return true
@@ -87,48 +95,40 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       )
     }
 
-    async function sync(sessionID: string) {
-      const before = new Map(
-        (store.messages[sessionID] ?? []).map((message) => [
-          message.id,
-          JSON.parse(JSON.stringify(message)) as SessionMessage,
-        ]),
-      )
-      const response = await sdk.client.v2.session.messages({ sessionID })
-      const messages = response.data?.data ?? []
-      const live = (store.messages[sessionID] ?? []).filter(
-        (message) => JSON.stringify(before.get(message.id)) !== JSON.stringify(message),
-      )
-      const liveByID = new Map(live.map((message) => [message.id, message]))
-      const snapshotIDs = new Set(messages.map((message) => message.id))
-      setStore(
-        "messages",
-        sessionID,
-        reconcile([
-          ...live.filter((message) => !snapshotIDs.has(message.id)),
-          ...messages.map((message) => {
-            const current = liveByID.get(message.id)
-            const previous = before.get(message.id)
-            if (!current || !previous) return message
-            return {
-              ...message,
-              ...Object.fromEntries(
-                Object.entries(current).filter(
-                  ([key, value]) => JSON.stringify(value) !== JSON.stringify(previous[key as keyof SessionMessage]),
-                ),
-              ),
-            } as SessionMessage
-          }),
-        ]),
-      )
+    async function hydrate(sessionID: string) {
+      const pending: Event[] = []
+      const before = JSON.parse(JSON.stringify(store.messages[sessionID] ?? [])) as SessionMessage[]
+      buffering.set(sessionID, pending)
+      try {
+        const response = await sdk.client.v2.session.messages({ sessionID })
+        const messages = response.data?.data ?? []
+        const snapshotIDs = new Set(messages.map((message) => message.id))
+        setStore(
+          "messages",
+          sessionID,
+          reconcile([...messages, ...before.filter((message) => !snapshotIDs.has(message.id))]),
+        )
+        buffering.delete(sessionID)
+        for (const event of pending) apply(event)
+      } catch (error) {
+        buffering.delete(sessionID)
+        throw error
+      }
     }
 
-    event.subscribe((event) => {
-      if (duplicate(event.id)) return
+    function sync(sessionID: string) {
+      const existing = syncing.get(sessionID)
+      if (existing) return existing
+      const result = hydrate(sessionID).finally(() => syncing.delete(sessionID))
+      syncing.set(sessionID, result)
+      return result
+    }
+
+    function apply(event: Event) {
       switch (event.type) {
         case "session.next.agent.switched":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
+            prepend(draft, {
               id: event.properties.messageID,
               type: "agent-switched",
               agent: event.properties.agent,
@@ -138,7 +138,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.model.switched":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
+            prepend(draft, {
               id: event.properties.messageID,
               type: "model-switched",
               model: event.properties.model,
@@ -148,7 +148,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.prompted": {
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
+            prepend(draft, {
               id: event.properties.messageID,
               type: "user",
               text: event.properties.prompt.text,
@@ -164,8 +164,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.prompt.promoted":
           update(event.properties.sessionID, (draft) => {
-            if (draft.some((message) => message.id === event.properties.messageID)) return
-            draft.unshift({
+            prepend(draft, {
               id: event.properties.messageID,
               type: "user",
               text: event.properties.prompt.text,
@@ -178,7 +177,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.synthetic":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
+            prepend(draft, {
               id: event.properties.messageID,
               type: "synthetic",
               sessionID: event.properties.sessionID,
@@ -189,7 +188,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.shell.started":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
+            prepend(draft, {
               id: event.properties.messageID,
               type: "shell",
               callID: event.properties.callID,
@@ -209,9 +208,10 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.step.started":
           update(event.properties.sessionID, (draft) => {
+            if (draft.some((message) => message.id === event.properties.assistantMessageID)) return
             const currentAssistant = activeAssistant(draft)
             if (currentAssistant) currentAssistant.time.completed = event.properties.timestamp
-            draft.unshift({
+            prepend(draft, {
               id: event.properties.assistantMessageID,
               type: "assistant",
               agent: event.properties.agent,
@@ -336,7 +336,11 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               content: [...event.properties.content],
               result: event.properties.result,
             }
-            match.provider = event.properties.provider
+            match.provider = {
+              executed: event.properties.provider.executed || match.provider?.executed === true,
+              metadata: match.provider?.metadata,
+              resultMetadata: event.properties.provider.metadata,
+            }
             match.time.completed = event.properties.timestamp
           })
           break
@@ -355,7 +359,11 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               content: match.state.status === "running" ? match.state.content : [],
               result: event.properties.result,
             }
-            match.provider = event.properties.provider
+            match.provider = {
+              executed: event.properties.provider.executed || match.provider?.executed === true,
+              metadata: match.provider?.metadata,
+              resultMetadata: event.properties.provider.metadata,
+            }
             match.time.completed = event.properties.timestamp
           })
           break
@@ -395,7 +403,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.compaction.started":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
+            prepend(draft, {
               id: event.properties.messageID,
               type: "compaction",
               reason: event.properties.reason,
@@ -419,6 +427,12 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           })
           break
       }
+    }
+
+    event.subscribe((event) => {
+      if (duplicate(event.id)) return
+      if ("sessionID" in event.properties) buffering.get(event.properties.sessionID)?.push(event)
+      apply(event)
     })
 
     const result = {

@@ -91,6 +91,19 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
       },
     })
     emitTwice(events, {
+      id: "evt_called_1",
+      type: "session.next.tool.called",
+      properties: {
+        sessionID: "session-1",
+        timestamp: 2,
+        assistantMessageID: "msg_explicit_assistant_9",
+        callID: "call-1",
+        tool: "bash",
+        input: {},
+        provider: { executed: false, metadata: { fake: { call: true } } },
+      },
+    })
+    emitTwice(events, {
       id: "evt_failed_1",
       type: "session.next.tool.failed",
       properties: {
@@ -99,7 +112,7 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
         error: { type: "unknown", message: "aborted" },
-        provider: { executed: false },
+        provider: { executed: false, metadata: { fake: { result: true } } },
       },
     })
 
@@ -125,6 +138,11 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
     expect(tool.state.input).toEqual({})
     expect(tool.state.structured).toEqual({})
     expect(tool.state.content).toEqual([])
+    expect(tool.provider).toEqual({
+      executed: false,
+      metadata: { fake: { call: true } },
+      resultMetadata: { fake: { result: true } },
+    })
     expect(sync.session.message.fromSession("session-1").map((message) => message.type)).toEqual([
       "assistant",
       "model-switched",
@@ -390,6 +408,17 @@ test("sync v2 preserves snapshot order and metadata for in-flight updates", asyn
   try {
     await mounted
     emitTwice(events, {
+      id: "evt_step_older",
+      type: "session.next.step.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_older",
+        timestamp: 0,
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    emitTwice(events, {
       id: "evt_step_1",
       type: "session.next.step.started",
       properties: {
@@ -412,9 +441,19 @@ test("sync v2 preserves snapshot order and metadata for in-flight updates", asyn
         textID: "text-1",
       },
     })
+    emitTwice(events, {
+      id: "evt_text_older",
+      type: "session.next.text.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_older",
+        timestamp: 2,
+        textID: "text-older",
+      },
+    })
     await wait(() => {
-      const message = sync.session.message.fromSession("session-1")[0]
-      return message?.type === "assistant" && message.content[0]?.type === "text"
+      const messages = sync.session.message.fromSession("session-1")
+      return messages.every((message) => message.type !== "assistant" || message.content[0]?.type === "text")
     })
     response.resolve(
       json({
@@ -440,14 +479,29 @@ test("sync v2 preserves snapshot order and metadata for in-flight updates", asyn
       }),
     )
     await hydration
+    emitTwice(events, {
+      id: "evt_step_late_duplicate",
+      type: "session.next.step.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_old",
+        timestamp: 1,
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
 
     expect(sync.session.message.fromSession("session-1").map((message) => message.id)).toEqual([
       "msg_assistant_new",
       "msg_assistant_old",
+      "msg_assistant_older",
     ])
     expect(JSON.parse(JSON.stringify(sync.session.message.fromSession("session-1")[1]))).toMatchObject({
       metadata: { source: "snapshot" },
       content: [{ type: "text", id: "text-1", text: "" }],
+    })
+    expect(JSON.parse(JSON.stringify(sync.session.message.fromSession("session-1")[2]))).toMatchObject({
+      content: [{ type: "text", id: "text-older", text: "" }],
     })
   } finally {
     app.renderer.destroy()
