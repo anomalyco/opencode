@@ -96,7 +96,7 @@ export const SidebarContent = (props: {
     <div class="flex h-full w-full min-w-0 overflow-hidden">
       <div
         data-component="sidebar-rail"
-        class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden arc-sidebar-scope"
+        class="relative z-20 w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden arc-sidebar-scope"
       >
         <div class="flex-1 min-h-0 w-full">
           <DragDropProvider
@@ -229,7 +229,11 @@ export const SidebarContent = (props: {
         ref={(el) => {
           panel = el
         }}
-        classList={{ "flex-1 flex h-full min-h-0 min-w-0 overflow-hidden arc-sidebar-scope": true, "pointer-events-none": !expanded() }}
+        classList={{
+          "relative z-10 flex-1 flex h-full min-h-0 min-w-0 overflow-hidden arc-sidebar-scope transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[transform,opacity] motion-reduce:transition-none": true,
+          "translate-x-0 opacity-100": expanded(),
+          "-translate-x-full opacity-0 pointer-events-none": !expanded(),
+        }}
         aria-hidden={!expanded()}
       >
         {props.renderPanel()}
