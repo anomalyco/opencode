@@ -166,7 +166,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantMessageID: EventV2.ID,
+      assistantCreatorEventID: EventV2.ID,
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
@@ -188,7 +188,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantMessageID: EventV2.ID,
+      assistantCreatorEventID: EventV2.ID,
       error: UnknownError,
     },
   })
@@ -268,7 +268,7 @@ export namespace Reasoning {
 export namespace Tool {
   const ToolBase = {
     ...Base,
-    assistantMessageID: EventV2.ID,
+    assistantCreatorEventID: EventV2.ID,
     callID: Schema.String,
   }
 

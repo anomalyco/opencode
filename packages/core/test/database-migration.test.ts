@@ -128,6 +128,11 @@ describe("DatabaseMigration", () => {
         expect(
           (yield* db.all<{ name: string }>(sql`PRAGMA table_info(session_input)`)).map((column) => column.name),
         ).toEqual(["id", "session_id", "prompt", "delivery", "admitted_seq", "promoted_seq", "time_created"])
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(session_message)`)).find(
+            (index) => index.name === "session_message_session_seq_idx",
+          ),
+        ).toMatchObject({ unique: 1 })
       }),
     )
   })

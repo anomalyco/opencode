@@ -50,7 +50,7 @@ describe("Tool.Progress", () => {
         })
         .run()
         .pipe(Effect.orDie)
-      const assistantMessageID = (yield* service.publish(SessionEvent.Step.Started, {
+      const assistantCreatorEventID = (yield* service.publish(SessionEvent.Step.Started, {
         sessionID,
         timestamp,
         agent: "build",
@@ -60,7 +60,7 @@ describe("Tool.Progress", () => {
         const row = yield* db
           .select()
           .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, SessionMessage.ID.fromEvent(assistantMessageID)))
+          .where(eq(SessionMessageTable.id, SessionMessage.ID.fromCreatorEvent(assistantCreatorEventID)))
           .get()
           .pipe(Effect.orDie)
         if (!row) return yield* Effect.die("Missing projected assistant")
@@ -71,14 +71,14 @@ describe("Tool.Progress", () => {
           yield* service.publish(SessionEvent.Tool.Input.Started, {
             sessionID,
             timestamp,
-            assistantMessageID,
+            assistantCreatorEventID,
             callID,
             name: "bash",
           })
           yield* service.publish(SessionEvent.Tool.Called, {
             sessionID,
             timestamp,
-            assistantMessageID,
+            assistantCreatorEventID,
             callID,
             tool: "bash",
             input: { command: "pwd" },
@@ -94,7 +94,7 @@ describe("Tool.Progress", () => {
       yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
         timestamp,
-        assistantMessageID,
+        assistantCreatorEventID,
         callID: "call-success",
         structured: { phase: "checkpoint" },
         content: content("saved"),
@@ -106,7 +106,7 @@ describe("Tool.Progress", () => {
       const success = yield* service.publish(SessionEvent.Tool.Success, {
         sessionID,
         timestamp,
-        assistantMessageID,
+        assistantCreatorEventID,
         callID: "call-success",
         structured: { phase: "done" },
         content: content("complete"),
@@ -120,7 +120,7 @@ describe("Tool.Progress", () => {
       yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
         timestamp,
-        assistantMessageID,
+        assistantCreatorEventID,
         callID: "call-failed",
         structured: { phase: "checkpoint" },
         content: content("before failure"),
@@ -128,7 +128,7 @@ describe("Tool.Progress", () => {
       const failed = yield* service.publish(SessionEvent.Tool.Failed, {
         sessionID,
         timestamp,
-        assistantMessageID,
+        assistantCreatorEventID,
         callID: "call-failed",
         error: { type: "unknown", message: "boom" },
         provider: { executed: false },

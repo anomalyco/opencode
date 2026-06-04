@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, mock } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
-import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { Session } from "@/session/session"
 import { Database } from "@opencode-ai/core/database/database"
 import * as Log from "@opencode-ai/core/util/log"
@@ -231,7 +230,11 @@ describe("workspace HttpApi", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: workspace.id, sessionID: session.id }),
       })
-      expect(warped.status).toBe(204)
+      expect(warped.status).toBe(400)
+      expect(yield* warped.json).toEqual({
+        name: "WorkspaceWarpError",
+        data: { message: "Workspace warp is disabled during the synchronized Session epoch cutover" },
+      })
 
       const removed = yield* request(WorkspacePaths.remove.replace(":id", workspace.id), dir, { method: "DELETE" })
       expect(removed.status).toBe(200)
@@ -267,7 +270,7 @@ describe("workspace HttpApi", () => {
     }),
   )
 
-  it.live("returns a declared not found error when warping into a missing workspace", () =>
+  it.live("rejects workspace warp during the synchronized Session epoch cutover", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const session = yield* Session.use.create({}).pipe(provideInstance(dir))
@@ -279,10 +282,10 @@ describe("workspace HttpApi", () => {
         body: JSON.stringify({ id: workspaceID, sessionID: session.id }),
       })
 
-      expect(response.status).toBe(404)
+      expect(response.status).toBe(400)
       expect(yield* response.json).toEqual({
-        name: "NotFoundError",
-        data: { message: `Workspace not found: ${workspaceID}` },
+        name: "WorkspaceWarpError",
+        data: { message: "Workspace warp is disabled during the synchronized Session epoch cutover" },
       })
     }),
   )
@@ -351,7 +354,7 @@ describe("workspace HttpApi", () => {
     }),
   )
 
-  it.live("proxies remote workspace HTTP requests with sanitized forwarding", () =>
+  it.live("rejects remote workspace HTTP proxying while synchronization is fenced", () =>
     Effect.gen(function* () {
       Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
       const dir = yield* tmpdirScoped({ git: true })
@@ -412,33 +415,11 @@ describe("workspace HttpApi", () => {
         })
 
         const responseBody = yield* response.text
-        expect({ status: response.status, body: responseBody }).toMatchObject({ status: 201 })
-        expect(response.headers["content-length"]).toBeUndefined()
-        expect(response.headers["x-remote"]).toBe("yes")
-        expect(JSON.parse(responseBody)).toEqual({ proxied: true, path: "/base/config", keep: "yes", workspace: null })
-        const forwarded = proxied.filter((item) => new URL(item.url).pathname === "/base/config")
-        expect(forwarded).toEqual([
-          {
-            url: `http://127.0.0.1:${remote.port}/base/config?keep=yes`,
-            method: "PATCH",
-            headers: expect.objectContaining({
-              "content-type": "application/json",
-              "x-target-auth": "secret",
-            }),
-            body: JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
-          },
-        ])
-        expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-directory")
-        expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-workspace")
-
-        const eventURL = new URL(`http://localhost${EventPaths.event}`)
-        eventURL.searchParams.set("workspace", workspace.id)
-        const eventResponse = yield* request(eventURL.toString(), dir)
-        expect(eventResponse.status).toBe(200)
-        expect(eventResponse.headers["content-type"]).toContain("text/event-stream")
-        const event = Array.from(yield* eventResponse.stream.pipe(Stream.take(1), Stream.runCollect))[0]
-        expect(new TextDecoder().decode(event)).toContain("server.connected")
-        expect(proxied.some((item) => new URL(item.url).pathname === "/base/event")).toBe(true)
+        expect({ status: response.status, body: responseBody }).toEqual({
+          status: 503,
+          body: `broken sync connection for workspace: ${workspace.id}`,
+        })
+        expect(proxied).toEqual([])
       } finally {
         void remote.stop(true)
         yield* requestDefault(WorkspacePaths.remove.replace(":id", workspace.id), dir, { method: "DELETE" })
@@ -446,7 +427,7 @@ describe("workspace HttpApi", () => {
     }),
   )
 
-  it.live("proxies remote workspace requests selected from session ownership", () =>
+  it.live("rejects remote workspace warp while synchronization is fenced", () =>
     Effect.gen(function* () {
       Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
       const dir = yield* tmpdirScoped({ git: true })
@@ -478,34 +459,14 @@ describe("workspace HttpApi", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: workspace.id, sessionID: session.id }),
       })
-      expect(warped.status).toBe(204)
+      expect(warped.status).toBe(400)
+      expect(yield* warped.json).toEqual({
+        name: "WorkspaceWarpError",
+        data: { message: "Workspace warp is disabled during the synchronized Session epoch cutover" },
+      })
 
       try {
-        const response = yield* requestDefault(`http://localhost/session/${session.id}/message`, dir, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ parts: [{ type: "text", text: "hello" }] }),
-        })
-
-        const responseBody = yield* response.text
-        expect({ status: response.status, body: responseBody }).toMatchObject({ status: 200 })
-        expect(JSON.parse(responseBody)).toEqual({ proxied: true, path: `/base/session/${session.id}/message` })
-        expect(proxied.filter((item) => new URL(item.url).pathname === `/base/session/${session.id}/message`)).toEqual([
-          expect.objectContaining({
-            url: `http://127.0.0.1:${remote.port}/base/session/${session.id}/message`,
-            method: "POST",
-          }),
-        ])
-
-        const aborted = yield* request(`http://localhost/session/${session.id}/abort`, dir, { method: "POST" })
-        expect(aborted.status).toBe(200)
-        expect(proxied.filter((item) => new URL(item.url).pathname === `/base/session/${session.id}/abort`)).toEqual([
-          expect.objectContaining({
-            url: `http://127.0.0.1:${remote.port}/base/session/${session.id}/abort`,
-            method: "POST",
-            body: "",
-          }),
-        ])
+        expect(proxied).toEqual([])
       } finally {
         void remote.stop(true)
         yield* requestDefault(WorkspacePaths.remove.replace(":id", workspace.id), dir, { method: "DELETE" })

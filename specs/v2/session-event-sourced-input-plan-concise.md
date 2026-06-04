@@ -143,7 +143,7 @@ preserve local V1 rows
   part
 ```
 
-Disable experimental workspace sync and discard or recreate remote beta
+Hard-fence experimental workspace sync and discard or recreate remote beta
 workspaces before replay resumes. Otherwise a stale workspace can replay old
 history back into the emptied log.
 

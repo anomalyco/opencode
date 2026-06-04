@@ -367,7 +367,7 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
-        const messageID = SessionMessage.ID.fromEvent(event.id)
+        const messageID = SessionMessage.ID.fromCreatorEvent(event.id)
         const existing = yield* db
           .select({ id: SessionMessageTable.id })
           .from(SessionMessageTable)

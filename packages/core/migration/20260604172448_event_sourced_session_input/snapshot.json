@@ -1616,7 +1616,7 @@
           "isExpression": false
         }
       ],
-      "isUnique": false,
+      "isUnique": true,
       "where": null,
       "origin": "manual",
       "name": "event_aggregate_type_seq_idx",

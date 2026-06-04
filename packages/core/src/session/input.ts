@@ -1,9 +1,10 @@
 export * as SessionInput from "./input"
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, lte } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
+import { EventSequenceTable } from "../event/sql"
 import { NonNegativeInt } from "../schema"
 import { V2Schema } from "../v2-schema"
 import { SessionEvent } from "./event"
@@ -24,6 +25,7 @@ export class Admitted extends Schema.Class<Admitted>("SessionInput.Admitted")({
   prompt: Prompt,
   delivery: Delivery,
   timeCreated: V2Schema.DateTimeUtcFromMillis,
+  state: Schema.Literals(["pending", "promoted"]),
   promotedSeq: NonNegativeInt.pipe(Schema.optional),
 }) {}
 
@@ -39,6 +41,7 @@ const fromRow = (row: typeof SessionInputTable.$inferSelect): Admitted =>
     prompt: decodePrompt(row.prompt),
     delivery: row.delivery,
     timeCreated: DateTime.makeUnsafe(row.time_created),
+    state: row.promoted_seq === null ? "pending" : "promoted",
     ...(row.promoted_seq === null ? {} : { promotedSeq: row.promoted_seq }),
   })
 
@@ -89,6 +92,19 @@ export const pending = Effect.fn("SessionInput.pending")(function* (db: Database
     .orderBy(asc(SessionInputTable.admitted_seq))
     .all()
     .pipe(Effect.orDie)).map(fromRow)
+})
+
+export const latestSeq = Effect.fn("SessionInput.latestSeq")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const row = yield* db
+    .select({ seq: EventSequenceTable.seq })
+    .from(EventSequenceTable)
+    .where(eq(EventSequenceTable.aggregate_id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  return row?.seq ?? -1
 })
 
 export const projectAdmitted = Effect.fn("SessionInput.projectAdmitted")(function* (
@@ -192,7 +208,7 @@ export const guardReservedID = Effect.fn("SessionInput.guardReservedID")(functio
   if (Schema.is(SessionEvent.PromptLifecycle.Admitted)(event)) return
   const id = Schema.is(SessionEvent.PromptLifecycle.Promoted)(event)
     ? event.data.messageID
-    : SessionMessage.ID.fromEvent(event.id)
+    : SessionMessage.ID.fromCreatorEvent(event.id)
   const admitted = yield* find(db, id)
   if (admitted === undefined) return
   if (Schema.is(SessionEvent.PromptLifecycle.Promoted)(event)) return
@@ -301,6 +317,7 @@ export const promoteSteers = Effect.fn("SessionInput.promoteSteers")(function* (
   db: DatabaseService,
   events: EventV2.Interface,
   sessionID: SessionSchema.ID,
+  cutoff: number,
 ) {
   const rows = yield* db
     .select()
@@ -310,6 +327,7 @@ export const promoteSteers = Effect.fn("SessionInput.promoteSteers")(function* (
         eq(SessionInputTable.session_id, sessionID),
         isNull(SessionInputTable.promoted_seq),
         eq(SessionInputTable.delivery, "steer"),
+        lte(SessionInputTable.admitted_seq, cutoff),
       ),
     )
     .orderBy(asc(SessionInputTable.admitted_seq))

@@ -266,7 +266,7 @@ describe("SessionProjector", () => {
         .publish(
           SessionEvent.Prompted,
           { sessionID, timestamp: created, prompt: new Prompt({ text: "different" }), delivery: "steer" },
-          { id: SessionMessage.ID.toEvent(id) },
+          { id: SessionMessage.ID.toCreatorEvent(id) },
         )
         .pipe(Effect.exit)
 
@@ -306,7 +306,7 @@ describe("SessionProjector", () => {
         .publish(
           SessionEvent.Prompted,
           { sessionID, timestamp: created, prompt, delivery: "steer" },
-          { id: SessionMessage.ID.toEvent(id) },
+          { id: SessionMessage.ID.toCreatorEvent(id) },
         )
         .pipe(Effect.exit)
 
@@ -375,7 +375,7 @@ describe("SessionProjector", () => {
       yield* service.publish(SessionEvent.Step.Ended, {
         sessionID,
         timestamp: DateTime.makeUnsafe(1),
-        assistantMessageID: EventV2.ID.make("evt_assistant_2"),
+        assistantCreatorEventID: EventV2.ID.make("evt_assistant_2"),
         finish: "stop",
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },

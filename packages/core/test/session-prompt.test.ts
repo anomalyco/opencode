@@ -141,7 +141,7 @@ describe("SessionV2.prompt", () => {
 
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
-      yield* SessionInput.promoteSteers(db, events, sessionID)
+      yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event) => [event.cursor, event.event.type])).toEqual([
@@ -324,15 +324,35 @@ describe("SessionV2.prompt", () => {
       yield* session.prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Promote once" }), resume: false })
 
       yield* Effect.all(
-        [SessionInput.promoteSteers(db, events, sessionID), SessionInput.promoteSteers(db, events, sessionID)],
+        [
+          SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER),
+          SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER),
+        ],
         { concurrency: "unbounded" },
       )
 
       expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1))).toBe(1)
-      expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
+      expect(yield* admitted(messageID)).toMatchObject({ state: "promoted", promotedSeq: 1 })
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Promote once" },
       ])
+    }),
+  )
+
+  it.effect("promotes steers only through the captured aggregate cutoff", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const first = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Before cutoff" }), resume: false })
+      const cutoff = yield* SessionInput.latestSeq(db, sessionID)
+      const second = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "After cutoff" }), resume: false })
+
+      yield* SessionInput.promoteSteers(db, events, sessionID, cutoff)
+
+      expect(yield* admitted(first.id)).toMatchObject({ state: "promoted" })
+      expect(yield* admitted(second.id)).toMatchObject({ state: "pending" })
     }),
   )
 
@@ -383,7 +403,7 @@ describe("SessionV2.prompt", () => {
       yield* events.publish(
         SessionEvent.Prompted,
         { sessionID, timestamp: yield* DateTime.now, prompt, delivery: "steer" },
-        { id: SessionMessage.ID.toEvent(messageID) },
+        { id: SessionMessage.ID.toCreatorEvent(messageID) },
       )
 
       const retried = yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
@@ -402,7 +422,7 @@ describe("SessionV2.prompt", () => {
       yield* events.publish(
         SessionEvent.Prompted,
         { sessionID, timestamp: yield* DateTime.now, prompt, delivery: "queue" },
-        { id: SessionMessage.ID.toEvent(messageID) },
+        { id: SessionMessage.ID.toCreatorEvent(messageID) },
       )
 
       const retried = yield* session.prompt({ id: messageID, sessionID, prompt, delivery: "queue", resume: false })
@@ -420,7 +440,7 @@ describe("SessionV2.prompt", () => {
       yield* events.publish(
         SessionEvent.Synthetic,
         { sessionID, timestamp: yield* DateTime.now, text: "Collision" },
-        { id: SessionMessage.ID.toEvent(messageID) },
+        { id: SessionMessage.ID.toCreatorEvent(messageID) },
       )
 
       const failure = yield* session
@@ -445,7 +465,7 @@ describe("SessionV2.prompt", () => {
         .publish(
           SessionEvent.Synthetic,
           { sessionID, timestamp: yield* DateTime.now, text: "Conflicting synthetic" },
-          { id: SessionMessage.ID.toEvent(messageID) },
+          { id: SessionMessage.ID.toCreatorEvent(messageID) },
         )
         .pipe(Effect.catchDefect(Effect.succeed))
 
@@ -453,7 +473,7 @@ describe("SessionV2.prompt", () => {
       expect(yield* admitted(messageID)).not.toHaveProperty("promotedSeq")
       expect(yield* session.messages({ sessionID })).toEqual([])
 
-      yield* SessionInput.promoteSteers(db, events, sessionID)
+      yield* SessionInput.promoteSteers(db, events, sessionID, Number.MAX_SAFE_INTEGER)
 
       expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
       expect(yield* session.messages({ sessionID })).toMatchObject([

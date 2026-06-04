@@ -211,11 +211,14 @@ describe("SessionV2.create", () => {
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
       yield* session.prompt({ sessionID: created.id, prompt: new Prompt({ text: "Hello" }), resume: false })
-      yield* SessionInput.promoteSteers(db, events, created.id)
+      yield* SessionInput.promoteSteers(db, events, created.id, Number.MAX_SAFE_INTEGER)
 
       expect(
-        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ cursor: 1, event: { type: "session.next.prompted", data: { prompt: { text: "Hello" } } } }])
+        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
+      ).toMatchObject([
+        { cursor: 1, event: { type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } } },
+        { cursor: 2, event: { type: "session.next.prompt.promoted" } },
+      ])
     }),
   )
 

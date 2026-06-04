@@ -70,8 +70,9 @@ Use independent identities for resources and immutable facts:
 
 Core-generated `msg_*` IDs use the existing sortable generator. Caller-supplied
 IDs must satisfy the public `SessionMessage.ID` contract and remain globally
-unique; their suffixes do not need to be sortable. IDs do not define timeline
-order. Timeline order comes from durable aggregate sequence.
+unique. Retry-capable clients should use the SDK's safe sortable-ID helper once
+that surface is exposed rather than constructing IDs ad hoc. IDs do not define
+timeline order. Timeline order comes from durable aggregate sequence.
 
 For prompt lifecycles, do not derive `messageID` from `PromptAdmitted` or
 `PromptPromoted` envelope IDs, and do not derive either envelope ID from
@@ -440,7 +441,7 @@ Fresh-target replay occurs in a staged empty target that does not accept Session
 commands until activation. This proves reconstructability only.
 
 Experimental workspace sync and warp are unreleased and out of scope for this
-slice. Disable them during cutover and discard or recreate stale remote beta
+slice. They are hard-fenced during cutover; discard or recreate stale remote beta
 workspaces. Design online transfer separately if it becomes a real requirement.
 
 Distinguish two reconstruction guarantees:
@@ -599,7 +600,7 @@ preserve local canonical V1 rows
   part
 ```
 
-Disable experimental workspace sync and discard or recreate every remote beta
+Hard-fence experimental workspace sync and discard or recreate every remote beta
 workspace before replay resumes. Without that operational gate, a stale remote
 workspace can replay pre-cutover history back into the emptied local log.
 

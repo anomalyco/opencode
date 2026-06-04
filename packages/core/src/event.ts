@@ -370,11 +370,13 @@ export const layerWith = (options?: LayerOptions) =>
         return Effect.gen(function* () {
           const durable = registry.get(event.type)?.sync !== undefined
           if (durable) {
-            for (const sync of syncHandlers) {
-              yield* sync(event as Payload)
-            }
             const committed = yield* commitSyncEvent(event as Payload)
-            if (committed) event = { ...event, seq: committed.seq }
+            if (committed) {
+              event = { ...event, seq: committed.seq }
+              for (const sync of syncHandlers) {
+                yield* sync(event as Payload)
+              }
+            }
           }
           for (const listener of listeners) {
             yield* listener(event as Payload)

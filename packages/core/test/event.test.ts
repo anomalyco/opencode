@@ -254,6 +254,30 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("synchronizes only after the durable event commits", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const synchronized = new Array<boolean>()
+      yield* events.sync((event) =>
+        db
+          .select({ id: EventTable.id })
+          .from(EventTable)
+          .where(eq(EventTable.id, event.id))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => synchronized.push(row !== undefined)),
+            Effect.asVoid,
+          ),
+      )
+
+      yield* events.publish(SyncMessage, { id: EventV2.ID.create(), text: "durable" })
+
+      expect(synchronized).toEqual([true])
+    }),
+  )
+
   it.effect("inserts sync event rows on publish", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

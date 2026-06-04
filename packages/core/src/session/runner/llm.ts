@@ -107,7 +107,7 @@ export const layer = Layer.effect(
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID,
             timestamp: yield* DateTime.now,
-            assistantMessageID: SessionMessage.ID.toEvent(message.id),
+            assistantCreatorEventID: SessionMessage.ID.toCreatorEvent(message.id),
             callID: tool.id,
             error: { type: "unknown", message: "Tool execution interrupted" },
             provider: {
@@ -133,10 +133,13 @@ export const layer = Layer.effect(
       const model = yield* models.resolve(session)
       const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
-      if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id)
-      if (promotion === "queue") {
-        yield* SessionInput.promoteNextQueued(db, events, session.id)
-        yield* SessionInput.promoteSteers(db, events, session.id)
+      if (promotion) {
+        const cutoff = yield* SessionInput.latestSeq(db, session.id)
+        if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        if (promotion === "queue") {
+          yield* SessionInput.promoteNextQueued(db, events, session.id)
+          yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        }
       }
       yield* failInterruptedTools(session.id)
       const context = yield* getContext(session.id)
@@ -199,7 +202,7 @@ export const layer = Layer.effect(
               events.publish(SessionEvent.Step.Failed, {
                 sessionID: session.id,
                 timestamp: yield* DateTime.now,
-                assistantMessageID: yield* publisher.startAssistant(),
+                assistantCreatorEventID: yield* publisher.startAssistant(),
                 error: { type: "unknown", message: llmFailure.reason.message },
               }),
             )

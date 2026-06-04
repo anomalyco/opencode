@@ -26,8 +26,12 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
     const scope = yield* Scope.Scope
     const events = yield* EventV2Bridge.Service
     const { db } = yield* Database.Service
+    const enabled = Effect.fnUntraced(function* () {
+      if (!Workspace.syncEnabled) return yield* new HttpApiError.BadRequest({})
+    })
 
     const start = Effect.fn("SyncHttpApi.start")(function* () {
+      yield* enabled()
       yield* workspace
         .startWorkspaceSyncing((yield* InstanceState.context).project.id)
         .pipe(Effect.ignore, Effect.forkIn(scope))
@@ -35,6 +39,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
     })
 
     const replay = Effect.fn("SyncHttpApi.replay")(function* (ctx: { payload: typeof ReplayPayload.Type }) {
+      yield* enabled()
       const payload: EventV2.SerializedEvent[] = ctx.payload.events.map((event) => ({
         id: EventV2.ID.make(event.id),
         aggregateID: event.aggregateID,
@@ -62,6 +67,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
     })
 
     const steal = Effect.fn("SyncHttpApi.steal")(function* (ctx: { payload: typeof SessionPayload.Type }) {
+      yield* enabled()
       const workspaceID = yield* InstanceState.workspaceID
       if (!workspaceID) return yield* new HttpApiError.BadRequest({})
 
@@ -76,6 +82,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
     })
 
     const history = Effect.fn("SyncHttpApi.history")(function* (ctx: { payload: typeof HistoryPayload.Type }) {
+      yield* enabled()
       const exclude = Object.entries(ctx.payload)
       return yield* db
         .select()
