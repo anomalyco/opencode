@@ -430,8 +430,7 @@ export async function createPage(input: DocMountInput) {
   }
 
   const refocus = (target?: Element) => {
-    const active = document.activeElement
-    if (target?.closest(".inline-editor") && active instanceof Element && editor.contains(active)) return
+    if (target && editor.contains(target)) return
     void focus()
   }
 

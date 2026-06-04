@@ -63,8 +63,6 @@ export const PromptDocPanel: Component<PanelProps> = (props) => {
       onPointerDown={(e) => {
         e.stopPropagation()
         props.doc.guard()
-        const target = e.target
-        requestAnimationFrame(() => props.doc.refocus(target instanceof Element ? target : undefined))
       }}
       onClick={(e) => e.stopPropagation()}
     />
