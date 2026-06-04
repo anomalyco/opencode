@@ -11,6 +11,25 @@ Versioning note: automated upstream mirrors are published as
 
 ## Unreleased
 
+- No unreleased personal changes.
+
+## v1.15.13-c0dn.6 - 2026-06-04
+
+### Added
+- MCP: added Bifrost gateway configuration support, including default header
+  handling, CLI/server wiring, tests, and documentation for the managed gateway
+  setup.
+
+### Fixed
+- Session runtime: reverted the OpenAI websocket/session stream recovery and
+  attempt replay stack that caused regressions around queued follow-up prompts
+  and undo/redo flows.
+- TUI/session sync: ported safe upstream fixes for live hydration, diff-viewer
+  rendering, ACP session handling, read output, task-tool wording, and related
+  regression coverage.
+
+## v1.15.13-c0dn.5 - 2026-06-04
+
 ### Added
 - TUI: `/tps` slash command (alias `/tokens-per-second`) that toggles a compact
   tokens-per-second indicator in the prompt footer. State persists via the
