@@ -36,7 +36,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
 
     const replay = Effect.fn("SyncHttpApi.replay")(function* (ctx: { payload: typeof ReplayPayload.Type }) {
       const payload: EventV2.SerializedEvent[] = ctx.payload.events.map((event) => ({
-        id: EventV2.ID.make(event.id),
+        id: event.id,
         aggregateID: event.aggregateID,
         seq: event.seq,
         type: event.type,
@@ -50,7 +50,8 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         last: payload.at(-1)?.seq,
         directory: ctx.payload.directory,
       })
-      yield* events.replayAll(payload)
+      const ownerID = yield* InstanceState.workspaceID
+      yield* events.replayAll(payload, { ownerID, strictOwner: true })
       log.info("sync replay complete", {
         sessionID: source,
         events: payload.length,
