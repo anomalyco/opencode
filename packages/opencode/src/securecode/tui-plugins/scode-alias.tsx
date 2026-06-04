@@ -74,9 +74,9 @@ function writeAlias(api: TuiPluginApi, info: RcInfo): void {
       writeFileSync(info.rc, "")
     }
     appendFileSync(info.rc, `\n# Acompany SecureCode alias\n${info.line}\n`)
-    api.ui.toast({ variant: "success", message: `scode エイリアスを ${shortenPath(info.rc)} に追記しました。新しいシェルを開くと使えます。` })
+    api.ui.toast({ variant: "success", message: `Added scode alias to ${shortenPath(info.rc)}. Open a new shell to use it.` })
   } catch (e) {
-    api.ui.toast({ variant: "error", message: `エイリアスの追記に失敗しました: ${e instanceof Error ? e.message : String(e)}` })
+    api.ui.toast({ variant: "error", message: `Failed to add alias: ${e instanceof Error ? e.message : String(e)}` })
   }
 }
 
@@ -87,8 +87,8 @@ function InstallView(props: { api: TuiPluginApi; info: RcInfo }) {
   const short = shortenPath(props.info.rc)
   return (
     <props.api.ui.DialogConfirm
-      title="scode エイリアスを追加"
-      message={`${short} に "${props.info.line}" を追記します`}
+      title="Add scode alias"
+      message={`Append "${props.info.line}" to ${short}`}
       onConfirm={() => writeAlias(props.api, props.info)}
     />
   )
@@ -99,18 +99,18 @@ const tui: TuiPlugin = async (api) => {
     commands: [
       {
         name: "scode.alias.setup",
-        title: "scode エイリアスを設定",
-        category: "SecureCode",
+        title: "Set up scode alias",
+        category: "System",
         slashName: "scode",
         namespace: "palette",
         run() {
           const info = detectShellRc()
           if (!info) {
-            api.ui.toast({ variant: "error", message: "非対応のシェルです。$SHELL を bash、zsh、fish のいずれかに設定してください。" })
+            api.ui.toast({ variant: "error", message: "Unsupported shell. Set $SHELL to bash, zsh, or fish." })
             return
           }
           if (isAliasInstalled(info)) {
-            api.ui.toast({ variant: "info", message: `scode エイリアスは既に ${shortenPath(info.rc)} に設定済みです。削除したい場合は手動で行を削除してください。` })
+            api.ui.toast({ variant: "info", message: `scode alias is already set in ${shortenPath(info.rc)}. To remove it, delete the line manually.` })
             return
           }
           api.ui.dialog.replace(() => <InstallView api={api} info={info} />)
