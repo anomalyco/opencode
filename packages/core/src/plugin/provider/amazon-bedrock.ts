@@ -110,8 +110,8 @@ export const AmazonBedrockPlugin = PluginV2.define({
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
-        if (evt.model.endpoint.type === "aisdk" && evt.model.endpoint.package === "@ai-sdk/amazon-bedrock/mantle") {
-          evt.language = selectMantleModel(evt.sdk, evt.model.apiID)
+        if (evt.model.api.type === "aisdk" && evt.model.api.package === "@ai-sdk/amazon-bedrock/mantle") {
+          evt.language = selectMantleModel(evt.sdk, evt.model.api.id)
           return
         }
         const region = typeof evt.options.region === "string" ? evt.options.region : process.env.AWS_REGION

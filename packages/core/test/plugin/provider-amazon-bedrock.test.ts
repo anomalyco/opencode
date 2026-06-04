@@ -258,7 +258,7 @@ describe("AmazonBedrockPlugin", () => {
           "aisdk.sdk",
           {
             model: model("amazon-bedrock", "openai.gpt-5.5", {
-              endpoint: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
+              api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
             }),
             package: "@ai-sdk/amazon-bedrock/mantle",
             options: {
@@ -287,7 +287,7 @@ describe("AmazonBedrockPlugin", () => {
         "aisdk.language",
         {
           model: model("amazon-bedrock", "openai.gpt-5.5", {
-            endpoint: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
+            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
           }),
           sdk: fakeSelectorSdk(calls),
           options: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/openai/v1", region: "us-east-2" },
@@ -298,7 +298,7 @@ describe("AmazonBedrockPlugin", () => {
         "aisdk.language",
         {
           model: model("amazon-bedrock", "openai.gpt-oss-safeguard-120b", {
-            endpoint: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
+            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
           }),
           sdk: fakeSelectorSdk(calls),
           options: { region: "us-east-1" },
@@ -317,7 +317,7 @@ describe("AmazonBedrockPlugin", () => {
         "aisdk.sdk",
         {
           model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5", {
-            endpoint: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/anthropic" },
+            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/anthropic" },
           }),
           package: "@ai-sdk/amazon-bedrock/anthropic",
           options: { name: "amazon-bedrock" },
