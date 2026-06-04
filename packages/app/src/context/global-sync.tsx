@@ -29,10 +29,8 @@ import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
 import { createRefreshQueue } from "./global-sync/queue"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
-import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
-import { trimSessions } from "./global-sync/session-trim"
+import { loadRootSessions } from "./global-sync/session-load"
 import type { ProjectMeta } from "./global-sync/types"
-import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject, stripProvider } from "./global-sync/utils"
 import { formatServerError, permissionNotice } from "@/utils/server-errors"
 import { useServer } from "./server"
@@ -77,7 +75,7 @@ function createGlobalSync() {
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
-  const sessionMeta = new Map<string, { limit: number }>()
+  const sessionLoaded = new Set<string>()
   const revs = new Map<string, number>()
   const queues = new Map<DomainId, ReturnType<typeof createRefreshQueue>>()
   const bootedAt = new Map<DomainId, number>()
@@ -312,7 +310,7 @@ function createGlobalSync() {
       onDispose: (directory) => {
         bump(directory, "dispose")
         queueFor(domain).clear(directory)
-        sessionMeta.delete(directory)
+        sessionLoaded.delete(directory)
         sdkCache.delete(directory)
         clearSessionPrefetchDirectory(directory)
       },
@@ -365,12 +363,18 @@ function createGlobalSync() {
     return sdk
   }
 
-  async function loadSessions(directory: string, opts?: { silent?: boolean; force?: boolean }) {
+  async function loadSessions(
+    directory: string,
+    opts?: { silent?: boolean; force?: boolean },
+  ): Promise<void> {
     if (isolated(directory)) {
       return
     }
     const pending = sessionLoads.get(directory)
     if (pending) {
+      if (opts?.force) {
+        return pending.then(() => loadSessions(directory, { ...opts, force: true }))
+      }
       return pending
     }
 
@@ -385,26 +389,16 @@ function createGlobalSync() {
     }) as typeof child[1]
     setStore("sessions", "loading")
     setStore("session_error", undefined)
-    const meta = sessionMeta.get(directory)
-    if (!opts?.force && meta && meta.limit >= store.limit) {
-      const next = trimSessions(store.session, {
-        limit: store.limit,
-        permission: store.permission,
-      })
-      if (next.length !== store.session.length) {
-        setStore("session", reconcile(next, { key: "id" }))
-        cleanupDroppedSessionCaches(store, setStore, next, setSessionTodo)
-      }
+    if (!opts?.force && sessionLoaded.has(directory)) {
       setStore("sessions", "ready")
       setStore("session_error", undefined)
       children.unpin(directory)
       return
     }
+    if (opts?.force) sessionLoaded.delete(directory)
 
-    const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
-    const promise = loadRootSessionsWithFallback({
+    const promise = loadRootSessions({
       directory,
-      limit,
       list: (query) => runtime(domainFromDirectory(directory)).client.session.list(query),
     })
       .then((x) => {
@@ -412,23 +406,15 @@ function createGlobalSync() {
           .filter((s) => !!s?.id)
           .filter((s) => !s.time?.archived)
           .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-        const limit = store.limit
         const childSessions = store.session.filter((s) => !!s.parentID)
-        const sessions = trimSessions([...nonArchived, ...childSessions], {
-          limit,
-          permission: store.permission,
-        })
-        setStore(
-          "sessionTotal",
-          estimateRootSessionTotal({
-            count: nonArchived.length,
-            limit: x.limit,
-            limited: x.limited,
-          }),
-        )
+        const sessions = [...nonArchived, ...childSessions].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        const total = nonArchived.length
+        setStore("sessionTotal", total)
+        // Keep the directory cache complete. Sidebar views own visible limits,
+        // so clipping here would let whichever view loads first hide newer rows.
         setStore("session", reconcile(sessions, { key: "id" }))
         cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
-        sessionMeta.set(directory, { limit })
+        sessionLoaded.add(directory)
         setStore("sessions", "ready")
         setStore("session_error", undefined)
         setLoaded("dir", directory, true)
@@ -631,7 +617,7 @@ function createGlobalSync() {
           for (const dir of dirs) {
             booting.delete(dir)
             sessionLoads.delete(dir)
-            sessionMeta.delete(dir)
+            sessionLoaded.delete(dir)
             bump(dir, "server-reset")
           }
         }

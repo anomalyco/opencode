@@ -12,7 +12,6 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
-import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
@@ -119,9 +118,9 @@ export function applyDirectoryEvent(input: {
       }
       const next = input.store.session.slice()
       next.splice(result.index, 0, info)
-      const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
-      input.setStore("session", reconcile(trimmed, { key: "id" }))
-      cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
+      // Session cache is now independent from sidebar pagination; do not trim
+      // here or realtime events can reintroduce view-limit races.
+      input.setStore("session", reconcile(next, { key: "id" }))
       if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
       break
     }
@@ -148,9 +147,9 @@ export function applyDirectoryEvent(input: {
       }
       const next = input.store.session.slice()
       next.splice(result.index, 0, info)
-      const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
-      input.setStore("session", reconcile(trimmed, { key: "id" }))
-      cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
+      // Keep all known sessions in cache; sidebar components decide how many
+      // sorted rows to display.
+      input.setStore("session", reconcile(next, { key: "id" }))
       break
     }
     case "session.deleted": {

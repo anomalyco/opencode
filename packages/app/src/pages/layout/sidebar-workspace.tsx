@@ -364,13 +364,17 @@ export const SortableWorkspace = (props: {
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const sortable = createSortable(props.directory)
-  const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory, { bootstrap: false })
+  const [workspaceStore] = globalSync.child(props.directory, { bootstrap: false })
+  // Keep display pagination local. GlobalSync caches sessions per directory and
+  // should not be clipped by whichever sidebar view happens to load first.
+  const [visibleLimit, setVisibleLimit] = createSignal(5)
   const [menu, setMenu] = createStore({
     open: false,
     pendingRename: false,
   })
   const slug = createMemo(() => base64Encode(props.directory))
-  const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
+  const allSessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
+  const sessions = createMemo(() => allSessions().slice(0, visibleLimit()))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
   const workspaceValue = createMemo(() => {
@@ -381,15 +385,15 @@ export const SortableWorkspace = (props: {
   const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())
   const count = createMemo(() => sessions().length)
-  const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
+  const hasMore = createMemo(() => workspaceStore.sessionTotal > visibleLimit())
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
   const wasBusy = createMemo((prev) => prev || busy(), false)
   const loading = createMemo(() => open() && workspaceStore.sessions === "loading" && count() === 0 && !wasBusy())
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
+  let initialFullRequested = false
   const loadMore = async () => {
-    setWorkspaceStore("limit", (limit) => (limit ?? 0) + 5)
-    await globalSync.project.loadSessions(props.directory)
+    setVisibleLimit((limit) => limit + 5)
   }
 
   const workspaceEditActive = createMemo(() => props.ctx.editorOpen(`workspace:${props.directory}`))
@@ -424,7 +428,9 @@ export const SortableWorkspace = (props: {
   createEffect(() => {
     if (!boot()) return
     if (!open() && !active()) return
-    if (workspaceStore.sessions === "ready" || workspaceStore.sessions === "loading") return
+    if (workspaceStore.sessions === "loading") return
+    if (initialFullRequested) return
+    initialFullRequested = true
     void globalSync.project.loadSessions(props.directory, { silent: true })
   })
 
@@ -517,27 +523,28 @@ export const LocalWorkspace = (props: {
   const language = useLanguage()
   const [searchQuery, setSearchQuery] = createSignal("")
   const [refreshing, setRefreshing] = createSignal(false)
+  // Project view paginates the merged, sorted session list; per-directory store
+  // limits would make worktrees compete and cause rows to appear mid-list later.
+  const [visibleLimit, setVisibleLimit] = createSignal(10)
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const stores = createMemo(() => dirs().map((directory) => globalSync.child(directory, { bootstrap: false })))
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const allSessions = createMemo(() => sortedProjectSessions(stores().map((item) => item[0]), props.sortNow()))
   const sessions = createMemo(() => {
     const query = searchQuery().toLowerCase().trim()
-    if (!query) return allSessions()
+    if (!query) return allSessions().slice(0, visibleLimit())
     return allSessions().filter((s) => s.title?.toLowerCase().includes(query))
   })
   const loading = createMemo(() => stores().some((item) => item[0].sessions === "loading") && allSessions().length === 0)
   const hasMore = createMemo(
-    () => !searchQuery() && stores().reduce((sum, item) => sum + item[0].sessionTotal, 0) > allSessions().length,
+    () => !searchQuery() && stores().reduce((sum, item) => sum + item[0].sessionTotal, 0) > visibleLimit(),
   )
   const issue = createMemo(() => stores().map((item) => item[0].session_error).find(Boolean))
   const extraAgent = createMemo(() => extraAgentByDirectory(props.project.worktree))
+  const initialFullRequested = new Set<string>()
   const refresh = async () => {
     if (refreshing()) return
     const directories = dirs()
-    for (const [store, setStore] of stores()) {
-      setStore("limit", Math.max(store.limit, store.sessionTotal, store.session.length + 20))
-    }
     setRefreshing(true)
     try {
       await Promise.all([
@@ -549,15 +556,17 @@ export const LocalWorkspace = (props: {
     }
   }
   const loadMore = async () => {
-    stores().forEach((item) => item[1]("limit", (limit) => (limit ?? 0) + 5))
-    await Promise.all(dirs().map((directory) => globalSync.project.loadSessions(directory)))
+    setVisibleLimit((limit) => limit + 5)
   }
 
   createEffect(() => {
     for (const directory of dirs()) {
       const [store] = globalSync.child(directory, { bootstrap: false })
-      if (store.sessions === "ready" || store.sessions === "loading") continue
-      void globalSync.project.loadSessions(directory, { silent: true })
+      if (store.sessions === "loading") continue
+      if (initialFullRequested.has(directory)) continue
+      void globalSync.project.loadSessions(directory, { silent: true }).finally(() => {
+        initialFullRequested.add(directory)
+      })
     }
   })
 

@@ -248,22 +248,21 @@ describe("applyDirectoryEvent", () => {
     }
   })
 
-  test("cleans caches for trimmed sessions on session.created", () => {
-    const dropped = rootSession({ id: "ses_a" })
+  test("keeps cached sessions on session.created regardless of store limit", () => {
+    const existing = rootSession({ id: "ses_a" })
     const kept = rootSession({ id: "ses_b" })
-    const message = userMessage("msg_1", dropped.id)
-    const todos: string[] = []
+    const message = userMessage("msg_1", existing.id)
     const [store, setStore] = createStore(
       baseState({
         limit: 1,
-        session: [dropped],
-        message: { [dropped.id]: [message] },
-        part: { [message.id]: [textPart("prt_1", dropped.id, message.id)] },
-        session_diff: { [dropped.id]: [] },
-        todo: { [dropped.id]: [] },
-        permission: { [dropped.id]: [] },
-        question: { [dropped.id]: [] },
-        session_status: { [dropped.id]: { type: "busy" } },
+        session: [existing],
+        message: { [existing.id]: [message] },
+        part: { [message.id]: [textPart("prt_1", existing.id, message.id)] },
+        session_diff: { [existing.id]: [] },
+        todo: { [existing.id]: [] },
+        permission: { [existing.id]: [] },
+        question: { [existing.id]: [] },
+        session_status: { [existing.id]: { type: "busy" } },
       }),
     )
 
@@ -274,21 +273,16 @@ describe("applyDirectoryEvent", () => {
       push() {},
       directory: "/tmp",
       loadLsp() {},
-      setSessionTodo(sessionID, value) {
-        if (value !== undefined) return
-        todos.push(sessionID)
-      },
     })
 
-    expect(store.session.map((x) => x.id)).toEqual([kept.id])
-    expect(store.message[dropped.id]).toBeUndefined()
-    expect(store.part[message.id]).toBeUndefined()
-    expect(store.session_diff[dropped.id]).toBeUndefined()
-    expect(store.todo[dropped.id]).toBeUndefined()
-    expect(store.permission[dropped.id]).toBeUndefined()
-    expect(store.question[dropped.id]).toBeUndefined()
-    expect(store.session_status[dropped.id]).toBeUndefined()
-    expect(todos).toEqual([dropped.id])
+    expect(store.session.map((x) => x.id)).toEqual([existing.id, kept.id])
+    expect(store.message[existing.id]).toEqual([message])
+    expect(store.part[message.id]).toEqual([textPart("prt_1", existing.id, message.id)])
+    expect(store.session_diff[existing.id]).toEqual([])
+    expect(store.todo[existing.id]).toEqual([])
+    expect(store.permission[existing.id]).toEqual([])
+    expect(store.question[existing.id]).toEqual([])
+    expect(store.session_status[existing.id]).toEqual({ type: "busy" })
   })
 
   test("cleanupDroppedSessionCaches clears part-only orphan state", () => {
