@@ -411,6 +411,45 @@ describe("ACP service sessions", () => {
     expect(select(updated, "effort")?.currentValue).toBe("default")
   })
 
+  it("resumes a session without replaying historical transcript chunks", async () => {
+    const { service, updates } = makeService([
+      {
+        info: {
+          id: "msg_user",
+          sessionID: "ses_resume",
+          role: "user",
+          model: { providerID: "test", modelID: "test-model", variant: "high" },
+          agent: "plan",
+        },
+        parts: [{ id: "part_user", sessionID: "ses_resume", messageID: "msg_user", type: "text", text: "hello" }],
+      },
+      {
+        info: { id: "msg_assistant", sessionID: "ses_resume", role: "assistant" },
+        parts: [
+          {
+            id: "part_assistant",
+            sessionID: "ses_resume",
+            messageID: "msg_assistant",
+            type: "text",
+            text: "hi there",
+          },
+        ],
+      },
+    ])
+
+    const resumed = await Effect.runPromise(
+      service.resumeSession({ cwd: "/workspace", sessionId: "ses_resume", mcpServers: [] }),
+    )
+
+    expect(select(resumed, "effort")?.currentValue).toBe("high")
+    expect(select(resumed, "mode")?.currentValue).toBe("plan")
+    expect(
+      updates
+        .map((item) => item.update)
+        .filter((item) => item.sessionUpdate === "user_message_chunk" || item.sessionUpdate === "agent_message_chunk"),
+    ).toEqual([])
+  })
+
   it("closes local ACP state and aborts the backing session best-effort", async () => {
     const { service, aborts } = makeService()
     const created = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
