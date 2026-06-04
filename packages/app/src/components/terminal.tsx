@@ -16,6 +16,7 @@ import type { LocalPTY } from "@/context/terminal"
 import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
+import { isPtyNotFoundError } from "./terminal-utils"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -487,7 +488,7 @@ export const Terminal = (props: TerminalProps) => {
           .get({ ptyID: id })
           .then(() => false)
           .catch((err) => {
-            if (errorName(err) === "NotFoundError") return true
+            if (isPtyNotFoundError(err)) return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
