@@ -20,7 +20,7 @@ const it = testEffect(
 )
 
 describe("CatalogV2", () => {
-  it.effect("normalizes provider baseURL into endpoint url", () =>
+  it.effect("normalizes provider baseURL into api url", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = ProviderV2.ID.make("test")
@@ -28,16 +28,16 @@ describe("CatalogV2", () => {
 
       yield* transform((catalog) =>
         catalog.provider.update(providerID, (provider) => {
-          provider.endpoint = {
+          provider.api = {
             type: "aisdk",
             package: "@ai-sdk/openai-compatible",
             url: "https://default.example.com",
           }
-          provider.options.aisdk.provider.baseURL = "https://override.example.com"
+          provider.request.body.baseURL = "https://override.example.com"
         }),
       )
 
-      expect((yield* catalog.provider.get(providerID)).endpoint).toEqual({
+      expect((yield* catalog.provider.get(providerID)).api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/openai-compatible",
         url: "https://override.example.com",
@@ -45,7 +45,7 @@ describe("CatalogV2", () => {
     }),
   )
 
-  it.effect("normalizes model baseURL into endpoint url", () =>
+  it.effect("normalizes model baseURL into api url", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = ProviderV2.ID.make("test")
@@ -54,27 +54,34 @@ describe("CatalogV2", () => {
 
       yield* transform((catalog) => {
         catalog.provider.update(providerID, (provider) => {
-          provider.endpoint = {
+          provider.api = {
             type: "aisdk",
             package: "@ai-sdk/openai-compatible",
             url: "https://provider.example.com",
           }
         })
         catalog.model.update(providerID, modelID, (model) => {
-          model.endpoint = { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://model.example.com" }
-          model.options.aisdk.provider.baseURL = "https://override.example.com"
+          model.api = {
+            id: modelID,
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://model.example.com",
+          }
+          model.request.body.baseURL = "https://override.example.com"
         })
       })
 
-      expect((yield* catalog.model.get(providerID, modelID)).endpoint).toEqual({
+      expect((yield* catalog.model.get(providerID, modelID)).api).toEqual({
+        id: modelID,
         type: "aisdk",
         package: "@ai-sdk/openai-compatible",
         url: "https://override.example.com",
+        settings: {},
       })
     }),
   )
 
-  it.effect("resolves unknown model endpoint from provider endpoint", () =>
+  it.effect("resolves default model api from provider api", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = ProviderV2.ID.make("test")
@@ -83,7 +90,7 @@ describe("CatalogV2", () => {
 
       yield* transform((catalog) => {
         catalog.provider.update(providerID, (provider) => {
-          provider.endpoint = {
+          provider.api = {
             type: "aisdk",
             package: "@ai-sdk/openai-compatible",
             url: "https://provider.example.com",
@@ -92,7 +99,8 @@ describe("CatalogV2", () => {
         catalog.model.update(providerID, modelID, () => {})
       })
 
-      expect((yield* catalog.model.get(providerID, modelID)).endpoint).toEqual({
+      expect((yield* catalog.model.get(providerID, modelID)).api).toEqual({
+        id: modelID,
         type: "aisdk",
         package: "@ai-sdk/openai-compatible",
         url: "https://provider.example.com",
@@ -115,16 +123,16 @@ describe("CatalogV2", () => {
             Effect.sync(() => {
               const item = evt.provider.get(providerID)
               if (!item) return
-              seen.push(item.provider.endpoint.type)
-              if (item?.provider.endpoint.type === "aisdk") seen.push(item.provider.endpoint.url)
-              seen.push(item?.provider.options.aisdk.provider.baseURL)
+              seen.push(item.provider.api.type)
+              if (item?.provider.api.type === "aisdk") seen.push(item.provider.api.url)
+              seen.push(item?.provider.request.body.baseURL)
             }),
         }),
       })
       yield* transform((catalog) =>
         catalog.provider.update(providerID, (provider) => {
-          provider.endpoint = { type: "aisdk", package: "@ai-sdk/openai-compatible" }
-          provider.options.aisdk.provider.baseURL = "https://provider.example.com"
+          provider.api = { type: "aisdk", package: "@ai-sdk/openai-compatible" }
+          provider.request.body.baseURL = "https://provider.example.com"
         }),
       )
 
@@ -187,7 +195,7 @@ describe("CatalogV2", () => {
     }),
   )
 
-  it.effect("resolves provider and model option merges", () =>
+  it.effect("resolves provider and model request merges", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = ProviderV2.ID.make("test")
@@ -196,25 +204,21 @@ describe("CatalogV2", () => {
 
       yield* transform((catalog) => {
         catalog.provider.update(providerID, (provider) => {
-          provider.options.headers.provider = "provider"
-          provider.options.headers.shared = "provider"
-          provider.options.body.provider = true
-          provider.options.aisdk.provider.provider = true
+          provider.request.headers.provider = "provider"
+          provider.request.headers.shared = "provider"
+          provider.request.body.provider = true
         })
         catalog.model.update(providerID, modelID, (model) => {
-          model.options.headers.model = "model"
-          model.options.headers.shared = "model"
-          model.options.body.model = true
-          model.options.aisdk.provider.model = true
-          model.options.aisdk.request.request = true
+          model.request.headers.model = "model"
+          model.request.headers.shared = "model"
+          model.request.body.model = true
+          model.request.body.request = true
         })
       })
 
       const model = yield* catalog.model.get(providerID, modelID)
-      expect(model.options.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
-      expect(model.options.body).toEqual({ provider: true, model: true })
-      expect(model.options.aisdk.provider).toEqual({ provider: true, model: true })
-      expect(model.options.aisdk.request).toEqual({ request: true })
+      expect(model.request.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
+      expect(model.request.body).toEqual({ provider: true, model: true, request: true })
     }),
   )
 
