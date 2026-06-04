@@ -81,7 +81,14 @@ export function win32InstallCtrlCGuard() {
   if (k32!.symbols.GetConsoleMode(handle, ptr(buf)) === 0) return
   const initial = buf[0]!
 
+  // Moved before enforce() so the closure can check the guard state.
+  let done = false
+
   const enforce = () => {
+    // After unhook(), stop touching the console mode — a pending
+    // setImmediate(enforce) could otherwise re-clear
+    // ENABLE_PROCESSED_INPUT after the mode was already restored.
+    if (done) return
     if (k32!.symbols.GetConsoleMode(handle, ptr(buf)) === 0) return
     const mode = buf[0]!
     if ((mode & ENABLE_PROCESSED_INPUT) === 0) return
@@ -112,7 +119,6 @@ export function win32InstallCtrlCGuard() {
   const interval = setInterval(enforce, 100)
   interval.unref()
 
-  let done = false
   unhook = () => {
     if (done) return
     done = true
