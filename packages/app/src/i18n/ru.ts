@@ -498,6 +498,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Произошла ошибка",
 
   "home.recentProjects": "Недавние проекты",
+  "home.openedProjects": "Открытые проекты",
   "home.empty.title": "Нет недавних проектов",
   "home.empty.description": "Начните с открытия локального проекта",
 
@@ -599,6 +600,8 @@ export const dict = {
   "common.archive": "Архивировать",
   "common.delete": "Удалить",
   "common.close": "Закрыть",
+  "common.moveLeft": "Move left",
+  "common.moveRight": "Move right",
   "common.edit": "Редактировать",
   "common.loadMore": "Загрузить ещё",
   "common.key.esc": "ESC",

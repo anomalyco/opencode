@@ -219,7 +219,7 @@ export const layer = Layer.effect(
       profile_id: defaultProfileID,
       general_auto_save: input.general.autoSave,
       general_release_notes: input.general.releaseNotes,
-      general_followup: input.general.followup === "queue" ? "steer" : input.general.followup,
+      general_followup: input.general.followup,
       general_show_file_tree: input.general.showFileTree,
       general_show_navigation: input.general.showNavigation,
       general_show_search: input.general.showSearch,
@@ -256,12 +256,7 @@ export const layer = Layer.effect(
         general: {
           autoSave: row.general_auto_save,
           releaseNotes: row.general_release_notes,
-          followup:
-            row.general_followup === "queue"
-              ? "steer"
-              : row.general_followup === "steer"
-                ? "steer"
-                : defaultAppSettings.general.followup,
+          followup: parseFollowup(row.general_followup),
           showFileTree: row.general_show_file_tree,
           showNavigation: row.general_show_navigation,
           showSearch: row.general_show_search,
@@ -551,6 +546,11 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
+
+function parseFollowup(value: string) {
+  if (value === "queue" || value === "steer") return value
+  return defaultAppSettings.general.followup
+}
 
 export const UiSettings = {
   AppSettings,

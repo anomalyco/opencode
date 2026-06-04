@@ -530,7 +530,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   </div>
                   <div
                     id="opencode-titlebar-mobile-left"
-                    class="md:hidden flex min-w-0 max-w-[46vw] shrink items-center overflow-hidden"
+                    class="md:hidden flex min-w-0 w-[min(68vw,22rem)] max-w-[min(68vw,22rem)] shrink items-center overflow-hidden"
                   />
                   <div class="min-w-0 flex-1" />
                 </div>
@@ -583,7 +583,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               </Show>
               <div
                 id="opencode-titlebar-mobile-left"
-                class="md:hidden flex min-w-0 max-w-[46vw] shrink items-center overflow-hidden"
+                class="md:hidden flex min-w-0 w-[min(68vw,22rem)] max-w-[min(68vw,22rem)] shrink items-center overflow-hidden"
               />
               <div class="flex items-center gap-1 shrink-0">
                 <TooltipKeybind

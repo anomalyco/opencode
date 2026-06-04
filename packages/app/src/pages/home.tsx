@@ -1,5 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, createUniqueId, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
@@ -114,6 +114,10 @@ function HomeDesign() {
         .filter((project) => !openedKeys.has(pathKey(project.worktree)))
         .slice(0, HOME_RECENT_PROJECT_LIMIT),
     ]
+  })
+  const closedRecentProjects = createMemo(() => {
+    const openedKeys = new Set(openedProjects().map((project) => pathKey(project.worktree)))
+    return recentProjects().filter((project) => !openedKeys.has(pathKey(project.worktree)))
   })
   const selectedRoot = createMemo(() => {
     const directory = selectedDirectory()
@@ -307,7 +311,8 @@ function HomeDesign() {
         // collapses once a project is selected. Desktop always shows both columns.
         class={projectSelected() ? "hidden lg:flex" : "flex"}
         selectedProject={selectedDirectory()}
-        projects={projects()}
+        openedProjects={openedProjects()}
+        recentProjects={closedRecentProjects()}
         selectProject={selectProject}
         openNewSession={openProjectNewSession}
         chooseProject={() => void chooseProject()}
@@ -448,7 +453,8 @@ function HomeDesign() {
 function HomeProjectColumn(props: {
   class?: string
   selectedProject?: string
-  projects: LocalProject[]
+  openedProjects: LocalProject[]
+  recentProjects: LocalProject[]
   selectProject: (directory: string) => void
   openNewSession: (directory: string) => void
   chooseProject: () => void
@@ -463,7 +469,7 @@ function HomeProjectColumn(props: {
   const global = useGlobal()
   return (
     <aside
-      class={`min-w-0 flex-col lg:flex lg:pt-[52px] gap-4 ${props.class ?? "flex"}`}
+      class={`min-h-0 min-w-0 flex-col lg:flex lg:pt-[52px] gap-4 ${props.class ?? "flex"}`}
       aria-label={props.language.t("home.projects")}
     >
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
@@ -482,18 +488,11 @@ function HomeProjectColumn(props: {
         when={global.servers.list().length > 1}
         fallback={
           <HomeProjectListViewport>
-            <ProjectList
-              projects={props.projects}
+            <ProjectSections
+              openedProjects={props.openedProjects}
+              recentProjects={props.recentProjects}
               selectedProject={props.selectedProject}
-              showEmptyFallback={true}
-              onSelectedProjectChange={props.selectProject}
-              onChooseProject={props.chooseProject}
-              openNewSession={props.openNewSession}
-              editProject={props.editProject}
-              closeProject={props.closeProject}
-              clearNotifications={props.clearNotifications}
-              unseenCount={props.unseenCount}
-              language={props.language}
+              actions={props}
             />
           </HomeProjectListViewport>
         }
@@ -505,7 +504,7 @@ function HomeProjectColumn(props: {
             const [open, setOpen] = createSignal(true)
 
             return (
-              <div class="max-h-[min(572px,calc(100vh_-_300px))] min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col overflow-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <div class="relative h-7 group">
                   <button
                     class="w-full h-full px-1.5 gap-2 flex flex-row items-center hover:not-disabled:bg-v2-overlay-simple-overlay-hover rounded-[4px]"
@@ -537,18 +536,11 @@ function HomeProjectColumn(props: {
                 <Show when={healthy() && open()}>
                   <div class="h-px bg-v2-border-border-base mx-3 my-1" />
                   <HomeProjectListViewport>
-                    <ProjectList
-                      projects={props.projects}
+                    <ProjectSections
+                      openedProjects={props.openedProjects}
+                      recentProjects={props.recentProjects}
                       selectedProject={props.selectedProject}
-                      showEmptyFallback={true}
-                      onSelectedProjectChange={props.selectProject}
-                      onChooseProject={props.chooseProject}
-                      openNewSession={props.openNewSession}
-                      editProject={props.editProject}
-                      closeProject={props.closeProject}
-                      clearNotifications={props.clearNotifications}
-                      unseenCount={props.unseenCount}
-                      language={props.language}
+                      actions={props}
                     />
                   </HomeProjectListViewport>
                 </Show>
@@ -557,7 +549,7 @@ function HomeProjectColumn(props: {
           }}
         </For>
       </Show>
-      <div class="flex min-w-0 flex-col gap-1">
+      <div class="mt-auto flex min-w-0 flex-col gap-1 border-t border-v2-border-border-base pt-3 lg:border-t-0 lg:pt-0">
         <button
           type="button"
           class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-base [&>[data-slot=icon-svg]]:text-v2-icon-icon-base`}
@@ -581,9 +573,124 @@ function HomeProjectColumn(props: {
 
 function HomeProjectListViewport(props: { children: JSX.Element }) {
   return (
-    <div class="max-h-[min(288px,36vh)] min-w-0 overflow-y-auto pr-1 [scrollbar-width:none] lg:max-h-none lg:overflow-visible lg:pr-0 [&::-webkit-scrollbar]:hidden">
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:none] lg:max-h-none lg:overflow-visible lg:pr-0 [&::-webkit-scrollbar]:hidden">
       {props.children}
     </div>
+  )
+}
+
+type ProjectSectionActions = Pick<
+  Parameters<typeof HomeProjectColumn>[0],
+  | "selectProject"
+  | "chooseProject"
+  | "openNewSession"
+  | "editProject"
+  | "closeProject"
+  | "clearNotifications"
+  | "unseenCount"
+  | "language"
+>
+
+function ProjectSections(props: {
+  openedProjects: LocalProject[]
+  recentProjects: LocalProject[]
+  selectedProject?: string
+  actions: ProjectSectionActions
+}) {
+  const [recentOpen, setRecentOpen] = createSignal(false)
+
+  return (
+    <div class="flex min-w-0 flex-col gap-4">
+      <ProjectListSection
+        title={props.actions.language.t("home.openedProjects")}
+        projects={props.openedProjects}
+        selectedProject={props.selectedProject}
+        showEmptyFallback={true}
+        actions={props.actions}
+      />
+      <Show when={props.recentProjects.length > 0}>
+        <div class="mx-1 h-px bg-v2-border-border-base" />
+        <ProjectListSection
+          title={props.actions.language.t("home.recentProjects")}
+          projects={props.recentProjects}
+          selectedProject={props.selectedProject}
+          actions={props.actions}
+          count={props.recentProjects.length}
+          collapsed={!recentOpen()}
+          onToggle={() => setRecentOpen((open) => !open)}
+        />
+      </Show>
+    </div>
+  )
+}
+
+function ProjectListSection(props: {
+  title: string
+  projects: LocalProject[]
+  selectedProject?: string
+  showEmptyFallback?: boolean
+  count?: number
+  collapsed?: boolean
+  onToggle?: () => void
+  actions: ProjectSectionActions
+}) {
+  const sectionID = createUniqueId()
+  const contentID = createMemo(
+    () => `home-project-section-${sectionID}-${props.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+  )
+  const header = () => (
+    <span class="flex min-w-0 items-center gap-2 px-1.5 text-[11px] uppercase tracking-[0.08em] text-v2-text-text-faint [font-weight:650]">
+      <span class="min-w-0 truncate">{props.title}</span>
+      <Show when={props.count !== undefined}>
+        <span class="rounded-full bg-v2-background-bg-deep px-1.5 py-0.5 text-[10px] leading-none text-v2-text-text-muted">
+          {props.count}
+        </span>
+      </Show>
+    </span>
+  )
+
+  return (
+    <section class="flex min-w-0 flex-col gap-2" aria-label={props.title}>
+      <Show
+        when={props.onToggle}
+        fallback={<div>{header()}</div>}
+      >
+        {(onToggle) => (
+          <button
+            type="button"
+            class="flex min-w-0 items-center justify-between rounded-[6px] py-1 text-left transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+            aria-expanded={!props.collapsed}
+            aria-controls={contentID()}
+            onClick={onToggle()}
+          >
+            {header()}
+            <IconV2
+              name="outline-chevron-down"
+              size="small"
+              class="mr-1 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms]"
+              classList={{ "-rotate-90": props.collapsed }}
+            />
+          </button>
+        )}
+      </Show>
+      <Show when={!props.collapsed}>
+        <div id={contentID()}>
+          <ProjectList
+            projects={props.projects}
+            selectedProject={props.selectedProject}
+            showEmptyFallback={props.showEmptyFallback}
+            onSelectedProjectChange={props.actions.selectProject}
+            onChooseProject={props.actions.chooseProject}
+            openNewSession={props.actions.openNewSession}
+            editProject={props.actions.editProject}
+            closeProject={props.actions.closeProject}
+            clearNotifications={props.actions.clearNotifications}
+            unseenCount={props.actions.unseenCount}
+            language={props.actions.language}
+          />
+        </div>
+      </Show>
+    </section>
   )
 }
 

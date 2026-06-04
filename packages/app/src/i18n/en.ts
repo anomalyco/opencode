@@ -525,6 +525,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "An error occurred",
 
   "home.recentProjects": "Recent projects",
+  "home.openedProjects": "Opened projects",
   "home.empty.title": "No projects yet",
   "home.empty.description": "Add a local project to start working with opencode.",
   "home.empty.hint": "Your projects and recent sessions will show up here.",
@@ -674,6 +675,8 @@ export const dict = {
   "common.archive": "Archive",
   "common.delete": "Delete",
   "common.close": "Close",
+  "common.moveLeft": "Move left",
+  "common.moveRight": "Move right",
   "common.edit": "Edit",
   "common.loadMore": "Load more",
   "common.key.esc": "ESC",

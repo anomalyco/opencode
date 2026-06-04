@@ -526,6 +526,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Сталася помилка",
 
   "home.recentProjects": "Нещодавні проєкти",
+  "home.openedProjects": "Відкриті проєкти",
   "home.empty.title": "Немає нещодавніх проєктів",
   "home.empty.description": "Почніть, відкривши локальний проєкт",
 
@@ -655,6 +656,8 @@ export const dict = {
   "common.archive": "Архівувати",
   "common.delete": "Видалити",
   "common.close": "Закрити",
+  "common.moveLeft": "Move left",
+  "common.moveRight": "Move right",
   "common.edit": "Редагувати",
   "common.loadMore": "Завантажити більше",
   "common.key.esc": "ESC",

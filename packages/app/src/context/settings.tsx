@@ -184,7 +184,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const appSettings = () => ({
       general: {
         ...store.general,
-        followup: store.general.followup === "queue" ? "steer" : store.general.followup,
         newLayoutDesigns: store.general.newLayoutDesigns ?? newLayoutDesignsDefault,
       },
       updates: { ...store.updates },
@@ -232,12 +231,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
     })
 
-    createEffect(() => {
-      if (store.general?.followup !== "queue") return
-      setStore("general", "followup", "steer")
-      saveApp()
-    })
-
     const ready = createMemo(() => !query.isLoading)
 
     return {
@@ -256,12 +249,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("general", "releaseNotes", value)
           saveApp()
         },
-        followup: withFallback(
-          () => (store.general?.followup === "queue" ? "steer" : store.general?.followup),
-          defaultSettings.general.followup,
-        ),
+        followup: withFallback(() => store.general?.followup, defaultSettings.general.followup),
         setFollowup(value: "queue" | "steer") {
-          setStore("general", "followup", value === "queue" ? "steer" : value)
+          setStore("general", "followup", value)
           saveApp()
         },
         showFileTree: withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree),

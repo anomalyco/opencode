@@ -497,6 +497,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Došlo je do greške",
 
   "home.recentProjects": "Nedavni projekti",
+  "home.openedProjects": "Otvoreni projekti",
   "home.empty.title": "Nema nedavnih projekata",
   "home.empty.description": "Kreni tako što ćeš otvoriti lokalni projekat",
 
@@ -599,6 +600,8 @@ export const dict = {
   "common.archive": "Arhiviraj",
   "common.delete": "Izbriši",
   "common.close": "Zatvori",
+  "common.moveLeft": "Move left",
+  "common.moveRight": "Move right",
   "common.edit": "Uredi",
   "common.loadMore": "Učitaj još",
   "common.key.esc": "ESC",

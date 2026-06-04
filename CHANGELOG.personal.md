@@ -28,6 +28,24 @@ Versioning note: automated upstream mirrors are published as
   surfaces do not steal focus from the composer and can stay open while the
   pointer is over the content.
 
+### Fixed
+- Web: restored queued follow-up prompts by preserving `followup: "queue"` in
+  app and server UI settings. Busy-session submissions in queue mode now enqueue
+  instead of sending immediately.
+- Web (v2 UI): kept mobile-only v2 session chrome out of v1 UI, including the
+  floating project bar, mobile Session/Changes titlebar control, and mobile
+  changes view path.
+- Web (v2 UI): improved mobile project navigation with a less pill-like bottom
+  bar, project status indicators for permissions/running/errors/unread sessions,
+  and long-press/right-click project actions for Move left, Move right, and
+  Close.
+- Web (v2 UI): split project selection into Opened projects and Recent projects,
+  with Recent collapsed by default and clearer section markers across desktop
+  and mobile layouts.
+- Web (v2 UI): reworked the mobile Session/Changes control into a box-style
+  segmented control so long changed-file labels truncate cleanly instead of
+  clipping.
+
 ## Baseline personal patches
 
 These are the standing customizations that define this fork's release channel.
