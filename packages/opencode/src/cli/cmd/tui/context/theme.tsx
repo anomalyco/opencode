@@ -50,6 +50,7 @@ type Theme = TuiThemeCurrent & {
 }
 type ThemeColor = Exclude<keyof TuiThemeCurrent, "thinkingOpacity">
 type SyntaxStyleOverrides = Record<string, { italic?: boolean }>
+const THEME_REFRESH_DELAYS = [250, 1000] as const
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   // If theme explicitly defines selectedListItemText, use it
@@ -332,24 +333,29 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (theme) setStore("active", theme)
     })
 
-    function init() {
+    function syncCustomThemes() {
+      return getCustomThemes()
+        .then((custom) => {
+          customThemes = custom
+          syncThemes()
+        })
+        .catch(() => {
+          setStore("active", "opencode")
+        })
+    }
+
+    onMount(() => {
       void Promise.allSettled([
         resolveSystemTheme(store.mode),
-        getCustomThemes()
-          .then((custom) => {
-            customThemes = custom
-            syncThemes()
-          })
-          .catch(() => {
-            setStore("active", "opencode")
-          }),
+        syncCustomThemes(),
       ]).finally(() => {
         setStore("ready", true)
       })
-    }
+    })
 
-    onMount(init)
-
+    let systemThemeSignature: string | undefined
+    let systemThemeMode: "dark" | "light" | undefined
+    let hasResolvedSystemTheme = false
     function resolveSystemTheme(mode: "dark" | "light" = store.mode) {
       return renderer
         .getPalette({
@@ -357,6 +363,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
         .then((colors: TerminalColors) => {
           if (!colors.palette[0]) {
+            // Keep the last known good generated theme during runtime reloads.
+            // A terminal config swap can briefly make OSC palette probes fail.
+            if (hasResolvedSystemTheme) return
             systemTheme = undefined
             syncThemes()
             if (store.active === "system") {
@@ -364,10 +373,20 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             }
             return
           }
-          systemTheme = generateSystem(colors, mode)
+          const next = store.lock ?? terminalMode(colors) ?? mode
+          if (store.mode !== next) setStore("mode", next)
+          const signature = JSON.stringify(colors)
+          hasResolvedSystemTheme = true
+          // Delayed reload retries commonly observe the same palette. Avoid
+          // rebuilding native syntax styles unless the generated theme changed.
+          if (systemTheme && systemThemeSignature === signature && systemThemeMode === next) return
+          systemThemeSignature = signature
+          systemThemeMode = next
+          systemTheme = generateSystem(colors, next)
           syncThemes()
         })
         .catch(() => {
+          if (hasResolvedSystemTheme) return
           systemTheme = undefined
           syncThemes()
           if (store.active === "system") {
@@ -376,12 +395,33 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     }
 
+    let systemRefreshRunning = false
+    let systemRefreshQueued = false
+    let systemRefreshMode = store.mode
+    function refreshSystemTheme(mode: "dark" | "light" = store.mode) {
+      systemRefreshMode = mode
+      if (systemRefreshRunning) {
+        systemRefreshQueued = true
+        return
+      }
+
+      systemRefreshRunning = true
+      // clearPaletteCache() does not cancel an older in-flight detection.
+      const retry = renderer.paletteDetectionStatus === "detecting"
+      renderer.clearPaletteCache()
+      void resolveSystemTheme(mode).finally(() => {
+        systemRefreshRunning = false
+        if (!retry && !systemRefreshQueued) return
+        systemRefreshQueued = false
+        refreshSystemTheme(systemRefreshMode)
+      })
+    }
+
     function apply(mode: "dark" | "light") {
       if (store.lock !== undefined) kv.set("theme_mode", mode)
       if (store.mode === mode) return
       setStore("mode", mode)
-      renderer.clearPaletteCache()
-      void resolveSystemTheme(mode)
+      refreshSystemTheme(mode)
     }
 
     function pin(mode: "dark" | "light" = store.mode) {
@@ -394,8 +434,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       setStore("lock", undefined)
       kv.set("theme_mode_lock", undefined)
       kv.set("theme_mode", undefined)
-      const mode = renderer.themeMode
-      if (mode) apply(mode)
+      refreshSystemTheme(renderer.themeMode ?? store.mode)
     }
 
     const handle = (mode: "dark" | "light") => {
@@ -404,15 +443,32 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
     renderer.on(CliRenderEvents.THEME_MODE, handle)
 
+    const handleThemeNotification = (sequence: string) => {
+      if (sequence !== "\x1b[?997;1n" && sequence !== "\x1b[?997;2n") return false
+      queueMicrotask(() => refreshSystemTheme())
+      return false
+    }
+    renderer.prependInputHandler(handleThemeNotification)
+
+    let themeRefreshTimeouts: ReturnType<typeof setTimeout>[] = []
     const refresh = () => {
-      renderer.clearPaletteCache()
-      init()
+      // Omarchy signals immediately after requesting a terminal config reload.
+      for (const timeout of themeRefreshTimeouts) clearTimeout(timeout)
+      themeRefreshTimeouts = THEME_REFRESH_DELAYS.map((delay) =>
+        setTimeout(() => {
+          refreshSystemTheme()
+          if (delay === THEME_REFRESH_DELAYS[THEME_REFRESH_DELAYS.length - 1]) void syncCustomThemes()
+        }, delay),
+      )
     }
     process.on("SIGUSR2", refresh)
 
     onCleanup(() => {
       renderer.off(CliRenderEvents.THEME_MODE, handle)
+      renderer.removeInputHandler(handleThemeNotification)
       process.off("SIGUSR2", refresh)
+      for (const timeout of themeRefreshTimeouts) clearTimeout(timeout)
+      themeRefreshTimeouts.length = 0
     })
 
     const values = createMemo(() => {
@@ -436,8 +492,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       renderer.setBackgroundColor(values().background)
     })
 
-    const syntax = createMemo(() => generateSyntax(values()))
-    const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
+    const syntax = createSyntaxStyleMemo(() => generateSyntax(values()))
+    const subtleSyntax = createSyntaxStyleMemo(() => generateSubtleSyntax(values()))
 
     return {
       theme: new Proxy(values(), {
@@ -517,6 +573,13 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
   const g = base.g + (overlay.g - base.g) * alpha
   const b = base.b + (overlay.b - base.b) * alpha
   return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
+}
+
+export function terminalMode(colors: TerminalColors): "dark" | "light" | undefined {
+  const bg = colors.defaultBackground
+  if (!bg) return
+  const { r, g, b } = RGBA.fromHex(bg)
+  return 0.299 * r + 0.587 * g + 0.114 * b > 0.5 ? "light" : "dark"
 }
 
 export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
@@ -717,6 +780,34 @@ function generateMutedTextColor(bg: RGBA, isDark: boolean): RGBA {
 
 export function generateSyntax(theme: Theme) {
   return SyntaxStyle.fromTheme(getSyntaxRules(theme))
+}
+
+export function createSyntaxStyleMemo(factory: () => SyntaxStyle) {
+  const renderer = useRenderer()
+  const retained = new Set<SyntaxStyle>()
+  let current: SyntaxStyle | undefined
+
+  const release = (style: SyntaxStyle) => {
+    retained.add(style)
+    void renderer
+      .idle()
+      .catch(() => { })
+      .finally(() => {
+        if (!retained.delete(style)) return
+        style.destroy()
+      })
+  }
+
+  onCleanup(() => {
+    if (current) release(current)
+  })
+
+  return createMemo(() => {
+    const previous = current
+    current = factory()
+    if (previous) release(previous)
+    return current
+  })
 }
 
 export function generateSubtleSyntax(theme: Theme, overrides?: SyntaxStyleOverrides) {
