@@ -10,6 +10,7 @@ import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
+import { WorkspaceV2 } from "../workspace"
 import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
@@ -241,6 +242,19 @@ export const layer = Layer.effectDiscard(
       db
         .update(SessionTable)
         .set(sessionRow(event.data.info))
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie),
+    )
+    yield* events.project(SessionEvent.Moved, (event) =>
+      db
+        .update(SessionTable)
+        .set({
+          directory: event.data.location.directory,
+          path: event.data.subdirectory,
+          workspace_id: event.data.location.workspaceID ? WorkspaceV2.ID.make(event.data.location.workspaceID) : null,
+          time_updated: DateTime.toEpochMillis(event.data.timestamp),
+        })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
         .pipe(Effect.orDie),

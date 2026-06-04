@@ -1,21 +1,29 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer, Option } from "effect"
+import { Context, Effect, Layer, Option, Ref } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionV2 } from "@opencode-ai/core/session"
 import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
 import { Installation } from "../../src/installation"
-import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { ServerAuth } from "../../src/server/auth"
 import { RootHttpApi } from "../../src/server/routes/instance/httpapi/api"
-import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/global"
 import { controlHandlers } from "../../src/server/routes/instance/httpapi/handlers/control"
 import { controlPlaneHandlers } from "../../src/server/routes/instance/httpapi/handlers/control-plane"
 import { globalHandlers } from "../../src/server/routes/instance/httpapi/handlers/global"
 import { authorizationLayer } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { schemaErrorLayer } from "../../src/server/routes/instance/httpapi/middleware/schema-error"
 import { testEffect } from "../lib/effect"
+
+const input = MoveSession.Input.make({
+  sessionID: SessionV2.ID.make("ses_move"),
+  destination: { directory: AbsolutePath.make("/destination") },
+  moveChanges: true,
+})
+const called = Ref.makeUnsafe<MoveSession.Input | undefined>(undefined)
 
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
@@ -30,37 +38,26 @@ const apiLayer = HttpRouter.serve(
   Layer.provideMerge(NodeHttpServer.layerTest),
   Layer.provide(Layer.mock(Auth.Service)({})),
   Layer.provide(Layer.mock(Config.Service)({})),
-  Layer.provide(Layer.mock(MoveSession.Service)({})),
+  Layer.provide(Layer.mock(Installation.Service)({})),
   Layer.provide(
-    Layer.mock(Installation.Service)({
-      method: () => Effect.succeed("npm"),
-      latest: () => Effect.succeed("9.9.9"),
-      upgrade: () => Effect.void,
+    Layer.mock(MoveSession.Service)({
+      moveSession: (value) => Ref.set(called, value),
     }),
   ),
   Layer.provide(ServerAuth.Config.layer({ password: Option.none(), username: "opencode" })),
 )
 const it = testEffect(apiLayer)
 
-describe("global HttpApi", () => {
-  it.live("upgrades to latest when the request body is omitted", () =>
+describe("control-plane HttpApi", () => {
+  it.live("moves a session through the root control-plane route", () =>
     Effect.gen(function* () {
-      const response = yield* HttpClient.post(GlobalPaths.upgrade)
-
-      expect(response.status).toBe(200)
-      expect(yield* response.json).toEqual({ success: true, version: "9.9.9" })
-    }),
-  )
-
-  it.live("rejects malformed upgrade payloads", () =>
-    Effect.gen(function* () {
-      const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
-        HttpClientRequest.setBody(HttpBody.text("{", "application/json")),
+      const response = yield* HttpClientRequest.post("/experimental/control-plane/move-session").pipe(
+        HttpClientRequest.setBody(HttpBody.jsonUnsafe(input)),
         HttpClient.execute,
       )
 
-      expect(response.status).toBe(400)
-      expect(yield* response.json).toEqual({ success: false, error: "Invalid request body" })
+      expect(response.status).toBe(204)
+      expect(yield* Ref.get(called)).toEqual(input)
     }),
   )
 })
