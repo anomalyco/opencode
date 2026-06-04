@@ -7,7 +7,7 @@ export const tmpdir = async () => {
   return {
     path: dir,
     async [Symbol.asyncDispose]() {
-      await fs.rm(dir, { recursive: true, force: true })
+      await fs.rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
     },
   }
 }

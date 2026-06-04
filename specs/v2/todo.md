@@ -55,6 +55,9 @@ Next reviewed slices:
 - integrate the new BackgroundJob service with V2 tool execution: support background
   bash jobs and background agent dispatch with durable status observation,
   completion delivery, and explicit cancellation / continuation semantics
+- revisit the V2 bash enablement product policy before broad exposure: the current
+  exact-action authored `bash` rule requirement is a conservative safety default,
+  not a settled UX decision
 - add compaction, interruption, retries, and stale-owner fencing
   only as their slices become concrete
 

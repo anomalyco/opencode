@@ -1,14 +1,11 @@
-import { NodeFileSystem } from "@effect/platform-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
 import path from "node:path"
 import z from "zod"
 import { Auth } from "@/auth"
@@ -280,13 +277,10 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
-    Layer.provide(LocationServiceMap.layer),
   )
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
-  const recordedClient = LLMClient.layer.pipe(
-    Layer.provide(Layer.mergeAll(RequestExecutor.layer, WebSocketExecutor.layer)),
-    Layer.provide(
-      HttpRecorder.recordingLayer(scenario.cassette, {
+  const recordedHttp = HttpRecorder.cassetteLayer(scenario.cassette, {
+        directory: FIXTURES_DIR,
         mode: shouldRecord ? "record" : "replay",
         metadata: {
           provider: scenario.providerID,
@@ -295,7 +289,10 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
           tags: scenario.tags,
         },
         redactor: recordingRedactor,
-      }).pipe(Layer.provide(FetchHttpClient.layer)),
+      })
+  const recordedClient = LLMClient.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(recordedHttp)), WebSocketExecutor.layer),
     ),
   )
 
@@ -307,9 +304,6 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
       Layer.provide(provider),
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(recordedClient),
-      Layer.provide(
-        HttpRecorder.Cassette.fileSystem({ directory: FIXTURES_DIR }).pipe(Layer.provide(NodeFileSystem.layer)),
-      ),
       Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: true })),
     ),
   )

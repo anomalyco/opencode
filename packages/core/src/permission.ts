@@ -170,6 +170,7 @@ export const layer = Layer.effect(
 
     function bashDeniedByDefault(input: AssertInput, rules: Ruleset) {
       if (input.action !== "bash") return false
+      // TODO: Revisit this exact-action opt-in as a product policy before broad V2 exposure.
       return input.resources.some((resource) => {
         const rule = rules.findLast((rule) => rule.action === "bash" && Wildcard.match(resource, rule.resource))
         return rule?.effect !== "ask" && rule?.effect !== "allow"

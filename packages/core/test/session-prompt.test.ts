@@ -301,7 +301,7 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("reconciles an existing projected prompt into a promoted inbox receipt", () =>
+  it.effect("reconciles an existing projected prompt into a promoted inbox record", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
