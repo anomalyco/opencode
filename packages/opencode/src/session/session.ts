@@ -387,6 +387,26 @@ export function plan(input: { slug: string; time: { created: number } }, instanc
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }
 
+function metadataNumber(value: unknown): number | undefined {
+  if (typeof value !== "number") return undefined
+  return Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+function metadataRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  return value as Record<string, unknown>
+}
+
+function metadataUsage(value: ProviderMetadata | undefined) {
+  if (!value) return
+  const roots = Object.values(value)
+    .map(metadataRecord)
+    .filter((item): item is Record<string, unknown> => !!item)
+  if (roots.length === 0) return
+  const usage = roots.map((item) => metadataRecord(item.usage)).find((item): item is Record<string, unknown> => !!item)
+  return usage ?? roots[0]
+}
+
 export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
     if (!Number.isFinite(value)) return 0
@@ -396,7 +416,15 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   const outputTokens = safe(input.usage.outputTokens ?? 0)
   const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
-  const cacheReadInputTokens = safe(input.usage.cacheReadInputTokens ?? 0)
+  const metadata = metadataUsage(input.metadata)
+  const cacheReadInputTokens = safe(
+    Number(
+      input.usage.cacheReadInputTokens ??
+        metadataNumber(metadataRecord(metadata?.prompt_tokens_details)?.cached_tokens) ??
+        metadataNumber(metadata?.cached_tokens) ??
+        0,
+    ),
+  )
   const cacheWriteInputTokens = safe(
     Number(
       input.usage.cacheWriteInputTokens ??
@@ -408,6 +436,8 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
         input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        metadataNumber(metadata?.cache_creation_input_tokens) ??
+        metadataNumber(metadata?.cacheWriteInputTokens) ??
         0,
     ),
   )
