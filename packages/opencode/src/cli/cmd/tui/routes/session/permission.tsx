@@ -28,15 +28,62 @@ function filetype(input?: string) {
   return language
 }
 
+interface FileEntry {
+  relativePath: string
+  patch: string
+  filePath: string
+  type: string
+  additions: number
+  deletions: number
+}
+
+function fileTitle(file?: FileEntry) {
+  if (!file) return ""
+  if (file.type === "delete") return "Deleted " + file.relativePath
+  if (file.type === "add") return "Created " + file.relativePath
+  return "Patched " + file.relativePath
+}
+
 function EditBody(props: { request: PermissionRequest }) {
   const themeState = useTheme()
   const theme = themeState.theme
   const syntax = themeState.syntax
   const config = useTuiConfig()
   const dimensions = useTerminalDimensions()
+  const dialog = useDialog()
 
-  const filepath = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
-  const diff = createMemo(() => (props.request.metadata?.diff as string) ?? "")
+  const files = createMemo(() => {
+    const raw = props.request.metadata?.files
+    return Array.isArray(raw) ? (raw as FileEntry[]) : []
+  })
+
+  const [store, setStore] = createStore({ fileIndex: 0 })
+
+  const isMultiFile = createMemo(() => files().length > 1)
+  const currentFile = createMemo(() => files()[store.fileIndex])
+
+  const filepath = createMemo(() => {
+    if (isMultiFile()) return currentFile()?.filePath ?? ""
+    return (props.request.metadata?.filepath as string) ?? ""
+  })
+  const diff = createMemo(() => {
+    if (isMultiFile()) return currentFile()?.patch ?? ""
+    return (props.request.metadata?.diff as string) ?? ""
+  })
+
+  useKeyboard((evt) => {
+    if (dialog.stack.length > 0) return
+    if (!isMultiFile()) return
+
+    if (evt.name === "]") {
+      evt.preventDefault()
+      setStore("fileIndex", (i) => (i + 1) % files().length)
+    }
+    if (evt.name === "[") {
+      evt.preventDefault()
+      setStore("fileIndex", (i) => (i - 1 + files().length) % files().length)
+    }
+  })
 
   const view = createMemo(() => {
     const diffStyle = config.diff_style
@@ -49,6 +96,14 @@ function EditBody(props: { request: PermissionRequest }) {
 
   return (
     <box flexDirection="column" gap={1}>
+      <Show when={isMultiFile()}>
+        <box flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1}>
+          <text fg={theme.text}>{fileTitle(currentFile())}</text>
+          <text fg={theme.textMuted}>
+            {store.fileIndex + 1}/{files().length}
+          </text>
+        </box>
+      </Show>
       <Show when={diff()}>
         <scrollbox
           height="100%"
@@ -200,10 +255,17 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             if (permission === "edit") {
               const raw = props.request.metadata?.filepath
               const filepath = typeof raw === "string" ? raw : ""
+              const filesArray = Array.isArray(props.request.metadata?.files) ? props.request.metadata.files : []
+              const hasMultipleFiles = filesArray.length > 1
               return {
                 icon: "→",
                 title: `Edit ${pathFormatter.format(filepath)}`,
                 body: <EditBody request={props.request} />,
+                hints: hasMultipleFiles ? (
+                  <text fg={theme.text}>
+                    {"[ ]"} <span style={{ fg: theme.textMuted }}>files</span>
+                  </text>
+                ) : undefined,
               }
             }
 
@@ -408,6 +470,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
               escapeKey="reject"
               fullscreen
+              hints={current.hints}
               onSelect={(option) => {
                 if (option === "always") {
                   setStore("stage", "always")
@@ -529,6 +592,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   options: T
   escapeKey?: keyof T
   fullscreen?: boolean
+  hints?: JSX.Element
   onSelect: (option: keyof T) => void
 }) {
   const { theme } = useTheme()
@@ -695,6 +759,7 @@ function Prompt<const T extends Record<string, string>>(props: {
           </For>
         </box>
         <box flexDirection="row" gap={2} flexShrink={0}>
+          <Show when={props.hints}>{props.hints}</Show>
           <Show when={props.fullscreen}>
             <text fg={theme.text}>
               {fullscreenHint()} <span style={{ fg: theme.textMuted }}>{hint()}</span>
