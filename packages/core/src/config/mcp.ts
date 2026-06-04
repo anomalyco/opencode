@@ -19,10 +19,17 @@ export class OAuth extends Schema.Class<OAuth>("ConfigV2.MCP.OAuth")({
   redirect_uri: Schema.String.pipe(Schema.optional),
 }) {}
 
+export class Bifrost extends Schema.Class<Bifrost>("ConfigV2.MCP.Bifrost")({
+  virtual_key: Schema.String.pipe(Schema.optional),
+  include_clients: Schema.Array(Schema.String).pipe(Schema.optional),
+  include_tools: Schema.Array(Schema.String).pipe(Schema.optional),
+}) {}
+
 export class Remote extends Schema.Class<Remote>("ConfigV2.MCP.Remote")({
   type: Schema.Literal("remote"),
   url: Schema.String,
   headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+  bifrost: Bifrost.pipe(Schema.optional),
   oauth: Schema.Union([OAuth, Schema.Literal(false)]).pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),
   timeout: PositiveInt.pipe(Schema.optional),

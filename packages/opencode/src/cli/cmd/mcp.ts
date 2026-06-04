@@ -55,13 +55,17 @@ function isMcpRemote(config: McpEntry): config is McpRemote {
   return isMcpConfigured(config) && config.type === "remote"
 }
 
+function isOAuthDisabled(config: McpRemote) {
+  return config.oauth === false || (config.bifrost !== undefined && config.oauth === undefined)
+}
+
 function configuredServers(config: Config.Info) {
   return Object.entries(config.mcp ?? {}).filter((entry): entry is [string, McpConfigured] => isMcpConfigured(entry[1]))
 }
 
 function oauthServers(config: Config.Info) {
   return configuredServers(config).filter(
-    (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && entry[1].oauth !== false,
+    (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && !isOAuthDisabled(entry[1]),
   )
 }
 
@@ -231,7 +235,7 @@ export const McpAuthCommand = effectCmd({
       return
     }
 
-    if (!isMcpRemote(serverConfig) || serverConfig.oauth === false) {
+    if (!isMcpRemote(serverConfig) || isOAuthDisabled(serverConfig)) {
       prompts.log.error(`MCP server ${serverName} is not an OAuth-capable remote server`)
       prompts.outro("Done")
       return
@@ -632,8 +636,8 @@ export const McpDebugCommand = effectCmd({
         return
       }
 
-      if (serverConfig.oauth === false) {
-        prompts.log.warn(`MCP server ${serverName} has OAuth explicitly disabled`)
+      if (isOAuthDisabled(serverConfig)) {
+        prompts.log.warn(`MCP server ${serverName} has OAuth disabled`)
         prompts.outro("Done")
         return
       }

@@ -36,6 +36,22 @@ export const OAuth = Schema.Struct({
 }).annotate({ identifier: "McpOAuthConfig" })
 export type OAuth = Schema.Schema.Type<typeof OAuth>
 
+export const Bifrost = Schema.Struct({
+  virtualKey: Schema.optional(Schema.String).annotate({
+    description:
+      "Optional Bifrost virtual key to send as x-bf-vk for MCP gateway authentication. Omit when the gateway allows unauthenticated MCP.",
+  }),
+  includeClients: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description:
+      "Bifrost MCP client names to include for this connection. Can be used without virtualKey when the gateway allows unauthenticated MCP.",
+  }),
+  includeTools: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description:
+      "Bifrost MCP tool names to include for this connection. Can be used without virtualKey when the gateway allows unauthenticated MCP.",
+  }),
+}).annotate({ identifier: "McpBifrostConfig" })
+export type Bifrost = Schema.Schema.Type<typeof Bifrost>
+
 export const Remote = Schema.Struct({
   type: Schema.Literal("remote").annotate({ description: "Type of MCP server connection" }),
   url: Schema.String.annotate({ description: "URL of the remote MCP server" }),
@@ -44,6 +60,9 @@ export const Remote = Schema.Struct({
   }),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
     description: "Headers to send with the request",
+  }),
+  bifrost: Schema.optional(Bifrost).annotate({
+    description: "Bifrost MCP gateway optional virtual-key authentication and client/tool filtering",
   }),
   oauth: Schema.optional(Schema.Union([OAuth, Schema.Literal(false)])).annotate({
     description: "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
