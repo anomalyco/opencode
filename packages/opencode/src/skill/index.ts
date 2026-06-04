@@ -6,6 +6,7 @@ import type { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Global } from "@opencode-ai/core/global"
+import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
 import { Permission } from "@/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@/config/config"
@@ -32,9 +33,7 @@ const SKILL_PATTERN = "**/SKILL.md"
 const CUSTOMIZE_OPENCODE_SKILL_NAME = "customize-opencode"
 const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
   "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
-const CUSTOMIZE_OPENCODE_SKILL_BODY = await Bun.file(
-  new URL("../../../core/src/plugin/skill/customize-opencode.md", import.meta.url),
-).text()
+const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 
 export const Info = Schema.Struct({
   name: Schema.String,
