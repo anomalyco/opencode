@@ -26,6 +26,8 @@ export const dict = {
   "command.project.previous": "Previous project",
   "command.project.next": "Next project",
   "command.project.index": "Switch to project {{index}}",
+  "command.project.reloadConfig": "Reload Config",
+  "command.project.reloadConfig.description": "Reload workspace config, agents, and MCPs.",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -459,6 +461,10 @@ export const dict = {
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
+  "toast.project.reloadConfig.success.title": "Config reloaded",
+  "toast.project.reloadConfig.success.description": "Workspace config, agents, and MCPs were reloaded.",
+  "toast.project.reloadConfig.failed.title": "Failed to reload config",
+  "toast.project.reloadConfig.failed.description": "Workspace config, agents, and MCPs could not be reloaded.",
 
   "toast.update.title": "Update available",
   "toast.update.description": "A new version of OpenCode ({{version}}) is now available to install.",

@@ -123,6 +123,8 @@ import type {
   ProjectInitGitResponses,
   ProjectListErrors,
   ProjectListResponses,
+  ProjectReloadErrors,
+  ProjectReloadResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   Prompt,
@@ -2350,6 +2352,36 @@ export class Project extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<ProjectInitGitResponses, ProjectInitGitErrors, ThrowOnError>({
       url: "/project/git/init",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reload current project instance
+   *
+   * Reload workspace-specific config, agents, and MCP state for the current project.
+   */
+  public reload<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProjectReloadResponses, ProjectReloadErrors, ThrowOnError>({
+      url: "/project/reload",
       ...options,
       ...params,
     })

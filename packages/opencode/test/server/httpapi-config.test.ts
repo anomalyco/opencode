@@ -110,4 +110,58 @@ describe("config HttpApi", () => {
       })
     }),
   )
+
+  it.live(
+    "reloads workspace config through the project reload endpoint",
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirEffect({ config: { username: "before", formatter: false, lsp: false } })
+
+      const before = yield* Effect.promise(() =>
+        Promise.resolve(
+          app().request("/config", {
+            headers: { "x-opencode-directory": tmp.path },
+          }),
+        ),
+      )
+      expect(before.status).toBe(200)
+      expect(yield* Effect.promise(() => before.json())).toMatchObject({ username: "before" })
+
+      const current = yield* Effect.promise(() =>
+        Promise.resolve(
+          app().request("/project/current", {
+            headers: { "x-opencode-directory": tmp.path },
+          }),
+        ),
+      )
+      expect(current.status).toBe(200)
+
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tmp.path, "opencode.json"),
+          JSON.stringify({ $schema: "https://opencode.ai/config.json", username: "after", formatter: false, lsp: false }),
+        ),
+      )
+
+      const reload = yield* Effect.promise(() =>
+        Promise.resolve(
+          app().request("/project/reload", {
+            method: "POST",
+            headers: { "x-opencode-directory": tmp.path },
+          }),
+        ),
+      )
+      expect(reload.status).toBe(200)
+      expect(yield* Effect.promise(() => reload.json())).toBe(true)
+
+      const after = yield* Effect.promise(() =>
+        Promise.resolve(
+          app().request("/config", {
+            headers: { "x-opencode-directory": tmp.path },
+          }),
+        ),
+      )
+      expect(after.status).toBe(200)
+      expect(yield* Effect.promise(() => after.json())).toMatchObject({ username: "after" })
+    }),
+  )
 })

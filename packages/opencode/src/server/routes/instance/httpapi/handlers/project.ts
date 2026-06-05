@@ -32,6 +32,16 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       return next
     })
 
+    const reload = Effect.fn("ProjectHttpApi.reload")(function* () {
+      const ctx = yield* InstanceState.context
+      yield* markInstanceForReload(ctx, {
+        directory: ctx.directory,
+        worktree: ctx.worktree,
+        project: ctx.project,
+      })
+      return true
+    })
+
     const update = Effect.fn("ProjectHttpApi.update")(function* (ctx: {
       params: { projectID: ProjectV2.ID }
       payload: Project.UpdatePayload
@@ -48,6 +58,11 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       )
     })
 
-    return handlers.handle("list", list).handle("current", current).handle("initGit", initGit).handle("update", update)
+    return handlers
+      .handle("list", list)
+      .handle("current", current)
+      .handle("initGit", initGit)
+      .handle("reload", reload)
+      .handle("update", update)
   }),
 )

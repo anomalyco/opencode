@@ -241,6 +241,7 @@ interface CreateResult {
   mcpClient?: MCPClient
   status: Status
   defs?: MCPToolDef[]
+  claim?: ClientClaim
 }
 
 interface AuthResult {
@@ -256,6 +257,132 @@ interface State {
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
+  claims: Record<string, ClientClaim>
+}
+
+interface ClientClaim {
+  release: () => Effect.Effect<void>
+  subscribe?: (subscriber: PoolSubscriber) => void
+}
+
+interface PoolSubscriber {
+  state: State
+  name: string
+  timeout?: number
+}
+
+interface PoolEntry {
+  client: MCPClient
+  defs: MCPToolDef[]
+  refs: number
+  close: (client: MCPClient) => Effect.Effect<void>
+  subscribers: Map<symbol, PoolSubscriber>
+}
+
+const clientPool = new Map<string, PoolEntry>()
+
+function sortedRecord(input: Record<string, string> | undefined) {
+  if (!input) return undefined
+  return Object.fromEntries(Object.entries(input).sort(([a], [b]) => a.localeCompare(b)))
+}
+
+function sortedArray(input: string[] | undefined) {
+  return input ? [...input].sort() : undefined
+}
+
+function stableJson(input: unknown) {
+  return JSON.stringify(input)
+}
+
+function poolKey(name: string, mcp: ConfigMCP.Info, cwd: string) {
+  if (mcp.enabled === false) return undefined
+  if (mcp.type === "local") {
+    const [command, ...args] = mcp.command
+    return stableJson({
+      type: "local",
+      command,
+      args,
+      cwd,
+      environment: sortedRecord(mcp.environment),
+      timeout: mcp.timeout,
+    })
+  }
+
+  const url = remoteURL(name, mcp.url)
+  if (!url) return undefined
+  const oauthDisabled = isOAuthDisabled(mcp)
+  const oauth = oauthDisabled ? false : mcp.oauth
+  return stableJson({
+    type: "remote",
+    url: url.toString(),
+    headers: sortedRecord(remoteHeaders(mcp)),
+    bifrost: mcp.bifrost
+      ? {
+          virtualKey: mcp.bifrost.virtualKey,
+          includeClients: sortedArray(mcp.bifrost.includeClients),
+          includeTools: sortedArray(mcp.bifrost.includeTools),
+        }
+      : undefined,
+    // OAuth providers are keyed by MCP name for token storage, so include the
+    // name unless OAuth is explicitly disabled. OAuth-disabled remotes can be
+    // safely shared across differently named workspace configs.
+    oauth: oauthDisabled ? false : { name, config: oauth },
+    timeout: mcp.timeout,
+  })
+}
+
+function acquirePooledClient(
+  key: string,
+  client: MCPClient,
+  defs: MCPToolDef[],
+  close: (client: MCPClient) => Effect.Effect<void>,
+  installNotificationHandler: (entry: PoolEntry) => void,
+): Effect.Effect<{ client: MCPClient; defs: MCPToolDef[]; claim: ClientClaim }> {
+  const existing = clientPool.get(key)
+  if (existing) {
+    existing.refs++
+    return close(client).pipe(
+      Effect.as({ client: existing.client, defs: existing.defs, claim: poolClaim(key, existing.client) }),
+    )
+  }
+  const entry: PoolEntry = { client, defs, refs: 1, close, subscribers: new Map() }
+  clientPool.set(key, entry)
+  installNotificationHandler(entry)
+  return Effect.succeed({ client, defs, claim: poolClaim(key, client) })
+}
+
+function borrowPooledClient(key: string): { client: MCPClient; defs: MCPToolDef[]; claim: ClientClaim } | undefined {
+  const existing = clientPool.get(key)
+  if (!existing) return undefined
+  existing.refs++
+  return { client: existing.client, defs: existing.defs, claim: poolClaim(key, existing.client) }
+}
+
+function poolClaim(key: string, client: MCPClient): ClientClaim {
+  let released = false
+  let subscriberID: symbol | undefined
+  return {
+    subscribe: (subscriber) => {
+      const entry = clientPool.get(key)
+      if (!entry || entry.client !== client) return
+      if (!subscriberID) subscriberID = Symbol(key)
+      entry.subscribers.set(subscriberID, subscriber)
+    },
+    release: () =>
+      Effect.sync(() => {
+        if (released) return undefined
+        released = true
+        const entry = clientPool.get(key)
+        if (!entry || entry.client !== client) return undefined
+        if (subscriberID) entry.subscribers.delete(subscriberID)
+        entry.refs--
+        if (entry.refs > 0) return undefined
+        clientPool.delete(key)
+        return entry.close
+      }).pipe(
+        Effect.flatMap((close) => (close ? close(client) : Effect.void)),
+      ),
+  }
 }
 
 export interface Interface {
@@ -482,6 +609,21 @@ export const layer = Layer.effect(
 
       log.info("found", { key, type: mcp.type })
 
+      const cwd = yield* InstanceState.directory
+      const keyForPool = poolKey(key, mcp, cwd)
+      if (keyForPool) {
+        const pooled = borrowPooledClient(keyForPool)
+        if (pooled) {
+          log.info("reusing pooled client", { key, type: mcp.type })
+          return {
+            mcpClient: pooled.client,
+            status: { status: "connected" },
+            defs: pooled.defs,
+            claim: pooled.claim,
+          } satisfies CreateResult
+        }
+      }
+
       const { client: mcpClient, status } =
         mcp.type === "remote"
           ? yield* connectRemote(key, mcp as ConfigMCP.Info & { type: "remote" })
@@ -497,8 +639,20 @@ export const layer = Layer.effect(
         return { status: { status: "failed", error: "Failed to get tools" } } satisfies CreateResult
       }
 
+      const bridge = yield* EffectBridge.make()
+      const acquired: { client: MCPClient; defs: MCPToolDef[]; claim: ClientClaim } = keyForPool
+        ? yield* acquirePooledClient(keyForPool, mcpClient, listed, closeMcpClient, (entry) =>
+            installPoolNotificationHandler(entry, key, bridge, mcp.timeout),
+          )
+        : {
+            client: mcpClient,
+            defs: listed,
+            claim: {
+              release: () => closeMcpClient(mcpClient),
+            },
+          }
       log.info("create() successfully created client", { key, toolCount: listed.length })
-      return { mcpClient, status, defs: listed } satisfies CreateResult
+      return { mcpClient: acquired.client, status, defs: acquired.defs, claim: acquired.claim } satisfies CreateResult
     })
     const cfgSvc = yield* Config.Service
 
@@ -526,6 +680,21 @@ export const layer = Layer.effect(
       Effect.catch(() => Effect.succeed([] as number[])),
     )
 
+    function closeMcpClient(client: MCPClient) {
+      return Effect.gen(function* () {
+        const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
+        if (typeof pid === "number") {
+          const pids = yield* descendants(pid)
+          for (const dpid of pids) {
+            try {
+              process.kill(dpid, "SIGTERM")
+            } catch {}
+          }
+        }
+        yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      })
+    }
+
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
         log.info("tools list changed notification received", { server: name })
@@ -540,6 +709,43 @@ export const layer = Layer.effect(
       })
     }
 
+    function installPoolNotificationHandler(
+      entry: PoolEntry,
+      sourceName: string,
+      bridge: EffectBridge.Shape,
+      timeout?: number,
+    ) {
+      entry.client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+        log.info("tools list changed notification received", { server: sourceName })
+
+        if (!hasActivePoolSubscribers(entry)) return
+
+        const listed = await bridge.promise(defs(sourceName, entry.client, timeout))
+        if (!listed) return
+
+        entry.defs = listed
+        for (const subscriber of entry.subscribers.values()) {
+          if (
+            subscriber.state.clients[subscriber.name] !== entry.client ||
+            subscriber.state.status[subscriber.name]?.status !== "connected"
+          ) {
+            continue
+          }
+
+          subscriber.state.defs[subscriber.name] = listed
+          await bridge.promise(events.publish(ToolsChanged, { server: subscriber.name }).pipe(Effect.ignore))
+        }
+      })
+    }
+
+    function hasActivePoolSubscribers(entry: PoolEntry) {
+      return Array.from(entry.subscribers.values()).some(
+        (subscriber) =>
+          subscriber.state.clients[subscriber.name] === entry.client &&
+          subscriber.state.status[subscriber.name]?.status === "connected",
+      )
+    }
+
     const state = yield* InstanceState.make<State>(
       Effect.fn("MCP.state")(function* () {
         const cfg = yield* cfgSvc.get()
@@ -550,6 +756,7 @@ export const layer = Layer.effect(
           status: {},
           clients: {},
           defs: {},
+          claims: {},
         }
 
         yield* Effect.forEach(
@@ -572,8 +779,10 @@ export const layer = Layer.effect(
               s.status[key] = result.status
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
+                if (result.claim) s.claims[key] = result.claim
                 s.defs[key] = result.defs!
-                watch(s, key, result.mcpClient, bridge, mcp.timeout)
+                if (result.claim?.subscribe) result.claim.subscribe({ state: s, name: key, timeout: mcp.timeout })
+                else watch(s, key, result.mcpClient, bridge, mcp.timeout)
               }
             }),
           { concurrency: "unbounded" },
@@ -582,19 +791,11 @@ export const layer = Layer.effect(
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
             yield* Effect.forEach(
-              Object.values(s.clients),
-              (client) =>
+              Object.entries(s.clients),
+              ([name, client]) =>
                 Effect.gen(function* () {
-                  const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
-                  if (typeof pid === "number") {
-                    const pids = yield* descendants(pid)
-                    for (const dpid of pids) {
-                      try {
-                        process.kill(dpid, "SIGTERM")
-                      } catch {}
-                    }
-                  }
-                  yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+                  const claim = s.claims[name]
+                  yield* (claim ? claim.release().pipe(Effect.ignore) : closeMcpClient(client))
                 }),
               { concurrency: "unbounded" },
             )
@@ -609,8 +810,12 @@ export const layer = Layer.effect(
     function closeClient(s: State, name: string) {
       const client = s.clients[name]
       delete s.defs[name]
+      delete s.clients[name]
+      const claim = s.claims[name]
+      delete s.claims[name]
+      if (claim) return claim.release().pipe(Effect.ignore)
       if (!client) return Effect.void
-      return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      return closeMcpClient(client)
     }
 
     const storeClient = Effect.fnUntraced(function* (
@@ -618,14 +823,17 @@ export const layer = Layer.effect(
       name: string,
       client: MCPClient,
       listed: MCPToolDef[],
+      claim: ClientClaim | undefined,
       timeout?: number,
     ) {
       const bridge = yield* EffectBridge.make()
       yield* closeClient(s, name)
       s.status[name] = { status: "connected" }
       s.clients[name] = client
+      if (claim) s.claims[name] = claim
       s.defs[name] = listed
-      watch(s, name, client, bridge, timeout)
+      if (claim?.subscribe) claim.subscribe({ state: s, name, timeout })
+      else watch(s, name, client, bridge, timeout)
       return s.status[name]
     })
 
@@ -655,16 +863,15 @@ export const layer = Layer.effect(
 
     const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCP.Info) {
       const s = yield* InstanceState.get(state)
+      yield* closeClient(s, name)
       const result = yield* create(name, mcp)
 
       s.status[name] = result.status
       if (!result.mcpClient) {
-        yield* closeClient(s, name)
-        delete s.clients[name]
         return result.status
       }
 
-      return yield* storeClient(s, name, result.mcpClient, result.defs!, mcp.timeout)
+      return yield* storeClient(s, name, result.mcpClient, result.defs!, result.claim, mcp.timeout)
     })
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCP.Info) {
@@ -875,7 +1082,7 @@ export const layer = Layer.effect(
 
         const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
-        return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
+        return yield* storeClient(s, mcpName, client, listed, undefined, mcpConfig.timeout)
       }
 
       log.info("opening browser for oauth", { mcpName, url: result.authorizationUrl, state: result.oauthState })

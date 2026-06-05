@@ -1886,6 +1886,12 @@ export type McpLocalConfig = {
   timeout?: number
 }
 
+export type McpBifrostConfig = {
+  virtualKey?: string
+  includeClients?: Array<string>
+  includeTools?: Array<string>
+}
+
 export type McpOAuthConfig = {
   clientId?: string
   clientSecret?: string
@@ -1907,6 +1913,7 @@ export type McpRemoteConfig = {
   headers?: {
     [key: string]: string
   }
+  bifrost?: McpBifrostConfig
   /**
    * OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.
    */
@@ -6835,6 +6842,34 @@ export type ProjectInitGitResponses = {
 }
 
 export type ProjectInitGitResponse = ProjectInitGitResponses[keyof ProjectInitGitResponses]
+
+export type ProjectReloadData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/reload"
+}
+
+export type ProjectReloadErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectReloadError = ProjectReloadErrors[keyof ProjectReloadErrors]
+
+export type ProjectReloadResponses = {
+  /**
+   * Whether the current project instance was marked for reload
+   */
+  200: boolean
+}
+
+export type ProjectReloadResponse = ProjectReloadResponses[keyof ProjectReloadResponses]
 
 export type ProjectUpdateData = {
   body?: {

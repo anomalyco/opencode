@@ -182,6 +182,13 @@ const scenarios: Scenario[] = [
     },
     "status",
   ),
+  http.protected
+    .post("/project/reload", "project.reload")
+    .inProject()
+    .mutating()
+    .json(200, (body) => {
+      check(body === true, "project reload should return true")
+    }),
   http.protected.get("/ui/project-view", "ui.projectView.get").json(200, (body) => {
     object(body)
     array(body.projects)
