@@ -104,6 +104,9 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
                   <Match when={message.type === "synthetic"}>
                     <></>
                   </Match>
+                  <Match when={message.type === "system"}>
+                    <></>
+                  </Match>
                   <Match when={message.type === "shell"}>
                     <ShellMessage message={message as SessionMessageShell} />
                   </Match>
@@ -228,7 +231,7 @@ function ShellMessage(props: { message: SessionMessageShell }) {
 }
 
 function CompactionMessage(props: { message: SessionMessageCompaction }) {
-  const { theme, syntax } = useTheme()
+  const { theme } = useTheme()
   return (
     <box
       marginTop={1}
@@ -237,23 +240,7 @@ function CompactionMessage(props: { message: SessionMessageCompaction }) {
       titleAlignment="center"
       borderColor={theme.borderActive}
       flexShrink={0}
-    >
-      <Show when={props.message.summary}>
-        {(summary) => (
-          <box paddingLeft={3} paddingTop={1}>
-            <code
-              filetype="markdown"
-              drawUnstyledText={false}
-              streaming={false}
-              syntaxStyle={syntax()}
-              content={summary().trim()}
-              conceal={true}
-              fg={theme.text}
-            />
-          </box>
-        )}
-      </Show>
-    </box>
+    />
   )
 }
 
@@ -1087,7 +1074,9 @@ function toolOutput(content?: Array<ToolTextContent | ToolFileContent>) {
   return (content ?? [])
     .map((item) => {
       if (item.type === "text") return item.text.trim()
-      return `[file ${item.name ?? item.uri}]`
+      const source =
+        item.source.type === "data" ? "inline data" : item.source.type === "url" ? item.source.url : item.source.uri
+      return `[file ${item.name ?? source}]`
     })
     .filter(Boolean)
     .join("\n")

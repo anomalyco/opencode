@@ -633,6 +633,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         suggested: true,
         category: "Agent",
         slashName: "models",
+        // Bias /mo toward /models over /move without changing global fuzzy scoring.
+        slashAliases: ["mo"],
         run: () => {
           dialog.replace(() => <DialogModel />)
         },
@@ -715,6 +717,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         hidden: local.model.variant.list().length === 0,
         slashName: "variants",
         run: () => {
+          if (local.model.variant.list().length === 0) {
+            return toast.show({
+              title: "No variants available",
+              message: "The current model does not support any variants.",
+              variant: "info",
+            })
+          }
           dialog.replace(() => <DialogVariant />)
         },
       },

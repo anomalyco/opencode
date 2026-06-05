@@ -126,6 +126,7 @@ const OpenAIResponsesCoreFields = {
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
+  service_tier: Schema.optional(OpenAIOptions.OpenAIServiceTier),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(OpenAIOptions.OpenAIResponseIncludable),
   reasoning: Schema.optional(
@@ -255,7 +256,7 @@ const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   type: "function",
   name: tool.name,
   description: tool.description,
-  parameters: tool.inputSchema,
+  parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -289,6 +290,13 @@ const lowerReasoning = (part: ReasoningPart): OpenAIResponsesReasoningInput | un
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
+}
+
+const hostedToolItemID = (part: ToolResultPart) => {
+  const openai = part.providerMetadata?.openai
+  return ProviderShared.isRecord(openai) && typeof openai.itemId === "string" && openai.itemId.length > 0
+    ? openai.itemId
+    : undefined
 }
 
 const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function* (
@@ -332,6 +340,18 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
   const store = OpenAIOptions.store(request)
 
   for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Responses", message)
+      const previous = input.at(-1)
+      if (previous && "role" in previous && previous.role === "user")
+        input[input.length - 1] = {
+          role: "user",
+          content: [...previous.content, { type: "input_text", text: part.text }],
+        }
+      else input.push({ role: "user", content: [{ type: "input_text", text: part.text }] })
+      continue
+    }
+
     if (message.role === "user") {
       input.push({ role: "user", content: yield* Effect.forEach(message.content, lowerUserContent) })
       continue
@@ -341,6 +361,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenAIResponsesReasoningInput> = {}
       const reasoningReferences = new Set<string>()
+      const hostedToolReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
         input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
@@ -373,13 +394,23 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
         }
         if (part.type === "tool-call") {
           flushText()
+          if (part.providerExecuted === true) continue
           input.push(lowerToolCall(part))
+          continue
+        }
+        if (part.type === "tool-result" && part.providerExecuted === true) {
+          flushText()
+          const itemID = hostedToolItemID(part)
+          if (store !== false && itemID && !hostedToolReferences.has(itemID))
+            input.push({ type: "item_reference", id: itemID })
+          if (itemID) hostedToolReferences.add(itemID)
           continue
         }
         return yield* ProviderShared.unsupportedContent("OpenAI Responses", "assistant", [
           "text",
           "reasoning",
           "tool-call",
+          "tool-result",
         ])
       }
       flushText()
@@ -417,6 +448,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   const include = OpenAIOptions.include(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
   const instructions = OpenAIOptions.instructions(request)
+  const serviceTier = OpenAIOptions.serviceTier(request)
   return {
     ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
@@ -424,6 +456,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
     ...(include ? { include } : {}),
     ...(effort || summary ? { reasoning: { effort, summary } } : {}),
     ...(verbosity ? { text: { verbosity } } : {}),
+    ...(serviceTier ? { service_tier: serviceTier } : {}),
   }
 })
 
