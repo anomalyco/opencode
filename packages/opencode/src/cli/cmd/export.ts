@@ -160,12 +160,13 @@ function part(part: SessionV1.Part): SessionV1.Part {
 
 const partFn = part
 
-function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] }) {
+export function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] }) {
   return {
     info: {
       ...data.info,
       title: redact("session-title", data.info.id, data.info.title),
       directory: redact("session-directory", data.info.id, data.info.directory),
+      path: data.info.path === undefined ? undefined : redact("session-path", data.info.id, data.info.path),
       summary: !data.info.summary
         ? data.info.summary
         : {
