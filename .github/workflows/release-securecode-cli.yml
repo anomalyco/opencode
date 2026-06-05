@@ -5,6 +5,20 @@ name: release-securecode-cli
 # the workflow's default GITHUB_TOKEN). This is the channel internal users
 # currently install from via the Notion onboarding doc.
 #
+# The pipeline is split into two jobs (refs #294):
+#   1. `build` (Linux): cross-compile opencode + supervisor binaries for
+#      every target. The bun `macho.zig` signing bug is irrelevant here;
+#      Linux/Windows binaries don't need codesign, and darwin binaries
+#      will be re-signed later.
+#   2. `release` (macOS): download the dist artifact, ad-hoc re-sign darwin
+#      binaries with Apple's native `codesign`, archive, and upload.
+# Running codesign on a macOS runner is the whole point of the split —
+# `codesign` only exists on macOS, and bun's linker-signed signature on
+# darwin-arm64 is truncated by the `macho.zig` sig_size bug, causing AMFI
+# to SIGKILL the binary on launch. Refs:
+#   - oven-sh/bun#29120
+#   - https://bun.com/docs/guides/runtime/codesign-macos-executable
+#
 # NOTE (#290): Public distribution to `acompany-develop/securecode-release`
 # is temporarily disabled while we re-evaluate the "binary-only =
 # code-secret" assumption (see Issue #290). The release-repo steps and the
@@ -32,18 +46,13 @@ permissions:
 #   RELEASE_REPO: acompany-develop/securecode-release
 
 jobs:
-  cli:
-    # macOS runner を使うのは、bun の `--compile` が出力する macOS arm64
-    # バイナリの ad-hoc (linker-signed) 署名が `macho.zig` の sig_size バグで
-    # truncated になり、Apple Silicon の AMFI が SIGKILL するため、配布前に
-    # Apple 純正 `codesign --sign -` で ad-hoc 再署名する必要があるから。
-    # codesign は macOS でしか動かないので runner ごと macOS に揃える。
-    # Linux/Windows バイナリは bun の cross-compile で macOS 上から生成可能。
-    # Refs:
-    #   - oven-sh/bun#29120 — truncated code signature in v1.3.12
-    #   - https://bun.com/docs/guides/runtime/codesign-macos-executable
-    #   - acompany-develop/securecode#294
-    runs-on: macos-14
+  build:
+    # Linux で全 OS のバイナリ (opencode + supervisor) を cross-compile する。
+    # darwin の codesign 問題と無関係なため、ビルド環境を変えずに済む。
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+      version: ${{ steps.vars.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -70,6 +79,48 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Build CLI binaries
+        env:
+          OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
+        run: bun ./packages/opencode/script/build.ts
+
+      - name: Build supervisors
+        run: bun ./script/build-supervisors.ts
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: securecode-dist
+          path: packages/opencode/dist
+          retention-days: 1
+          if-no-files-found: error
+
+  release:
+    # macOS runner にする唯一の理由は Apple 純正 `codesign` を呼ぶため
+    # (codesign は macOS でしか動かない)。darwin の ad-hoc (linker-signed)
+    # 署名が bun の macho.zig sig_size バグで truncated になり Apple Silicon
+    # の AMFI が SIGKILL するため、配布前に純正 `codesign --force --sign -`
+    # で再署名する必要がある。Refs:
+    #   - oven-sh/bun#29120 — truncated code signature in v1.3.12
+    #   - https://bun.com/docs/guides/runtime/codesign-macos-executable
+    #   - acompany-develop/securecode#294
+    needs: build
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: securecode-dist
+          path: packages/opencode/dist
+
       # Disabled per #290 — re-enable together with the release-repo steps below.
       # # Secrets cannot be referenced directly in step-level `if:` conditions,
       # # so we surface a boolean output here and key subsequent steps off it.
@@ -88,7 +139,7 @@ jobs:
       - name: Ensure release exists on source repo
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.vars.outputs.tag }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$TAG" \
@@ -108,7 +159,7 @@ jobs:
       #   if: steps.token.outputs.available == 'true'
       #   env:
       #     GH_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
-      #     TAG: ${{ steps.vars.outputs.tag }}
+      #     TAG: ${{ needs.build.outputs.tag }}
       #   run: |
       #     if gh release view "$TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
       #       gh release edit "$TAG" \
@@ -122,17 +173,12 @@ jobs:
       #       --notes "Acompany SecureCode CLI release." \
       #       --repo "$RELEASE_REPO"
 
-      - name: Build CLI binaries
-        env:
-          OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
-        run: bun ./packages/opencode/script/build.ts
-
       - name: Upload release assets to source repo
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
-          SECURECODE_TAG: ${{ steps.vars.outputs.tag }}
+          OPENCODE_VERSION: ${{ needs.build.outputs.version }}
+          SECURECODE_TAG: ${{ needs.build.outputs.tag }}
         run: bun ./script/release-securecode.ts
 
       # Disabled per #290 — public distribution paused while we revisit the
@@ -142,6 +188,6 @@ jobs:
       #   env:
       #     GH_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
       #     GH_REPO: ${{ env.RELEASE_REPO }}
-      #     OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
-      #     SECURECODE_TAG: ${{ steps.vars.outputs.tag }}
+      #     OPENCODE_VERSION: ${{ needs.build.outputs.version }}
+      #     SECURECODE_TAG: ${{ needs.build.outputs.tag }}
       #   run: bun ./script/release-securecode.ts

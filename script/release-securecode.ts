@@ -64,10 +64,18 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   await fs.copyFile(src, innerBin)
   await fs.chmod(innerBin, 0o755)
 
-  // 2) supervisor を securecode として bun compile (platform クロスコンパイル)
-  const platformSuffix = dir.name.replace(/^opencode-/, "")
-  const bunTarget = `bun-${platformSuffix}`
-  await $`bun build --compile --target=${bunTarget} script/securecode-supervisor.ts --outfile ${supervisorBin}`.cwd(root)
+  // 2) supervisor (= securecode) は script/build-supervisors.ts が事前に
+  // cross-compile 済みなので、それを拾うだけ。build (Linux runner) と
+  // codesign+release (macOS runner) を分離する都合で、supervisor の
+  // cross-compile は build フェーズに移してある。Refs #294.
+  const supervisorSrc = path.join(dist, dir.name, "bin", "securecode")
+  if (!(await exists(supervisorSrc))) {
+    throw new Error(
+      `Pre-built supervisor not found at ${supervisorSrc}. ` +
+        `Did script/build-supervisors.ts run before release-securecode.ts?`,
+    )
+  }
+  await fs.copyFile(supervisorSrc, supervisorBin)
   await fs.chmod(supervisorBin, 0o755)
 
   // 3) darwin バイナリは Apple 純正 codesign で ad-hoc 再署名する。bun が
@@ -75,8 +83,8 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   // なり、Apple Silicon の AMFI が起動時に SIGKILL する。`codesign --force
   // --sign -` で正しい ad-hoc 署名に上書きすると整合性が回復する。Linux 側
   // は AMFI 強制が無いので署名不要。
-  // この処理は macOS runner 上でのみ動作する (workflow 側で runner を
-  // macos-14 に設定)。Refs:
+  // この処理は macOS runner 上でのみ動作する (workflow 側で release job を
+  // macos-14 に固定)。Refs:
   //   - oven-sh/bun#29120
   //   - https://bun.com/docs/guides/runtime/codesign-macos-executable
   //   - acompany-develop/securecode#294
