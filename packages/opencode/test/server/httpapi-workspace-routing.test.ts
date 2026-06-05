@@ -230,6 +230,11 @@ const ProbeApi = HttpApi.make("workspace-routing-probe").add(
       HttpApiEndpoint.get("get", "/probe", { query: WorkspaceRoutingQuery, success: ProbeResult }),
       HttpApiEndpoint.patch("patch", "/probe", { query: WorkspaceRoutingQuery, success: Schema.Boolean }),
       HttpApiEndpoint.get("session", "/session", { query: WorkspaceRoutingQuery, success: ProbeResult }),
+      HttpApiEndpoint.post("sessionFork", "/session/:sessionID/fork", {
+        params: { sessionID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        success: ProbeResult,
+      }),
       HttpApiEndpoint.get("workspace", WorkspacePaths.list, {
         query: WorkspaceRoutingQuery,
         success: ProbeResult,
@@ -248,6 +253,7 @@ const probeHandlers = HttpApiBuilder.group(ProbeApi, "probe", (handlers) =>
     .handle("get", () => routeContextResponse)
     .handle("patch", () => Effect.succeed(false))
     .handle("session", () => routeContextResponse)
+    .handle("sessionFork", () => routeContextResponse)
     .handle("workspace", () => routeContextResponse),
 )
 
@@ -523,6 +529,22 @@ describe("HttpApi workspace routing middleware", () => {
       expect(yield* queryResponse.json).toEqual({ directory: queryDir, workspaceID: null })
       expect(headerResponse.status).toBe(200)
       expect(yield* headerResponse.json).toEqual({ directory: headerDir, workspaceID: null })
+    }),
+  )
+
+  it.live("uses explicit directory target for session fork routes", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const targetDir = path.join(dir, "fork-target")
+      yield* serveProbe
+
+      const response = yield* HttpClientRequest.post("/session/ses_123/fork").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", targetDir),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({ directory: targetDir, workspaceID: null })
     }),
   )
 

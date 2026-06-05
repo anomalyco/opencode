@@ -46,6 +46,7 @@ import { useGlobal } from "@/context/global"
 import { useCommand } from "@/context/command"
 import { useSettings } from "@/context/settings"
 import { ServerHealthIndicator } from "@/components/server/server-row"
+import { homeSessionSubtitle } from "./home-session-subtitle"
 
 const HOME_SESSION_LIMIT = 15
 const HOME_ROW_LAYOUT =
@@ -59,7 +60,7 @@ const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 type HomeSessionRecord = {
   session: Session
   project: LocalProject
-  projectName: string
+  subtitle: string
 }
 
 type HomeSessionSync = Pick<ReturnType<typeof useServerSync>, "child">
@@ -101,13 +102,18 @@ function buildHomeSessionRecords(input: {
       return {
         session,
         project,
-        projectName: displayName(project),
+        subtitle: homeSessionSubtitle({
+          projectName: displayName(project),
+          projectWorktree: project.worktree,
+          sessionDirectory: session.directory,
+          branch: input.sync.child(session.directory, { bootstrap: false })[0].vcs?.branch,
+        }),
       }
     })
 }
 
 function matchesHomeSessionSearch(record: HomeSessionRecord, query: string) {
-  return `${record.session.title} ${record.projectName}`.toLowerCase().includes(query)
+  return `${record.session.title} ${record.subtitle}`.toLowerCase().includes(query)
 }
 
 function createHomeSessionStatus(input: {
@@ -973,12 +979,12 @@ function HomeSessionSearchResultRow(props: {
       </Show>
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
         <span
-          class={`${HOME_SEARCH_RESULT_TITLE} ${props.record.projectName ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
+          class={`${HOME_SEARCH_RESULT_TITLE} ${props.record.subtitle ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
         >
           {title()}
         </span>
-        <Show when={props.record.projectName}>
-          <span class={HOME_SEARCH_RESULT_META}>{props.record.projectName}</span>
+        <Show when={props.record.subtitle}>
+          <span class={HOME_SEARCH_RESULT_META}>{props.record.subtitle}</span>
         </Show>
       </div>
     </button>
@@ -1057,13 +1063,13 @@ function HomeSessionRow(props: {
         </div>
       </Show>
       <span
-        class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${props.record.projectName ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
+        class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${props.record.subtitle ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
       >
         {title()}
       </span>
-      <Show when={props.record.projectName}>
+      <Show when={props.record.subtitle}>
         <span class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]">
-          {props.record.projectName}
+          {props.record.subtitle}
         </span>
       </Show>
     </button>
