@@ -32,7 +32,7 @@ const render = (skills: ReadonlyArray<Summary>) =>
   ].join("\n")
 
 export interface Interface {
-  readonly load: (agentID: AgentV2.ID) => Effect.Effect<SystemContext.SystemContext>
+  readonly load: (agent: AgentV2.Selection) => Effect.Effect<SystemContext.SystemContext>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillGuidance") {}
@@ -40,14 +40,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const agents = yield* AgentV2.Service
     const boot = yield* PluginBoot.Service
     const skills = yield* SkillV2.Service
 
     return Service.of({
-      load: Effect.fn("SkillGuidance.load")(function* (agentID) {
+      load: Effect.fn("SkillGuidance.load")(function* (selection) {
         yield* boot.wait()
-        const agent = yield* agents.get(agentID)
+        const agent = selection.info
         if (!agent) return SystemContext.empty
         const permitted = SkillV2.available(yield* skills.list(), agent)
         if (permitted.length === 0 && PermissionV2.evaluate("skill", "*", agent.permissions).effect === "deny")

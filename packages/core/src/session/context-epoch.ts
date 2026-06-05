@@ -58,10 +58,7 @@ export function prepare(
   sessionID: SessionSchema.ID,
   location: Location.Ref,
   agent: AgentV2.ID,
-): Effect.Effect<
-  Prepared,
-  SystemContext.InitializationBlocked | ContextSnapshotDecodeError | AgentReplacementBlocked
-> {
+): Effect.Effect<Prepared, SystemContext.InitializationBlocked | ContextSnapshotDecodeError | AgentReplacementBlocked> {
   return retryRevisionMismatch(() => prepareOnce(db, events, context, sessionID, location, agent)).pipe(
     Effect.withSpan("SessionContextEpoch.prepare"),
   )
@@ -145,7 +142,7 @@ const find = Effect.fn("SessionContextEpoch.find")(function* (db: DatabaseServic
     .pipe(Effect.orDie)
 })
 
-const requireEffectiveAgent = Effect.fnUntraced(function* (
+const requireAgentSelection = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   agent: AgentV2.ID,
@@ -156,7 +153,7 @@ const requireEffectiveAgent = Effect.fnUntraced(function* (
     .where(eq(SessionTable.id, sessionID))
     .get()
     .pipe(Effect.orDie)
-  if (!selected || AgentV2.effectiveID(selected.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+  if (!selected || (selected.agent !== null && selected.agent !== agent)) return yield* Effect.die(new AgentMismatch())
 })
 
 export const requestReplacement = Effect.fn("SessionContextEpoch.requestReplacement")(function* (
@@ -215,7 +212,7 @@ const insert = Effect.fnUntraced(function* (
             .get()
             .pipe(Effect.orDie)
           if (!placed) return yield* Effect.die(new LocationMismatch())
-          if (AgentV2.effectiveID(placed.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+          if (placed.agent !== null && placed.agent !== agent) return yield* Effect.die(new AgentMismatch())
           const baselineSeq = yield* SessionInput.latestSeq(db, sessionID)
           yield* db
             .insert(SessionContextEpochTable)
@@ -253,7 +250,7 @@ const replace = Effect.fnUntraced(function* (
     .transaction(
       () =>
         Effect.gen(function* () {
-          yield* requireEffectiveAgent(db, sessionID, agent)
+          yield* requireAgentSelection(db, sessionID, agent)
           const updated = yield* db
             .update(SessionContextEpochTable)
             .set({
@@ -287,13 +284,14 @@ const fence = Effect.fnUntraced(function* (
   expectedRevision: number,
 ) {
   const current = yield* db
-    .select({ agent: SessionTable.agent, revision: SessionContextEpochTable.revision })
+    .select({ selected: SessionTable.agent, revision: SessionContextEpochTable.revision })
     .from(SessionContextEpochTable)
     .innerJoin(SessionTable, eq(SessionTable.id, SessionContextEpochTable.session_id))
     .where(eq(SessionContextEpochTable.session_id, sessionID))
     .get()
     .pipe(Effect.orDie)
-  if (!current || AgentV2.effectiveID(current.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+  if (!current || (current.selected !== null && current.selected !== agent))
+    return yield* Effect.die(new AgentMismatch())
   if (current.revision !== expectedRevision) return yield* Effect.die(new RevisionMismatch())
 })
 
@@ -304,13 +302,22 @@ export const current = Effect.fn("SessionContextEpoch.current")(function* (
   revision: number,
 ) {
   const value = yield* db
-    .select({ agent: SessionTable.agent, revision: SessionContextEpochTable.revision })
+    .select({
+      agent: SessionContextEpochTable.agent,
+      selected: SessionTable.agent,
+      revision: SessionContextEpochTable.revision,
+    })
     .from(SessionContextEpochTable)
     .innerJoin(SessionTable, eq(SessionTable.id, SessionContextEpochTable.session_id))
     .where(eq(SessionContextEpochTable.session_id, sessionID))
     .get()
     .pipe(Effect.orDie)
-  return value !== undefined && AgentV2.effectiveID(value.agent) === agent && value.revision === revision
+  return (
+    value !== undefined &&
+    value.agent === agent &&
+    (value.selected === null || value.selected === agent) &&
+    value.revision === revision
+  )
 })
 
 const advance = Effect.fnUntraced(function* (

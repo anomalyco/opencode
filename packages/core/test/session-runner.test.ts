@@ -47,7 +47,6 @@ import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { AgentV2 } from "@opencode-ai/core/agent"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -189,13 +188,13 @@ const systemContext = Layer.effectDiscard(
   ),
 ).pipe(Layer.provideMerge(SystemContextRegistry.layer))
 const skillGuidance = Layer.mock(SkillGuidance.Service, {
-  load: (agentID) =>
+  load: (agent) =>
     Effect.succeed(
-      skillBaselines.has(agentID)
+      skillBaselines.has(agent.id)
         ? SystemContext.make({
             key: SystemContext.Key.make("test/skill-guidance"),
             codec: Schema.toCodecJson(Schema.String),
-            load: Effect.succeed(skillBaselines.get(agentID)!),
+            load: Effect.succeed(skillBaselines.get(agent.id)!),
             baseline: String,
             update: (_previous, current) => current,
             removed: () => "Skill guidance removed",

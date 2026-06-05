@@ -166,7 +166,7 @@ export const layer = Layer.effect(
     ) {
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionV2.NotFoundError({ sessionID })
-      const agent = agentID ? yield* agents.get(agentID) : yield* agents.resolve(session.agent)
+      const agent = yield* agents.resolve(agentID ?? session.agent)
       return agent?.permissions ?? missingAgentPermissions
     })
 

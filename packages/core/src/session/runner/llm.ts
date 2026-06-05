@@ -1,5 +1,5 @@
 import { LLM, LLMClient, LLMError, LLMEvent, SystemPart } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Schema, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
@@ -133,14 +133,8 @@ export const layer = Layer.effect(
         defect instanceof SessionContextEpoch.AgentMismatch ? Effect.die(new RetryTurn(promotion)) : Effect.die(defect),
       )
 
-    const sameModel = (left: ModelV2.Ref | undefined, right: ModelV2.Ref | undefined) =>
-      left === right ||
-      (left !== undefined &&
-        right !== undefined &&
-        left.id === right.id &&
-        left.providerID === right.providerID &&
-        left.variant === right.variant)
-    const loadSystemContext = (agent: AgentV2.ID) =>
+    const sameModel = Schema.toEquivalence(Schema.UndefinedOr(ModelV2.Ref))
+    const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent)], { concurrency: "unbounded" }).pipe(
         Effect.map(SystemContext.combine),
       )
@@ -150,14 +144,13 @@ export const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
     ) {
       const session = yield* getSession(sessionID)
-      const agent = yield* agents.resolve(session.agent)
-      const agentID = agent?.id ?? AgentV2.defaultID
+      const agent = yield* agents.select(session.agent)
       const initialized = yield* SessionContextEpoch.initialize(
         db,
-        loadSystemContext(agentID),
+        loadSystemContext(agent),
         session.id,
         session.location,
-        agentID,
+        agent.id,
       ).pipe(retryAgentMismatch(promotion))
       const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
@@ -174,19 +167,19 @@ export const layer = Layer.effect(
         (yield* SessionContextEpoch.prepare(
           db,
           events,
-          loadSystemContext(agentID),
+          loadSystemContext(agent),
           session.id,
           session.location,
-          agentID,
+          agent.id,
         ).pipe(retryAgentMismatch(undefined)))
       const current = yield* getSession(sessionID)
-      if ((yield* agents.resolve(current.agent))?.id !== agent?.id || !sameModel(current.model, session.model))
+      if ((yield* agents.select(current.agent)).id !== agent.id || !sameModel(current.model, session.model))
         return yield* Effect.die(new RetryTurn(undefined))
       const model = yield* models.resolve(session)
       const context = yield* store.runnerContext(session.id, system.baselineSeq)
       const request = LLM.request({
         model,
-        system: [agent?.system, system.baseline]
+        system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: toLLMMessages(context, model),
@@ -194,7 +187,7 @@ export const layer = Layer.effect(
       })
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
-        agent: agentID,
+        agent: agent.id,
         model: {
           id: ModelV2.ID.make(model.id),
           providerID: ProviderV2.ID.make(model.provider),
@@ -203,7 +196,7 @@ export const layer = Layer.effect(
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent) => withPublication(publisher.publish(event))
-      if (!(yield* SessionContextEpoch.current(db, session.id, agentID, system.revision)))
+      if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
         return yield* Effect.die(new RetryTurn(undefined))
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
@@ -211,7 +204,7 @@ export const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
-            yield* tools.settle({ sessionID: session.id, agent: agentID, call: event }).pipe(
+            yield* tools.settle({ sessionID: session.id, agent: agent.id, call: event }).pipe(
               Effect.catchCause((cause) => {
                 if (isQuestionRejected(cause)) return Effect.failCause(cause)
                 return Effect.succeed({

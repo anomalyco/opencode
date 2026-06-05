@@ -28,9 +28,8 @@ const denied = new SkillV2.Info({
   content: "Denied guidance",
 })
 
-const layer = (agent: AgentV2.Info, list: () => SkillV2.Info[], wait: () => void = () => {}) =>
+const layer = (list: () => SkillV2.Info[], wait: () => void = () => {}) =>
   SkillGuidance.layer.pipe(
-    Layer.provide(Layer.mock(AgentV2.Service, { get: (id) => Effect.succeed(id === agent.id ? agent : undefined) })),
     Layer.provide(Layer.mock(SkillV2.Service, { list: () => Effect.succeed(list()) })),
     Layer.provide(Layer.mock(PluginBoot.Service, { wait: () => Effect.sync(wait) })),
   )
@@ -45,7 +44,9 @@ describe("SkillGuidance", () => {
     let waited = 0
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
-      const initialized = yield* guidance.load(build).pipe(Effect.flatMap(SystemContext.initialize))
+      const initialized = yield* guidance
+        .load({ id: agent.id, info: agent })
+        .pipe(Effect.flatMap(SystemContext.initialize))
 
       expect(waited).toBe(1)
       expect(initialized.baseline).toBe(
@@ -64,7 +65,7 @@ describe("SkillGuidance", () => {
       skills = []
       expect(
         yield* guidance
-          .load(build)
+          .load({ id: agent.id, info: agent })
           .pipe(Effect.flatMap((context) => SystemContext.reconcile(context, initialized.snapshot))),
       ).toMatchObject({
         _tag: "Updated",
@@ -73,7 +74,6 @@ describe("SkillGuidance", () => {
     }).pipe(
       Effect.provide(
         layer(
-          agent,
           () => skills,
           () => waited++,
         ),
@@ -88,11 +88,13 @@ describe("SkillGuidance", () => {
     })
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
-      expect(yield* guidance.load(build).pipe(Effect.flatMap(SystemContext.initialize))).toEqual({
+      expect(
+        yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
+      ).toEqual({
         baseline: "",
         snapshot: {},
       })
-    }).pipe(Effect.provide(layer(agent, () => [effect])))
+    }).pipe(Effect.provide(layer(() => [effect])))
   })
 
   it.effect("omits guidance when a resource-specific denial follows the global denial", () => {
@@ -105,11 +107,13 @@ describe("SkillGuidance", () => {
     })
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
-      expect(yield* guidance.load(build).pipe(Effect.flatMap(SystemContext.initialize))).toEqual({
+      expect(
+        yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
+      ).toEqual({
         baseline: "",
         snapshot: {},
       })
-    }).pipe(Effect.provide(layer(agent, () => [effect])))
+    }).pipe(Effect.provide(layer(() => [effect])))
   })
 
   it.effect("retains specifically allowed skills after a global denial", () => {
@@ -122,10 +126,10 @@ describe("SkillGuidance", () => {
     })
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
-      expect((yield* guidance.load(build).pipe(Effect.flatMap(SystemContext.initialize))).baseline).toContain(
-        "<name>effect</name>",
-      )
-    }).pipe(Effect.provide(layer(agent, () => [effect])))
+      expect(
+        (yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize))).baseline,
+      ).toContain("<name>effect</name>")
+    }).pipe(Effect.provide(layer(() => [effect])))
   })
 
   it.effect("omits guidance when a specifically allowed skill is denied again", () => {
@@ -139,10 +143,12 @@ describe("SkillGuidance", () => {
     })
     return Effect.gen(function* () {
       const guidance = yield* SkillGuidance.Service
-      expect(yield* guidance.load(build).pipe(Effect.flatMap(SystemContext.initialize))).toEqual({
+      expect(
+        yield* guidance.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(SystemContext.initialize)),
+      ).toEqual({
         baseline: "",
         snapshot: {},
       })
-    }).pipe(Effect.provide(layer(agent, () => [effect])))
+    }).pipe(Effect.provide(layer(() => [effect])))
   })
 })
