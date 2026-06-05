@@ -110,9 +110,7 @@ export function completedToolContent(toolName: string, state: CompletedToolState
     },
   ]
 
-  if (toToolKind(toolName) === "edit") {
-    content.push(...diffContent(state.input))
-  }
+  content.push(...editDiffContent(toolName, state.input, state.metadata))
 
   content.push(...imageContents(state.attachments ?? []))
   return content
@@ -237,6 +235,26 @@ export function imageContents(attachments: ReadonlyArray<ToolAttachment>): ToolC
   })
 }
 
+export function editDiffContent(toolName: string, input: ToolInput, metadata?: unknown): ToolCallContent[] {
+  if (toToolKind(toolName) !== "edit") return []
+
+  const metadataDiffs = metadataDiffContent(metadata)
+  if (metadataDiffs.length) return metadataDiffs
+
+  const oldText = stringValue(input.oldString)
+  const newText = stringValue(input.newString) ?? stringValue(input.content)
+  if (oldText === undefined || newText === undefined) return []
+
+  return [
+    {
+      type: "diff",
+      path: stringValue(input.filePath) ?? "",
+      oldText,
+      newText,
+    },
+  ]
+}
+
 export function extractImageAttachments(attachments: ReadonlyArray<ToolAttachment>): ImageAttachment[] {
   return attachments.flatMap((attachment): ImageAttachment[] => {
     const data = dataUrlImage(attachment)
@@ -252,6 +270,7 @@ export function shellOutputSnapshot(state: { readonly metadata?: unknown }) {
 export const mapToolKind = toToolKind
 export const extractLocations = toLocations
 export const buildCompletedToolContent = completedToolContent
+export const buildEditDiffContent = editDiffContent
 export const buildCompletedRawOutput = completedToolRawOutput
 export const extractShellOutputSnapshot = shellOutputSnapshot
 export const buildPendingToolCall = pendingToolCall
@@ -275,19 +294,28 @@ function locationFrom(...values: unknown[]): ToolCallLocation[] {
   )
 }
 
-function diffContent(input: ToolInput): ToolCallContent[] {
-  const oldText = stringValue(input.oldString)
-  const newText = stringValue(input.newString) ?? stringValue(input.content)
-  if (oldText === undefined || newText === undefined) return []
+function metadataDiffContent(metadata: unknown): ToolCallContent[] {
+  if (!metadata || typeof metadata !== "object") return []
+  const files = (metadata as Record<string, unknown>).files
+  if (!Array.isArray(files)) return []
 
-  return [
-    {
-      type: "diff",
-      path: stringValue(input.filePath) ?? "",
-      oldText,
-      newText,
-    },
-  ]
+  return files.flatMap((file): ToolCallContent[] => {
+    if (!file || typeof file !== "object") return []
+    const info = file as Record<string, unknown>
+    const path = stringValue(info.movePath) ?? stringValue(info.filePath)
+    const oldText = stringValue(info.before)
+    const newText = stringValue(info.after)
+    if (!path || oldText === undefined || newText === undefined) return []
+
+    return [
+      {
+        type: "diff",
+        path,
+        oldText,
+        newText,
+      },
+    ]
+  })
 }
 
 function readDisplayText(metadata: unknown) {

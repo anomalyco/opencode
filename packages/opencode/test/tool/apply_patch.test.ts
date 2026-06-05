@@ -46,6 +46,8 @@ type AskInput = {
       relativePath: string
       type: "add" | "update" | "delete" | "move"
       patch: string
+      before: string
+      after: string
       additions: number
       deletions: number
       movePath?: string
@@ -151,6 +153,8 @@ describe("tool.apply_patch freeform", () => {
         const updateFile = permissionCall.metadata.files.find((f) => f.type === "update")
         expect(updateFile?.patch).toContain("-line2")
         expect(updateFile?.patch).toContain("+changed")
+        expect(updateFile?.before).toBe("line1\nline2\n")
+        expect(updateFile?.after).toBe("line1\nchanged\n")
 
         expect(yield* readText(path.join(test.directory, "nested", "new.txt"))).toBe("created\n")
         expect(yield* readText(modifyPath)).toBe("line1\nchanged\n")

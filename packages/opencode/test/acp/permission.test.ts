@@ -13,6 +13,7 @@ import { ACPSession } from "@/acp/session"
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type PermissionReplyParams = Parameters<OpencodeClient["permission"]["reply"]>[0]
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
+type WriteTextFileParams = Parameters<AgentSideConnection["writeTextFile"]>[0]
 
 const pollUntil = async (
   check: () => boolean | Promise<boolean>,
@@ -40,6 +41,7 @@ function createHarness(
   const replies: PermissionReplyParams[] = []
   const requests: RequestPermissionRequest[] = []
   const updates: SessionUpdateParams[] = []
+  const writes: WriteTextFileParams[] = []
   const session = makeSessionService()
   const sdk = {
     permission: {
@@ -61,10 +63,14 @@ function createHarness(
       updates.push(params)
       return Promise.resolve()
     },
-  } satisfies Pick<AgentSideConnection, "requestPermission" | "sessionUpdate">
+    writeTextFile: (params: WriteTextFileParams) => {
+      writes.push(params)
+      return Promise.resolve({})
+    },
+  } satisfies Pick<AgentSideConnection, "requestPermission" | "sessionUpdate" | "writeTextFile">
   const subscription = new ACPEvent.Subscription({ sdk, connection, session })
 
-  return { connection, replies, requests, sdk, session, subscription, updates }
+  return { connection, replies, requests, sdk, session, subscription, updates, writes }
 }
 
 async function createSession(session: ACPSession.Interface, sessionId: string, cwd = "/workspace") {
@@ -199,6 +205,53 @@ describe("acp permissions", () => {
         locations: [{ path: "/tmp/outside" }],
       },
     })
+  })
+
+  it("includes edit diff content in requestPermission tool calls", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_edit")
+
+    harness.subscription.handle(
+      permissionAsked("ses_edit", "perm_edit", {
+        permission: "edit",
+        metadata: {
+          filepath: "README.md",
+          diff: "@@ -1 +1 @@\n-old\n+new\n",
+          files: [
+            {
+              filePath: "/workspace/README.md",
+              relativePath: "README.md",
+              type: "update",
+              before: "old\n",
+              after: "new\n",
+            },
+          ],
+        },
+        tool: { messageID: "msg_1", callID: "call_patch" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "edit permission was never replied")
+
+    expect(harness.requests[0]?.toolCall).toMatchObject({
+      toolCallId: "call_patch",
+      kind: "edit",
+      content: [
+        {
+          type: "diff",
+          path: "/workspace/README.md",
+          oldText: "old\n",
+          newText: "new\n",
+        },
+      ],
+    })
+    expect(harness.writes).toEqual([
+      {
+        sessionId: "ses_edit",
+        path: "/workspace/README.md",
+        content: "new\n",
+      },
+    ])
   })
 
   it("rejects non-selected outcomes", async () => {

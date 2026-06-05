@@ -4,7 +4,7 @@ import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 import { exists, readText } from "@/util/filesystem"
 import type { ACPSession } from "./session"
-import { toLocations, toToolKind, type ToolInput } from "./tool"
+import { editDiffContent, toLocations, toToolKind, type ToolInput } from "./tool"
 import { Effect } from "effect"
 
 const log = Log.create({ service: "acp-permission" })
@@ -60,6 +60,7 @@ export class Handler {
       return
     }
 
+    const content = editDiffContent(permission.permission, permission.metadata, permission.metadata)
     const result = await this.input.connection
       .requestPermission({
         sessionId: permission.sessionID,
@@ -70,6 +71,7 @@ export class Handler {
           rawInput: permission.metadata,
           kind: toToolKind(permission.permission),
           locations: toLocations(permission.permission, permission.metadata),
+          ...(content.length ? { content } : {}),
         },
         options: permissionOptions,
       })
@@ -113,9 +115,12 @@ export class Handler {
   }
 
   private async writeProposedEdit(sessionId: string, metadata: ToolInput) {
+    if (!this.input.connection.writeTextFile) return
+    if (await this.writeProposedFiles(sessionId, metadata)) return
+
     const filepath = stringValue(metadata.filepath)
     const diff = stringValue(metadata.diff)
-    if (!filepath || !diff || !this.input.connection.writeTextFile) return
+    if (!filepath || !diff) return
 
     const content = (await exists(filepath)) ? await readText(filepath) : ""
     const next = applyPatch(content, diff)
@@ -129,6 +134,32 @@ export class Handler {
       path: filepath,
       content: next,
     })
+  }
+
+  private async writeProposedFiles(sessionId: string, metadata: ToolInput) {
+    if (!Array.isArray(metadata.files)) return false
+
+    const writes = metadata.files.flatMap((file): Array<{ path: string; content: string }> => {
+      if (!file || typeof file !== "object") return []
+      const info = file as Record<string, unknown>
+      if (info.type === "delete") return []
+      const path = stringValue(info.movePath) ?? stringValue(info.filePath)
+      const content = stringValue(info.after)
+      if (!path || content === undefined) return []
+      return [{ path, content }]
+    })
+    if (!writes.length) return false
+
+    await Promise.all(
+      writes.map((write) =>
+        this.input.connection.writeTextFile!({
+          sessionId,
+          path: write.path,
+          content: write.content,
+        }),
+      ),
+    )
+    return true
   }
 }
 

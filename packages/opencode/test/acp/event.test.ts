@@ -610,6 +610,51 @@ describe("acp event routing", () => {
     })
   })
 
+  it("emits apply_patch diffs on completed tool updates", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_patch", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      toolUpdated(
+        completedTool("ses_patch", "call_patch", "Success. Updated the following files:\nM README.md", [], {
+          tool: "apply_patch",
+          input: {
+            patchText: "*** Begin Patch\n*** Update File: README.md\n@@\n-old\n+new\n*** End Patch",
+          },
+          metadata: {
+            files: [
+              {
+                filePath: "/workspace/README.md",
+                relativePath: "README.md",
+                type: "update",
+                before: "old\n",
+                after: "new\n",
+              },
+            ],
+          },
+        }),
+      ),
+    )
+
+    expect(harness.updates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_patch",
+      status: "completed",
+      content: [
+        {
+          type: "content",
+          content: { type: "text", text: "Success. Updated the following files:\nM README.md" },
+        },
+        {
+          type: "diff",
+          path: "/workspace/README.md",
+          oldText: "old\n",
+          newText: "new\n",
+        },
+      ],
+    })
+  })
+
   it("emits clean read display content and preserves rawOutput", async () => {
     const harness = createHarness()
     await Effect.runPromise(harness.session.create({ id: "ses_read", cwd: "/workspace" }))

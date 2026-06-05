@@ -191,15 +191,18 @@ export const ApplyPatchTool = Tool.define(
       }
 
       // Build per-file metadata for UI rendering (used for both permission and result)
-      const files = fileChanges.map((change) => ({
-        filePath: change.filePath,
-        relativePath: path.relative(instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
-        type: change.type,
-        patch: change.diff,
-        additions: change.additions,
-        deletions: change.deletions,
-        movePath: change.movePath,
-      }))
+      const files = () =>
+        fileChanges.map((change) => ({
+          filePath: change.filePath,
+          relativePath: path.relative(instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
+          type: change.type,
+          patch: change.diff,
+          before: change.oldContent,
+          after: change.newContent,
+          additions: change.additions,
+          deletions: change.deletions,
+          movePath: change.movePath,
+        }))
 
       // Check permissions if needed
       const relativePaths = fileChanges.map((c) => path.relative(instance.worktree, c.filePath).replaceAll("\\", "/"))
@@ -210,7 +213,7 @@ export const ApplyPatchTool = Tool.define(
         metadata: {
           filepath: relativePaths.join(", "),
           diff: totalDiff,
-          files,
+          files: files(),
         },
       })
 
@@ -251,7 +254,15 @@ export const ApplyPatchTool = Tool.define(
 
         if (edited) {
           if (yield* format.file(edited)) {
-            yield* Bom.syncFile(afs, edited, change.bom)
+            change.newContent = yield* Bom.syncFile(afs, edited, change.bom)
+            change.diff = trimDiff(createTwoFilesPatch(edited, edited, change.oldContent, change.newContent))
+            const changes = diffLines(change.oldContent, change.newContent)
+            change.additions = changes
+              .filter((item) => item.added)
+              .reduce((total, item) => total + (item.count || 0), 0)
+            change.deletions = changes
+              .filter((item) => item.removed)
+              .reduce((total, item) => total + (item.count || 0), 0)
           }
           yield* events.publish(FileSystem.Event.Edited, { file: edited })
         }
@@ -296,7 +307,7 @@ export const ApplyPatchTool = Tool.define(
         title: output,
         metadata: {
           diff: totalDiff,
-          files,
+          files: files(),
           diagnostics,
         },
         output,

@@ -104,6 +104,69 @@ describe("acp tool conversion", () => {
     ])
   })
 
+  test("builds completed patch content with metadata file diffs", () => {
+    expect(
+      completedToolContent("apply_patch", {
+        status: "completed",
+        input: {
+          patchText: "*** Begin Patch\n*** Update File: src/file.ts\n@@\n-before\n+after\n*** End Patch",
+        },
+        output: "Success. Updated the following files:\nM src/file.ts",
+        metadata: {
+          files: [
+            {
+              filePath: "/repo/src/file.ts",
+              relativePath: "src/file.ts",
+              type: "update",
+              patch: "@@ -1 +1 @@\n-before\n+after\n",
+              before: "before\n",
+              after: "after\n",
+              additions: 1,
+              deletions: 1,
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      {
+        type: "content",
+        content: { type: "text", text: "Success. Updated the following files:\nM src/file.ts" },
+      },
+      {
+        type: "diff",
+        path: "/repo/src/file.ts",
+        oldText: "before\n",
+        newText: "after\n",
+      },
+    ])
+  })
+
+  test("uses move destination path for completed patch metadata diffs", () => {
+    expect(
+      completedToolContent("apply_patch", {
+        status: "completed",
+        input: {},
+        output: "moved",
+        metadata: {
+          files: [
+            {
+              filePath: "/repo/old.ts",
+              movePath: "/repo/new.ts",
+              type: "move",
+              before: "old\n",
+              after: "new\n",
+            },
+          ],
+        },
+      }),
+    ).toContainEqual({
+      type: "diff",
+      path: "/repo/new.ts",
+      oldText: "old\n",
+      newText: "new\n",
+    })
+  })
+
   test("uses clean read display text for completed content", () => {
     const output = [
       "<path>/tmp/file.ts</path>",
