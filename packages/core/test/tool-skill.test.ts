@@ -79,6 +79,7 @@ describe("SkillTool", () => {
               limits: () => Effect.die("unused"),
               write: () => Effect.die("unused"),
               truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
+              bound: (input) => Effect.succeed({ output: input.output, resources: [] }),
               read: () => Effect.die("unused"),
               cleanup: () => Effect.die("unused"),
             }),

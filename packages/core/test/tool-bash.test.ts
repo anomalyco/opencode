@@ -74,6 +74,7 @@ const resources = Layer.succeed(
     limits: () => Effect.die("unused"),
     write: () => Effect.die("unused"),
     truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
+    bound: (input) => Effect.succeed({ output: input.output, resources: [] }),
     read: () => Effect.die("unused"),
     cleanup: () => Effect.die("unused"),
   }),
@@ -325,6 +326,9 @@ describe("BashTool", () => {
                 truncated: true,
                 resource: { uri: "tool-output://opaque" },
               })
+              expect(settled.resources).toEqual([
+                { uri: "tool-output://opaque", mime: "text/plain", size: "HEAD full output TAIL".length },
+              ])
               expect(truncations).toMatchObject([
                 { sessionID, toolCallID: "call-overflow", content: "HEAD full output TAIL" },
               ])

@@ -134,6 +134,7 @@ const resources = Layer.succeed(
     limits: () => Effect.die("unused"),
     write: () => Effect.die("unused"),
     truncate: () => Effect.die("unused"),
+    bound: (input) => Effect.succeed({ output: input.output, resources: [] }),
     cleanup: () => Effect.die("unused"),
     read: (input) =>
       Effect.sync(() => {

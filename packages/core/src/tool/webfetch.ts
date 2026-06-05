@@ -141,6 +141,7 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
+        resources: (output) => (output.resource ? [output.resource] : []),
         execute: ({ parameters, sessionID, call, assertPermission }) =>
           Effect.gen(function* () {
             const parsed = new URL(parameters.url)

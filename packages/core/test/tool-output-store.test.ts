@@ -58,8 +58,8 @@ describe("ToolOutputStore", () => {
   it.live("stores byte-truncated output and returns an opaque head-tail preview", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
-        const content = "HEAD-" + "x".repeat(100) + "-TAIL"
-        const result = yield* store.truncate({ sessionID, toolCallID: "call-bytes", content, maxBytes: 20 })
+        const content = "HEAD-" + "x".repeat(200) + "-TAIL"
+        const result = yield* store.truncate({ sessionID, toolCallID: "call-bytes", content, maxBytes: 120 })
 
         expect(result.truncated).toBe(true)
         if (!result.truncated) throw new Error("expected truncation")
@@ -79,7 +79,7 @@ describe("ToolOutputStore", () => {
     withStore(({ store }) =>
       Effect.gen(function* () {
         const content = Array.from({ length: 10 }, (_, index) => `line-${index}`).join("\n")
-        const result = yield* store.truncate({ sessionID, toolCallID: "call-lines", content, maxLines: 4 })
+        const result = yield* store.truncate({ sessionID, toolCallID: "call-lines", content, maxLines: 8 })
 
         expect(result.truncated).toBe(true)
         if (!result.truncated) throw new Error("expected truncation")
@@ -102,8 +102,79 @@ describe("ToolOutputStore", () => {
 
         expect(result.truncated).toBe(true)
         if (!result.truncated) throw new Error("expected truncation")
-        const preview = result.content.split("\n\n... output truncated")[0]
-        expect(preview).toBe("one")
+        expect(result.content.split("\n").length).toBeLessThanOrEqual(1)
+      }),
+    ),
+  )
+
+  it.live("bounds aggregate text blocks and retains one complete managed resource", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const first = "HEAD-" + "x".repeat(30_000)
+        const second = "y".repeat(30_000) + "-TAIL"
+        const result = yield* store.bound({
+          sessionID,
+          toolCallID: "call-aggregate",
+          output: {
+            structured: { kind: "report" },
+            content: [
+              { type: "text", text: first },
+              { type: "text", text: second },
+            ],
+          },
+        })
+
+        expect(result.output.structured).toEqual({ kind: "report" })
+        expect(result.output.content).toHaveLength(1)
+        expect(result.output.content[0]).toMatchObject({ type: "text" })
+        if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
+        expect(Buffer.byteLength(result.output.content[0].text, "utf-8")).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
+        expect(result.output.content[0].text).toContain("HEAD-")
+        expect(result.output.content[0].text).toContain("-TAIL")
+        expect(result.resources).toHaveLength(1)
+        expect(
+          (yield* store.read({ sessionID, uri: result.resources[0]!.uri, limit: ToolOutputStore.MAX_READ_BYTES }))
+            .content,
+        ).toBe(`${first}\n\n${second}`.slice(0, ToolOutputStore.MAX_READ_BYTES))
+      }),
+    ),
+  )
+
+  it.live("uses bounded text for oversized structured-only model output", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const structured = { text: "x".repeat(ToolOutputStore.MAX_BYTES) }
+        const result = yield* store.bound({
+          sessionID,
+          toolCallID: "call-structured",
+          output: { structured, content: [] },
+        })
+
+        expect(result.output.structured).toBe(structured)
+        expect(result.output.content[0]?.type).toBe("text")
+        expect(result.resources).toHaveLength(1)
+        expect((yield* store.read({ sessionID, uri: result.resources[0]!.uri })).content).toBe(
+          JSON.stringify(structured).slice(0, ToolOutputStore.MAX_READ_BYTES),
+        )
+      }),
+    ),
+  )
+
+  it.live("degrades to explicitly lossy bounded output when retention fails", () =>
+    withStore(({ root, store, fs }) =>
+      Effect.gen(function* () {
+        yield* fs.writeFileString(path.join(root, "tool-output"), "blocks managed directory creation")
+        const result = yield* store.bound({
+          sessionID,
+          toolCallID: "call-lossy",
+          output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
+        })
+
+        expect(result.resources).toEqual([])
+        expect(result.output.content[0]?.type).toBe("text")
+        if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
+        expect(result.output.content[0].text).toContain("could not be retained")
+        expect(Buffer.byteLength(result.output.content[0].text, "utf-8")).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
       }),
     ),
   )

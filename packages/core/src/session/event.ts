@@ -4,6 +4,7 @@ import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { NonNegativeInt } from "../schema"
 import { ToolOutput } from "../tool-output"
+import { ToolOutputStore } from "../tool-output-store"
 import { V2Schema } from "../v2-schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionSchema } from "./schema"
@@ -366,6 +367,7 @@ export namespace Tool {
       ...ToolBase,
       structured: ToolOutput.Structured,
       content: Schema.Array(ToolOutput.Content),
+      resources: Schema.Array(ToolOutputStore.Resource).pipe(Schema.optional),
       result: Schema.Unknown.pipe(Schema.optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,

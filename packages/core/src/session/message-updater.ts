@@ -327,6 +327,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 input: match.state.input,
                 structured: event.data.structured,
                 content: [...event.data.content],
+                resources: event.data.resources ? [...event.data.resources] : [],
                 result: event.data.result,
               }),
             )

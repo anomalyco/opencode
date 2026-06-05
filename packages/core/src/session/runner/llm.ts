@@ -10,6 +10,7 @@ import { Service, StepLimitExceededError } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { ToolRegistry } from "../../tool/registry"
+import type { ToolOutputStore } from "../../tool-output-store"
 import { SessionRunnerModel } from "./model"
 import { Database } from "../../database/database"
 import { SessionInput } from "../input"
@@ -168,33 +169,37 @@ export const layer = Layer.effect(
         },
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
-      const publish = (event: LLMEvent) => withPublication(publisher.publish(event))
+      const publish = (event: LLMEvent, resources: ReadonlyArray<ToolOutputStore.Resource> = []) =>
+        withPublication(publisher.publish(event, resources))
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
-            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
-              Effect.catchCause((cause) => {
-                if (isQuestionRejected(cause)) return Effect.failCause(cause)
-                return Effect.succeed({
-                  result: { type: "error" as const, value: String(Cause.squash(cause)) },
-                  output: undefined,
-                })
-              }),
-              Effect.flatMap((settlement) =>
-                publish(
-                  LLMEvent.toolResult({
-                    id: event.id,
-                    name: event.name,
-                    result: settlement.result,
-                    output: settlement.output,
-                  }),
+            yield* Effect.uninterruptibleMask((restore) =>
+              restore(tools.settle({ sessionID: session.id, call: event })).pipe(
+                Effect.catchCause((cause) => {
+                  if (isQuestionRejected(cause) || Cause.hasInterrupts(cause)) return Effect.failCause(cause)
+                  return Effect.succeed({
+                    result: { type: "error" as const, value: String(Cause.squash(cause)) },
+                    output: undefined,
+                    resources: [],
+                  })
+                }),
+                Effect.flatMap((settlement) =>
+                  publish(
+                    LLMEvent.toolResult({
+                      id: event.id,
+                      name: event.name,
+                      result: settlement.result,
+                      output: settlement.output,
+                    }),
+                    settlement.resources ?? [],
+                  ),
                 ),
               ),
-              FiberSet.run(toolFibers),
-            )
+            ).pipe(FiberSet.run(toolFibers))
           }),
         ),
         Effect.ensuring(withPublication(publisher.flush())),

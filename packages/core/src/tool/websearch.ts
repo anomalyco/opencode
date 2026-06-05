@@ -199,6 +199,7 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
+        resources: (output) => (output.resource ? [output.resource] : []),
         execute: ({ parameters, sessionID, call, assertPermission }) => {
           const provider = selectProvider(sessionID, config, config.provider)
           return Effect.gen(function* () {

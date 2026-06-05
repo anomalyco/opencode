@@ -8,6 +8,7 @@ import { Global } from "./global"
 import { NonNegativeInt, PositiveInt } from "./schema"
 import { SessionSchema } from "./session/schema"
 import { Identifier } from "./util/identifier"
+import type { ToolOutput } from "@opencode-ai/llm"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024
@@ -78,6 +79,17 @@ export type TruncateResult =
   | { readonly content: string; readonly truncated: false }
   | { readonly content: string; readonly truncated: true; readonly resource: Resource }
 
+export interface BoundInput {
+  readonly sessionID: SessionSchema.ID
+  readonly toolCallID: string
+  readonly output: ToolOutput
+}
+
+export interface BoundResult {
+  readonly output: ToolOutput
+  readonly resources: ReadonlyArray<Resource>
+}
+
 interface Record {
   readonly version: 1
   readonly id: string
@@ -94,6 +106,7 @@ export interface Interface {
   readonly limits: () => Effect.Effect<{ readonly maxLines: number; readonly maxBytes: number }>
   readonly write: (input: WriteInput) => Effect.Effect<Resource>
   readonly truncate: (input: TruncateInput) => Effect.Effect<TruncateResult>
+  readonly bound: (input: BoundInput) => Effect.Effect<BoundResult>
   readonly read: (
     input: ReadInput,
   ) => Effect.Effect<Page, AccessDeniedError | InvalidResourceError | ResourceNotFoundError>
@@ -178,6 +191,14 @@ const preview = (text: string, maxLines: number, maxBytes: number) => {
   return { head: takePrefix(sampled, headBytes), tail: takeSuffix(sampled, tailBytes) }
 }
 
+const boundedPreview = (text: string, marker: string, maxLines: number, maxBytes: number) => {
+  const markerOnly = takePrefix(marker, maxBytes).split("\n").slice(0, maxLines).join("\n")
+  const markerBytes = Buffer.byteLength(marker, "utf-8")
+  if (maxLines <= 4 || maxBytes <= markerBytes + 4) return markerOnly
+  const bounded = preview(text, maxLines - 4, maxBytes - markerBytes - 4)
+  return bounded.tail ? `${bounded.head}\n\n${marker}\n\n${bounded.tail}` : `${bounded.head}\n\n${marker}`
+}
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -248,13 +269,54 @@ export const layer = Layer.effect(
         return { content: input.content, truncated: false } as const
       }
       const resource = yield* write(input)
-      const bounded = preview(input.content, maxLines, maxBytes)
       const marker = `... output truncated; full content available as ${resource.uri} ...`
       return {
-        content: bounded.tail ? `${bounded.head}\n\n${marker}\n\n${bounded.tail}` : `${bounded.head}\n\n${marker}`,
+        content: boundedPreview(input.content, marker, maxLines, maxBytes),
         truncated: true,
         resource,
       } as const
+    })
+
+    const bound = Effect.fn("ToolOutputStore.bound")(function* (input: BoundInput) {
+      const text = input.output.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n\n")
+      const structured = yield* Effect.sync(() => JSON.stringify(input.output.structured)).pipe(
+        Effect.catch(() => Effect.succeed(String(input.output.structured))),
+      )
+      const content = text || input.output.content.length > 0 ? text : structured
+      if (content === undefined) return { output: input.output, resources: [] }
+
+      const truncated = yield* truncate({
+        sessionID: input.sessionID,
+        toolCallID: input.toolCallID,
+        content,
+        mime: "text/plain",
+        name: `${input.toolCallID}.txt`,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("Unable to retain complete tool output", cause).pipe(
+            Effect.andThen(limits()),
+            Effect.map(({ maxLines, maxBytes }) => {
+              const marker = "... output truncated; omitted content could not be retained ..."
+              return {
+                content: boundedPreview(content, marker, maxLines, maxBytes),
+                truncated: true as const,
+              }
+            }),
+          ),
+        ),
+      )
+      if (!truncated.truncated) return { output: input.output, resources: [] }
+
+      return {
+        output: {
+          structured: input.output.structured,
+          content: [
+            { type: "text" as const, text: truncated.content },
+            ...input.output.content.filter((item) => item.type === "file"),
+          ],
+        },
+        resources: "resource" in truncated ? [truncated.resource] : [],
+      }
     })
 
     const read = Effect.fn("ToolOutputStore.read")(function* (input: ReadInput) {
@@ -345,7 +407,7 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ limits, write, truncate, read, cleanup })
+    return Service.of({ limits, write, truncate, bound, read, cleanup })
   }),
 )
 
