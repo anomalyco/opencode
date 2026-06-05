@@ -1,11 +1,58 @@
 @ECOSYSTEM.md
 
-- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
-- The llama-skein local provider API is design-first and owned by `/Users/andreas/dev/llama-swap/contracts/llama-skein.openapi.json`; read `/Users/andreas/dev/llama-swap/docs/openapi-contract.md` before changing llama-skein provider integration.
-- To regenerate the llama-skein TypeScript client, run `bun run build:llama-skein-client` from `packages/opencode`; generated files live in `packages/opencode/src/local/llama-skein/gen/`.
+## Ecosystem position
+
+This is a fork of opencode. It adds local provider discovery (mDNS + LAN scan) and
+the `--agent` flag for role-based agent sessions. It is the **agent runner** in the
+Skein ecosystem — skein supervisor calls it; it calls llama-skein for inference.
+
+```
+skein supervisor → opencode (this repo) → llama-skein (inference proxy)
+```
+
+## Multi-repo rules — read before touching provider or agent code
+
+### llama-skein client (TypeScript)
+
+- The llama-skein API is design-first: `~/dev/llama-swap/contracts/llama-skein.openapi.json` is the source of truth.
+- Read `~/dev/llama-swap/docs/openapi-contract.md` before changing `src/local/llama-skein/`.
+- Generated types live in `packages/opencode/src/local/llama-skein/gen/` — never edit these by hand.
+- To regenerate: `bun run build:llama-skein-client` from `packages/opencode`
+- If the OpenAPI spec changed in llama-skein, regenerate before writing callers.
+
+### `--agent` flag and session run API
+
+- The `--agent` flag in `src/cli/cmd/run.ts` is a fork-specific addition. **Never remove it.**
+- skein's supervisor dispatches agents via `opencode run --agent <role> "/skein-<cmd> <slug>"`.
+- If the run API shape changes, update `RunAgent()` in `~/dev/skein/internal/supervisor/`.
+
+### mDNS + LAN discovery (`src/local/`)
+
+- `src/local/` is the biggest fork-specific addition. Protect it during upstream syncs.
+- llama-skein registers itself via mDNS; opencode's `src/local/mdns.ts` discovers it.
+- Changes to llama-skein mDNS service names or ports must be reflected here.
+
+### Upstream sync
+
+- Remote `upstream` → `anomalyco/opencode`, branch `dev`. Gap is 500-700 commits — **do not rebase**.
+- Use `bun run sync-upstream` (dry run) / `bun run sync-upstream:apply` for merges.
+- See `~/dev/skein/docs/ECOSYSTEM.md` for the full sync policy.
+
+## Code generation
+
+```bash
+# Regenerate llama-skein TypeScript client (run from packages/opencode)
+bun run build:llama-skein-client
+# Output: packages/opencode/src/local/llama-skein/gen/
+
+# Regenerate JavaScript SDK
+./packages/sdk/js/script/build.ts
+```
+
+## Branch and commit conventions
+
+- Default branch is `dev`. Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 - Do not manually mirror llama-skein OpenAPI schemas in handwritten TypeScript when generated types exist.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
 ## Commits and PR Titles
 
