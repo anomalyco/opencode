@@ -35,6 +35,14 @@ export type ImageAttachment = {
   readonly data: string
 }
 
+export type ShellReplay = {
+  readonly terminalId: string
+  readonly command: string
+  readonly cwd?: string
+  readonly output: string
+  readonly exitCode?: number | null
+}
+
 export function toToolKind(toolName: string): ToolKind {
   const tool = toolName.toLocaleLowerCase()
 
@@ -127,6 +135,7 @@ export function pendingToolCall(input: {
   readonly toolName: string
   readonly rawInput?: ToolInput
   readonly title?: string
+  readonly replay?: ShellReplay
 }): ToolCall {
   const rawInput = input.rawInput ?? {}
   return {
@@ -136,6 +145,16 @@ export function pendingToolCall(input: {
     status: "pending",
     locations: [],
     rawInput,
+    ...(input.replay
+      ? {
+          _meta: {
+            terminal_info: {
+              terminal_id: input.replay.terminalId,
+              cwd: input.replay.cwd,
+            },
+          },
+        }
+      : {}),
   }
 }
 
@@ -189,7 +208,30 @@ export function completedToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly state: CompletedToolState & { readonly title: string }
+  readonly replay?: ShellReplay
 }): ToolCallUpdate {
+  if (input.replay) {
+    return {
+      toolCallId: input.toolCallId,
+      status: "completed",
+      kind: toToolKind(input.toolName),
+      title: toolTitle(input.toolName, input.state.input, input.state.title),
+      content: [{ type: "terminal", terminalId: input.replay.terminalId }],
+      rawInput: input.state.input,
+      rawOutput: completedToolRawOutput(input.state),
+      _meta: {
+        terminal_output: {
+          terminal_id: input.replay.terminalId,
+          data: input.replay.output,
+        },
+        terminal_exit: {
+          terminal_id: input.replay.terminalId,
+          exit_code: input.replay.exitCode ?? undefined,
+        },
+      },
+    }
+  }
+
   return {
     toolCallId: input.toolCallId,
     status: "completed",
@@ -261,6 +303,28 @@ export function shellOutputSnapshot(state: { readonly metadata?: unknown }) {
   return stringValue((state.metadata as Record<string, unknown>).output)
 }
 
+export function shellReplay(input: {
+  readonly sessionId: string
+  readonly messageId: string
+  readonly partId: string
+  readonly toolCallId: string
+  readonly toolName: string
+  readonly cwd?: string
+  readonly state: CompletedToolState
+}): ShellReplay | undefined {
+  if (!isShellTool(input.toolName)) return undefined
+  if (!input.state.output) return undefined
+  if (input.state.attachments?.length) return undefined
+
+  return {
+    terminalId: terminalReplayId(input),
+    command: stringValue(input.state.input.command) ?? input.toolName,
+    cwd: input.cwd,
+    output: input.state.output,
+    exitCode: exitCode(input.state.metadata),
+  }
+}
+
 export const mapToolKind = toToolKind
 export const extractLocations = toLocations
 export const buildCompletedToolContent = completedToolContent
@@ -271,6 +335,7 @@ export const buildRunningToolUpdate = runningToolUpdate
 export const buildDuplicateRunningToolUpdate = duplicateRunningToolUpdate
 export const buildCompletedToolUpdate = completedToolUpdate
 export const buildErrorToolUpdate = errorToolUpdate
+export const buildShellReplay = shellReplay
 
 function locationFrom(...values: unknown[]): ToolCallLocation[] {
   return Array.from(
@@ -323,6 +388,28 @@ function terminalContents(metadata: unknown): ToolCallContent[] {
 function toolTitle(toolName: string, input: ToolInput, fallback: string) {
   if (toToolKind(toolName) !== "execute") return fallback
   return stringValue(input.command) ?? fallback
+}
+
+function isShellTool(toolName: string) {
+  const tool = toolName.toLocaleLowerCase()
+  return tool === "bash" || tool === "shell"
+}
+
+function terminalReplayId(input: {
+  readonly sessionId: string
+  readonly messageId: string
+  readonly partId: string
+  readonly toolCallId: string
+}) {
+  return ["opencode", "replay", input.sessionId, input.messageId, input.partId, input.toolCallId]
+    .map((item) => item.replace(/[^a-zA-Z0-9_-]/g, "_"))
+    .join("_")
+}
+
+function exitCode(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return undefined
+  const value = (metadata as Record<string, unknown>).exit
+  return typeof value === "number" ? value : undefined
 }
 
 function dataUrlImage(attachment: ToolAttachment) {

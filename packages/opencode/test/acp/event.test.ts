@@ -581,6 +581,58 @@ describe("acp event routing", () => {
     ])
   })
 
+  it("replays completed shell output through Zed terminal metadata", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_shell_replay", cwd: "/workspace" }))
+
+    await harness.subscription.replayMessage(
+      assistantToolMessage(
+        completedTool("ses_shell_replay", "call_shell_replay", "replayed output", [], {
+          input: { command: "printf replayed" },
+          metadata: { exit: 0 },
+        }),
+      ),
+    )
+
+    const updates = toolUpdates(harness.updates)
+    expect(updates).toHaveLength(2)
+    expect(updates[0]?.update).toMatchObject({
+      sessionUpdate: "tool_call",
+      toolCallId: "call_shell_replay",
+      title: "printf replayed",
+      _meta: {
+        terminal_info: {
+          terminal_id:
+            "opencode_replay_ses_shell_replay_msg_call_shell_replay_part_call_shell_replay_call_shell_replay",
+          cwd: "/workspace",
+        },
+      },
+    })
+    expect(updates[1]?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_shell_replay",
+      status: "completed",
+      content: [
+        {
+          type: "terminal",
+          terminalId: "opencode_replay_ses_shell_replay_msg_call_shell_replay_part_call_shell_replay_call_shell_replay",
+        },
+      ],
+      _meta: {
+        terminal_output: {
+          terminal_id:
+            "opencode_replay_ses_shell_replay_msg_call_shell_replay_part_call_shell_replay_call_shell_replay",
+          data: "replayed output",
+        },
+        terminal_exit: {
+          terminal_id:
+            "opencode_replay_ses_shell_replay_msg_call_shell_replay_part_call_shell_replay_call_shell_replay",
+          exit_code: 0,
+        },
+      },
+    })
+  })
+
   it("dedupes shell output snapshots while still sending status-only running updates", async () => {
     const harness = createHarness()
     await Effect.runPromise(harness.session.create({ id: "ses_shell", cwd: "/workspace" }))

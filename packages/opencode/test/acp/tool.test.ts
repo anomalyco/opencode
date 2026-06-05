@@ -7,6 +7,7 @@ import {
   extractImageAttachments,
   imageContents,
   runningToolUpdate,
+  shellReplay,
   shellOutputSnapshot,
   toLocations,
   toToolKind,
@@ -232,6 +233,58 @@ describe("acp tool conversion", () => {
         metadata: { terminalId: "term_1" },
       }),
     ).toEqual([{ type: "terminal", terminalId: "term_1" }])
+  })
+
+  test("builds terminal replay metadata for completed shell output", () => {
+    const replay = shellReplay({
+      sessionId: "ses_1",
+      messageId: "msg_1",
+      partId: "part_1",
+      toolCallId: "call_1",
+      toolName: "bash",
+      cwd: "/workspace",
+      state: {
+        status: "completed",
+        input: { command: "printf done" },
+        output: "done",
+        metadata: { exit: 0 },
+      },
+    })
+
+    expect(replay).toEqual({
+      terminalId: "opencode_replay_ses_1_msg_1_part_1_call_1",
+      command: "printf done",
+      cwd: "/workspace",
+      output: "done",
+      exitCode: 0,
+    })
+
+    expect(
+      completedToolUpdate({
+        toolCallId: "call_1",
+        toolName: "bash",
+        state: {
+          status: "completed",
+          input: { command: "printf done" },
+          output: "done",
+          title: "bash",
+          metadata: { exit: 0 },
+        },
+        replay,
+      }),
+    ).toMatchObject({
+      content: [{ type: "terminal", terminalId: "opencode_replay_ses_1_msg_1_part_1_call_1" }],
+      _meta: {
+        terminal_output: {
+          terminal_id: "opencode_replay_ses_1_msg_1_part_1_call_1",
+          data: "done",
+        },
+        terminal_exit: {
+          terminal_id: "opencode_replay_ses_1_msg_1_part_1_call_1",
+          exit_code: 0,
+        },
+      },
+    })
   })
 
   test("uses shell command instead of description for execute tool titles", () => {

@@ -18,8 +18,10 @@ import {
   errorToolUpdate,
   pendingToolCall,
   runningToolUpdate,
+  shellReplay,
   shellOutputSnapshot,
   completedToolUpdate,
+  type ShellReplay,
 } from "./tool"
 import { ACPTerminal } from "./terminal"
 
@@ -101,7 +103,20 @@ export class Subscription {
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
       if (part.type === "tool") {
-        await this.handleToolPart(message.info.sessionID, part)
+        await this.handleToolPart(message.info.sessionID, part, {
+          replay:
+            part.state.status === "completed"
+              ? shellReplay({
+                  sessionId: message.info.sessionID,
+                  messageId: part.messageID,
+                  partId: part.id,
+                  toolCallId: part.callID,
+                  toolName: part.tool,
+                  cwd: "path" in message.info ? message.info.path.cwd : undefined,
+                  state: part.state,
+                })
+              : undefined,
+        })
         continue
       }
       await this.replayContentPart(message, part)
@@ -254,8 +269,8 @@ export class Subscription {
     )
   }
 
-  private async handleToolPart(sessionId: string, part: ToolPart) {
-    await this.toolStart(sessionId, part)
+  private async handleToolPart(sessionId: string, part: ToolPart, options: { readonly replay?: ShellReplay } = {}) {
+    await this.toolStart(sessionId, part, options.replay)
 
     switch (part.state.status) {
       case "pending":
@@ -277,6 +292,7 @@ export class Subscription {
                 toolCallId: part.callID,
                 toolName: part.tool,
                 state: part.state,
+                replay: options.replay,
               }),
             },
           })
@@ -418,7 +434,7 @@ export class Subscription {
     })
   }
 
-  private async toolStart(sessionId: string, part: ToolPart) {
+  private async toolStart(sessionId: string, part: ToolPart, replay?: ShellReplay) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
     const rawInput = part.state.status === "pending" ? undefined : part.state.input
@@ -432,6 +448,7 @@ export class Subscription {
           toolName: part.tool,
           rawInput,
           title,
+          replay,
         }),
       },
     })
