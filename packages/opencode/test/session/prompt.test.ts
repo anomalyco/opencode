@@ -3044,13 +3044,261 @@ it.instance("auto-compacts zero-token empty unknown responses after prior contex
   }),
 )
 
-it.instance("returns an error for fresh zero-token empty unknown responses without context pressure", () =>
+it.instance("auto-compacts zero-token empty responses when the current request estimate exceeds the context limit", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 100, output: 10 }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt current request pressure compaction" })
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.text("summary")
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "large request ".repeat(2_000) }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    expect(yield* llm.calls).toBe(3)
+
+    const messages = yield* sessions.messages({ sessionID: session.id })
+    expect(compactionParts(messages)).toHaveLength(1)
+    expect(compactionParts(messages)[0]).toMatchObject({ type: "compaction", auto: true, overflow: true })
+  }),
+)
+
+it.instance("auto-compacts after manual compaction when the current request estimate is still too large", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 100, output: 10 }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt current request pressure after manual compact" })
+    const manual = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID: session.id,
+      agent: "build",
+      model: ref,
+      time: { created: Date.now() },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: manual.id,
+      sessionID: session.id,
+      type: "compaction",
+      auto: false,
+    })
+    const summary = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      role: "assistant",
+      parentID: manual.id,
+      sessionID: session.id,
+      mode: "build",
+      agent: "build",
+      summary: true,
+      cost: 0,
+      path: { cwd: "/tmp", root: "/tmp" },
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: ref.modelID,
+      providerID: ref.providerID,
+      finish: "stop",
+      time: { created: Date.now(), completed: Date.now() },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: summary.id,
+      sessionID: session.id,
+      type: "text",
+      text: "manual summary",
+    })
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.text("summary")
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "large request after manual compact ".repeat(2_000) }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    expect(yield* llm.calls).toBe(3)
+
+    const messages = yield* sessions.messages({ sessionID: session.id })
+    expect(compactionParts(messages)).toHaveLength(2)
+    expect(compactionParts(messages).at(-1)).toMatchObject({ type: "compaction", auto: true, overflow: true })
+  }),
+)
+
+it.instance("does not use missing model context limit alone to auto-compact zero-token empty responses", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 0, output: 0 }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt missing context limit empty error" })
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "large unknown limit request ".repeat(2_000) }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("error")
+      expect(JSON.stringify(result.info.error)).toContain("empty response")
+      expect(JSON.stringify(result.info.error)).toContain("continuing silently")
+    }
+    expect(yield* llm.calls).toBe(3)
+
+    const messages = yield* sessions.messages({ sessionID: session.id })
+    expect(compactionParts(messages)).toHaveLength(0)
+  }),
+)
+
+it.instance("does not auto-compact zero-token empty responses when automatic compaction is disabled", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => ({
+      ...providerCfgWithLimit(url, { context: 100, output: 10 }),
+      compaction: { auto: false },
+    }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt disabled auto-compaction empty error" })
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "large disabled auto-compaction request ".repeat(2_000) }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("error")
+      expect(JSON.stringify(result.info.error)).toContain("empty response")
+      expect(JSON.stringify(result.info.error)).toContain("continuing silently")
+    }
+    expect(yield* llm.calls).toBe(3)
+
+    const messages = yield* sessions.messages({ sessionID: session.id })
+    expect(compactionParts(messages)).toHaveLength(0)
+  }),
+)
+
+it.instance("retries a fresh zero-token empty response once and returns the recovered response", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt empty retry once" })
+    const retryStatuses: SessionStatus.Info[] = []
+    const off = yield* events.listen((evt) => {
+      if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+      const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+      if (data.sessionID === session.id && data.status.type === "retry") retryStatuses.push(data.status)
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => off)
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Recover from empty" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    expect(yield* llm.calls).toBe(2)
+    expect(retryStatuses).toHaveLength(1)
+    expect(retryStatuses[0]).toMatchObject({
+      type: "retry",
+      attempt: 1,
+      message: "Model returned an empty response; retrying 1/2",
+    })
+
+    const messages = yield* sessions.messages({ sessionID: session.id })
+    expect(messages.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
+    expect(compactionParts(messages)).toHaveLength(0)
+  }),
+)
+
+it.instance("retries fresh zero-token empty responses twice and returns the recovered response", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt empty retry twice" })
+    const retryStatuses: SessionStatus.Info[] = []
+    const off = yield* events.listen((evt) => {
+      if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+      const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+      if (data.sessionID === session.id && data.status.type === "retry") retryStatuses.push(data.status)
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => off)
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Recover from two empties" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    expect(yield* llm.calls).toBe(3)
+    expect(retryStatuses.map((item) => item.type === "retry" ? item.attempt : undefined)).toEqual([1, 2])
+    expect(retryStatuses.map((item) => item.type === "retry" ? item.message : undefined)).toEqual([
+      "Model returned an empty response; retrying 1/2",
+      "Model returned an empty response; retrying 2/2",
+    ])
+
+    const messages = yield* sessions.messages({ sessionID: session.id })
+    expect(messages.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
+    expect(compactionParts(messages)).toHaveLength(0)
+  }),
+)
+
+it.instance("returns an error after fresh zero-token empty response retries are exhausted", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
     const prompt = yield* SessionPrompt.Service
     const sessions = yield* Session.Service
     const session = yield* sessions.create({ title: "Prompt fresh empty unknown error" })
+    const retryStatuses: SessionStatus.Info[] = []
+    const off = yield* events.listen((evt) => {
+      if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+      const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+      if (data.sessionID === session.id && data.status.type === "retry") retryStatuses.push(data.status)
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => off)
 
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
     yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
 
     const result = yield* prompt.prompt({
@@ -3065,7 +3313,12 @@ it.instance("returns an error for fresh zero-token empty unknown responses witho
       expect(JSON.stringify(result.info.error)).toContain("empty response")
       expect(JSON.stringify(result.info.error)).toContain("continuing silently")
     }
-    expect(yield* llm.calls).toBe(1)
+    expect(yield* llm.calls).toBe(3)
+    expect(retryStatuses.map((item) => item.type === "retry" ? item.attempt : undefined)).toEqual([1, 2])
+
+    const messages = yield* sessions.messages({ sessionID: session.id })
+    expect(messages.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
+    expect(compactionParts(messages)).toHaveLength(0)
   }),
 )
 
@@ -3119,6 +3372,8 @@ it.instance("returns an error for whitespace-only assistant output without conte
     const session = yield* sessions.create({ title: "Prompt whitespace-only error" })
 
     yield* llm.text("   \n\t")
+    yield* llm.text("   \n\t")
+    yield* llm.text("   \n\t")
 
     const result = yield* prompt.prompt({
       sessionID: session.id,
@@ -3132,7 +3387,7 @@ it.instance("returns an error for whitespace-only assistant output without conte
       expect(JSON.stringify(result.info.error)).toContain("empty response")
       expect(JSON.stringify(result.info.error)).toContain("continuing silently")
     }
-    expect(yield* llm.calls).toBe(1)
+    expect(yield* llm.calls).toBe(3)
   }),
 )
 

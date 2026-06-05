@@ -63,7 +63,8 @@ import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
-import { isOverflow } from "./overflow"
+import { isOverflow, usable } from "./overflow"
+import { Token } from "@/util/token"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -80,6 +81,7 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
+const EMPTY_RESPONSE_RETRY_LIMIT = 2
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
@@ -107,14 +109,28 @@ function hasContextPressure(msgs: SessionV1.WithParts[], model: Provider.Model, 
     .some((msg) => msg.info.role === "assistant" && (msg.info.finish === "length" || isOverflow({ cfg, tokens: msg.info.tokens, model })))
 }
 
+function hasRequestContextPressure(input: {
+  cfg: Config.Info
+  model: Provider.Model
+  system: string[]
+  messages: unknown[]
+  outputTokenMax?: number
+}) {
+  if (input.cfg.compaction?.auto === false) return false
+  if (input.model.limit.context === 0) return false
+  return Token.estimate(JSON.stringify({ system: input.system, messages: input.messages })) >= usable(input)
+}
+
+function hasCompactionContinueMetadata(msg: SessionV1.WithParts | undefined) {
+  return (
+    msg?.parts.some((part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true) ??
+    false
+  )
+}
+
 function isAutomaticCompactionContinuation(msgs: SessionV1.WithParts[], lastUserMsg: SessionV1.WithParts | undefined) {
   if (!lastUserMsg) return false
-  if (
-    !lastUserMsg.parts.some(
-      (part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true,
-    )
-  )
-    return false
+  if (!hasCompactionContinueMetadata(lastUserMsg)) return false
 
   const compaction = msgs.findLast(
     (msg) =>
@@ -1589,22 +1605,52 @@ export const layer = Layer.effect(
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-            const result = yield* handle.process({
+            const requestMessages = [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])]
+            const cfg = yield* config.get().pipe(Effect.provideService(Config.Service, config))
+            const hasPreRequestContextPressure = hasRequestContextPressure({
+              cfg,
+              model,
+              system,
+              messages: requestMessages,
+              outputTokenMax: flags.outputTokenMax,
+            })
+            const streamInput = {
               user: lastUser,
               agent,
               permission: session.permission,
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+              messages: requestMessages,
               tools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
-            })
-            const currentParts = yield* MessageV2.parts(handle.message.id).pipe(
-              Effect.provideService(Database.Service, database),
-            )
-            const isEmpty = isEmptyAssistantResponse(handle.message, currentParts)
+              toolChoice: format.type === "json_schema" ? ("required" as const) : undefined,
+            }
+            const isCompactionContinue = isAutomaticCompactionContinuation(msgs, lastUserMsg)
+            const isCompactionContinuePrompt = hasCompactionContinueMetadata(lastUserMsg)
+            let result: "compact" | "stop" | "continue" = "continue"
+            let currentParts: SessionV1.Part[] = []
+            let isEmpty = false
+            for (let attempt = 0; attempt <= EMPTY_RESPONSE_RETRY_LIMIT; attempt++) {
+              result = yield* handle.process(streamInput)
+              currentParts = yield* MessageV2.parts(handle.message.id).pipe(
+                Effect.provideService(Database.Service, database),
+              )
+              isEmpty = isEmptyAssistantResponse(handle.message, currentParts)
+              if (!isEmpty) break
+              if (result !== "continue") break
+              if (isCompactionContinuePrompt) break
+              if (isCompactionContinue) break
+              if (hasPreRequestContextPressure || hasContextPressure(msgs, model, cfg)) break
+              if (attempt === EMPTY_RESPONSE_RETRY_LIMIT) break
+
+              yield* status.set(sessionID, {
+                type: "retry",
+                attempt: attempt + 1,
+                message: `Model returned an empty response; retrying ${attempt + 1}/${EMPTY_RESPONSE_RETRY_LIMIT}`,
+                next: Date.now(),
+              })
+            }
 
             if (structured !== undefined) {
               handle.message.structured = structured
@@ -1625,7 +1671,6 @@ export const layer = Layer.effect(
               }
             }
 
-            const isCompactionContinue = isAutomaticCompactionContinuation(msgs, lastUserMsg)
             if (isEmpty && isCompactionContinue) {
               handle.message.error = new NamedError.Unknown({
                 message: "Model returned an empty response after automatic compaction; stopping to avoid a compaction loop.",
@@ -1648,8 +1693,7 @@ export const layer = Layer.effect(
             }
 
             if (isEmpty) {
-              const cfg = yield* config.get().pipe(Effect.provideService(Config.Service, config))
-              if (hasContextPressure(msgs, model, cfg)) {
+              if (hasPreRequestContextPressure || hasContextPressure(msgs, model, cfg)) {
                 const compact = yield* compaction.create({
                   sessionID,
                   agent: lastUser.agent,
