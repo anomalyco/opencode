@@ -30,20 +30,12 @@ describe("ProviderError.isExpiredCredentials", () => {
     ).toBe(true)
   })
 
-  test("matches ExpiredTokenException in error message", () => {
+  test("does not match ExpiredTokenException in message only — must be in structured __type field", () => {
     expect(
       ProviderError.isExpiredCredentials(
         expiredError({ message: "ExpiredTokenException: Token has expired" }),
       ),
-    ).toBe(true)
-  })
-
-  test("matches ExpiredTokenException on 403", () => {
-    expect(
-      ProviderError.isExpiredCredentials(
-        expiredError({ message: "ExpiredTokenException", statusCode: 403 }),
-      ),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   test("matches ExpiredTokenException as structured __type field in responseBody (real SDK behavior)", () => {

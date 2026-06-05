@@ -131,6 +131,9 @@ export const layer = Layer.effect(
     const sdks = new Map<string, SDK>()
 
     function buildLanguageKey(model: ModelV2.Info) {
+      // \x00 as separator: ProviderV2.ID and ModelV2.ID are validated as branded strings
+      // from config/models.dev and cannot contain null bytes in practice, making this
+      // prefix unambiguous for eviction matching.
       return `${model.providerID}\x00${model.id}\x00${model.request.variant ?? "default"}`
     }
 
@@ -163,7 +166,9 @@ export const layer = Layer.effect(
           })
 
         const options = prepareOptions(model, model.api.package)
-        const sdkKey = JSON.stringify({ providerID: model.providerID, api: model.api, options })
+        const sdkKey = JSON.stringify({ providerID: model.providerID, api: model.api, options }, (_, v) =>
+          typeof v === "function" ? undefined : v,
+        )
         const sdk =
           sdks.get(sdkKey) ??
           (yield* plugin

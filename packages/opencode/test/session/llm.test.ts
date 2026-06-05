@@ -1935,6 +1935,36 @@ describe("session.llm.stream", () => {
   )
 })
 
+function llmLayerWithProviderSpy(evictionSpy: { count: number }) {
+  const spyLayer = Layer.effect(
+    Provider.Service,
+    Effect.gen(function* () {
+      const inner = yield* Provider.Service
+      return Provider.Service.of({
+        ...inner,
+        evictLanguage: Effect.fn("SpyProvider.evictLanguage")((model) =>
+          Effect.gen(function* () {
+            evictionSpy.count++
+            yield* inner.evictLanguage(model)
+          }),
+        ),
+      })
+    }),
+  ).pipe(Layer.provide(Provider.defaultLayer))
+
+  return LLM.layer.pipe(
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(spyLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(
+      LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer))),
+    ),
+    Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(AISDK.defaultLayer),
+  )
+}
+
 describe("session.llm.expired-credentials-retry", () => {
   const openaiFixture = { providerID: "openai", modelID: "gpt-5.2" }
   const openaiConfig = () =>
@@ -1948,6 +1978,41 @@ describe("session.llm.expired-credentials-retry", () => {
   }
 
   const modelID = ModelV2.ID.make(loadFixture(openaiFixture.providerID, openaiFixture.modelID).model.id)
+
+  function retrySuccessChunks(modelApiId: string) {
+    return [
+      {
+        type: "response.created",
+        response: { id: "resp-retry", created_at: Math.floor(Date.now() / 1000), model: modelApiId, service_tier: null },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { type: "message", id: "item-retry", status: "in_progress", role: "assistant", content: [] },
+      },
+      {
+        type: "response.content_part.added",
+        item_id: "item-retry",
+        output_index: 0,
+        content_index: 0,
+        part: { type: "output_text", text: "", annotations: [] },
+      },
+      {
+        type: "response.output_text.delta",
+        item_id: "item-retry",
+        delta: "Hello from retry",
+        logprobs: null,
+      },
+      {
+        type: "response.completed",
+        response: {
+          incomplete_details: null,
+          usage: { input_tokens: 1, input_tokens_details: null, output_tokens: 4, output_tokens_details: null },
+          service_tier: null,
+        },
+      },
+    ]
+  }
 
   function makeStreamInput(resolved: Provider.Model): LLM.StreamInput {
     const sessionID = SessionID.make("session-expired-creds")
@@ -1982,41 +2047,8 @@ describe("session.llm.expired-credentials-retry", () => {
         const resolved = yield* Provider.use.getModel(ProviderV2.ID.make(openaiFixture.providerID), modelID)
         const apiPath = resolved.api.id.startsWith("gpt-") ? "/responses" : "/chat/completions"
 
-        const retrySuccessChunks = [
-          {
-            type: "response.created",
-            response: { id: "resp-retry", created_at: Math.floor(Date.now() / 1000), model: resolved.api.id, service_tier: null },
-          },
-          {
-            type: "response.output_item.added",
-            output_index: 0,
-            item: { type: "message", id: "item-retry", status: "in_progress", role: "assistant", content: [] },
-          },
-          {
-            type: "response.content_part.added",
-            item_id: "item-retry",
-            output_index: 0,
-            content_index: 0,
-            part: { type: "output_text", text: "", annotations: [] },
-          },
-          {
-            type: "response.output_text.delta",
-            item_id: "item-retry",
-            delta: "Hello from retry",
-            logprobs: null,
-          },
-          {
-            type: "response.completed",
-            response: {
-              incomplete_details: null,
-              usage: { input_tokens: 1, input_tokens_details: null, output_tokens: 4, output_tokens_details: null },
-              service_tier: null,
-            },
-          },
-        ]
-
         const firstRequest = waitRequest(apiPath, expiredTokenResponse())
-        const secondRequest = waitRequest(apiPath, createEventResponse(retrySuccessChunks, true))
+        const secondRequest = waitRequest(apiPath, createEventResponse(retrySuccessChunks(resolved.api.id), true))
 
         yield* drain(makeStreamInput(resolved))
 
@@ -2067,6 +2099,68 @@ describe("session.llm.expired-credentials-retry", () => {
 
         expect(result._tag).toBe("Failure")
         expect(state.queue.length).toBe(0)
+      }),
+    { config: openaiConfig },
+  )
+
+  it.instance(
+    "calls evictLanguage exactly once on expired credential error (eviction-retry coupling)",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make(openaiFixture.providerID), modelID)
+        const apiPath = resolved.api.id.startsWith("gpt-") ? "/responses" : "/chat/completions"
+
+        const evictionSpy = { count: 0 }
+
+        waitRequest(apiPath, expiredTokenResponse())
+        waitRequest(apiPath, createEventResponse(retrySuccessChunks(resolved.api.id), true))
+
+        yield* drainWith(llmLayerWithProviderSpy(evictionSpy), makeStreamInput(resolved))
+
+        expect(evictionSpy.count).toBe(1)
+      }),
+    { config: openaiConfig },
+  )
+
+  it.instance(
+    "does not call evictLanguage on non-expired-credential errors",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make(openaiFixture.providerID), modelID)
+        const apiPath = resolved.api.id.startsWith("gpt-") ? "/responses" : "/chat/completions"
+
+        const evictionSpy = { count: 0 }
+
+        waitRequest(
+          apiPath,
+          new Response(JSON.stringify({ error: { message: "Not Found", type: "not_found" } }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+
+        yield* drainWith(llmLayerWithProviderSpy(evictionSpy), makeStreamInput(resolved)).pipe(Effect.exit)
+
+        expect(evictionSpy.count).toBe(0)
+      }),
+    { config: openaiConfig },
+  )
+
+  it.instance(
+    "calls evictLanguage exactly once even when retry also fails with expired credentials",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make(openaiFixture.providerID), modelID)
+        const apiPath = resolved.api.id.startsWith("gpt-") ? "/responses" : "/chat/completions"
+
+        const evictionSpy = { count: 0 }
+
+        waitRequest(apiPath, expiredTokenResponse())
+        waitRequest(apiPath, expiredTokenResponse())
+
+        yield* drainWith(llmLayerWithProviderSpy(evictionSpy), makeStreamInput(resolved)).pipe(Effect.exit)
+
+        expect(evictionSpy.count).toBe(1)
       }),
     { config: openaiConfig },
   )

@@ -197,7 +197,6 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
 // otherwise valid credential) benefits from cache eviction.
 const EXPIRED_CREDENTIAL_MESSAGE_PATTERNS = [
   /the security token included in the request is expired/i,
-  /ExpiredTokenException/,
 ]
 
 function extractAwsErrorType(responseBody: string | undefined): string | undefined {

@@ -74,22 +74,24 @@ describe("AISDK.evict", () => {
     }),
   )
 
-  it.effect("evict does not remove entries for other models on same provider", () =>
-    Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
-      const aisdk = yield* AISDK.Service
-      const sdkCalls: string[] = []
-      yield* plugin.add(pluginWithCounter(sdkCalls))
+  it.effect(
+    "evict clears language cache for target model but not other models (language eviction is model-scoped, SDK eviction is provider-wide by design)",
+    () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
+        const sdkCalls: string[] = []
+        yield* plugin.add(pluginWithCounter(sdkCalls))
 
-      yield* aisdk.language(modelA1)
-      yield* aisdk.language(modelA2)
-      expect(sdkCalls).toHaveLength(2)
+        yield* aisdk.language(modelA1)
+        yield* aisdk.language(modelA2)
+        expect(sdkCalls).toHaveLength(2)
 
-      yield* aisdk.evict({ providerID: providerA, id: ModelV2.ID.make("model-1") })
+        yield* aisdk.evict({ providerID: providerA, id: ModelV2.ID.make("model-1") })
 
-      yield* aisdk.language(modelA2)
-      expect(sdkCalls).toHaveLength(2)
-    }),
+        yield* aisdk.language(modelA2)
+        expect(sdkCalls).toHaveLength(2)
+      }),
   )
 
   it.effect("evict does not remove entries for different providers", () =>
