@@ -138,6 +138,89 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    function groupPendingRequests<T extends { sessionID: string; id: string }>(requests: T[]) {
+      return requests
+        .toSorted((a, b) => {
+          const session = a.sessionID.localeCompare(b.sessionID)
+          if (session !== 0) return session
+          return a.id.localeCompare(b.id)
+        })
+        .reduce<Record<string, T[]>>((groups, request) => {
+          groups[request.sessionID] = [...(groups[request.sessionID] ?? []), request]
+          return groups
+        }, {})
+    }
+
+    function reconcilePendingPermissions(requests: PermissionRequest[]) {
+      setStore("permission", reconcile(groupPendingRequests(requests)))
+    }
+
+    function reconcilePendingQuestions(requests: QuestionRequest[]) {
+      setStore("question", reconcile(groupPendingRequests(requests)))
+    }
+
+    async function refreshPendingRequests() {
+      const workspace = project.workspace.current()
+      const [permissions, questions] = await Promise.all([
+        sdk.client.permission.list({ workspace }),
+        sdk.client.question.list({ workspace }),
+      ])
+
+      batch(() => {
+        reconcilePendingPermissions(permissions.data ?? [])
+        reconcilePendingQuestions(questions.data ?? [])
+      })
+    }
+
+    function dropPendingPermission(sessionID: string, requestID: string) {
+      const requests = store.permission[sessionID]
+      if (!requests) return
+      const match = Binary.search(requests, requestID, (r) => r.id)
+      if (!match.found) return
+      setStore(
+        "permission",
+        produce((draft) => {
+          const sessionRequests = draft[sessionID]
+          if (!sessionRequests) return
+          sessionRequests.splice(match.index, 1)
+          if (sessionRequests.length === 0) delete draft[sessionID]
+        }),
+      )
+    }
+
+    function dropPendingQuestion(sessionID: string, requestID: string) {
+      const requests = store.question[sessionID]
+      if (!requests) return
+      const match = Binary.search(requests, requestID, (r) => r.id)
+      if (!match.found) return
+      setStore(
+        "question",
+        produce((draft) => {
+          const sessionRequests = draft[sessionID]
+          if (!sessionRequests) return
+          sessionRequests.splice(match.index, 1)
+          if (sessionRequests.length === 0) delete draft[sessionID]
+        }),
+      )
+    }
+
+    function clearSessionCaches(sessionID: string) {
+      fullSyncedSessions.delete(sessionID)
+      setStore(
+        produce((draft) => {
+          delete draft.permission[sessionID]
+          delete draft.question[sessionID]
+          delete draft.session_status[sessionID]
+          delete draft.session_diff[sessionID]
+          delete draft.todo[sessionID]
+          for (const message of draft.message[sessionID] ?? []) {
+            delete draft.part[message.id]
+          }
+          delete draft.message[sessionID]
+        }),
+      )
+    }
+
     event.subscribe((event, { workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":
@@ -227,6 +310,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
 
         case "session.deleted": {
+          clearSessionCaches(event.properties.info.id)
           const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore(
@@ -488,6 +572,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
+            refreshPendingRequests(),
             project.workspace.sync(),
           ]).then(() => {
             setStore("status", "complete")
@@ -523,6 +608,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       },
       get path() {
         return project.instance.path()
+      },
+      pending: {
+        dropPermission: dropPendingPermission,
+        dropQuestion: dropPendingQuestion,
+        refresh: refreshPendingRequests,
       },
       session: {
         get(sessionID: string) {

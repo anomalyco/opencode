@@ -48,6 +48,8 @@ export function createFetch(override?: FetchHandler) {
     switch (url.pathname) {
       case "/agent":
       case "/command":
+      case "/permission":
+      case "/question":
       case "/experimental/workspace":
       case "/experimental/workspace/status":
       case "/formatter":
