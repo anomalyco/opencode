@@ -220,6 +220,17 @@ export const TaskTool = Tool.define(
           .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
       })
 
+      const notify = Effect.fn("TaskTool.notifyBackgroundResult")(function* (jobID: string) {
+        yield* background.wait({ id: jobID }).pipe(
+          Effect.flatMap((result) => {
+            if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
+            if (result.info?.status === "error") return inject("error", result.info.error ?? "")
+            return Effect.void
+          }),
+          Effect.forkIn(scope, { startImmediately: true }),
+        )
+      })
+
       if (yield* background.extend({ id: nextSession.id, run: runTask() })) {
         return {
           title: params.description,
@@ -237,27 +248,27 @@ export const TaskTool = Tool.define(
         }
       }
 
-      if (runInBackground) {
-        const info = yield* background.start({
-          id: nextSession.id,
-          type: id,
-          title: params.description,
-          metadata,
-          run: runTask(),
-        })
-        yield* background.wait({ id: info.id }).pipe(
-          Effect.flatMap((result) => {
-            if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
-            if (result.info?.status === "error") return inject("error", result.info.error ?? "")
-            return Effect.void
+      const info = yield* background.start({
+        id: nextSession.id,
+        type: id,
+        title: params.description,
+        metadata,
+        onPromote: Effect.all([
+          ctx.metadata({
+            title: params.description,
+            metadata: { ...metadata, background: true, jobId: nextSession.id },
           }),
-          Effect.forkIn(scope, { startImmediately: true }),
-        )
+          notify(nextSession.id),
+        ]),
+        run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
+      })
 
+      function backgroundResult() {
         return {
           title: params.description,
           metadata: {
             ...metadata,
+            background: true,
             jobId: info.id,
           },
           output: renderOutput({
@@ -267,6 +278,11 @@ export const TaskTool = Tool.define(
             text: BACKGROUND_STARTED,
           }),
         }
+      }
+
+      if (runInBackground) {
+        yield* notify(info.id)
+        return backgroundResult()
       }
 
       const runCancel = yield* EffectBridge.make()
@@ -282,16 +298,23 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const text = yield* runTask()
+            const result = yield* Effect.raceFirst(
+              background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
+              background.waitForPromotion(nextSession.id),
+            )
+            if (result?.metadata?.background === true) return backgroundResult()
+            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
+            if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
             return {
               title: params.description,
               metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text }),
+              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
             }
           }),
         (_, exit) =>
           Effect.gen(function* () {
-            if (Exit.hasInterrupts(exit)) yield* cancel
+            if (Exit.hasInterrupts(exit))
+              yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {

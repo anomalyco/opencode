@@ -24,6 +24,8 @@ export const layer = Layer.effect(
       start: (input) => InstanceState.useEffect(state, (jobs) => jobs.start(input)),
       extend: (input) => InstanceState.useEffect(state, (jobs) => jobs.extend(input)),
       wait: (input) => InstanceState.useEffect(state, (jobs) => jobs.wait(input)),
+      waitForPromotion: (id) => InstanceState.useEffect(state, (jobs) => jobs.waitForPromotion(id)),
+      promote: (id) => InstanceState.useEffect(state, (jobs) => jobs.promote(id)),
       cancel: (id) => InstanceState.useEffect(state, (jobs) => jobs.cancel(id)),
     })
   }),

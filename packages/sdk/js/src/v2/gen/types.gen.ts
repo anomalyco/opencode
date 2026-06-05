@@ -5850,6 +5850,38 @@ export type ExperimentalSessionListResponses = {
 
 export type ExperimentalSessionListResponse = ExperimentalSessionListResponses[keyof ExperimentalSessionListResponses]
 
+export type ExperimentalSessionBackgroundData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/session/{sessionID}/background"
+}
+
+export type ExperimentalSessionBackgroundErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type ExperimentalSessionBackgroundError =
+  ExperimentalSessionBackgroundErrors[keyof ExperimentalSessionBackgroundErrors]
+
+export type ExperimentalSessionBackgroundResponses = {
+  /**
+   * Backgrounded subagents
+   */
+  200: boolean
+}
+
+export type ExperimentalSessionBackgroundResponse =
+  ExperimentalSessionBackgroundResponses[keyof ExperimentalSessionBackgroundResponses]
+
 export type ExperimentalResourceListData = {
   body?: never
   path?: never

@@ -68,6 +68,7 @@ export type RunInput = {
   files: RunFilePart[]
   initialInput?: string
   thinking: boolean
+  backgroundSubagents: boolean
   demo?: boolean
 }
 
@@ -184,6 +185,7 @@ export type FooterSubagentTab = {
   label: string
   description: string
   status: "running" | "completed" | "error"
+  background?: boolean
   title?: string
   toolCalls?: number
   lastUpdatedAt: number
