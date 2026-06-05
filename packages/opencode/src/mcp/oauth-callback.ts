@@ -1,7 +1,7 @@
 import { createConnection } from "net"
 import { createServer } from "http"
 import * as Log from "@opencode-ai/core/util/log"
-import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
+import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri, normalizeCallbackPath } from "./oauth-provider"
 
 const log = Log.create({ service: "mcp.oauth-callback" })
 
@@ -138,9 +138,14 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   res.end(HTML_SUCCESS)
 }
 
-export async function ensureRunning(redirectUri?: string): Promise<void> {
-  // Parse the redirect URI to get port and path (uses defaults if not provided)
-  const { port, path } = parseRedirectUri(redirectUri)
+export async function ensureRunning(options?: string | { port?: number; path?: string }): Promise<void> {
+  const { port, path } =
+    typeof options === "object"
+      ? {
+          port: options.port ?? OAUTH_CALLBACK_PORT,
+          path: normalizeCallbackPath(options.path),
+        }
+      : parseRedirectUri(options)
 
   // If server is running on a different port/path, stop it first
   if (server && (currentPort !== port || currentPath !== path)) {

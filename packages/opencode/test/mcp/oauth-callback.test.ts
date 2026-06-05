@@ -31,4 +31,9 @@ describe("McpOAuthCallback.ensureRunning", () => {
     await McpOAuthCallback.ensureRunning("http://127.0.0.1:18000/custom/callback")
     expect(McpOAuthCallback.isRunning()).toBe(true)
   })
+
+  test("starts server with callback options", async () => {
+    await McpOAuthCallback.ensureRunning({ port: 18001, path: "/mcp/oauth/callback" })
+    expect(McpOAuthCallback.isRunning()).toBe(true)
+  })
 })

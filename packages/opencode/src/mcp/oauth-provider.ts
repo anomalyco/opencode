@@ -19,6 +19,7 @@ export interface McpOAuthConfig {
   clientSecret?: string
   scope?: string
   callbackPort?: number
+  callbackPath?: string
   redirectUri?: string
 }
 
@@ -40,7 +41,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
       return this.config.redirectUri
     }
     const port = this.config.callbackPort ?? OAUTH_CALLBACK_PORT
-    return `http://127.0.0.1:${port}${OAUTH_CALLBACK_PATH}`
+    const path = normalizeCallbackPath(this.config.callbackPath)
+    return `http://127.0.0.1:${port}${path}`
   }
 
   get clientMetadata(): OAuthClientMetadata {
@@ -209,9 +211,42 @@ export function parseRedirectUri(redirectUri?: string): { port: number; path: st
   try {
     const url = new URL(redirectUri)
     const port = url.port ? parseInt(url.port, 10) : url.protocol === "https:" ? 443 : 80
-    const path = url.pathname || OAUTH_CALLBACK_PATH
+    const path = normalizeCallbackPath(url.pathname)
     return { port, path }
   } catch {
     return { port: OAUTH_CALLBACK_PORT, path: OAUTH_CALLBACK_PATH }
   }
+}
+
+export function resolveCallback(redirectUri?: string, callbackPort?: number, callbackPath?: string) {
+  const path = normalizeCallbackPath(callbackPath)
+
+  if (!redirectUri) {
+    return {
+      port: callbackPort ?? OAUTH_CALLBACK_PORT,
+      path,
+    }
+  }
+
+  try {
+    const url = new URL(redirectUri)
+    if (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1") {
+      return parseRedirectUri(redirectUri)
+    }
+  } catch {
+    if (callbackPath === undefined) return parseRedirectUri(redirectUri)
+    return { port: callbackPort ?? OAUTH_CALLBACK_PORT, path }
+  }
+
+  if (callbackPath === undefined) return parseRedirectUri(redirectUri)
+
+  return {
+    port: callbackPort ?? OAUTH_CALLBACK_PORT,
+    path,
+  }
+}
+
+export function normalizeCallbackPath(path?: string) {
+  if (!path) return OAUTH_CALLBACK_PATH
+  return path.startsWith("/") ? path : `/${path}`
 }

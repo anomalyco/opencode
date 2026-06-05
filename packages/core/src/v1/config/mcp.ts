@@ -30,7 +30,11 @@ export const OAuth = Schema.Struct({
   scope: Schema.optional(Schema.String).annotate({ description: "OAuth scopes to request during authorization" }),
   callbackPort: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))).annotate({
     description:
-      "Port for the local OAuth callback server (default: 19876). Shorthand for redirectUri when only the port needs changing. Ignored if redirectUri is set.",
+      "Port for the local OAuth callback server (default: 19876). When redirectUri is unset, also changes the generated localhost redirect URI.",
+  }),
+  callbackPath: Schema.optional(Schema.String).annotate({
+    description:
+      "Path for the local OAuth callback server (default: /mcp/oauth/callback). With a non-local redirectUri, this enables a separate local callback listener.",
   }),
   redirectUri: Schema.optional(Schema.String).annotate({
     description: "OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).",

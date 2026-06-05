@@ -20,7 +20,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
+import { McpOAuthProvider, resolveCallback } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -327,6 +327,7 @@ export const layer = Layer.effect(
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
             callbackPort: oauthConfig?.callbackPort,
+            callbackPath: oauthConfig?.callbackPath,
             redirectUri: oauthConfig?.redirectUri,
           },
           {
@@ -789,13 +790,13 @@ export const layer = Layer.effect(
       // OAuth config is optional - if not provided, we'll use auto-discovery
       const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
 
-      // Resolve effective redirect URI: explicit redirectUri > callbackPort shorthand > default
-      const effectiveRedirectUri =
-        oauthConfig?.redirectUri ??
-        (oauthConfig?.callbackPort ? `http://127.0.0.1:${oauthConfig.callbackPort}${OAUTH_CALLBACK_PATH}` : undefined)
+      const callback = resolveCallback(
+        oauthConfig?.redirectUri,
+        oauthConfig?.callbackPort,
+        oauthConfig?.callbackPath,
+      )
 
-      // Start the callback server with custom redirectUri if configured
-      yield* Effect.promise(() => McpOAuthCallback.ensureRunning(effectiveRedirectUri))
+      yield* Effect.promise(() => McpOAuthCallback.ensureRunning(callback))
 
       const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
         .map((b) => b.toString(16).padStart(2, "0"))
@@ -809,7 +810,9 @@ export const layer = Layer.effect(
           clientId: oauthConfig?.clientId,
           clientSecret: oauthConfig?.clientSecret,
           scope: oauthConfig?.scope,
-          redirectUri: effectiveRedirectUri,
+          callbackPort: oauthConfig?.callbackPort,
+          callbackPath: oauthConfig?.callbackPath,
+          redirectUri: oauthConfig?.redirectUri,
         },
         {
           onRedirect: async (url) => {
