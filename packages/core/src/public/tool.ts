@@ -13,7 +13,5 @@ export interface Service {
    * Closing the Scope removes the tools immediately, so calls that have not
    * started settling may fail because the tool is no longer available.
    */
-  readonly attach: (
-    tools: Readonly<Record<string, NativeTool.Any>>,
-  ) => Effect.Effect<void, never, Scope.Scope>
+  readonly attach: (tools: Readonly<Record<string, NativeTool.Any>>) => Effect.Effect<void, never, Scope.Scope>
 }
