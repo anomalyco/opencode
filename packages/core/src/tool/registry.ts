@@ -90,7 +90,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 enableMapSet()
 
-export const layerWithApplications = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const permission = yield* PermissionV2.Service
@@ -198,4 +198,4 @@ export const layerWithApplications = Layer.effect(
   }),
 )
 
-export const layer = layerWithApplications.pipe(Layer.provide(ApplicationToolRegistry.layer))
+export const defaultLayer = layer.pipe(Layer.provide(ApplicationToolRegistry.layer))

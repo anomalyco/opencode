@@ -67,7 +67,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   )
   const planning = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
   const commits = FileMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(planning))
-  const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+  const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const write = WriteTool.layer.pipe(Layer.provide(registry), Layer.provide(planning), Layer.provide(commits))
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)

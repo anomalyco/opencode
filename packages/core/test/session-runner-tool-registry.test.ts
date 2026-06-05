@@ -24,7 +24,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const it = testEffect(Layer.mergeAll(permission, registry))
 
 const echo = Tool.make({

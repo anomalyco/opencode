@@ -93,7 +93,7 @@ export const layer = Layer.effectDiscard(
   }),
 )
 export const locationLayer = layer.pipe(
-  Layer.provideMerge(ToolRegistry.layer),
+  Layer.provideMerge(ToolRegistry.defaultLayer),
   Layer.provideMerge(FileSystem.locationLayer),
   Layer.provideMerge(PermissionV2.locationLayer),
   Layer.provideMerge(ToolOutputStore.defaultLayer),

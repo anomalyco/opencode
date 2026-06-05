@@ -12,7 +12,7 @@ const permission = Layer.mock(PermissionV2.Service, {
   assert: () => Effect.void,
 })
 const applications = ApplicationToolRegistry.layer
-const registry = ToolRegistry.layerWithApplications.pipe(Layer.provide(permission), Layer.provide(applications))
+const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
 const it = testEffect(Layer.mergeAll(applications, registry))
 
 const sessionID = SessionV2.ID.make("ses_application_tool")

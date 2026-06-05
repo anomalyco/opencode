@@ -86,7 +86,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const grep = GrepTool.layer.pipe(
   Layer.provide(registry),
   Layer.provide(filesystem),
@@ -140,7 +140,7 @@ function provideLive(directory: string, projectReferences = references({})) {
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(dependencies),
   )
-  const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+  const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const grep = GrepTool.layer.pipe(
     Layer.provide(registry),
     Layer.provide(filesystem),

@@ -45,7 +45,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const location = Location.layer(ref)
-    const permissionsAndTools = ToolRegistry.layerWithApplications.pipe(Layer.provideMerge(PermissionV2.locationLayer))
+    const permissionsAndTools = ToolRegistry.layer.pipe(Layer.provideMerge(PermissionV2.locationLayer))
     const services = Layer.mergeAll(
       location,
       Policy.locationLayer,

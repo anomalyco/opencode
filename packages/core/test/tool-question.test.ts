@@ -23,7 +23,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const question = Layer.succeed(
   QuestionV2.Service,
   QuestionV2.Service.of({

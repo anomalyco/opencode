@@ -96,7 +96,7 @@ const permission = Layer.succeed(
   }),
 )
 const applications = ApplicationToolRegistry.layer
-const registry = ToolRegistry.layerWithApplications.pipe(Layer.provide(permission), Layer.provide(applications))
+const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
     registry.contribute((editor) => {

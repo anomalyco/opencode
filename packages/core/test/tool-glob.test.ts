@@ -81,7 +81,7 @@ const search = Layer.succeed(
   }),
 )
 
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const glob = GlobTool.layer.pipe(
   Layer.provide(registry),
   Layer.provide(permission),

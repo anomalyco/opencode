@@ -113,7 +113,7 @@ const withTool = <A, E, R>(
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
   const mutation = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+  const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const bash = BashTool.layer.pipe(
     Layer.provide(registry),
     Layer.provide(permission),
