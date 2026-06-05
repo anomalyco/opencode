@@ -546,6 +546,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   const [approval, setApproval] = createSignal<DocSubmitState | undefined>()
   let approvalID: string | undefined
+  let finalizedID: string | undefined
   let approvalSession: string | undefined
 
   const approvalActor = () => doc.actorID()
@@ -563,6 +564,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const actorID = approvalActor()
     if (!actorID) return
     if (!state.actors.some((item) => item.actorID === actorID)) return
+    // Terminal states are handled exactly once per submit: a server replay on reconnect (or a
+    // duplicate cast) for an already-resolved submit must not re-clear context or re-open a dialog.
+    if (state.status !== "pending") {
+      if (finalizedID === state.submitID) return
+      finalizedID = state.submitID
+    }
     if (state.status === "sent") {
       clearContext()
       if (approvalID === state.submitID) closeApproval()

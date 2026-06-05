@@ -1,4 +1,5 @@
-import { sqliteTable, text, integer, index, primaryKey, blob } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, index, uniqueIndex, primaryKey, blob } from "drizzle-orm/sqlite-core"
+import { sql } from "drizzle-orm"
 import { SessionTable } from "../session/session.sql"
 import type { SessionID } from "../session/schema"
 import type { DocID, ActorID, AssetID, SubmitID } from "./schema"
@@ -100,6 +101,10 @@ export const DocSubmitTable = sqliteTable(
   (table) => [
     index("doc_submit_session_doc_status_idx").on(table.session_id, table.doc_id, table.status),
     index("doc_submit_expires_idx").on(table.expires_at),
+    // At most one pending submit per (session, doc) — closes the concurrent-create race.
+    uniqueIndex("doc_submit_pending_unique")
+      .on(table.session_id, table.doc_id)
+      .where(sql`${table.status} = 'pending'`),
   ],
 )
 

@@ -6,6 +6,9 @@ import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Doc } from "../../src/doc"
 import * as Room from "../../src/doc/room"
+import { Database } from "../../src/storage/db"
+import { DocSubmitTable } from "../../src/doc/doc.sql"
+import { eq } from "drizzle-orm"
 import { AssetID, DocID } from "../../src/doc/schema"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
@@ -301,6 +304,200 @@ describe("doc", () => {
         expect(current[0]?.state.submitID).toBe(state.submitID)
 
         close()
+        stop()
+      },
+    })
+  })
+
+  test("recover expires overdue pending submits after a restart", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+
+        const events: Doc.SubmitEvent[] = []
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: (data) => events.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+        expect(state.status).toBe("pending")
+
+        // Simulate a restart: the deadline has passed but the in-memory timer is gone.
+        Database.use((db) =>
+          db
+            .update(DocSubmitTable)
+            .set({ expires_at: Date.now() - 1_000 })
+            .where(eq(DocSubmitTable.id, state.submitID))
+            .run(),
+        )
+        events.length = 0
+
+        Doc.recover()
+
+        // The overdue submit is expired (freeing the pending unique index) and the cast reaches peers.
+        expect(events.some((event) => event.type === "expired")).toBe(true)
+        expect(Doc.submitActive({ sessionID: session.id, docID, actorID: alice.actorID })).toBeUndefined()
+
+        // The doc is unblocked: a fresh submit can be created.
+        const next = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+        expect(next.status).toBe("pending")
+        expect(next.submitID).not.toBe(state.submitID)
+
+        stop()
+      },
+    })
+  })
+
+  test("submit approval replays a just-resolved terminal state on reconnect", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+
+        const stopBob = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+
+        // Bob rejects, then alice's client reconnects after missing the cancel cast.
+        Doc.submitRespond({ sessionID: session.id, submitID: state.submitID, actorID: bob.actorID, action: "cancel" })
+
+        const replay: Doc.SubmitEvent[] = []
+        const stopAlice = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          peer: { send: (data) => replay.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+        expect(replay[0]?.type).toBe("cancelled")
+        expect(replay[0]?.state.submitID).toBe(state.submitID)
+        expect(replay[0]?.state.cancelledBy?.actorID).toBe(bob.actorID)
+
+        // A participant who was not part of the resolved submit gets no replay.
+        const carol = Doc.actorUpsert({ sessionID: session.id, name: "Carol" })
+        const none: Doc.SubmitEvent[] = []
+        const stopCarol = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: carol.actorID,
+          peer: { send: (data) => none.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+        expect(none.length).toBe(0)
+
+        stopCarol()
+        stopAlice()
+        stopBob()
+      },
+    })
+  })
+
+  test("submit approval only targets connected peers", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const carol = Doc.actorUpsert({ sessionID: session.id, name: "Carol" })
+
+        // Only Bob has a live submit connection. Carol is registered but not connected.
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID, carol.actorID],
+          prompt,
+        })
+
+        const ids = state.actors.map((actor) => actor.actorID)
+        expect(ids).toContain(alice.actorID)
+        expect(ids).toContain(bob.actorID)
+        // Carol is in the doc roster but has no live connection — she is not a target.
+        expect(ids).not.toContain(carol.actorID)
+
+        stop()
+      },
+    })
+  })
+
+  test("submit approval caps overly long names", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          names: { [bob.actorID]: "x".repeat(200) },
+          prompt,
+        })
+
+        const stored = state.actors.find((actor) => actor.actorID === bob.actorID)
+        expect(stored?.name.length).toBe(64)
+
         stop()
       },
     })

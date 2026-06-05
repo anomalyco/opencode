@@ -51,8 +51,20 @@ export function createPromptDoc(input: PromptDocInput) {
   let mounted: HTMLElement | undefined
   let session: string | undefined
   let live: string | undefined
-  let seq = 0
-  let pending: { id: string; init: boolean; task: Promise<void> } | undefined
+
+  // Every operation that builds or replaces the editor handle runs through one serialized lane, so
+  // they never interleave. Each call gets a generation token; after each await it checks `alive()`
+  // and bails if a newer intent has superseded it. This single mechanism replaces the scattered
+  // seq/mark/pending and `mounted !== el` race guards.
+  let lane: Promise<unknown> = Promise.resolve()
+  let generation = 0
+
+  const serialize = <T>(task: (alive: () => boolean) => Promise<T>): Promise<T> => {
+    const token = ++generation
+    const run = lane.then(() => task(() => token === generation))
+    lane = run.catch(() => {})
+    return run
+  }
 
   const [ready, setReady] = createSignal(false)
   const [filled, setFilled] = createSignal(false)
@@ -112,14 +124,16 @@ export function createPromptDoc(input: PromptDocInput) {
     session = sessionID
   }
 
-  const remount = async (opts?: {
-    sync?: DocSyncOpts
-    init?: boolean
-    sessionID?: string
-    docID?: string
-    keep?: boolean
-    seq?: number
-  }) => {
+  const remount = async (
+    alive: () => boolean,
+    opts?: {
+      sync?: DocSyncOpts
+      init?: boolean
+      sessionID?: string
+      docID?: string
+      keep?: boolean
+    },
+  ) => {
     const el = mounted
     const themeFn = theme
     const next = opts?.sync ?? sync
@@ -134,11 +148,7 @@ export function createPromptDoc(input: PromptDocInput) {
       submit: input.submit,
       onDraftChange: syncFilled,
     })
-    if (opts?.seq && opts.seq !== seq) {
-      await fresh.dispose()
-      return
-    }
-    if (mounted !== el || theme !== themeFn) {
+    if (!alive()) {
       await fresh.dispose()
       return
     }
@@ -165,30 +175,20 @@ export function createPromptDoc(input: PromptDocInput) {
       return Promise.resolve()
     setDocID(next)
     const should = opts?.init ?? true
-    if (!opts?.force && pending?.id === next && (pending.init || !should)) return pending.task
-    const mark = ++seq
 
-    const run = async () => {
+    return serialize(async (alive) => {
+      // Already on the target doc (a duplicate pivot that queued behind the real one) — no-op.
       if (!opts?.force && handle?.collection.id === next && session === sessionID && sync?.docID === next) return
 
       if (session !== sessionID || !sync) await ensure(sessionID)
-      if (!sync) return
-      if (mark !== seq) return
-      await remount({
+      if (!alive() || !sync) return
+      await remount(alive, {
         sync: { ...sync, docID: next },
         init: should,
         sessionID,
         docID: next,
-        seq: mark,
       })
-    }
-    const task = run()
-    const done = task.finally(() => {
-      if (pending?.task !== done) return
-      pending = undefined
     })
-    pending = { id: next, init: should, task: done }
-    return done
   }
 
   const refresh = async (sessionID: string, opts?: { init?: boolean }) => {
@@ -202,45 +202,49 @@ export function createPromptDoc(input: PromptDocInput) {
     return doc.docID
   }
 
-  const mount = async (opts: { el: HTMLElement; theme: () => "light" | "dark"; locale?: () => string }) => {
+  const mount = (opts: { el: HTMLElement; theme: () => "light" | "dark"; locale?: () => string }) => {
     mounted = opts.el
     theme = opts.theme
     locale = opts.locale
 
     const sessionID = input.sessionID()
-    if (!sessionID) return
+    if (!sessionID) return Promise.resolve()
 
-    const remote = await promptDoc(input, sessionID)
-    setDocID(remote.docID)
-    if (session !== sessionID || !sync || sync.docID !== remote.docID) {
-      await drop()
-      await ensure(sessionID)
-    }
+    return serialize(async (alive) => {
+      const remote = await promptDoc(input, sessionID)
+      if (!alive()) return
+      setDocID(remote.docID)
+      if (session !== sessionID || !sync || sync.docID !== remote.docID) {
+        await drop()
+        if (!alive()) return
+        await ensure(sessionID)
+        if (!alive()) return
+      }
 
-    if (handle?.collection.id === remote.docID) {
-      await handle.attach(opts.el)
-      setReady(true)
-      syncFilled()
-      return
-    }
+      if (handle?.collection.id === remote.docID) {
+        await handle.attach(opts.el)
+        setReady(true)
+        syncFilled()
+        return
+      }
 
-    await remount()
+      await remount(alive)
+    })
   }
 
   const detach = () => {
-    seq++
-    pending = undefined
-    void drop()
     mounted = undefined
     theme = undefined
     locale = undefined
+    // serialize() bumps the generation (cancelling any in-flight build) and queues the teardown
+    // behind it, so drop() can never race a concurrent mount/pivot.
+    void serialize(async () => {
+      await drop()
+    })
   }
 
   const reset = () => {
     const sessionID = session
-    seq++
-    pending = undefined
-    void drop()
     sync = undefined
     setActiveSync(undefined)
     init = true
@@ -251,6 +255,9 @@ export function createPromptDoc(input: PromptDocInput) {
     if (sessionID) clearActor(sessionID)
     setHistory({ undo: false, redo: false })
     setFilled(false)
+    void serialize(async () => {
+      await drop()
+    })
   }
 
   const guard = () => handle?.guard()

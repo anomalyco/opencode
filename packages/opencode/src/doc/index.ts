@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm"
+import { eq, and, desc } from "drizzle-orm"
 import z from "zod"
 import { ulid } from "ulid"
 import { Bus } from "@/bus"
@@ -281,6 +281,10 @@ export namespace Doc {
   const DEFAULT = 120_000
   const MIN = 10_000
   const MAX = 600_000
+  const MAX_NAME = 64
+  // How long after a submit resolves we still replay its terminal state to a (re)connecting
+  // participant, so a client that blipped offline exactly at the transition can catch up.
+  const REPLAY_WINDOW = 15_000
   const SubmitPrompt = SessionPrompt.PromptInput.omit({ sessionID: true })
   const SubmitActorStatus = z.enum(["pending", "approved"])
   export const SubmitStatus = z.enum(["pending", "sent", "cancelled", "expired", "left"]).meta({ ref: "DocSubmitStatus" })
@@ -353,6 +357,10 @@ export namespace Doc {
 
   function fallback(id: ActorID) {
     return `Guest-${id.slice(-4)}`
+  }
+
+  function cap(name: string) {
+    return name.trim().slice(0, MAX_NAME)
   }
 
   function read(row: SubmitRow) {
@@ -461,6 +469,24 @@ export namespace Doc {
     return state
   }
 
+  function recent(sessionID: SessionID, docID: DocID, actorID: ActorID, now = Date.now()) {
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(DocSubmitTable)
+        .where(and(eq(DocSubmitTable.session_id, sessionID), eq(DocSubmitTable.doc_id, docID)))
+        .orderBy(desc(DocSubmitTable.time_updated))
+        .all(),
+    )
+    for (const row of rows) {
+      if (row.status === "pending") continue
+      if (row.time_updated < now - REPLAY_WINDOW) return
+      const state = read(row)
+      if (state.actors.some((actor) => actor.actorID === actorID)) return state
+    }
+    return
+  }
+
   function schedule(row: SubmitRow) {
     done(row.id)
     if (row.status !== "pending") return
@@ -478,12 +504,25 @@ export namespace Doc {
     )
   }
 
+  // Re-establish in-memory state after a process restart: the DB is the source of truth, but the
+  // expiry timers live only in memory. Expire any pending submit whose deadline already passed and
+  // reschedule the timer for the rest, so recovery no longer depends on someone happening to read.
+  export function recover() {
+    const rows = Database.use((db) =>
+      db.select().from(DocSubmitTable).where(eq(DocSubmitTable.status, "pending")).all(),
+    )
+    for (const row of rows) {
+      const next = expire(row)
+      if (next.status === "pending") schedule(next)
+    }
+  }
+
   function actorNames(sessionID: SessionID, ids: ActorID[], names?: Record<string, string>) {
     const actors = Database.use((db) =>
       db.select().from(SessionActorTable).where(eq(SessionActorTable.session_id, sessionID)).all(),
     )
     return ids.map((id) => {
-      const provided = names?.[id]?.trim()
+      const provided = names?.[id] ? cap(names[id]!) : ""
       if (provided) return { actorID: id, name: provided }
       return {
         actorID: id,
@@ -492,9 +531,14 @@ export namespace Doc {
     })
   }
 
-  function targets(docID: DocID, actorID: ActorID, actorIDs: ActorID[]) {
+  function targets(docID: DocID, actorID: ActorID) {
+    // The connected submit peers are the single source of truth for "who is in the doc":
+    // it is the same set used by cast() and leave(), so a vote can never target someone
+    // we cannot reach (or skip someone we can). The requester is always included, even if
+    // their own socket has not finished connecting yet.
     const online = new Set(Array.from(peers.get(docID) ?? []).map((peer) => peer.actorID))
-    return Array.from(new Set([actorID, ...actorIDs.filter((id) => online.has(id))]))
+    online.add(actorID)
+    return Array.from(online)
   }
 
   export const submitCreate = fn(SubmitCreateInput, (input) => {
@@ -504,37 +548,49 @@ export namespace Doc {
     const found = active(input.sessionID, input.docID)
     if (found) return found
 
-    const ids = targets(input.docID, input.actorID, input.actorIDs)
+    const ids = targets(input.docID, input.actorID)
     const timeout = clamp(input.timeoutMs)
     const now = Date.now()
-    const row = Database.transaction((db) => {
-      const submit = {
-        id: SubmitID.ascending(),
-        session_id: input.sessionID,
-        doc_id: input.docID,
-        actor_id: input.actorID,
-        status: ids.length <= 1 ? "sent" : "pending",
-        prompt: JSON.stringify(input.prompt),
-        timeout_ms: timeout,
-        expires_at: now + timeout,
-        cancelled_by: null,
-        time_created: now,
-        time_updated: now,
-      }
-      db.insert(DocSubmitTable).values(submit).run()
-      db.insert(DocSubmitActorTable)
-        .values(
-          actorNames(input.sessionID, ids, input.names).map((actor) => ({
-            submit_id: submit.id,
-            actor_id: actor.actorID,
-            name: actor.name,
-            status: actor.actorID === input.actorID ? "approved" : "pending",
-            time_responded: actor.actorID === input.actorID ? now : null,
-          })),
-        )
-        .run()
-      return submit
-    })
+    const build = () =>
+      Database.transaction((db) => {
+        const submit = {
+          id: SubmitID.ascending(),
+          session_id: input.sessionID,
+          doc_id: input.docID,
+          actor_id: input.actorID,
+          status: ids.length <= 1 ? "sent" : "pending",
+          prompt: JSON.stringify(input.prompt),
+          timeout_ms: timeout,
+          expires_at: now + timeout,
+          cancelled_by: null,
+          time_created: now,
+          time_updated: now,
+        }
+        db.insert(DocSubmitTable).values(submit).run()
+        db.insert(DocSubmitActorTable)
+          .values(
+            actorNames(input.sessionID, ids, input.names).map((actor) => ({
+              submit_id: submit.id,
+              actor_id: actor.actorID,
+              name: actor.name,
+              status: actor.actorID === input.actorID ? "approved" : "pending",
+              time_responded: actor.actorID === input.actorID ? now : null,
+            })),
+          )
+          .run()
+        return submit
+      })
+
+    let row: SubmitRow
+    try {
+      row = build()
+    } catch (err) {
+      // Two participants pressed send at the same instant: the pending unique index
+      // rejected the loser. Return whoever won rather than surfacing a DB error.
+      const winner = active(input.sessionID, input.docID)
+      if (winner) return winner
+      throw err
+    }
 
     const state = read(row)
     if (state.status === "sent") {
@@ -695,7 +751,14 @@ export namespace Doc {
       peers.set(input.docID, set)
       cancelLeave(input.docID, input.actorID)
       const state = active(input.sessionID, input.docID, input.actorID)
-      if (state) peer.send(JSON.stringify({ type: "created", state } satisfies SubmitEvent))
+      if (state) {
+        peer.send(JSON.stringify({ type: "created", state } satisfies SubmitEvent))
+      } else {
+        // No live vote — but if one resolved moments ago, replay its terminal state so a
+        // client that missed the cast() (e.g. reconnected just after) can update its dialog.
+        const last = recent(input.sessionID, input.docID, input.actorID)
+        if (last) peer.send(JSON.stringify({ type: last.status as SubmitEvent["type"], state: last } satisfies SubmitEvent))
+      }
       return () => {
         set.delete(peer)
         if (!Array.from(set).some((item) => item.actorID === peer.actorID)) scheduleLeave(input.docID, peer.actorID)
@@ -723,7 +786,7 @@ export namespace Doc {
           .get(),
       )
 
-      const name = input.name ?? existing?.name ?? `Guest-${actorID.slice(-4)}`
+      const name = (input.name ? cap(input.name) : "") || existing?.name || fallback(actorID)
       const row = {
         session_id: input.sessionID,
         actor_id: actorID,

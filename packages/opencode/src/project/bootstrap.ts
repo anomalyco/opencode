@@ -4,6 +4,7 @@ import { LSP } from "../lsp"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Snapshot } from "../snapshot"
+import { Doc } from "../doc"
 import { Project } from "./project"
 import { Vcs } from "./vcs"
 import { Bus } from "../bus"
@@ -22,6 +23,7 @@ export async function InstanceBootstrap() {
   FileWatcher.init()
   Vcs.init()
   Snapshot.init()
+  Doc.recover()
 
   Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {
