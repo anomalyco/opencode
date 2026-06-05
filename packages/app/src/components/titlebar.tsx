@@ -9,7 +9,7 @@ import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 
-import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
+import { getProjectAvatarVariant, useLayout, type LocalProject, type TitlebarSessionTab } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -263,7 +263,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return `/${base64Encode(project.worktree)}/session`
             }
 
-            type Tab = { dir: string; sessionId: string; href: string }
+            type Tab = TitlebarSessionTab
 
             const tabForRouteSession = (b64Dir: string, sessionId: string) => {
               const dir = decodeDirectory(b64Dir) ?? ""
@@ -318,19 +318,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     }),
                   )
                 },
+                restoreTabs: (restored: readonly Tab[]) => {
+                  setStore(
+                    produce((tabs) => {
+                      for (const tab of restored) {
+                        if (!tabs.some((current) => current.href === tab.href)) tabs.push(tab)
+                      }
+                    }),
+                  )
+                },
                 removeTab: (href: string) => {
                   const removedActiveTab = href === currentSessionTab()?.href
+                  const currentTabs = workspaceTabsFor(activeWorkspaceDir())
+                  const currentIndex = currentTabs.findIndex((tab) => tab.href === href)
+                  const nextHref = removedActiveTab
+                    ? nextHrefAfterRemovingSessions(currentTabs, currentIndex, (tab) => tab.href === href)
+                    : undefined
                   void startTransition(() => {
-                    let nextHref: string | undefined
                     setStore(
                       produce((tabs) => {
                         const index = tabs.findIndex((t) => t.href === href)
                         if (index === -1) return
                         tabs.splice(index, 1)
-                        if (!removedActiveTab) return
-
-                        const nextTab = tabs[index] ?? tabs[tabs.length - 1]
-                        nextHref = nextTab?.href ?? "/"
                       }),
                     )
                     if (nextHref) navigate(nextHref)
@@ -339,12 +348,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 removeSessions: (input: SessionTabsRemovedDetail) => {
                   const sessionIDs = new Set(input.sessionIDs)
                   const currentTab = params.dir && params.id ? tabForRouteSession(params.dir, params.id) : undefined
-                  const currentIndex = currentTab ? tabsStore.findIndex((tab) => tab.href === currentTab.href) : -1
+                  const directoryTabs = workspaceTabsFor(input.directory)
+                  const currentIndex = currentTab ? directoryTabs.findIndex((tab) => tab.href === currentTab.href) : -1
                   const removing = (tab: Tab) => tab.dir === input.directory && sessionIDs.has(tab.sessionId)
-                  const activeTab = currentIndex === -1 ? undefined : tabsStore[currentIndex]
+                  const activeTab = currentIndex === -1 ? undefined : directoryTabs[currentIndex]
                   const removedCurrent = activeTab !== undefined && removing(activeTab)
                   const nextHref = removedCurrent
-                    ? nextHrefAfterRemovingSessions(tabsStore, currentIndex, removing)
+                    ? nextHrefAfterRemovingSessions(directoryTabs, currentIndex, removing)
                     : undefined
 
                   void startTransition(() => {
@@ -378,6 +388,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return [store, actions]
             })
 
+            const activeWorkspaceKey = createMemo(() => params.dir)
+            const activeWorkspaceDir = createMemo(() => {
+              const dir = activeWorkspaceKey()
+              if (!dir) return
+              return decodeDirectory(dir) ?? undefined
+            })
+            const persistedTitlebarTabs = layout.titlebarTabs(activeWorkspaceKey)
+            const hydratedWorkspaces = new Set<string>()
+
+            createEffect(() => {
+              if (!layout.ready()) return
+
+              const workspace = activeWorkspaceKey()
+              if (!workspace) return
+
+              const restored = persistedTitlebarTabs.all()
+              if (hydratedWorkspaces.has(workspace) && restored.length === 0) return
+              hydratedWorkspaces.add(workspace)
+
+              tabsStoreActions.restoreTabs(restored)
+            })
+
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
               const detail = readSessionTabsRemovedDetail(event)
               if (!detail) return
@@ -391,6 +423,17 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               if (!tab) return
 
               tabsStoreActions.addTab(tab)
+            })
+
+            createEffect(() => {
+              if (!layout.ready()) return
+
+              const workspace = activeWorkspaceKey()
+              const dir = activeWorkspaceDir()
+              if (!workspace || !dir) return
+              if (!hydratedWorkspaces.has(workspace)) return
+
+              persistedTitlebarTabs.setAll(tabsStore.filter((tab) => tab.dir === dir))
             })
 
             const projects = createMemo(() => layout.projects.list())
@@ -415,7 +458,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             const closeNewSessionTab = () => {
               if (!(params.dir && !params.id)) return false
-              const last = tabsStore[tabsStore.length - 1]
+              const last = visibleTabs().at(-1)
               if (last) navigate(last.href)
               else navigate("/")
               return true
@@ -438,7 +481,12 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return () => base().flatMap((s) => (s ? [s] : []))
             })
 
-            const visibleTabs = createMemo(() => tabsEnriched().filter((tab) => !tab.info.parentID))
+            const workspaceTabsFor = (dir: string | undefined) => {
+              if (!dir) return []
+              return tabsEnriched().filter((tab) => !tab.info.parentID && tab.dir === dir)
+            }
+
+            const visibleTabs = createMemo(() => workspaceTabsFor(activeWorkspaceDir()))
 
             command.register(() => {
               const commands = [

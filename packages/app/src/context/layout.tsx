@@ -50,6 +50,16 @@ type SessionTabs = {
   all: string[]
 }
 
+export type TitlebarSessionTab = {
+  dir: string
+  sessionId: string
+  href: string
+}
+
+type TitlebarTabs = {
+  all: TitlebarSessionTab[]
+}
+
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
@@ -145,6 +155,26 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
+const normalizeTitlebarTabs = (all: readonly TitlebarSessionTab[]) => {
+  const seen = new Set<string>()
+  return all.flatMap((tab) => {
+    if (!tab.dir || !tab.sessionId || !tab.href) return []
+    if (seen.has(tab.href)) return []
+    seen.add(tab.href)
+    return [{ dir: tab.dir, sessionId: tab.sessionId, href: tab.href }]
+  })
+}
+
+const sameTitlebarTabs = (a: readonly TitlebarSessionTab[] | undefined, b: readonly TitlebarSessionTab[] | undefined) => {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((tab, index) => {
+    const other = b[index]
+    return tab.dir === other?.dir && tab.sessionId === other.sessionId && tab.href === other.href
+  })
+}
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
@@ -221,11 +251,42 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return next
       })()
 
+      const titlebarTabs = value.titlebarTabs
+      const migratedTitlebarTabs = (() => {
+        if (!isRecord(titlebarTabs)) return titlebarTabs
+
+        let changed = false
+        const next = Object.fromEntries(
+          Object.entries(titlebarTabs).map(([key, tabs]) => {
+            if (!isRecord(tabs) || !Array.isArray(tabs.all)) {
+              changed = true
+              return [key, { all: [] }]
+            }
+
+            const current = tabs.all.flatMap((tab): TitlebarSessionTab[] => {
+              if (!isRecord(tab)) return []
+              if (typeof tab.dir !== "string") return []
+              if (typeof tab.sessionId !== "string") return []
+              if (typeof tab.href !== "string") return []
+              return [{ dir: tab.dir, sessionId: tab.sessionId, href: tab.href }]
+            })
+            const normalized = normalizeTitlebarTabs(current)
+            if (current.length !== tabs.all.length) changed = true
+            if (!sameTitlebarTabs(current, normalized)) changed = true
+            return [key, { all: normalized }]
+          }),
+        )
+
+        if (!changed) return titlebarTabs
+        return next
+      })()
+
       if (
         migratedSidebar === sidebar &&
         migratedReview === review &&
         migratedFileTree === fileTree &&
-        migratedSessionTabs === sessionTabs
+        migratedSessionTabs === sessionTabs &&
+        migratedTitlebarTabs === titlebarTabs
       ) {
         return value
       }
@@ -236,6 +297,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         review: migratedReview,
         fileTree: migratedFileTree,
         sessionTabs: migratedSessionTabs,
+        titlebarTabs: migratedTitlebarTabs,
       }
     }
 
@@ -269,6 +331,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: false,
         },
         sessionTabs: {} as Record<string, SessionTabs>,
+        titlebarTabs: {} as Record<string, TitlebarTabs>,
         sessionView: {} as Record<string, SessionView>,
         handoff: {
           tabs: undefined as TabHandoff | undefined,
@@ -951,6 +1014,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
                 opened.splice(to, 0, opened.splice(index, 1)[0])
               }),
             )
+          },
+        }
+      },
+      titlebarTabs(workspaceKey: string | Accessor<string | undefined>) {
+        const key = typeof workspaceKey === "function" ? workspaceKey : () => workspaceKey
+        const tabs = createMemo(() => {
+          const workspace = key()
+          if (!workspace) return { all: [] }
+          return store.titlebarTabs?.[workspace] ?? { all: [] }
+        })
+
+        return {
+          all: createMemo(() => tabs().all),
+          setAll(all: readonly TitlebarSessionTab[]) {
+            const workspace = key()
+            if (!workspace) return
+
+            const next = normalizeTitlebarTabs(all)
+            if (sameTitlebarTabs(store.titlebarTabs?.[workspace]?.all ?? [], next)) return
+            setStore("titlebarTabs", workspace, { all: next })
           },
         }
       },
