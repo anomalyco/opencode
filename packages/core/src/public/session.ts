@@ -59,6 +59,11 @@ export interface PromptInput {
   readonly delivery?: Delivery
 }
 
+export interface SwitchModelInput {
+  readonly sessionID: ID
+  readonly model: Model.Ref
+}
+
 export interface MessagesInput {
   readonly sessionID: ID
   readonly limit?: number
@@ -84,6 +89,7 @@ export interface Interface {
   readonly get: (sessionID: ID) => Effect.Effect<Info, NotFoundError>
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly prompt: (input: PromptInput) => Effect.Effect<Admission, NotFoundError | PromptConflictError>
+  readonly switchModel: (input: SwitchModelInput) => Effect.Effect<void, NotFoundError>
   /** Interrupt the active V2 execution chain for one Session on this process. Interrupting an idle or missing Session is a no-op. */
   readonly interrupt: (sessionID: ID) => Effect.Effect<void>
   readonly messages: (input: MessagesInput) => Effect.Effect<Message[], NotFoundError | MessageDecodeError>
