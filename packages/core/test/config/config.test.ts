@@ -479,7 +479,22 @@ describe("Config", () => {
                     npm: "@ai-sdk/openai",
                     options: { apiKey: "secret", organization: "org" },
                     models: {
-                      model: { options: { reasoningEffort: "high", serviceTier: "priority" } },
+                      model: {
+                        options: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                        variants: { high: { reasoningEffort: "high", reasoningSummary: "auto" } },
+                      },
+                    },
+                  },
+                  anthropic: {
+                    npm: "@ai-sdk/anthropic",
+                    models: {
+                      model: {
+                        options: {
+                          effort: "high",
+                          taskBudget: 4096,
+                          metadata: { userId: "user-1" },
+                        },
+                      },
                     },
                   },
                 },
@@ -537,7 +552,26 @@ describe("Config", () => {
             expect(documents[0]?.info.providers?.openai).toMatchObject({
               api: { settings: {} },
               request: { headers: { Authorization: "Bearer secret", "OpenAI-Organization": "org" } },
-              models: { model: { request: { body: { reasoning_effort: "high", service_tier: "priority" } } } },
+              models: {
+                model: {
+                  request: {
+                    body: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                  },
+                  variants: [{ id: "high", body: { reasoningEffort: "high", reasoningSummary: "auto" } }],
+                },
+              },
+            })
+            expect(documents[0]?.info.providers?.anthropic).toMatchObject({
+              models: {
+                model: {
+                  request: {
+                    body: {
+                      output_config: { effort: "high", task_budget: 4096 },
+                      metadata: { user_id: "user-1" },
+                    },
+                  },
+                },
+              },
             })
             expect(documents[0]?.info.compaction).toEqual({
               auto: true,
