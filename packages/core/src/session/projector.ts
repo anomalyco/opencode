@@ -428,6 +428,7 @@ export const layer = Layer.effectDiscard(
         )
       }),
     )
+    yield* events.project(SessionEvent.InterruptRequested, () => Effect.void)
     yield* events.project(SessionEvent.ContextUpdated, (event) => {
       if (!event.replay || event.seq === undefined) return run(db, event)
       return run(db, event).pipe(

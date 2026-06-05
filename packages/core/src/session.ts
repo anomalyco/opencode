@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { Cause, Effect, Layer, Schema, Context, Stream } from "effect"
+import { Cause, DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -155,6 +155,7 @@ export interface Interface {
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
+  readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
@@ -171,13 +172,13 @@ export const layer = Layer.effect(
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const scope = yield* Effect.scope
 
-    const enqueueWake = (sessionID: SessionSchema.ID) =>
-      execution.wake(sessionID).pipe(
+    const enqueueWake = (admitted: SessionInput.Admitted) =>
+      execution.wake(admitted.sessionID, admitted.admittedSeq).pipe(
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void
             : Effect.logError("Failed to wake Session").pipe(
-                Effect.annotateLogs("sessionID", sessionID),
+                Effect.annotateLogs("sessionID", admitted.sessionID),
                 Effect.annotateLogs("cause", cause),
               ),
         ),
@@ -351,7 +352,7 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
             const returnPrompt = Effect.fnUntraced(function* (admitted: SessionInput.Admitted) {
-              if (input.resume !== false) yield* enqueueWake(input.sessionID)
+              if (input.resume !== false) yield* enqueueWake(admitted)
               return admitted
             }, Effect.uninterruptible)
             const messageID = input.id ?? SessionMessage.ID.create()
@@ -399,6 +400,20 @@ export const layer = Layer.effect(
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
       }),
+      interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const session = yield* store.get(sessionID)
+            if (!session) return yield* execution.interrupt(sessionID)
+            const event = yield* events.publish(SessionEvent.InterruptRequested, {
+              sessionID,
+              timestamp: yield* DateTime.now,
+            })
+            if (event.seq === undefined) return yield* Effect.die("Interrupt request event is missing aggregate sequence")
+            yield* execution.interrupt(sessionID, event.seq)
+          }),
+        ),
+      ),
     })
 
     return result

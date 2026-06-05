@@ -20,6 +20,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { Location } from "@opencode-ai/core/location"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
@@ -61,6 +62,7 @@ const model = OpenAIChat.route
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
 const systemContext = SystemContextRegistry.layer
+const location = Location.layer({ directory: AbsolutePath.make("/project") }).pipe(Layer.provide(Project.defaultLayer))
 const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(database),
@@ -70,6 +72,7 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(registry),
   Layer.provide(models),
   Layer.provide(systemContext),
+  Layer.provide(location),
   Layer.provide(agents),
   Layer.provide(skillGuidance),
 )
@@ -77,7 +80,9 @@ const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
   SessionExecution.Service,
   SessionRunCoordinator.Service.pipe(
-    Effect.map((coordinator) => SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake })),
+    Effect.map((coordinator) =>
+      SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake, interrupt: coordinator.interrupt }),
+    ),
   ),
 ).pipe(Layer.provide(coordinator))
 const sessions = SessionV2.layer.pipe(
@@ -100,6 +105,7 @@ const it = testEffect(
     registry,
     models,
     systemContext,
+    location,
     skillGuidance,
     runner,
     coordinator,

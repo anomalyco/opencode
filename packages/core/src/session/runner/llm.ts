@@ -3,6 +3,7 @@ import { Cause, DateTime, Effect, FiberSet, Layer, Schema, Semaphore, Stream } f
 import { AgentV2 } from "../../agent"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
+import { Location } from "../../location"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 import { QuestionV2 } from "../../question"
@@ -82,6 +83,7 @@ export const layer = Layer.effect(
     const tools = yield* ToolRegistry.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
+    const location = yield* Location.Service
     const systemContext = yield* SystemContextRegistry.Service
     const skillGuidance = yield* SkillGuidance.Service
     const db = (yield* Database.Service).db
@@ -144,6 +146,8 @@ export const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
     ) {
       const session = yield* getSession(sessionID)
+      if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
+        return yield* Effect.interrupt
       const agent = yield* agents.select(session.agent)
       const initialized = yield* SessionContextEpoch.initialize(
         db,
