@@ -24,7 +24,7 @@ export function usePathFormatter() {
 }
 
 function formatPath(input: string | undefined, base: string | undefined) {
-  if (!input) return ""
+  if (typeof input !== "string" || !input) return ""
 
   const root = base || process.cwd()
   const absolute = path.isAbsolute(input) ? input : path.resolve(root, input)
