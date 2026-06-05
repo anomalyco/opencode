@@ -111,7 +111,7 @@ function TextBody(props: { title: string; description?: string; icon?: string })
   )
 }
 
-export function PermissionPrompt(props: { request: PermissionRequest }) {
+export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
   const sdk = useSDK()
   const project = useProject()
   const sync = useSync()
@@ -171,6 +171,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             void sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,
+              directory: props.directory,
               workspace: project.workspace.current(),
             })
           }}
@@ -182,6 +183,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             void sdk.client.permission.reply({
               reply: "reject",
               requestID: props.request.id,
+              directory: props.directory,
               message: message || undefined,
               workspace: project.workspace.current(),
             })
@@ -421,6 +423,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   void sdk.client.permission.reply({
                     reply: "reject",
                     requestID: props.request.id,
+                    directory: props.directory,
                     workspace: project.workspace.current(),
                   })
                   return
@@ -428,6 +431,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                 void sdk.client.permission.reply({
                   reply: "once",
                   requestID: props.request.id,
+                  directory: props.directory,
                   workspace: project.workspace.current(),
                 })
               }}
