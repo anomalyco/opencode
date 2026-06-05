@@ -107,7 +107,7 @@ export const layer = Layer.effect(
               ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
               : model.api
       const request = {
-        ...ModelRequest.merge(provider.request, model.request),
+        ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
         variant: model.request.variant,
       }
       return new ModelV2.Info({

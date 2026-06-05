@@ -32,7 +32,8 @@ export const Plugin = PluginV2.define({
             provider.enabled = { via: "custom", data: {} }
             if (item.api !== undefined) provider.api = { ...item.api }
             if (item.request !== undefined) {
-              ModelRequest.assign(provider.request, item.request)
+              Object.assign(provider.request.headers, item.request.headers)
+              Object.assign(provider.request.body, item.request.body)
             }
           })
           const providerApi = catalog.provider.get(providerID)?.provider.api
@@ -54,7 +55,7 @@ export const Plugin = PluginV2.define({
               if (config.request !== undefined) {
                 ModelRequest.assign(model.request, {
                   headers: config.request.headers,
-                  ...ModelRequest.ingest(packageName, config.request.body ?? {}),
+                  ...ModelRequest.normalizeAiSdkOptions(packageName, config.request.body ?? {}),
                 })
                 if (config.request.variant !== undefined) model.request.variant = config.request.variant
               }
@@ -73,7 +74,7 @@ export const Plugin = PluginV2.define({
                   }
                   ModelRequest.assign(existing, {
                     headers: variant.headers,
-                    ...ModelRequest.ingest(packageName, variant.body ?? {}),
+                    ...ModelRequest.normalizeAiSdkOptions(packageName, variant.body ?? {}),
                   })
                 }
               }

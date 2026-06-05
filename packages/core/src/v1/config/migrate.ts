@@ -187,7 +187,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
   const packageID = info.provider?.npm ?? packageName
   const lowerer = ConfigProviderOptionsV1.get(packageID)
   const ingest = (options: Readonly<Record<string, unknown>>) => {
-    const request = ModelRequest.ingest(packageID, options)
+    const request = ModelRequest.normalizeAiSdkOptions(packageID, options)
     return { ...lowerer.request(request.body), ...request.generation, ...request.options }
   }
   const request = info.options && ingest(info.options)

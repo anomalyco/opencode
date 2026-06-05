@@ -1,6 +1,6 @@
 export * as ModelRequest from "./model-request"
 
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 export const Generation = Schema.Struct({
   maxTokens: Schema.Number.pipe(Schema.optional),
@@ -13,6 +13,29 @@ export const Generation = Schema.Struct({
   stop: Schema.String.pipe(Schema.Array, Schema.mutable, Schema.optional),
 })
 export type Generation = typeof Generation.Type
+
+export const Request = Schema.Struct({
+  headers: Schema.Record(Schema.String, Schema.String),
+  body: Schema.Record(Schema.String, Schema.Any),
+  generation: Generation.pipe(
+    Schema.optionalKey,
+    Schema.withConstructorDefault(Effect.succeed({})),
+    Schema.withDecodingDefaultKey(Effect.succeed({})),
+  ),
+  options: Schema.Record(Schema.String, Schema.Any).pipe(
+    Schema.optionalKey,
+    Schema.withConstructorDefault(Effect.succeed({})),
+    Schema.withDecodingDefaultKey(Effect.succeed({})),
+  ),
+})
+export type Request = typeof Request.Type
+
+interface MutableRequest {
+  headers: Record<string, string>
+  body: Record<string, unknown>
+  generation?: Generation
+  options?: Record<string, unknown>
+}
 
 const generationKeys = new Map<string, keyof Generation>([
   ["maxOutputTokens", "maxTokens"],
@@ -66,13 +89,6 @@ const profiles = new Map<string, Profile>([
 
 export const namespace = (packageName: string) => profiles.get(packageName)?.namespace
 
-interface Request {
-  headers: Record<string, string>
-  body: Record<string, unknown>
-  generation?: Generation
-  options?: Record<string, unknown>
-}
-
 export const merge = (base: Request, override: Partial<Request>) => ({
   headers: { ...base.headers, ...override.headers },
   body: { ...base.body, ...override.body },
@@ -80,7 +96,7 @@ export const merge = (base: Request, override: Partial<Request>) => ({
   options: { ...base.options, ...override.options },
 })
 
-export const assign = (target: Request, override: Partial<Request>) => {
+export const assign = (target: MutableRequest, override: Partial<Request>) => {
   Object.assign(target.headers, override.headers)
   Object.assign(target.body, override.body)
   Object.assign((target.generation ??= {}), override.generation)
@@ -88,7 +104,7 @@ export const assign = (target: Request, override: Partial<Request>) => {
 }
 
 /** Partitions AI-SDK-shaped request options before they enter the Catalog. */
-export function ingest(packageName: string | undefined, input: Readonly<Record<string, unknown>>) {
+export function normalizeAiSdkOptions(packageName: string | undefined, input: Readonly<Record<string, unknown>>) {
   const generation: Record<string, number | ReadonlyArray<string>> = {}
   const options: Record<string, unknown> = {}
   const body: Record<string, unknown> = {}

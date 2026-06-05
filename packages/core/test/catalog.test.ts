@@ -213,9 +213,6 @@ describe("CatalogV2", () => {
           provider.request.headers.provider = "provider"
           provider.request.headers.shared = "provider"
           provider.request.body.provider = true
-          const options = (provider.request.options ??= {})
-          options.shared = "provider"
-          options.provider = true
         })
         catalog.model.update(providerID, modelID, (model) => {
           model.request.headers.model = "model"
@@ -231,7 +228,7 @@ describe("CatalogV2", () => {
       const model = yield* catalog.model.get(providerID, modelID)
       expect(model.request.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
       expect(model.request.body).toEqual({ provider: true, model: true, request: true })
-      expect(model.request.options).toEqual({ provider: true, shared: "model", model: true })
+      expect(model.request.options).toEqual({ shared: "model", model: true })
     }),
   )
 

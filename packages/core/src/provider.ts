@@ -1,8 +1,7 @@
 export * as ProviderV2 from "./provider"
 
 import { withStatics } from "./schema"
-import { Effect, Schema } from "effect"
-import { ModelRequest } from "./model-request"
+import { Schema } from "effect"
 
 export const ID = Schema.String.pipe(
   Schema.brand("ProviderV2.ID"),
@@ -42,16 +41,6 @@ export type Api = typeof Api.Type
 export const Request = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.Record(Schema.String, Schema.Any),
-  generation: ModelRequest.Generation.pipe(
-    Schema.optionalKey,
-    Schema.withConstructorDefault(Effect.succeed({})),
-    Schema.withDecodingDefaultKey(Effect.succeed({})),
-  ),
-  options: Schema.Record(Schema.String, Schema.Any).pipe(
-    Schema.optionalKey,
-    Schema.withConstructorDefault(Effect.succeed({})),
-    Schema.withDecodingDefaultKey(Effect.succeed({})),
-  ),
 })
 export type Request = typeof Request.Type
 
@@ -90,8 +79,6 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
       request: {
         headers: {},
         body: {},
-        generation: {},
-        options: {},
       },
     })
   }

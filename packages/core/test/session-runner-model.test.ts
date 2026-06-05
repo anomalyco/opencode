@@ -48,7 +48,7 @@ const provider = (api: ProviderV2.Info["api"]) =>
     enabled: { via: "env", name: "TEST_PROVIDER_API_KEY" },
     env: ["TEST_PROVIDER_API_KEY"],
     api,
-    request: { headers: {}, body: {}, generation: {}, options: {} },
+    request: { headers: {}, body: {} },
   })
 
 describe("SessionRunnerModel", () => {

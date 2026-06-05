@@ -41,7 +41,7 @@ function cost(input: ModelsDev.Model["cost"]) {
 
 function variants(model: ModelsDev.Model, packageName?: string) {
   return Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => {
-    const request = ModelRequest.ingest(packageName, item.provider?.body ?? {})
+    const request = ModelRequest.normalizeAiSdkOptions(packageName, item.provider?.body ?? {})
     return {
       id: ModelV2.VariantID.make(id),
       headers: { ...(item.provider?.headers ?? {}) },
