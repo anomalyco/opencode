@@ -10,6 +10,7 @@ import { State } from "./state"
 
 export const ID = Schema.String.pipe(Schema.brand("AgentV2.ID"))
 export type ID = typeof ID.Type
+export const defaultID = ID.make("build")
 
 export const Color = Schema.Union([
   Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
@@ -42,6 +43,11 @@ export class Info extends Schema.Class<Info>("AgentV2.Info")({
   }
 }
 
+export interface Selection {
+  readonly id: ID
+  readonly info: Info | undefined
+}
+
 type Data = {
   agents: Map<ID, Info>
   default?: ID
@@ -61,6 +67,7 @@ export interface Interface {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly default: () => Effect.Effect<Info | undefined>
   readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
+  readonly select: (id?: ID | string) => Effect.Effect<Selection>
   readonly all: () => Effect.Effect<Info[]>
 }
 
@@ -119,6 +126,14 @@ export const layer = Layer.effect(
       resolve: Effect.fn("AgentV2.resolve")(function* (id) {
         if (id !== undefined) return state.get().agents.get(ID.make(id))
         return selectedDefault()
+      }),
+      select: Effect.fn("AgentV2.select")(function* (id) {
+        if (id !== undefined) {
+          const selected = ID.make(id)
+          return { id: selected, info: state.get().agents.get(selected) }
+        }
+        const info = selectedDefault()
+        return { id: info?.id ?? defaultID, info }
       }),
       all: Effect.fn("AgentV2.all")(function* () {
         return Array.fromIterable(state.get().agents.values())

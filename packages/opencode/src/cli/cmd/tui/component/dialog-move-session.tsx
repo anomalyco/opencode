@@ -15,7 +15,11 @@ const REFRESH_FRAMES = ["■", "⬝"]
 
 export type MoveSessionSelection = { type: "directory"; directory: string } | { type: "new" }
 
-export function DialogMoveSession(props: { projectID: string; onSelect: (selection: MoveSessionSelection) => void }) {
+export function DialogMoveSession(props: {
+  projectID: string
+  current?: MoveSessionSelection
+  onSelect: (selection: MoveSessionSelection) => void
+}) {
   const dialog = useDialog()
   const sdk = useSDK()
   const dimensions = useTerminalDimensions()
@@ -42,7 +46,7 @@ export function DialogMoveSession(props: { projectID: string; onSelect: (selecti
     },
   )
 
-  const options = createMemo<DialogSelectOption<string | undefined>[]>(() => {
+  const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
     if (directories.loading) return [{ title: "Loading project directories...", value: undefined }]
     if (directories.error) return [{ title: "Failed to load project directories", value: undefined }]
     const data = directories()
@@ -88,7 +92,7 @@ export function DialogMoveSession(props: { projectID: string; onSelect: (selecti
             <span style={{ fg: theme.textMuted }}>{visible.slice(split)}</span>
           </>
         ) : undefined,
-        value: item.location,
+        value: { type: "directory", directory: item.location } as const,
         category: item.root === data?.main ? "Project" : "Working copies",
         titleWidth,
         truncateTitle: "left" as const,
@@ -103,8 +107,9 @@ export function DialogMoveSession(props: { projectID: string; onSelect: (selecti
       <DialogSelect
         title="Move session"
         options={options()}
+        current={props.current}
         onSelect={(option) => {
-          if (option.value) props.onSelect({ type: "directory", directory: option.value })
+          if (option.value) props.onSelect(option.value)
         }}
         actions={[
           {

@@ -55,7 +55,6 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
       auto: info.compaction.auto,
       prune: info.compaction.prune,
       keep: {
-        turns: info.compaction.tail_turns,
         tokens: info.compaction.preserve_recent_tokens,
       },
       buffer: info.compaction.reserved,

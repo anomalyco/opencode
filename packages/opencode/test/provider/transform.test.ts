@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import { ProviderTransform } from "@/provider/transform"
+import { LLMRequestPrep } from "@/session/llm/request"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -292,6 +294,78 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.reasoningSummary).toBe("auto")
     expect(result.include).toEqual(["reasoning.encrypted_content"])
     expect(result.textVerbosity).toBe("low")
+  })
+
+  test("openai-compatible gpt-5 models omit Responses-only reasoningSummary", () => {
+    const model = {
+      ...createGpt5Model("gpt-5.4"),
+      id: "cortecs/gpt-5.4",
+      providerID: "cortecs",
+      api: {
+        id: "gpt-5.4",
+        url: "https://api.cortecs.ai/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningEffort).toBe("medium")
+    expect(result.reasoningSummary).toBeUndefined()
+    expect(result.include).toBeUndefined()
+  })
+
+  test("azure chat completions omit Responses-only reasoning options after variants merge", async () => {
+    const model = {
+      ...createGpt5Model("gpt-5.4"),
+      id: "azure/gpt-5.4",
+      providerID: "azure",
+      api: {
+        id: "gpt-5.4",
+        url: "https://azure.com",
+        npm: "@ai-sdk/azure",
+      },
+      variants: {
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      },
+    }
+    const result = await Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: "azure", modelID: "gpt-5.4", variant: "high" },
+        } as any,
+        sessionID,
+        model,
+        agent: {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [],
+        } as any,
+        system: [],
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {},
+        provider: { id: "azure", options: { useCompletionUrls: true } } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+    expect(result.params.options.reasoningEffort).toBe("high")
+    expect(result.params.options.reasoningSummary).toBeUndefined()
+    expect(result.params.options.include).toBeUndefined()
   })
 
   test("gpt-5.1 should have textVerbosity set to low", () => {

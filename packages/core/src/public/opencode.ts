@@ -51,6 +51,7 @@ export const layer = Layer.effect(
           }),
         get: sessions.get,
         list: sessions.list,
+        interrupt: sessions.interrupt,
         prompt: (input) =>
           sessions.prompt({
             id: input.id,

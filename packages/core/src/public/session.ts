@@ -84,6 +84,8 @@ export interface Interface {
   readonly get: (sessionID: ID) => Effect.Effect<Info, NotFoundError>
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly prompt: (input: PromptInput) => Effect.Effect<Admission, NotFoundError | PromptConflictError>
+  /** Interrupt the active V2 execution chain for one Session on this process. Interrupting an idle or missing Session is a no-op. */
+  readonly interrupt: (sessionID: ID) => Effect.Effect<void>
   readonly messages: (input: MessagesInput) => Effect.Effect<Message[], NotFoundError | MessageDecodeError>
   readonly message: (input: MessageInput) => Effect.Effect<Message | undefined>
   readonly context: (sessionID: ID) => Effect.Effect<Message[], NotFoundError | MessageDecodeError>
