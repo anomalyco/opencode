@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.15.13",
+  "version": "1.16.0",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -17,6 +17,7 @@
     "opencode": "./bin/opencode"
   },
   "exports": {
+    "./public": "./src/public/index.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./*": "./src/*.ts"
   },
@@ -89,7 +90,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
     "@opentelemetry/sdk-trace-base": "2.6.1",
     "@parcel/watcher": "2.5.1",
-    "@openrouter/ai-sdk-provider": "2.8.1",
+    "@openrouter/ai-sdk-provider": "2.9.0",
     "ai-gateway-provider": "3.1.2",
     "bun-pty": "0.4.8",
     "cross-spawn": "catalog:",

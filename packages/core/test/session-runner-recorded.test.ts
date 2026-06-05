@@ -14,12 +14,12 @@ import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
-import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SystemContextRegistry } from "@opencode-ai/core/system-context-registry"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -47,7 +47,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
@@ -56,6 +56,7 @@ const model = OpenAIChat.route
   })
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
+const systemContext = SystemContextRegistry.layer
 const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -63,6 +64,7 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
+  Layer.provide(systemContext),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -89,6 +91,7 @@ const it = testEffect(
     permission,
     registry,
     models,
+    systemContext,
     runner,
     coordinator,
     execution,
@@ -131,7 +134,7 @@ describe("SessionRunnerLLM recorded", () => {
 
       const messages = yield* session.context(sessionID)
       expect(messages).toHaveLength(2)
-      expect(messages[0]).toEqual(prompt)
+      expect(messages[0]).toMatchObject({ id: prompt.id, type: "user", text: "Say hello in one short sentence." })
       expect(messages[1]).toMatchObject({ type: "assistant", agent: "build", finish: "stop" })
       expect(messages[1]?.type === "assistant" ? messages[1].content : []).toMatchObject([
         { type: "text", text: "Hello!" },
@@ -144,7 +147,8 @@ describe("SessionRunnerLLM recorded", () => {
           .orderBy(EventTable.seq)
           .all()).map((event) => event.type),
       ).toEqual([
-        "session.next.prompted.1",
+        "session.next.prompt.admitted.1",
+        "session.next.prompt.promoted.1",
         "session.next.step.started.1",
         "session.next.text.started.1",
         "session.next.text.ended.1",

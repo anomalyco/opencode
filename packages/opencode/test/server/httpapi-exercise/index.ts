@@ -507,6 +507,14 @@ const scenarios: Scenario[] = [
     }))
     .status(400),
   http.protected
+    .post("/experimental/control-plane/move-session", "experimental.controlPlane.moveSession")
+    .global()
+    .at(() => ({
+      path: "/experimental/control-plane/move-session",
+      body: {},
+    }))
+    .status(400),
+  http.protected
     .get("/experimental/tool", "tool.list")
     .at((ctx) => ({
       path: `/experimental/tool?${new URLSearchParams({ provider: "opencode", model: "test" })}`,
@@ -560,6 +568,17 @@ const scenarios: Scenario[] = [
     .get("/experimental/session", "experimental.session.list")
     .at((ctx) => ({ path: "/experimental/session?roots=false&archived=false", headers: ctx.headers() }))
     .json(200, array),
+  http.protected
+    .post("/experimental/session/{sessionID}/background", "experimental.session.background")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Background route owner" }))
+    .at((ctx) => ({
+      path: route("/experimental/session/{sessionID}/background", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === false, "background route should be a no-op without running subagents")
+    }),
   http.protected.get("/experimental/resource", "experimental.resource.list").json(),
   http.protected
     .post("/sync/history", "sync.history.list")

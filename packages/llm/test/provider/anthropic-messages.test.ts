@@ -125,26 +125,65 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects invalid native chronological system update placement", () =>
+  it.effect("falls back for unsupported native chronological system update placement", () =>
     Effect.gen(function* () {
-      const placementError = (messages: Parameters<typeof LLM.request>[0]["messages"]) =>
-        LLMClient.prepare(LLM.request({ model: opus48, messages, cache: "none" })).pipe(Effect.flip)
+      expect(
+        (yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+          LLM.request({
+            model: opus48,
+            messages: [Message.assistant("Plain."), Message.system("After plain assistant.")],
+            cache: "none",
+          }),
+        )).body.messages,
+      ).toEqual([
+        { role: "assistant", content: [{ type: "text", text: "Plain." }] },
+        {
+          role: "user",
+          content: [{ type: "text", text: "<system-update>\nAfter plain assistant.\n</system-update>" }],
+        },
+      ])
+      expect(
+        (yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+          LLM.request({ model: opus48, messages: [Message.system("First.")], cache: "none" }),
+        )).body.messages,
+      ).toEqual([{ role: "user", content: [{ type: "text", text: "<system-update>\nFirst.\n</system-update>" }] }])
+      expect(
+        (yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+          LLM.request({
+            model: opus48,
+            messages: [Message.user("Before."), Message.system("One."), Message.system("Two.")],
+            cache: "none",
+          }),
+        )).body.messages,
+      ).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Before." },
+            { type: "text", text: "<system-update>\nOne.\n</system-update>" },
+            { type: "text", text: "<system-update>\nTwo.\n</system-update>" },
+          ],
+        },
+      ])
+    }),
+  )
 
-      expect((yield* placementError([Message.system("First.")])).message).toContain("cannot be the first message")
-      expect(
-        (yield* placementError([Message.user("Before."), Message.system("One."), Message.system("Two.")])).message,
-      ).toContain("cannot be consecutive")
-      expect(
-        (yield* placementError([Message.assistant("Plain."), Message.system("After plain assistant.")])).message,
-      ).toContain("must follow a user message, tool result, or assistant server tool use")
-      expect(
-        (yield* placementError([
-          Message.user("Use the tool."),
-          Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
-          Message.system("Too early."),
-          Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
-        ])).message,
-      ).toContain("cannot appear between a local tool call and its tool result")
+  it.effect("rejects a system update between a local tool call and its result", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model: opus48,
+          messages: [
+            Message.user("Use the tool."),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.system("Too early."),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+          ],
+          cache: "none",
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("system updates cannot split a local tool call from its tool result")
     }),
   )
 

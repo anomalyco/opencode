@@ -123,7 +123,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.agent.switched": (event) => {
         return adapter.appendMessage(
           new SessionMessage.AgentSwitched({
-            id: event.id,
+            id: event.data.messageID,
             type: "agent-switched",
             metadata: event.metadata,
             agent: event.data.agent,
@@ -134,7 +134,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.model.switched": (event) => {
         return adapter.appendMessage(
           new SessionMessage.ModelSwitched({
-            id: event.id,
+            id: event.data.messageID,
             type: "model-switched",
             metadata: event.metadata,
             model: event.data.model,
@@ -142,10 +142,11 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.moved": () => Effect.void,
       "session.next.prompted": (event) => {
         return adapter.appendMessage(
           new SessionMessage.User({
-            id: event.id,
+            id: event.data.messageID,
             type: "user",
             metadata: event.metadata,
             text: event.data.prompt.text,
@@ -156,12 +157,23 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.prompt.admitted": () => Effect.void,
+      "session.next.prompt.promoted": () => Effect.void,
+      "session.next.context.updated": (event) =>
+        adapter.appendMessage(
+          new SessionMessage.System({
+            id: event.data.messageID,
+            type: "system",
+            text: event.data.text,
+            time: { created: event.data.timestamp },
+          }),
+        ),
       "session.next.synthetic": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Synthetic({
             sessionID: event.data.sessionID,
             text: event.data.text,
-            id: event.id,
+            id: event.data.messageID,
             type: "synthetic",
             time: { created: event.data.timestamp },
           }),
@@ -170,7 +182,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.shell.started": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Shell({
-            id: event.id,
+            id: event.data.messageID,
             type: "shell",
             metadata: event.metadata,
             callID: event.data.callID,
@@ -205,7 +217,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
           yield* adapter.appendMessage(
             new SessionMessage.Assistant({
-              id: event.id,
+              id: event.data.assistantMessageID,
               type: "assistant",
               agent: event.data.agent,
               model: event.data.model,
@@ -233,43 +245,22 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.text.started": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.content.push(
-                  castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })),
-                )
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.content.push(
+            castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })),
+          )
         })
       },
       "session.next.text.delta": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestText(draft, event.data.textID)
-                if (match) match.text += event.data.delta
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestText(draft, event.data.textID)
+          if (match) match.text += event.data.delta
         })
       },
       "session.next.text.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestText(draft, event.data.textID)
-                if (match) match.text = event.data.text
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestText(draft, event.data.textID)
+          if (match) match.text = event.data.text
         })
       },
       "session.next.tool.input.started": (event) => {
@@ -366,52 +357,31 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.reasoning.started": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.content.push(
-                  castDraft(
-                    new SessionMessage.AssistantReasoning({
-                      type: "reasoning",
-                      id: event.data.reasoningID,
-                      text: "",
-                      providerMetadata: event.data.providerMetadata,
-                    }),
-                  ),
-                )
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.content.push(
+            castDraft(
+              new SessionMessage.AssistantReasoning({
+                type: "reasoning",
+                id: event.data.reasoningID,
+                text: "",
+                providerMetadata: event.data.providerMetadata,
               }),
-            )
-          }
+            ),
+          )
         })
       },
       "session.next.reasoning.delta": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestReasoning(draft, event.data.reasoningID)
-                if (match) match.text += event.data.delta
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestReasoning(draft, event.data.reasoningID)
+          if (match) match.text += event.data.delta
         })
       },
       "session.next.reasoning.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestReasoning(draft, event.data.reasoningID)
-                if (match) {
-                  match.text = event.data.text
-                  if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
-                }
-              }),
-            )
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestReasoning(draft, event.data.reasoningID)
+          if (match) {
+            match.text = event.data.text
+            if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
           }
         })
       },
@@ -419,7 +389,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.compaction.started": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Compaction({
-            id: event.id,
+            id: event.data.messageID,
             type: "compaction",
             metadata: event.metadata,
             reason: event.data.reason,

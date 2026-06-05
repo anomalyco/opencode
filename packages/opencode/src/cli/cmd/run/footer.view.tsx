@@ -86,6 +86,7 @@ type RunFooterViewProps = {
   theme?: RunTheme
   diffStyle?: RunDiffStyle
   tuiConfig: RunTuiConfig
+  backgroundSubagents: boolean
   history?: RunPrompt[]
   agent: string
   onSubmit: (input: RunPrompt) => boolean
@@ -94,6 +95,7 @@ type RunFooterViewProps = {
   onQuestionReject: (input: QuestionReject) => void | Promise<void>
   onCycle: () => void
   onInterrupt: () => boolean
+  onBackground?: () => void
   onInputClear: () => void
   onExitRequest?: () => boolean
   onRequestExit?: (fn: (() => boolean) | undefined) => void
@@ -158,6 +160,9 @@ export function RunFooterView(props: RunFooterViewProps) {
       label: count === 1 ? "agent" : "agents",
     }
   })
+  const foregroundSubagents = createMemo(
+    () => props.backgroundSubagents && tabs().some((item) => item.status === "running" && !item.background),
+  )
   const queuedIndicator = createMemo(() => {
     const count = queuedPrompts().length
     if (count === 0) return
@@ -211,6 +216,15 @@ export function RunFooterView(props: RunFooterViewProps) {
         keymap
           .getCommandBindings({ visibility: "registered", commands: ["session.child.first"] })
           .get("session.child.first"),
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const backgroundShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeyBindings(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.background"] })
+          .get("session.background"),
         props.tuiConfig,
       ) ?? "",
   )
@@ -373,6 +387,21 @@ export function RunFooterView(props: RunFooterViewProps) {
       ...props.tuiConfig.keybinds.get("command.palette.show"),
       ...props.tuiConfig.keybinds.get("variant.cycle"),
     ],
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents(),
+    priority: 1,
+    commands: [
+      {
+        name: "session.background",
+        title: "Background subagents",
+        category: "Session",
+        run: () => props.onBackground?.(),
+      },
+    ],
+    bindings: props.tuiConfig.keybinds.get("session.background"),
   }))
 
   useBindings(() => ({
@@ -773,6 +802,13 @@ export function RunFooterView(props: RunFooterViewProps) {
                               <span style={{ fg: theme().highlight }}>{subagentShortcut() || "leader+down"}</span>
                             </text>
                           )}
+                        </Show>
+                        <Show when={foregroundSubagents() && backgroundShortcut()}>
+                          <text id="run-direct-footer-background-label" fg={theme().text} wrapMode="none" truncate>
+                            <span style={{ fg: theme().highlight }}>• </span>
+                            <span style={{ fg: theme().highlight }}>{backgroundShortcut()}</span>{" "}
+                            <span style={{ fg: theme().muted }}>background</span>
+                          </text>
                         </Show>
                         <Show when={queuedIndicator()}>
                           {(info) => (
