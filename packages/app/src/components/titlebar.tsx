@@ -242,7 +242,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
           : undefined,
         "align-self": electronWindows() ? "flex-start" : undefined,
       }}
-      // data-tauri-drag-region
+      data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
     >
@@ -663,7 +663,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 "flex items-center min-w-0 justify-end": true,
                 "pr-2": !windows(),
               }}
-              // data-tauri-drag-region
+              data-tauri-drag-region
               onMouseDown={drag}
             >
               <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
