@@ -20,7 +20,7 @@
   letter-spacing: 0.05px;
   font-variant-numeric: tabular-nums;
   text-transform: uppercase;
-  color: var(--v2-grey-100);
+  color: var(--v2-avatar-fg);
   text-shadow: 0 0 4px var(--v2-alpha-dark-20);
   user-select: none;
   -webkit-user-select: none;
