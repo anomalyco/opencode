@@ -1,12 +1,12 @@
-import { Effect, Option, Ref, Scope, Stream } from "effect"
+import { Effect, Option, Ref, Scope, Semaphore, Stream, SynchronizedRef } from "effect"
 import type { Headers } from "effect/unstable/http"
-import * as CassetteService from "./cassette"
-import { canonicalizeJson, decodeJson, safeText } from "./matching"
-import { makeReplayState, resolveAutoMode } from "./recorder"
-import type { RecordReplayMode } from "./effect"
-import { redactUrl } from "./redaction"
-import { defaults, type Redactor } from "./redactor"
-import { webSocketInteractions, type CassetteMetadata, type WebSocketFrame } from "./schema"
+import * as CassetteService from "./cassette.js"
+import { canonicalizeJson, decodeJson, safeText } from "./matching.js"
+import { makeReplayState, resolveAutoMode } from "./recorder.js"
+import type { RecordReplayMode } from "./internal-effect.js"
+import { redactUrl } from "./redaction.js"
+import { defaults, type Redactor } from "./redactor.js"
+import { webSocketInteractions, type CassetteMetadata, type WebSocketFrame } from "./schema.js"
 
 export interface WebSocketRequest {
   readonly url: string
@@ -96,17 +96,21 @@ export const makeWebSocketExecutor = <E>(
             const server: WebSocketFrame[] = []
             const connection = yield* options.live.open(request)
             const closed = yield* Ref.make(false)
-            const closeOnce = Effect.gen(function* () {
-              if (yield* Ref.getAndSet(closed, true)) return
-              yield* connection.close
-              yield* options.cassette
-                .append(
-                  options.name,
-                  { transport: "websocket", open: openSnapshot(request), client, server },
-                  options.metadata,
-                )
-                .pipe(Effect.orDie)
-            })
+            const closeLock = yield* Semaphore.make(1)
+            const closeOnce = closeLock.withPermit(
+              Effect.gen(function* () {
+                if (yield* Ref.get(closed)) return
+                yield* connection.close
+                yield* options.cassette
+                  .append(
+                    options.name,
+                    { transport: "websocket", open: openSnapshot(request), client, server },
+                    options.metadata,
+                  )
+                  .pipe(Effect.orDie)
+                yield* Ref.set(closed, true)
+              }),
+            )
             return {
               sendText: (message) =>
                 connection
@@ -126,31 +130,31 @@ export const makeWebSocketExecutor = <E>(
     return {
       open: (request) =>
         Effect.gen(function* () {
-          const interactions = yield* replay.load.pipe(Effect.orDie)
-          const index = yield* replay.cursor
-          const interaction = interactions[index]
-          if (!interaction)
-            return yield* Effect.die(new Error(`No recorded WebSocket interaction for ${redactUrl(request.url)}`))
-          yield* replay.advance
-          yield* assertEqual(`WebSocket open frame ${index + 1}`, openSnapshot(request), interaction.open)
-          const messageIndex = yield* Ref.make(0)
+          const claimed = yield* replay
+            .claim((interaction, index) => {
+              if (!interaction)
+                return Effect.die(new Error(`No recorded WebSocket interaction for ${redactUrl(request.url)}`))
+              return assertEqual(`WebSocket open frame ${index + 1}`, openSnapshot(request), interaction.open)
+            })
+            .pipe(Effect.orDie)
+          const interaction = claimed.interaction
+          const index = claimed.index
+          const messageIndex = yield* SynchronizedRef.make(0)
           return {
             sendText: (message) =>
-              Effect.gen(function* () {
-                const current = yield* Ref.get(messageIndex)
-                yield* compareClientMessage(
+              SynchronizedRef.updateEffect(messageIndex, (current) =>
+                compareClientMessage(
                   message,
                   interaction.client[current],
                   current,
                   options.compareClientMessagesAsJson === true,
-                )
-                yield* Ref.update(messageIndex, (value) => value + 1)
-              }),
+                ).pipe(Effect.as(current + 1)),
+              ),
             messages: Stream.fromIterable(interaction.server).pipe(Stream.map(decodeFrameMessage)),
             close: Effect.gen(function* () {
               yield* assertEqual(
                 `WebSocket client frame count for interaction ${index + 1}`,
-                yield* Ref.get(messageIndex),
+                yield* SynchronizedRef.get(messageIndex),
                 interaction.client.length,
               )
             }),

@@ -453,13 +453,19 @@
       "name": "@opencode-ai/http-recorder",
       "version": "1.16.2",
       "dependencies": {
-        "@effect/platform-node": "catalog:",
-        "effect": "catalog:",
+        "@effect/platform-node": "4.0.0-beta.74",
+        "@effect/platform-node-shared": "4.0.0-beta.74",
       },
       "devDependencies": {
-        "@tsconfig/bun": "catalog:",
+        "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
+        "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
+        "effect": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.74",
       },
     },
     "packages/llm": {

@@ -1,4 +1,7 @@
 import { Schema } from "effect"
+import type { CassetteMetadata, HttpInteraction, RequestSnapshot, ResponseSnapshot } from "./types.js"
+
+export type { CassetteMetadata, HttpInteraction, RequestSnapshot, ResponseSnapshot } from "./types.js"
 
 export const RequestSnapshotSchema = Schema.Struct({
   method: Schema.String,
@@ -6,7 +9,6 @@ export const RequestSnapshotSchema = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.String,
 })
-export type RequestSnapshot = Schema.Schema.Type<typeof RequestSnapshotSchema>
 
 export const ResponseSnapshotSchema = Schema.Struct({
   status: Schema.Number,
@@ -14,17 +16,14 @@ export const ResponseSnapshotSchema = Schema.Struct({
   body: Schema.String,
   bodyEncoding: Schema.optional(Schema.Literals(["text", "base64"])),
 })
-export type ResponseSnapshot = Schema.Schema.Type<typeof ResponseSnapshotSchema>
 
 export const CassetteMetadataSchema = Schema.Record(Schema.String, Schema.Unknown)
-export type CassetteMetadata = Schema.Schema.Type<typeof CassetteMetadataSchema>
 
 export const HttpInteractionSchema = Schema.Struct({
   transport: Schema.tag("http"),
   request: RequestSnapshotSchema,
   response: ResponseSnapshotSchema,
 })
-export type HttpInteraction = Schema.Schema.Type<typeof HttpInteractionSchema>
 
 export const WebSocketFrameSchema = Schema.Union([
   Schema.Struct({ kind: Schema.tag("text"), body: Schema.String }),

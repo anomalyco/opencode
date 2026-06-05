@@ -1,28 +1,36 @@
 # @opencode-ai/http-recorder
 
-Record and replay HTTP and WebSocket traffic for Effect's `HttpClient`. Tests
-exercise real request shapes against deterministic, version-controlled
-cassettes — no manual mocks, no flakes from upstream drift.
+Record and replay HTTP traffic for Effect's `HttpClient`. Tests exercise real
+request shapes against deterministic, version-controlled cassettes — no manual
+mocks, no flakes from upstream drift.
 
 ## Install
 
-Internal package; depended on as `@opencode-ai/http-recorder` from another
-workspace package.
+This package targets Node.js and Bun. It uses Node filesystem storage and is
+not currently supported in browsers, workers, or Deno.
 
-```ts
-import { HttpRecorder } from "@opencode-ai/http-recorder"
+Requirements:
+
+- Node.js 22 or newer, or Bun
+- `effect@4.0.0-beta.74`
+- TypeScript consumers must currently enable `skipLibCheck` because the
+  published Effect 4 beta declarations contain an upstream internal Schema
+  declaration error
+
+```sh
+bun add -d @opencode-ai/http-recorder
 ```
 
 ## Quickstart
 
-Provide `cassetteLayer(name)` in place of (or layered over) your `HttpClient`.
-By default the layer records on first run and replays on subsequent runs —
-no env-var ternary at the call site, and `CI=true` forces strict replay so
-missing cassettes fail loudly in CI rather than silently re-recording.
+`layer` wraps your existing `HttpClient`. It records on the first local run and
+replays on subsequent runs. `CI=true` forces strict replay, so CI never records
+a missing cassette.
 
 ```ts
 import { Effect } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { Layer } from "effect"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 
 const program = Effect.gen(function* () {
@@ -31,22 +39,25 @@ const program = Effect.gen(function* () {
   return yield* response.json
 })
 
-// Records if the cassette is missing, replays if it exists.
-// In CI (CI=true) always replays — fails loudly on missing fixtures.
-Effect.runPromise(program.pipe(Effect.provide(HttpRecorder.cassetteLayer("users/get-one"))))
+const recorderLayer = HttpRecorder.layer("users/get-one").pipe(Layer.provide(FetchHttpClient.layer))
 
-// Force a refresh — always hits upstream and overwrites.
-Effect.runPromise(program.pipe(Effect.provide(HttpRecorder.cassetteLayer("users/get-one", { mode: "record" }))))
+Effect.runPromise(program.pipe(Effect.provide(recorderLayer)))
 ```
 
-## Modes
+For the common fetch-backed case, `layerFetch` provides the upstream client too:
 
-| Mode          | Behavior                                                                            |
-| ------------- | ----------------------------------------------------------------------------------- |
-| `auto`        | Default. Replay if the cassette exists; record if missing. `CI=true` forces replay. |
-| `replay`      | Strict — match the request to a recorded interaction; error if none.                |
-| `record`      | Execute upstream, append the interaction, write the cassette.                       |
-| `passthrough` | Bypass the recorder entirely — just call upstream.                                  |
+```ts
+const recorderLayer = HttpRecorder.layerFetch("users/get-one")
+```
+
+To refresh recordings, delete the selected cassette files and rerun their
+tests. This works for one cassette or any chosen set without granting a test
+run permission to overwrite unrelated fixtures.
+
+```sh
+rm test/fixtures/recordings/users/get-one.json
+bun run test users.test.ts
+```
 
 ## Cassette format
 
@@ -85,46 +96,36 @@ custom equivalence (e.g. ignoring a timestamp field in the body).
 
 ## Redaction & secret safety
 
-Cassettes get checked in, so the recorder is aggressive about not letting
-secrets escape. Redaction is configured by composing a `Redactor`:
+Cassettes get checked in, so the recorder applies secure defaults and lets you
+declaratively extend them at layer construction:
 
 ```ts
-import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@opencode-ai/http-recorder"
 
-HttpRecorder.cassetteLayer("anthropic/messages", {
-  redactor: Redactor.defaults({
-    requestHeaders: { allow: ["content-type", "anthropic-version"] },
-    url: { transform: (url) => url.replace(/\/accounts\/[^/]+/, "/accounts/{account}") },
-    body: (parsed) => ({ ...(parsed as object), user_id: "{user}" }),
-  }),
+HttpRecorder.layer("anthropic/messages", {
+  redact: {
+    headers: ["x-project-token"],
+    allowRequestHeaders: ["anthropic-version"],
+    queryParameters: ["session-id"],
+    jsonFields: ["user_id"],
+    url: (url) => url.replace(/\/accounts\/[^/]+/, "/accounts/{account}"),
+  },
 })
 ```
 
-`Redactor.defaults({ … })` composes the four built-in redactors with your
-overrides. For full control, build the stack yourself:
+What each option does:
 
-```ts
-const redactor = Redactor.compose(
-  Redactor.requestHeaders({ allow: ["content-type", "x-custom"] }),
-  Redactor.responseHeaders(),
-  Redactor.url({ query: ["session-id"] }),
-  Redactor.body((parsed) => /* … */),
-)
-```
+- **`headers`** adds sensitive header names. Request and response headers are
+  stripped to small allow-lists before these values are replaced.
+- **`allowRequestHeaders` / `allowResponseHeaders`** add non-sensitive headers
+  that affect matching or replay behavior.
+- **`queryParameters`** adds sensitive query parameter names.
+- **`jsonFields`** recursively redacts matching request and response JSON keys.
+- **`url`** and **`body`** apply narrow custom stabilization after built-in redaction.
 
-What each layer does:
-
-- **`requestHeaders` / `responseHeaders`** — strip headers to a small
-  allow-list (request default: `content-type`, `accept`, `openai-beta`;
-  response default: `content-type`). Sensitive headers within the
-  allow-list (`authorization`, `cookie`, API-key headers, AWS/GCP tokens,
-  …) are replaced with `[REDACTED]`.
-- **`url`** — query parameters matching common secret names (`api_key`,
-  `token`, `signature`, AWS signing params, …) are replaced with
-  `[REDACTED]`. URL user/password are replaced. `transform` runs after
-  built-in redaction for path-level scrubbing.
-- **`body`** — receives the parsed JSON request body and returns a redacted
-  version. No-op for non-JSON bodies.
+Configured names extend the defaults. They never disable built-in protection
+for authorization, cookies, common API-key headers, signed query parameters,
+or credential-like JSON fields.
 
 After assembling the cassette, the recorder scans every string for known
 secret patterns (Bearer tokens, `sk-…`, `sk-ant-…`, Google `AIza…` keys,
@@ -133,76 +134,21 @@ environment variable named like a credential. If anything is found, the
 cassette is **not written** and the request fails with `UnsafeCassetteError`
 listing what was detected.
 
-## WebSocket recording
-
-WebSocket support records the open frame plus client/server message
-streams. It uses the shared `Cassette.Service`, so HTTP and WS interactions
-can live in the same cassette.
-
-```ts
-import { HttpRecorder } from "@opencode-ai/http-recorder"
-import { Effect } from "effect"
-
-const program = Effect.gen(function* () {
-  const cassette = yield* HttpRecorder.Cassette.Service
-  const executor = yield* HttpRecorder.makeWebSocketExecutor({
-    name: "ws/subscribe",
-    cassette,
-    live: liveExecutor,
-  })
-  // use executor.open(...)
-})
-```
-
-## Inspecting cassettes programmatically
-
-`Cassette.Service` exposes `read`, `append`, `exists`, and `list`. `read`
-returns the recorded interactions for a name; the file format is hidden
-behind the seam. Useful for CI checks:
-
-```ts
-import { HttpRecorder } from "@opencode-ai/http-recorder"
-import { Effect } from "effect"
-
-const audit = Effect.gen(function* () {
-  const cassettes = yield* HttpRecorder.Cassette.Service
-  const names = yield* cassettes.list()
-  const issues = yield* Effect.forEach(names, (name) =>
-    cassettes
-      .read(name)
-      .pipe(Effect.map((interactions) => ({ name, findings: HttpRecorder.secretFindings(interactions) }))),
-  )
-  return issues.filter((i) => i.findings.length > 0)
-})
-```
-
-`cassetteLayer` is the batteries-included entry point — it provides
-`Cassette.fileSystem({ directory })` automatically. If you want to provide
-your own `Cassette.Service` (e.g. an in-memory adapter for the recorder's
-own unit tests), use `recordingLayer` and supply `Cassette.fileSystem` /
-`Cassette.memory` yourself.
-
 ## Options reference
 
 ```ts
-type RecordReplayOptions = {
-  mode?: "auto" | "replay" | "record" | "passthrough" // default: "auto" (CI=true forces "replay")
+type RecorderOptions = {
   directory?: string // default: <cwd>/test/fixtures/recordings
   metadata?: Record<string, unknown> // merged into cassette.metadata
-  redactor?: Redactor // default: Redactor.defaults()
+  redact?: {
+    headers?: ReadonlyArray<string>
+    allowRequestHeaders?: ReadonlyArray<string>
+    allowResponseHeaders?: ReadonlyArray<string>
+    queryParameters?: ReadonlyArray<string>
+    jsonFields?: ReadonlyArray<string>
+    url?: (url: string) => string
+    body?: (body: string) => string
+  }
   match?: (incoming, recorded) => boolean // custom matcher
 }
 ```
-
-## Layout
-
-| File           | Purpose                                                                     |
-| -------------- | --------------------------------------------------------------------------- |
-| `effect.ts`    | `cassetteLayer` / `recordingLayer` — the `HttpClient` adapter.              |
-| `websocket.ts` | `makeWebSocketExecutor` — WebSocket record/replay.                          |
-| `cassette.ts`  | `Cassette.Service` — `fileSystem` / `memory` adapters, error types.         |
-| `recorder.ts`  | Shared transport plumbing: `resolveAutoMode`, `ReplayState`.                |
-| `redactor.ts`  | Composable `Redactor` — headers, url, body redaction.                       |
-| `redaction.ts` | Lower-level header/URL primitives + secret pattern detection.               |
-| `schema.ts`    | Effect Schema definitions for the cassette JSON format.                     |
-| `matching.ts`  | Request matcher, canonicalization, sequential cursor, mismatch diagnostics. |

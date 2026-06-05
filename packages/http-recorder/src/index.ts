@@ -1,25 +1,12 @@
+export { defaultMatcher, layer, layerFetch } from "./effect.js"
 export type {
   CassetteMetadata,
   HttpInteraction,
-  Interaction,
+  RecorderOptions,
+  RedactOptions,
+  RequestMatcher,
   RequestSnapshot,
   ResponseSnapshot,
-  WebSocketFrame,
-  WebSocketInteraction,
-} from "./schema"
-export { CassetteNotFoundError, hasCassetteSync, UnsafeCassetteError } from "./cassette"
-export { defaultMatcher, type RequestMatcher } from "./matching"
-export { redactHeaders, redactUrl, secretFindings, type SecretFinding } from "./redaction"
-export { cassetteLayer, recordingLayer, type RecordReplayMode, type RecordReplayOptions } from "./effect"
-export {
-  makeWebSocketExecutor,
-  type WebSocketConnection,
-  type WebSocketExecutor,
-  type WebSocketRecordReplayOptions,
-  type WebSocketRequest,
-} from "./websocket"
+} from "./types.js"
 
-export * as Cassette from "./cassette"
-export * as Redactor from "./redactor"
-
-export * as HttpRecorder from "."
+export * as HttpRecorder from "./index.js"
