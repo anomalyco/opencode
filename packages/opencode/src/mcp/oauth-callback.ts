@@ -183,7 +183,7 @@ export namespace McpOAuthCallback {
 
   export async function isPortInUse(): Promise<boolean> {
     return new Promise((resolve) => {
-      const socket = createConnection(OAUTH_CALLBACK_PORT, "127.0.0.1")
+      const socket = createConnection(OAUTH_CALLBACK_PORT, "localhost")
       socket.on("connect", () => {
         socket.destroy()
         resolve(true)
