@@ -118,6 +118,7 @@ function initError(providerID: ProviderV2.ID) {
 
 export interface Interface {
   readonly language: (model: ModelV2.Info) => Effect.Effect<LanguageModelV3, InitError>
+  readonly evict: (model: ModelV2.Info) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/AISDK") {}
@@ -129,9 +130,23 @@ export const layer = Layer.effect(
     const languages = new Map<string, LanguageModelV3>()
     const sdks = new Map<string, SDK>()
 
+    function buildLanguageKey(model: ModelV2.Info) {
+      return `${model.providerID}/${model.id}/${model.request.variant ?? "default"}`
+    }
+
+    function buildSdkKey(model: ModelV2.Info, options: Record<string, any>) {
+      return JSON.stringify({ providerID: model.providerID, api: model.api, options })
+    }
+
     return Service.of({
+      evict: Effect.fn("AISDK.evict")(function* (model) {
+        if (model.api.type !== "aisdk") return
+        languages.delete(buildLanguageKey(model))
+        const options = prepareOptions(model, model.api.package)
+        sdks.delete(buildSdkKey(model, options))
+      }),
       language: Effect.fn("AISDK.language")(function* (model) {
-        const key = `${model.providerID}/${model.id}/${model.request.variant ?? "default"}`
+        const key = buildLanguageKey(model)
         const existing = languages.get(key)
         if (existing) return existing
         if (model.api.type !== "aisdk")
@@ -141,11 +156,7 @@ export const layer = Layer.effect(
           })
 
         const options = prepareOptions(model, model.api.package)
-        const sdkKey = JSON.stringify({
-          providerID: model.providerID,
-          api: model.api,
-          options,
-        })
+        const sdkKey = buildSdkKey(model, options)
         const sdk =
           sdks.get(sdkKey) ??
           (yield* plugin

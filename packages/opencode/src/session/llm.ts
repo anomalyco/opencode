@@ -4,7 +4,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Provider } from "@/provider/provider"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
@@ -12,6 +12,7 @@ import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/
 import type { LLMClientService } from "@opencode-ai/llm/route"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
+import { ProviderError } from "@/provider/error"
 import { Config } from "@/config/config"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
@@ -354,6 +355,19 @@ const live: Layer.Layer<
       }
     })
 
+    type RunResult = Effect.Success<ReturnType<typeof run>>
+
+    function toAISDKStream(result: RunResult) {
+      if (result.type === "native") return result.stream
+      const state = LLMAISDK.adapterState()
+      return Stream.fromAsyncIterable(result.result.fullStream, (e: unknown) =>
+        e instanceof Error ? e : new Error(String(e)),
+      ).pipe(
+        Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
+        Stream.flatMap((events) => Stream.fromIterable(events)),
+      )
+    }
+
     const stream: Interface["stream"] = (input) =>
       Stream.scoped(
         Stream.unwrap(
@@ -365,16 +379,18 @@ const live: Layer.Layer<
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
-            if (result.type === "native") return result.stream
-
-            // Adapter seam: both runtimes expose the same LLMEvent stream. Native
-            // already returns one; AI SDK streams are converted here.
-            const state = LLMAISDK.adapterState()
-            return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
-              e instanceof Error ? e : new Error(String(e)),
-            ).pipe(
-              Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
-              Stream.flatMap((events) => Stream.fromIterable(events)),
+            return toAISDKStream(result).pipe(
+              Stream.catchCause((cause) => {
+                const err = Cause.squash(cause)
+                if (!ProviderError.isExpiredCredentials(err)) return Stream.failCause(cause)
+                return Stream.unwrap(
+                  Effect.gen(function* () {
+                    yield* provider.evictLanguage(input.model)
+                    const retried = yield* run({ ...input, abort: ctrl.signal })
+                    return toAISDKStream(retried)
+                  }),
+                )
+              }),
             )
           }),
         ),
@@ -384,7 +400,11 @@ const live: Layer.Layer<
   }),
 )
 
-export const layer = live.pipe(Layer.provide(Permission.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
+export const layer = live.pipe(
+  Layer.provide(Permission.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
+  Layer.provide(AISDK.defaultLayer),
+)
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(

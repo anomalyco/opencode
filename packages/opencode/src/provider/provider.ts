@@ -1101,6 +1101,7 @@ export interface Interface {
   readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
   readonly getModel: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Model, ModelNotFoundError>
   readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
+  readonly evictLanguage: (model: Model) => Effect.Effect<void>
   readonly closest: (
     providerID: ProviderV2.ID,
     query: string[],
@@ -1915,7 +1916,12 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    const evictLanguage = Effect.fn("Provider.evictLanguage")(function* (model: Model) {
+      const s = yield* InstanceState.get(state)
+      s.models.delete(`${model.providerID}/${model.id}`)
+    })
+
+    return Service.of({ list, getProvider, getModel, getLanguage, evictLanguage, closest, getSmallModel, defaultModel })
   }),
 )
 

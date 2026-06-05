@@ -185,4 +185,20 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
   }
 }
 
+// AWS STS credential expiry patterns — surfaced as 401/403 with these message signatures.
+// The security token error comes from Bedrock when STS-vended credentials have been cached
+// past their TTL by the AI SDK. The InvalidClientTokenId and ExpiredTokenException codes
+// are the canonical AWS error codes for the same condition.
+const EXPIRED_CREDENTIALS_PATTERNS = [
+  /the security token included in the request is expired/i,
+  /ExpiredTokenException/,
+  /InvalidClientTokenId/,
+]
+
+export function isExpiredCredentials(error: unknown): boolean {
+  if (!(error instanceof APICallError)) return false
+  const msg = error.message + (error.responseBody ?? "")
+  return EXPIRED_CREDENTIALS_PATTERNS.some((p) => p.test(msg))
+}
+
 export * as ProviderError from "./error"
