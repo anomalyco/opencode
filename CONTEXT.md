@@ -39,6 +39,13 @@ An expected temporary inability to observe a **Context Source** value; the runti
 **Safe Provider-Turn Boundary**:
 The point immediately before a provider call, after durable input promotion and any required tool settlement, where context changes may be admitted chronologically.
 
+**Model Request Options**:
+Provider-semantic model settings selected from the Catalog and active Session variant before the LLM protocol adapter encodes them for a provider request.
+_Avoid_: Request body, wire options
+
+**Generation Controls**:
+Provider-neutral sampling and output controls, partitioned from provider semantics and compatibility wire fields when model metadata enters the Catalog.
+
 ## Relationships
 
 - A **System Context** is an opaque carrier composed from zero or more **Context Sources**.
@@ -84,6 +91,8 @@ The point immediately before a provider call, after durable input promotion and 
 - A **Baseline System Context** durably preserves the exact joined text used for the active provider-cache prefix.
 - Compaction or a model/provider switch starts a new **Context Epoch** because the baseline can be replaced without preserving the prior provider cache.
 - A model/provider switch always starts a new **Context Epoch** while preserving chronological conversation history.
+- **Model Request Options** remain provider-semantic through Catalog resolution. The Session runner maps them into the LLM package's provider-option namespace; the selected protocol adapter alone owns provider wire encoding.
+- **Generation Controls**, protocol-semantic **Model Request Options**, and compatibility request body fields are separate Catalog domains. A shared ingestion adapter partitions legacy and models.dev AI-SDK-shaped options before routing.
 - A **Mid-Conversation System Message** lowers to the provider's native chronological instruction role when supported and to a wrapped chronological fallback otherwise.
 - When the effective aggregate instruction set changes, its **Mid-Conversation System Message** includes the complete current ordered set and supersedes the prior aggregate value; when no ambient instructions remain, the message states that previously loaded instructions no longer apply.
 - Ambient project instruction discovery honors `OPENCODE_DISABLE_PROJECT_CONFIG`; global instructions remain eligible.

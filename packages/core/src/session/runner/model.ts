@@ -50,16 +50,28 @@ const apiKey = (model: ModelV2.Info, provider?: ProviderV2.Info) => {
   return provider?.enabled !== false && provider?.enabled.via === "env" ? Auth.config(provider.enabled.name) : undefined
 }
 
-const withDefaults = (model: ModelV2.Info, route: AnyRoute) =>
-  route.with({
+const requestDefaults = (model: ModelV2.Info) => {
+  const namespace = model.api.type === "aisdk" && model.api.package === "@ai-sdk/anthropic" ? "anthropic" : "openai"
+  const options = model.request.options ?? {}
+  return {
+    generation: model.request.generation,
+    providerOptions: Object.keys(options).length === 0 ? undefined : { [namespace]: options },
+    body: Object.fromEntries(Object.entries(model.request.body).filter(([key]) => key !== "apiKey")),
+  }
+}
+
+const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
+  const defaults = requestDefaults(model)
+  return route.with({
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
-    http: {
-      body: Object.fromEntries(Object.entries(model.request.body).filter(([key]) => key !== "apiKey")),
-    },
+    generation: defaults.generation,
+    providerOptions: defaults.providerOptions,
+    http: { body: defaults.body },
     limits: { context: model.limit.context, output: model.limit.output },
   })
+}
 
 const withVariant = (model: ModelV2.Info, variantID: ModelV2.VariantID | undefined) => {
   const id = variantID === "default" || variantID === undefined ? model.request.variant : variantID
@@ -68,6 +80,8 @@ const withVariant = (model: ModelV2.Info, variantID: ModelV2.VariantID | undefin
   return produce(model, (draft) => {
     Object.assign(draft.request.headers, variant.headers)
     Object.assign(draft.request.body, variant.body)
+    Object.assign((draft.request.generation ??= {}), variant.generation ?? {})
+    Object.assign((draft.request.options ??= {}), variant.options ?? {})
   })
 }
 

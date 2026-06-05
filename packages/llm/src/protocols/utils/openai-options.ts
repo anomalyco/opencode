@@ -76,6 +76,11 @@ export const textVerbosity = (request: LLMRequest) => {
   return isTextVerbosity(value) ? value : undefined
 }
 
+export const serviceTier = (request: LLMRequest) => {
+  const value = options(request)?.serviceTier
+  return typeof value === "string" ? value : undefined
+}
+
 export const instructions = (request: LLMRequest) => {
   const value = options(request)?.instructions
   return typeof value === "string" ? value : undefined

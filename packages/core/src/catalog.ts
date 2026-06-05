@@ -114,6 +114,14 @@ export const layer = Layer.effect(
           ...provider.request.body,
           ...model.request.body,
         },
+        generation: {
+          ...provider.request.generation,
+          ...model.request.generation,
+        },
+        options: {
+          ...provider.request.options,
+          ...model.request.options,
+        },
         variant: model.request.variant,
       }
       return new ModelV2.Info({

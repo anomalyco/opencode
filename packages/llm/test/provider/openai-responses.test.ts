@@ -57,6 +57,17 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("lowers semantic service tier options", () =>
+    Effect.gen(function* () {
+      const input = LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "priority" } } })
+      expect(input.providerOptions).toEqual({ openai: { serviceTier: "priority" } })
+      const prepared = yield* LLMClient.prepare(input)
+
+      expect(prepared.body).toMatchObject({ service_tier: "priority" })
+      expect(prepared.body).not.toHaveProperty("serviceTier")
+    }),
+  )
+
   it.effect("flattens top-level object unions in function schemas", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(

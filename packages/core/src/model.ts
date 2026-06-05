@@ -97,6 +97,8 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
       request: {
         headers: {},
         body: {},
+        generation: {},
+        options: {},
       },
       variants: [],
       time: {

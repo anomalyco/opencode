@@ -33,6 +33,8 @@ export const Plugin = PluginV2.define({
             if (item.request !== undefined) {
               Object.assign(provider.request.headers, item.request.headers ?? {})
               Object.assign(provider.request.body, item.request.body ?? {})
+              Object.assign((provider.request.generation ??= {}), item.request.generation ?? {})
+              Object.assign((provider.request.options ??= {}), item.request.options ?? {})
             }
           })
 
@@ -51,6 +53,8 @@ export const Plugin = PluginV2.define({
               if (config.request !== undefined) {
                 Object.assign(model.request.headers, config.request.headers ?? {})
                 Object.assign(model.request.body, config.request.body ?? {})
+                Object.assign((model.request.generation ??= {}), config.request.generation ?? {})
+                Object.assign((model.request.options ??= {}), config.request.options ?? {})
                 if (config.request.variant !== undefined) model.request.variant = config.request.variant
               }
               if (config.variants !== undefined) {
@@ -61,11 +65,15 @@ export const Plugin = PluginV2.define({
                       id: variant.id,
                       headers: {},
                       body: {},
+                      generation: {},
+                      options: {},
                     }
                     model.variants.push(existing)
                   }
                   Object.assign(existing.headers, variant.headers ?? {})
                   Object.assign(existing.body, variant.body ?? {})
+                  Object.assign((existing.generation ??= {}), variant.generation ?? {})
+                  Object.assign((existing.options ??= {}), variant.options ?? {})
                 }
               }
               if (config.cost !== undefined) {

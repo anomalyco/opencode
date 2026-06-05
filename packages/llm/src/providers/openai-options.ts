@@ -15,6 +15,7 @@ export interface OpenAIOptionsInput {
   // native-SDK callers share one shape and no translation is required.
   readonly include?: ReadonlyArray<OpenAIResponseIncludable>
   readonly textVerbosity?: TextVerbosity
+  readonly serviceTier?: string
 }
 
 export type OpenAIProviderOptionsInput = ProviderOptions & {
@@ -33,6 +34,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
       reasoningSummary: options?.reasoningSummary,
       include: options?.include,
       textVerbosity: options?.textVerbosity,
+      serviceTier: options?.serviceTier,
     }),
   )
   if (Object.keys(openai).length === 0) return undefined

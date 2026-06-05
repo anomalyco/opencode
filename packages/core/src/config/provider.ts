@@ -3,10 +3,13 @@ export * as ConfigProvider from "./provider"
 import { Schema } from "effect"
 import { ProviderV2 } from "../provider"
 import { ModelV2 } from "../model"
+import { ModelRequest } from "../model-request"
 
 export class Request extends Schema.Class<Request>("ConfigV2.Provider.Request")({
   headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   body: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  generation: ModelRequest.Generation.pipe(Schema.optional),
+  options: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 }) {}
 
 class Cache extends Schema.Class<Cache>("ConfigV2.Model.Cost.Cache")({
