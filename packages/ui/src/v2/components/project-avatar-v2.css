@@ -1,14 +1,24 @@
 [data-component="project-avatar-v2"] {
+  position: relative;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+[data-component="project-avatar-v2"][data-unread] {
+  overflow: visible;
+}
+
+[data-slot="project-avatar-surface"] {
   --project-avatar-bg: var(--v2-avatar-bg-gray);
   --project-avatar-border: var(--v2-avatar-border-gray);
   position: relative;
   box-sizing: border-box;
   display: flex;
-  flex-shrink: 0;
+  width: 100%;
+  height: 100%;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
   overflow: hidden;
   border-radius: 4px;
   background:
@@ -26,56 +36,56 @@
   -webkit-user-select: none;
 }
 
-[data-component="project-avatar-v2"][data-variant="orange"] {
+[data-slot="project-avatar-surface"][data-variant="orange"] {
   --project-avatar-bg: var(--v2-avatar-bg-orange);
   --project-avatar-border: var(--v2-avatar-border-orange);
 }
 
-[data-component="project-avatar-v2"][data-variant="yellow"] {
+[data-slot="project-avatar-surface"][data-variant="yellow"] {
   --project-avatar-bg: var(--v2-avatar-bg-yellow);
   --project-avatar-border: var(--v2-avatar-border-yellow);
 }
 
-[data-component="project-avatar-v2"][data-variant="cyan"] {
+[data-slot="project-avatar-surface"][data-variant="cyan"] {
   --project-avatar-bg: var(--v2-avatar-bg-cyan);
   --project-avatar-border: var(--v2-avatar-border-cyan);
 }
 
-[data-component="project-avatar-v2"][data-variant="green"] {
+[data-slot="project-avatar-surface"][data-variant="green"] {
   --project-avatar-bg: var(--v2-avatar-bg-green);
   --project-avatar-border: var(--v2-avatar-border-green);
 }
 
-[data-component="project-avatar-v2"][data-variant="red"] {
+[data-slot="project-avatar-surface"][data-variant="red"] {
   --project-avatar-bg: var(--v2-avatar-bg-red);
   --project-avatar-border: var(--v2-avatar-border-red);
 }
 
-[data-component="project-avatar-v2"][data-variant="pink"] {
+[data-slot="project-avatar-surface"][data-variant="pink"] {
   --project-avatar-bg: var(--v2-avatar-bg-pink);
   --project-avatar-border: var(--v2-avatar-border-pink);
 }
 
-[data-component="project-avatar-v2"][data-variant="blue"] {
+[data-slot="project-avatar-surface"][data-variant="blue"] {
   --project-avatar-bg: var(--v2-avatar-bg-blue);
   --project-avatar-border: var(--v2-avatar-border-blue);
 }
 
-[data-component="project-avatar-v2"][data-variant="purple"] {
+[data-slot="project-avatar-surface"][data-variant="purple"] {
   --project-avatar-bg: var(--v2-avatar-bg-purple);
   --project-avatar-border: var(--v2-avatar-border-purple);
 }
 
-[data-component="project-avatar-v2"][data-variant="gray"] {
+[data-slot="project-avatar-surface"][data-variant="gray"] {
   --project-avatar-bg: var(--v2-avatar-bg-gray);
   --project-avatar-border: var(--v2-avatar-border-gray);
 }
 
-[data-component="project-avatar-v2"][data-has-image] {
+[data-slot="project-avatar-surface"][data-has-image] {
   background: var(--project-avatar-bg);
 }
 
-[data-component="project-avatar-v2"] [data-slot="project-avatar-image"] {
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-image"] {
   position: relative;
   z-index: 1;
   display: block;
@@ -88,11 +98,11 @@
   -webkit-user-drag: none;
 }
 
-[data-component="project-avatar-v2"] [data-slot="project-avatar-loader"] {
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-loader"] {
   position: absolute;
-  inset: 0;
+  inset: -3px;
   z-index: 2;
-  border-radius: 4px;
+  border-radius: 0;
   background: conic-gradient(
     from 180deg at 50% 50%,
     var(--v2-grey-100) 0deg,
@@ -111,6 +121,27 @@
   }
 }
 
+[data-component="project-avatar-v2"][data-unread] [data-slot="project-avatar-surface"] {
+  -webkit-mask-image: radial-gradient(
+    circle 4.5px at calc(100% - 1px) 1px,
+    transparent 4.5px,
+    black 4.5px
+  );
+  mask-image: radial-gradient(circle 4.5px at calc(100% - 1px) 1px, transparent 4.5px, black 4.5px);
+}
+
+[data-slot="project-avatar-unread-dot"] {
+  position: absolute;
+  z-index: 3;
+  width: 6px;
+  height: 6px;
+  right: -2px;
+  top: -2px;
+  border-radius: 9999px;
+  background: var(--v2-background-bg-accent);
+  pointer-events: none;
+}
+
 [data-slot="project-avatar-slot"] {
   display: flex;
   flex-shrink: 0;
@@ -119,10 +150,4 @@
   width: 22px;
   height: 22px;
   overflow: visible;
-}
-
-[data-component="project-avatar-v2"][data-unread] {
-  overflow: visible;
-  outline: 2px solid var(--v2-background-bg-accent);
-  outline-offset: 1px;
 }
