@@ -205,19 +205,19 @@ function View(props: { api: TuiPluginApi }) {
       current={cur()}
       onMove={(item) => setCur(item.value)}
       actions={[
-          {
-            title: "toggle",
-            command: "plugins.toggle",
-            hidden: lock(),
+        {
+          title: "toggle",
+          command: "plugins.toggle",
+          hidden: lock(),
           onTrigger: (item) => {
             setCur(item.value)
             flip(item.value)
           },
         },
-          {
-            title: "install",
-            command: "dialog.plugins.install",
-            hidden: lock(),
+        {
+          title: "install",
+          command: "dialog.plugins.install",
+          hidden: lock(),
           onTrigger: () => {
             showInstall(props.api)
           },

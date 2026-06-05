@@ -16,9 +16,7 @@ import { useProject } from "@tui/context/project"
 import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
 
-export type MoveSessionSelection =
-  | { type: "directory"; directory: string; subdirectory: boolean }
-  | { type: "new" }
+export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
 
 export function DialogMoveSession(props: {
   projectID: string
@@ -114,15 +112,14 @@ export function DialogMoveSession(props: {
       const isRemoving = removing() === item.location
       return {
         title: isRemoving ? `Deleting ${item.location}` : deleting ? `Press ${deleteHint()} again to confirm` : title,
-        titleView:
-          isRemoving ? (
-            <span style={{ fg: theme.error }}>Deleting {item.location}</span>
-          ) : !deleting && suffix ? (
-            <>
-              {visible.slice(0, split)}
-              <span style={{ fg: theme.textMuted }}>{visible.slice(split)}</span>
-            </>
-          ) : undefined,
+        titleView: isRemoving ? (
+          <span style={{ fg: theme.error }}>Deleting {item.location}</span>
+        ) : !deleting && suffix ? (
+          <>
+            {visible.slice(0, split)}
+            <span style={{ fg: theme.textMuted }}>{visible.slice(split)}</span>
+          </>
+        ) : undefined,
         bg: deleting ? theme.error : undefined,
         value: { type: "directory", directory: item.location, subdirectory: item.location !== item.root } as const,
         category: item.root === main ? "Project" : "Working copies",
@@ -136,9 +133,7 @@ export function DialogMoveSession(props: {
     if (directories.loading || loadedProject.loading || !props.current) return
     if (props.current.type === "new") return props.current
     const directory = props.current.directory
-    return options().find(
-      (option) => option.value?.type === "directory" && option.value.directory === directory,
-    )?.value
+    return options().find((option) => option.value?.type === "directory" && option.value.directory === directory)?.value
   })
 
   async function remove(option: DialogSelectOption<MoveSessionSelection | undefined>) {

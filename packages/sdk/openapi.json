@@ -3991,14 +3991,6 @@
             "required": true
           },
           {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
             "name": "workspace",
             "in": "query",
             "schema": {
@@ -4039,9 +4031,12 @@
                 "properties": {
                   "directory": {
                     "type": "string"
+                  },
+                  "force": {
+                    "type": "boolean"
                   }
                 },
-                "required": ["directory"],
+                "required": ["directory", "force"],
                 "additionalProperties": false
               }
             }
@@ -19626,6 +19621,9 @@
             "properties": {
               "message": {
                 "type": "string"
+              },
+              "forceRequired": {
+                "type": "boolean"
               }
             },
             "required": ["message"],

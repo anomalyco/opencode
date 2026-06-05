@@ -135,7 +135,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       .filter((item) => item.label),
     ...(props.footerHints ?? []),
   ])
-  const actionItems = createMemo(() => visibleActions().filter(isActionItem).filter((item) => !isActionDisabled(item)))
+  const actionItems = createMemo(() =>
+    visibleActions()
+      .filter(isActionItem)
+      .filter((item) => !isActionDisabled(item)),
+  )
 
   createEffect(() => {
     const index = focusedAction()
@@ -550,7 +554,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   </Show>
                   <For each={options}>
                     {(option) => {
-                       const active = createMemo(() => !props.locked && isDeepEqual(option.value, selected()?.value))
+                      const active = createMemo(() => !props.locked && isDeepEqual(option.value, selected()?.value))
                       const current = createMemo(() => isDeepEqual(option.value, props.current))
                       return (
                         <box

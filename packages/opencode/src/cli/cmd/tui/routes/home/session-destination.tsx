@@ -9,9 +9,7 @@ import {
 } from "solid-js"
 import { useSync } from "../../context/sync"
 
-export type HomeSessionDestination =
-  | { type: "directory"; directory: string; subdirectory: boolean }
-  | { type: "new" }
+export type HomeSessionDestination = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
 
 type Context = {
   destination: Accessor<HomeSessionDestination | undefined>
@@ -24,8 +22,8 @@ const HomeSessionDestinationContext = createContext<Context>()
 export function HomeSessionDestinationProvider(props: ParentProps) {
   const sync = useSync()
   const [selected, setDestination] = createSignal<HomeSessionDestination>()
-  const destination = createMemo<HomeSessionDestination>(() =>
-    selected() ?? { type: "directory", directory: sync.path.directory || process.cwd(), subdirectory: false },
+  const destination = createMemo<HomeSessionDestination>(
+    () => selected() ?? { type: "directory", directory: sync.path.directory || process.cwd(), subdirectory: false },
   )
   return (
     <HomeSessionDestinationContext.Provider
