@@ -740,8 +740,8 @@
 }
 
 [data-page="stats"] [data-component="content"] a:hover {
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  color: var(--stats-text);
+  text-decoration: none;
 }
 
 [data-page="stats"] [data-section="chart"] {
@@ -2613,6 +2613,7 @@
 }
 
 [data-page="stats"] [data-section="model-hero"],
+[data-page="stats"] [data-section="lab-hero"],
 [data-page="stats"] [data-section="model-panel"] {
   position: relative;
   box-sizing: border-box;
@@ -2623,7 +2624,8 @@
   color: var(--stats-text);
 }
 
-[data-page="stats"] [data-section="model-hero"] {
+[data-page="stats"] [data-section="model-hero"],
+[data-page="stats"] [data-section="lab-hero"] {
   display: grid;
   gap: 28px;
   padding: 120px 40px 64px;
@@ -2648,6 +2650,7 @@
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
+  text-decoration: none;
   text-transform: uppercase;
 }
 
@@ -2655,17 +2658,62 @@
   content: "‹ ";
 }
 
-[data-page="stats"] [data-section="model-hero"] [data-slot="hero-meta"] {
-  gap: 8px;
-  padding-left: 6px;
+[data-page="stats"] [data-slot="model-back-link"]:hover,
+[data-page="stats"] [data-slot="model-back-link"]:focus-visible {
+  color: var(--stats-text);
+  outline: none;
+  text-decoration: none;
 }
 
-[data-page="stats"] [data-section="model-hero"] [data-slot="hero-meta"] svg {
+[data-page="stats"] [data-section="model-hero"] [data-slot="hero-meta"],
+[data-page="stats"] [data-section="lab-hero"] [data-slot="hero-meta"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 6px;
+  color: var(--stats-hero-muted);
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-section="model-hero"] a[data-slot="hero-meta"]:hover,
+[data-page="stats"] [data-section="model-hero"] a[data-slot="hero-meta"]:focus-visible {
+  color: var(--stats-text);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-section="model-hero"] [data-slot="hero-meta"] svg,
+[data-page="stats"] [data-section="lab-hero"] [data-slot="hero-meta"] svg {
   width: 14px;
   height: 14px;
 }
 
-[data-page="stats"] [data-section="model-hero"] h1 {
+[data-page="stats"] [data-slot="model-hero-tags"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="model-id-tag"] {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--stats-hero-muted);
+  background: var(--stats-layer-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-section="model-hero"] h1,
+[data-page="stats"] [data-section="lab-hero"] h1 {
   max-width: 980px;
   color: var(--stats-text);
   font-size: clamp(38px, 7vw, 72px);
@@ -2676,7 +2724,7 @@
 }
 
 [data-page="stats"] [data-slot="model-hero-pattern"] {
-  width: min(100%, 720px);
+  width: 100%;
   height: 18px;
   overflow: hidden;
   background: var(--stats-hero-pattern);
@@ -2694,6 +2742,32 @@
   font-size: 16px;
   font-weight: 400;
   line-height: 1.5;
+}
+
+[data-page="stats"] [data-slot="model-weight-link"] {
+  width: fit-content;
+  color: var(--stats-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="model-weight-link"]::after {
+  content: " ↗";
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-slot="model-weight-link"]:hover,
+[data-page="stats"] [data-slot="model-weight-link"]:focus-visible {
+  color: var(--stats-text);
+  outline: none;
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="model-weight-link"]:hover::after,
+[data-page="stats"] [data-slot="model-weight-link"]:focus-visible::after {
+  color: var(--stats-text);
 }
 
 [data-page="stats"] [data-component="model-rank-panel"] {
@@ -2719,6 +2793,49 @@
   font-weight: 500;
   line-height: 0.95;
   letter-spacing: 0;
+}
+
+[data-page="stats"] [data-component="model-catalog"] {
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="model-catalog-datum"] span {
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+[data-page="stats"] [data-slot="model-catalog-grid"] {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 18px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-component="model-catalog-datum"] {
+  display: grid;
+  align-content: start;
+  flex: 1 1 132px;
+  gap: 7px;
+  max-width: 220px;
+  min-width: 0;
+  padding: 0 24px;
+  border-left: 1px solid var(--stats-line);
+}
+
+[data-page="stats"] [data-component="model-catalog-datum"]:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+[data-page="stats"] [data-component="model-catalog-datum"] strong {
+  min-width: 0;
+  color: var(--stats-text);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  overflow-wrap: anywhere;
 }
 
 [data-page="stats"] [data-section="model-panel"] {
@@ -2769,6 +2886,71 @@
 
 [data-page="stats"] [data-component="model-metric"][data-state="negative"] strong {
   color: #b82d35;
+}
+
+[data-page="stats"] [data-component="lab-model-grid"] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+[data-page="stats"] [data-component="lab-model-card"] {
+  position: relative;
+  display: grid;
+  align-content: space-between;
+  gap: 28px;
+  min-height: 220px;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--stats-line);
+  color: var(--stats-text);
+  background: var(--stats-layer);
+}
+
+[data-page="stats"] [data-component="lab-model-card"]:hover,
+[data-page="stats"] [data-component="lab-model-card"]:focus-visible {
+  z-index: 1;
+  border-color: var(--stats-text);
+  outline: none;
+}
+
+[data-page="stats"] [data-component="lab-model-card"] > strong {
+  align-self: start;
+  min-width: 0;
+  color: var(--stats-text);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-page="stats"] [data-slot="lab-model-card-meta"] {
+  display: grid;
+  gap: 8px;
+}
+
+[data-page="stats"] [data-slot="lab-model-card-meta"] p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--stats-line);
+  color: var(--stats-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+[data-page="stats"] [data-slot="lab-model-card-meta"] b,
+[data-page="stats"] [data-slot="lab-model-card-meta"] em {
+  font: inherit;
+}
+
+[data-page="stats"] [data-slot="lab-model-card-meta"] em {
+  color: var(--stats-text);
+  text-align: right;
 }
 
 [data-page="stats"] [data-component="model-usage-chart"] {
@@ -2988,85 +3170,6 @@
 
 [data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] b {
   font-weight: 500;
-}
-
-[data-page="stats"] [data-component="model-split-grid"] {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-[data-page="stats"] [data-component="model-mix-panel"] {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--stats-line);
-  background: var(--stats-layer);
-}
-
-[data-page="stats"] [data-component="model-mix-panel"] h2 {
-  color: var(--stats-text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-[data-page="stats"] [data-component="model-mix-row"] {
-  display: grid;
-  gap: 8px;
-}
-
-[data-page="stats"] [data-component="model-mix-row"] div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 12px;
-  align-items: center;
-}
-
-[data-page="stats"] [data-component="model-mix-row"] strong,
-[data-page="stats"] [data-component="model-mix-row"] span,
-[data-page="stats"] [data-component="model-mix-row"] b {
-  min-width: 0;
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-[data-page="stats"] [data-component="model-mix-row"] strong {
-  color: var(--stats-text);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-page="stats"] [data-component="model-mix-row"] span {
-  color: var(--stats-faint);
-  font-weight: 500;
-}
-
-[data-page="stats"] [data-component="model-mix-row"] b {
-  color: var(--stats-muted);
-  font-weight: 600;
-}
-
-[data-page="stats"] [data-component="model-mix-row"] i {
-  position: relative;
-  display: block;
-  height: 5px;
-  background: var(--stats-layer-2);
-  font-style: normal;
-}
-
-[data-page="stats"] [data-component="model-mix-row"] em {
-  position: absolute;
-  inset: 0 auto 0 0;
-  display: block;
-  width: var(--model-mix-fill);
-  background: var(--stats-text);
-  font-style: normal;
 }
 
 [data-page="stats"] [data-component="model-peer-list"] {
@@ -3446,6 +3549,7 @@
   [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"],
   [data-page="stats"] [data-section="model-hero"],
+  [data-page="stats"] [data-section="lab-hero"],
   [data-page="stats"] [data-section="model-panel"] {
     padding: 64px 32px;
   }
@@ -3485,7 +3589,7 @@
 
   [data-page="stats"] [data-component="model-metric-grid"],
   [data-page="stats"] [data-component="model-metric-grid"][data-variant="dense"],
-  [data-page="stats"] [data-component="model-split-grid"] {
+  [data-page="stats"] [data-component="lab-model-grid"] {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -3604,6 +3708,7 @@
   [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"],
   [data-page="stats"] [data-section="model-hero"],
+  [data-page="stats"] [data-section="lab-hero"],
   [data-page="stats"] [data-section="model-panel"] {
     padding: 48px 24px;
   }
@@ -3626,7 +3731,8 @@
     width: 100%;
   }
 
-  [data-page="stats"] [data-section="model-hero"] {
+  [data-page="stats"] [data-section="model-hero"],
+  [data-page="stats"] [data-section="lab-hero"] {
     gap: 20px;
   }
 
@@ -3634,7 +3740,8 @@
     gap: 24px;
   }
 
-  [data-page="stats"] [data-section="model-hero"] h1 {
+  [data-page="stats"] [data-section="model-hero"] h1,
+  [data-page="stats"] [data-section="lab-hero"] h1 {
     font-size: 38px;
     line-height: 1;
   }
@@ -3643,13 +3750,29 @@
     height: 14px;
   }
 
+  [data-page="stats"] [data-slot="model-catalog-grid"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 24px;
+  }
+
+  [data-page="stats"] [data-component="model-catalog-datum"] {
+    max-width: none;
+    padding: 0;
+    border-left: 0;
+  }
+
+  [data-page="stats"] [data-component="model-catalog-datum"] strong {
+    font-size: 18px;
+  }
+
   [data-page="stats"] [data-slot="model-hero-copy"] p:not([data-slot="hero-meta"]) {
     font-size: 13px;
   }
 
   [data-page="stats"] [data-component="model-metric-grid"],
   [data-page="stats"] [data-component="model-metric-grid"][data-variant="dense"],
-  [data-page="stats"] [data-component="model-split-grid"] {
+  [data-page="stats"] [data-component="lab-model-grid"] {
     grid-template-columns: 1fr;
   }
 
@@ -3659,6 +3782,10 @@
 
   [data-page="stats"] [data-component="model-usage-chart"] {
     --model-usage-mobile-bar-width: 16px;
+    --model-usage-mobile-track-width: calc(
+      var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap)) -
+        var(--model-usage-bar-gap)
+    );
     width: calc(100% + 48px);
     height: 360px;
     margin-inline: -24px;
@@ -3674,12 +3801,30 @@
 
   [data-page="stats"] [data-slot="model-usage-axis"],
   [data-page="stats"] [data-slot="model-usage-bars"] {
-    min-width: calc(var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap)));
+    width: var(--model-usage-mobile-track-width);
+    min-width: var(--model-usage-mobile-track-width);
+  }
+
+  [data-page="stats"] [data-slot="model-usage-bars"] {
+    gap: var(--model-usage-bar-gap);
   }
 
   [data-page="stats"] [data-slot="model-usage-axis"] > div,
   [data-page="stats"] [data-slot="model-usage-column"] {
     flex: 0 0 var(--model-usage-mobile-bar-width);
+  }
+
+  [data-page="stats"] [data-slot="model-usage-column"] {
+    padding-inline: 0;
+  }
+
+  [data-page="stats"] [data-slot="model-usage-column"]::before {
+    width: 100%;
+  }
+
+  [data-page="stats"] [data-slot="model-usage-bar"] {
+    right: 0;
+    left: 0;
   }
 
   [data-page="stats"] [data-component="model-peer-list"] a {

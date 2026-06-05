@@ -932,7 +932,7 @@ function LeaderboardCard(props: {
       data-component="leader-card"
       data-size={props.size}
       data-active={props.active ? "true" : undefined}
-      href={`${import.meta.env.BASE_URL}models/${modelSlug(props.entry.model)}`}
+      href={`${import.meta.env.BASE_URL}${modelSlug(props.entry.provider)}/${modelSlug(props.entry.model)}`}
       role="listitem"
       tabIndex={0}
       aria-label={`${String(props.entry.rank).padStart(2, "0")} ${props.entry.model} by ${props.entry.author}`}
