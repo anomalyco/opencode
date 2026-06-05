@@ -434,7 +434,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
-                <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar" ref={tabScrollRef}>
+                <div
+                  class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+                  ref={tabScrollRef}
+                >
                   <div class="flex min-w-0 flex-row items-center gap-1.5">
                     <For each={[...tabsStore, ...tabsStore, ...tabsStore]}>
                       {(tab, i) => {
