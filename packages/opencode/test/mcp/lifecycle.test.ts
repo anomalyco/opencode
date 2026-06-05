@@ -222,6 +222,61 @@ it.instance(
   { config: { mcp: {} } },
 )
 
+it.instance(
+  "reuses pooled clients for identical local MCP configs and releases by refcount",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "shared-a"
+        const serverState = getOrCreateClientState("shared-a")
+
+        yield* mcp.add("shared-a", {
+          type: "local",
+          command: ["echo", "same"],
+        })
+        yield* mcp.add("shared-b", {
+          type: "local",
+          command: ["echo", "same"],
+        })
+
+        expect(clientCreateCount).toBe(1)
+        expect(serverState.listToolsCalls).toBe(1)
+
+        yield* mcp.disconnect("shared-a")
+        expect(serverState.closed).toBe(false)
+
+        yield* mcp.disconnect("shared-b")
+        expect(serverState.closed).toBe(true)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "does not reuse local MCP clients when effective environment differs",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "env-a"
+        yield* mcp.add("env-a", {
+          type: "local",
+          command: ["echo", "same"],
+          environment: { SCOPE: "a" },
+        })
+
+        lastCreatedClientName = "env-b"
+        yield* mcp.add("env-b", {
+          type: "local",
+          command: ["echo", "same"],
+          environment: { SCOPE: "b" },
+        })
+
+        expect(clientCreateCount).toBe(2)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
 // ========================================================================
 // Test: tool change notifications refresh the cache
 // ========================================================================
@@ -254,6 +309,47 @@ it.instance(
         const after = yield* mcp.tools()
         expect(Object.keys(after).some((key) => key.includes("next_tool"))).toBe(true)
         expect(Object.keys(after).some((key) => key.includes("test_tool"))).toBe(false)
+        expect(serverState.listToolsCalls).toBe(2)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "pooled client tool change notifications refresh all subscribers",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "fanout-a"
+        const serverState = getOrCreateClientState("fanout-a")
+
+        yield* mcp.add("fanout-a", {
+          type: "local",
+          command: ["echo", "fanout"],
+        })
+        yield* mcp.add("fanout-b", {
+          type: "local",
+          command: ["echo", "fanout"],
+        })
+
+        const before = yield* mcp.tools()
+        expect(Object.keys(before).some((key) => key.includes("fanout-a_test_tool"))).toBe(true)
+        expect(Object.keys(before).some((key) => key.includes("fanout-b_test_tool"))).toBe(true)
+        expect(serverState.listToolsCalls).toBe(1)
+
+        serverState.tools = [
+          { name: "next_tool", description: "next", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        const handler = Array.from(serverState.notificationHandlers.values())[0]
+        expect(handler).toBeDefined()
+        yield* Effect.promise(() => handler?.())
+
+        const after = yield* mcp.tools()
+        expect(Object.keys(after).some((key) => key.includes("fanout-a_next_tool"))).toBe(true)
+        expect(Object.keys(after).some((key) => key.includes("fanout-b_next_tool"))).toBe(true)
+        expect(Object.keys(after).some((key) => key.includes("fanout-a_test_tool"))).toBe(false)
+        expect(Object.keys(after).some((key) => key.includes("fanout-b_test_tool"))).toBe(false)
         expect(serverState.listToolsCalls).toBe(2)
       }),
     ),

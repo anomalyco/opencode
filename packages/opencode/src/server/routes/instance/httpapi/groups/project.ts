@@ -49,6 +49,16 @@ export const ProjectApi = HttpApi.make("project")
             description: "Create a git repository for the current project and return the refreshed project info.",
           }),
         ),
+        HttpApiEndpoint.post("reload", `${root}/reload`, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Whether the current project instance was marked for reload"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.reload",
+            summary: "Reload current project instance",
+            description: "Reload workspace-specific config, agents, and MCP state for the current project.",
+          }),
+        ),
         HttpApiEndpoint.patch("update", `${root}/:projectID`, {
           params: { projectID: ProjectV2.ID },
           query: WorkspaceRoutingQuery,
