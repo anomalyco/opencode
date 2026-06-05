@@ -178,11 +178,11 @@ export const SettingsGeneral: Component = () => {
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
   const serverSync = useServerSync()
-  const globalSdk = useServerSDK()
+  const serverSdk = useServerSDK()
 
   const [shells] = createResource(
     () =>
-      globalSdk.client.pty
+      serverSdk.client.pty
         .shells()
         .then((res) => res.data ?? [])
         .catch(() => [] as ShellOption[]),

@@ -39,6 +39,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
@@ -54,6 +55,7 @@ import {
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useServer } from "@/context/server"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
@@ -190,13 +192,15 @@ export default function Page() {
   const dialog = useDialog()
   const language = useLanguage()
   const sdk = useSDK()
+  const serverSDK = useServerSDK()
   const settings = useSettings()
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
+  const server = useServer()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
-  const { params, sessionKey, tabs, view } = useSessionLayout()
+  const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
   createEffect(() => {
@@ -223,7 +227,6 @@ export default function Page() {
 
   const composer = createSessionComposerState()
 
-  const workspaceKey = createMemo(() => params.dir ?? "")
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
 
   createEffect(
@@ -239,6 +242,7 @@ export default function Page() {
           layout.handoff.clearTabs()
           return
         }
+        if (pending.scope !== server.scope()) return
 
         if (pending.id !== id) return
         layout.handoff.clearTabs()
@@ -386,7 +390,7 @@ export default function Page() {
   })
 
   const [followup, setFollowup] = persisted(
-    Persist.workspace(sdk.directory, "followup", ["followup.v1"]),
+    Persist.serverWorkspace(serverSDK.scope, sdk.directory, "followup", ["followup.v1"]),
     createStore<{
       items: Record<string, FollowupItem[] | undefined>
       failed: Record<string, string | undefined>
@@ -633,7 +637,7 @@ export default function Page() {
       const stale = !cached
         ? false
         : (() => {
-            const info = getSessionPrefetch(directory, id)
+            const info = getSessionPrefetch(serverSDK.scope, directory, id)
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
