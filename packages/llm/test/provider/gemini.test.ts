@@ -109,6 +109,47 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("continues image tool results as inline vision input without base64 text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: { path: "pixel.png" } })]),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "pixel.png" },
+                ],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "model", parts: [{ functionCall: { name: "read", args: { path: "pixel.png" } } }] },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                name: "read",
+                response: { name: "read", content: "Image read successfully" },
+              },
+            },
+            { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
+          ],
+        },
+      ])
+      expect(JSON.stringify(prepared.body.contents)).not.toContain('"content":"AAECAw=="')
+    }),
+  )
+
   it.effect("omits tools when tool choice is none", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(

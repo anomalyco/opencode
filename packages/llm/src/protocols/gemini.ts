@@ -247,15 +247,32 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Gemini", "tool", ["tool-result"])
+      if (part.result.type !== "content") {
+        parts.push({
+          functionResponse: {
+            name: part.name,
+            response: {
+              name: part.name,
+              content: ProviderShared.toolResultText(part),
+            },
+          },
+        })
+        continue
+      }
+      const text = part.result.value.filter((item) => item.type === "text").map((item) => item.text)
       parts.push({
         functionResponse: {
           name: part.name,
           response: {
             name: part.name,
-            content: ProviderShared.toolResultText(part),
+            content: text.join("\n"),
           },
         },
       })
+      for (const item of part.result.value) {
+        if (item.type === "text") continue
+        parts.push({ inlineData: { mimeType: item.mediaType, data: mediaData(item) } })
+      }
     }
     contents.push({ role: "user", parts })
   }
