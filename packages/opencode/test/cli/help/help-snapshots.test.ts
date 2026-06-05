@@ -13,6 +13,7 @@
 // version (changes per release), so we'd snapshot a moving target.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { EOL } from "os"
 import { cliIt } from "../../lib/cli-process"
 import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
 
@@ -98,6 +99,10 @@ describe("opencode CLI help-text snapshots", () => {
     "every documented command emits stable help text",
     ({ opencode }) =>
       Effect.gen(function* () {
+        const topLevel = yield* opencode.spawn(["--help"], { env: SNAPSHOT_ENV })
+        expect(topLevel.exitCode).toBe(0)
+        expect(topLevel.stderr.endsWith(EOL)).toBe(true)
+
         const argvs: Array<readonly string[]> = [...TOP_LEVEL.map((c) => [c] as const), ...SUBCOMMANDS]
 
         // Spawn in parallel, then assert in argv order so snapshot output is
@@ -121,7 +126,8 @@ describe("opencode CLI help-text snapshots", () => {
           // yargs writes --help to stderr, not stdout. Snapshotting stderr
           // means our test catches the help body; stdout for these commands
           // is expected to be empty.
-          expect(normalize(result.stderr)).toMatchSnapshot(`opencode ${argv.join(" ")} --help`)
+          expect(result.stderr.endsWith(EOL)).toBe(true)
+          expect(normalize(result.stderr).replace(/\n$/, "")).toMatchSnapshot(`opencode ${argv.join(" ")} --help`)
         }
         if (failures.length > 0) {
           throw new Error(`Help text failed for:\n  ${failures.join("\n  ")}`)
