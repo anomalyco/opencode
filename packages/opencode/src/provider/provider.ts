@@ -1735,6 +1735,40 @@ export const layer = Layer.effect(
             timeout: false,
           }).finally(() => headerTimeoutCtl?.clear())
 
+          // Filter out synthetic `chatcmpl-dummy` SSE frames that some
+          // OpenAI-compatible proxies emit before the real Responses API events.
+          if (res.ok && res.body) {
+            const url = typeof input === "string" ? input : input instanceof Request ? input.url : ""
+            if (url.includes("/responses") && res.headers.get("content-type")?.includes("text/event-stream")) {
+              const filtered = res.body.pipeThrough(
+                new TransformStream({
+                  decoder: new TextDecoder(),
+                  encoder: new TextEncoder(),
+                  buffer: "",
+                  transform(chunk, controller) {
+                    this.buffer += this.decoder.decode(chunk, { stream: true })
+                    const parts = this.buffer.split("\n\n")
+                    this.buffer = parts.pop() ?? ""
+                    for (const part of parts) {
+                      const dataLine = part.startsWith("data:") ? part.slice(5).trim() : ""
+                      const skip = dataLine && (() => {
+                        try { return JSON.parse(dataLine)?.id === "chatcmpl-dummy" }
+                        catch { return false }
+                      })()
+                      if (!skip) controller.enqueue(this.encoder.encode(part + "\n\n"))
+                    }
+                  },
+                  flush(controller) {
+                    if (this.buffer) controller.enqueue(this.encoder.encode(this.buffer))
+                  },
+                }),
+              )
+              const filteredRes = new Response(filtered, res)
+              if (!chunkAbortCtl) return filteredRes
+              return wrapSSE(filteredRes, chunkTimeout, chunkAbortCtl)
+            }
+          }
+
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
         }
