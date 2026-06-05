@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { Config } from "@/config/config"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { Schema } from "effect"
 import { TuiInfo } from "../src/cli/cmd/tui/config/tui-schema"
 
@@ -68,7 +69,7 @@ const configFile = process.argv[2]
 const tuiFile = process.argv[3]
 
 console.log(configFile)
-await Bun.write(configFile, JSON.stringify(generateEffect(Config.Info), null, 2))
+await Bun.write(configFile, JSON.stringify(generateEffect(ConfigV1.Info), null, 2))
 
 if (tuiFile) {
   console.log(tuiFile)

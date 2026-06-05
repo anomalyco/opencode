@@ -1,9 +1,10 @@
-import { Pty } from "@/pty"
-import { PtyTicket } from "@/pty/ticket"
-import { PtyID } from "@/pty/schema"
+import { Pty } from "@opencode-ai/core/pty"
+import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { PtyID } from "@opencode-ai/core/pty/schema"
+import { PTY_CONNECT_TICKET_QUERY } from "@/server/shared/pty-ticket"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "../middleware/authorization"
+import { Authorization, PtyConnectAuthorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import {
   WorkspaceRoutingMiddleware,
@@ -138,9 +139,10 @@ export const PtyApi = HttpApi.make("pty")
 export const PtyConnectApi = HttpApi.make("pty-connect").add(
   HttpApiGroup.make("pty-connect")
     .add(
+      // Decode PTY connection query fields in the raw handler after checking
+      // existence, preserving the established empty-404 response ordering.
       HttpApiEndpoint.get("connect", PtyPaths.connect, {
         params: Params,
-        query: WorkspaceRoutingQuery,
         success: described(Schema.Boolean, "Connected session"),
         error: [HttpApiError.Forbidden, HttpApiError.NotFound],
       }).annotateMerge(
@@ -149,8 +151,22 @@ export const PtyConnectApi = HttpApi.make("pty-connect").add(
           summary: "Connect to PTY session",
           description:
             "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.",
+          transform: (operation) => ({
+            ...operation,
+            parameters: [
+              ...(operation.parameters ?? []),
+              ...["directory", "workspace", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
+                in: "query",
+                name,
+                schema: { type: "string" },
+              })),
+            ],
+          }),
         }),
       ),
     )
-    .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." })),
+    .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." }))
+    .middleware(InstanceContextMiddleware)
+    .middleware(WorkspaceRoutingMiddleware)
+    .middleware(PtyConnectAuthorization),
 )

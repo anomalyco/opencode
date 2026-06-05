@@ -1,6 +1,8 @@
 import { usePlatform } from "@/context/platform"
-import type { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/server"
 import { createSdkForServer } from "./server"
+import { Accessor, createEffect, onCleanup } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 
 export type ServerHealth = { healthy: boolean; version?: string }
 
@@ -11,7 +13,7 @@ interface CheckServerHealthOptions {
   retryDelayMs?: number
 }
 
-const defaultTimeoutMs = 3000
+const defaultTimeoutMs = 30_000
 const defaultRetryCount = 2
 const defaultRetryDelayMs = 100
 const cacheMs = 750
@@ -92,6 +94,8 @@ export async function checkServerHealth(
   return attempt(0).finally(() => timeout?.clear?.())
 }
 
+const pollMs = 10_000
+
 export function useCheckServerHealth() {
   const platform = usePlatform()
   const fetcher = platform.fetch ?? globalThis.fetch
@@ -110,4 +114,41 @@ export function useCheckServerHealth() {
     healthCache.set(key, { at: now, done: false, fetch: fetcher, promise })
     return promise
   }
+}
+
+export const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
+  const checkServerHealth = useCheckServerHealth()
+  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
+
+  createEffect(() => {
+    if (!enabled()) {
+      setStatus(reconcile({}))
+      return
+    }
+    const list = servers()
+    let dead = false
+
+    const refresh = async () => {
+      const results: Record<string, ServerHealth> = {}
+      await Promise.all(
+        list.map(async (conn) => {
+          const key = ServerConnection.key(conn)
+          const result = await checkServerHealth(conn.http)
+          results[key] = result
+          if (!dead) setStatus(key, result)
+        }),
+      )
+      if (dead) return
+      setStatus(reconcile(results))
+    }
+
+    void refresh()
+    const id = setInterval(() => void refresh(), pollMs)
+    onCleanup(() => {
+      dead = true
+      clearInterval(id)
+    })
+  })
+
+  return status
 }

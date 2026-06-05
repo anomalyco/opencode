@@ -58,6 +58,7 @@ export const googleHelper: ProviderHelper = ({ providerModel }) => ({
       retrieve: () => usage,
     }
   },
+  extractUsage: (response: any) => response.usageMetadata,
   normalizeUsage: (usage: Usage) => {
     const inputTokens = usage.promptTokenCount ?? 0
     const outputTokens = usage.candidatesTokenCount ?? 0
