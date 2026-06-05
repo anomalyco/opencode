@@ -453,6 +453,7 @@ const scenarios: Scenario[] = [
       200,
       (body, ctx) => {
         const { entry, project } = onlyProjectViewEntry(body)
+        check(ctx.directory !== undefined, "open project scenario should have a directory")
         check(project.id === ctx.state.id, "open project should resolve the directory to the current project")
         check(
           project.worktree === path.parse(ctx.directory).root,
