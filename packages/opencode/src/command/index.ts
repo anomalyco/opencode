@@ -6,6 +6,9 @@ import { Effect, Layer, Context, Schema } from "effect"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
+import { Plugin } from "@/plugin"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
@@ -67,9 +70,11 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
+    const plugin = yield* Plugin.Service
     const skill = yield* Skill.Service
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
+      yield* plugin.init()
       const cfg = yield* config.get()
       const bridge = yield* EffectBridge.make()
       const commands: Record<string, Info> = {}
@@ -173,8 +178,9 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Config.defaultLayer),
   Layer.provide(MCP.defaultLayer),
+  Layer.provide(Plugin.layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer))),
+  Layer.provide(Config.defaultLayer),
   Layer.provide(Skill.defaultLayer),
 )
 
