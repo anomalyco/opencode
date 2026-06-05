@@ -74,9 +74,7 @@ export const AllVariantsUnread = {
   render: () => (
     <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
       <For each={PROJECT_AVATAR_VARIANTS}>
-        {(variant) => (
-          <ProjectAvatar fallback={variant[0].toUpperCase()} variant={variant} unread />
-        )}
+        {(variant) => <ProjectAvatar fallback={variant[0].toUpperCase()} variant={variant} unread />}
       </For>
     </div>
   ),

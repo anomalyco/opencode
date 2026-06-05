@@ -122,11 +122,7 @@
 }
 
 [data-component="project-avatar-v2"][data-unread] [data-slot="project-avatar-surface"] {
-  -webkit-mask-image: radial-gradient(
-    circle 4.5px at calc(100% - 1px) 1px,
-    transparent 4.5px,
-    black 4.5px
-  );
+  -webkit-mask-image: radial-gradient(circle 4.5px at calc(100% - 1px) 1px, transparent 4.5px, black 4.5px);
   mask-image: radial-gradient(circle 4.5px at calc(100% - 1px) 1px, transparent 4.5px, black 4.5px);
 }
 
