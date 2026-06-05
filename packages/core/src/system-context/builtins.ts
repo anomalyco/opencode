@@ -1,10 +1,10 @@
-export * as SystemContextBuiltIns from "./system-context-builtins"
+export * as SystemContextBuiltIns from "./builtins"
 
 import { DateTime, Effect, Layer, Schema } from "effect"
-import { InstructionContext } from "./instruction-context"
-import { Location } from "./location"
-import { SystemContext } from "./system-context"
-import { SystemContextRegistry } from "./system-context-registry"
+import { Location } from "../location"
+import { SystemContext } from "./index"
+import { InstructionContext } from "../instruction-context"
+import { SystemContextRegistry } from "./registry"
 
 const builtIns = Layer.effectDiscard(
   Effect.gen(function* () {

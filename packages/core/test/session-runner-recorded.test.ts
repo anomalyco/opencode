@@ -20,7 +20,9 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context-registry"
+import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { SystemContext } from "@opencode-ai/core/system-context"
+import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -59,6 +61,7 @@ const model = OpenAIChat.route
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
 const systemContext = SystemContextRegistry.layer
+const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -68,6 +71,7 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(models),
   Layer.provide(systemContext),
   Layer.provide(agents),
+  Layer.provide(skillGuidance),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -96,6 +100,7 @@ const it = testEffect(
     registry,
     models,
     systemContext,
+    skillGuidance,
     runner,
     coordinator,
     execution,

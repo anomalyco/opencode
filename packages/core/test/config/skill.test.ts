@@ -51,7 +51,6 @@ describe("ConfigSkillPlugin.Plugin", () => {
             transform,
             sources: () => Effect.succeed(sources),
             list: () => Effect.succeed([]),
-            forAgent: () => Effect.succeed([]),
           }),
         ),
       )
