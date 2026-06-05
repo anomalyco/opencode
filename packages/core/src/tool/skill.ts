@@ -81,10 +81,13 @@ export const layer = Layer.effectDiscard(
             return yield* Effect.gen(function* () {
               yield* assertPermission({ action: name, resources: [skill.name], save: [skill.name] })
               const directory = path.dirname(skill.location)
-              const files = (yield* fs.glob("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
-                .filter((file) => path.basename(file) !== "SKILL.md")
-                .toSorted()
-                .slice(0, FILE_LIMIT)
+              const files =
+                path.basename(skill.location) === "SKILL.md"
+                  ? (yield* fs.glob("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
+                      .filter((file) => path.basename(file) !== "SKILL.md")
+                      .toSorted()
+                      .slice(0, FILE_LIMIT)
+                  : []
               const output = yield* resources.truncate({
                 sessionID,
                 toolCallID: call.id,

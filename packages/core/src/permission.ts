@@ -35,7 +35,6 @@ export type Source = typeof Source.Type
 
 const RequestFields = {
   sessionID: SessionV2.ID,
-  agent: AgentV2.ID.pipe(Schema.optional),
   action: Schema.String,
   resources: Schema.Array(Schema.String),
   save: Schema.Array(Schema.String).pipe(Schema.optional),
@@ -55,6 +54,7 @@ export type Reply = typeof Reply.Type
 export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
   ...RequestFields,
+  agent: AgentV2.ID.pipe(Schema.optional),
 }).annotate({ identifier: "PermissionV2.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
 
@@ -128,6 +128,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 interface Pending {
   readonly request: Request
+  readonly agent?: AgentV2.ID
   readonly deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
 
@@ -190,7 +191,6 @@ export const layer = Layer.effect(
       return {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
-        agent: input.agent,
         action: input.action,
         resources: input.resources,
         save: input.save,
@@ -199,11 +199,11 @@ export const layer = Layer.effect(
       }
     }
 
-    const create = (request: Request) =>
+    const create = (request: Request, agent?: AgentV2.ID) =>
       EffectRuntime.uninterruptible(
         EffectRuntime.gen(function* () {
           const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
-          const item = { request, deferred }
+          const item = { request, agent, deferred }
           if (pending.has(request.id)) return yield* EffectRuntime.die(`Duplicate pending permission ID: ${request.id}`)
           pending.set(request.id, item)
           yield* events
@@ -216,7 +216,7 @@ export const layer = Layer.effect(
     const ask = EffectRuntime.fn("PermissionV2.ask")(function* (input: AssertInput) {
       const result = yield* evaluateInput(input)
       const value = request(input)
-      if (result.effect === "ask") yield* create(value)
+      if (result.effect === "ask") yield* create(value, input.agent)
       return { id: value.id, effect: result.effect }
     })
 
@@ -230,7 +230,7 @@ export const layer = Layer.effect(
             })
           }
           if (result.effect === "allow") return
-          const item = yield* create(request(input))
+          const item = yield* create(request(input), input.agent)
           return yield* restore(Deferred.await(item.deferred)).pipe(
             EffectRuntime.ensuring(
               EffectRuntime.sync(() => {
@@ -286,7 +286,7 @@ export const layer = Layer.effect(
           const rememberedRules = yield* savedRules()
           for (const [id, item] of pending) {
             const input = { ...item.request }
-            const rules = yield* configured(item.request.sessionID, item.request.agent).pipe(
+            const rules = yield* configured(item.request.sessionID, item.agent).pipe(
               EffectRuntime.catchTag("Session.NotFoundError", () => EffectRuntime.succeed(undefined)),
             )
             if (!rules) continue

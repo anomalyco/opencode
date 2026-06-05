@@ -145,7 +145,7 @@ describe("PermissionV2", () => {
         }),
       )
       expect(yield* service.ask(assertion({ agent: AgentV2.ID.make("reviewer") }))).toMatchObject({ effect: "ask" })
-      expect(yield* service.get(PermissionV2.ID.create("per_test"))).toMatchObject({ agent: "reviewer" })
+      expect(yield* service.get(PermissionV2.ID.create("per_test"))).not.toHaveProperty("agent")
     }),
   )
 
