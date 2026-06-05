@@ -198,7 +198,8 @@ function createCompactionMarker(sessionID: SessionID) {
 
 function fake(
   input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
-  result: "continue" | "compact",
+  result: "continue" | "compact" | "stop",
+  error?: SessionV1.Assistant["error"],
 ) {
   const msg = input.assistantMessage
   return {
@@ -207,15 +208,20 @@ function fake(
     },
     updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(() => Effect.succeed(undefined)),
     completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(() => Effect.void),
-    process: Effect.fn("TestSessionProcessor.process")(() => Effect.succeed(result)),
+    process: Effect.fn("TestSessionProcessor.process")(() =>
+      Effect.sync(() => {
+        msg.error = error
+        return result
+      }),
+    ),
   } satisfies SessionProcessorModule.SessionProcessor.Handle
 }
 
-function layer(result: "continue" | "compact") {
+function layer(result: "continue" | "compact" | "stop", error?: SessionV1.Assistant["error"]) {
   return Layer.succeed(
     SessionProcessorModule.SessionProcessor.Service,
     SessionProcessorModule.SessionProcessor.Service.of({
-      create: Effect.fn("TestSessionProcessor.create")((input) => Effect.succeed(fake(input, result))),
+      create: Effect.fn("TestSessionProcessor.create")((input) => Effect.succeed(fake(input, result, error))),
     }),
   )
 }
@@ -258,7 +264,8 @@ const compactionEnv = Layer.mergeAll(
 const itCompaction = testEffect(compactionEnv)
 
 type CompactionProcessOptions = {
-  result?: "continue" | "compact"
+  result?: "continue" | "compact" | "stop"
+  error?: SessionV1.Assistant["error"]
   llm?: Layer.Layer<LLM.Service>
   plugin?: Layer.Layer<Plugin.Service>
   provider?: ReturnType<typeof ProviderTest.fake>
@@ -279,7 +286,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
         Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
         Layer.provide(status),
       )
-    : layer(options?.result ?? "continue")
+    : layer(options?.result ?? "continue", options?.error)
   return Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, events, status).pipe(
     Layer.provide(SessionNs.defaultLayer),
     Layer.provide((options?.provider ?? wide()).layer),
@@ -905,6 +912,47 @@ describe("session.compaction.process", () => {
         expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
       }
     }).pipe(withCompaction({ result: "compact" })),
+  )
+
+  itCompaction.instance(
+    "marks errored summary message as finished when processor stops",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const error = new SessionV1.APIError({
+        message: "boom",
+        isRetryable: false,
+      }).toObject() as SessionV1.Assistant["error"]
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
+
+      const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+        (msg) => msg.info.role === "assistant" && msg.info.summary,
+      )
+
+      expect(result).toBe("stop")
+      expect(summary?.info.role).toBe("assistant")
+      if (summary?.info.role === "assistant") {
+        expect(summary.info.finish).toBe("error")
+        expect(summary.info.error).toEqual(error)
+      }
+    }).pipe(
+      withCompaction({
+        result: "stop",
+        error: new SessionV1.APIError({
+          message: "boom",
+          isRetryable: false,
+        }).toObject() as SessionV1.Assistant["error"],
+      }),
+    ),
   )
 
   it.instance(
