@@ -24,6 +24,7 @@ export type ReadInput = typeof ReadInput.Type
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
 export const READ_SAMPLE_BYTES = 4 * 1024
+export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const MAX_LINE_LENGTH = 2_000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 
@@ -84,6 +85,25 @@ export const isBinary = (resource: string, bytes: Uint8Array) => {
     if (byte < 9 || (byte > 13 && byte < 32)) nonPrintable++
   }
   return nonPrintable / bytes.length > 0.3
+}
+
+const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
+const supportedImageMime = (bytes: Uint8Array) => {
+  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
+  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
+  if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif"
+  if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50]))
+    return "image/webp"
+}
+
+export class MediaIngestLimitError extends Error {
+  constructor(
+    readonly resource: string,
+    readonly maximumBytes: number,
+  ) {
+    super(`Media exceeds ${maximumBytes} byte ingestion limit: ${resource}`)
+    this.name = "MediaIngestLimitError"
+  }
 }
 
 export class TextContent extends Schema.Class<TextContent>("FileSystem.TextContent")({
@@ -220,6 +240,7 @@ export interface Interface {
   readonly readResolved: (target: ReadTarget, maximumBytes?: number) => Effect.Effect<Content>
   readonly readSampleResolved: (target: ReadTarget, maximumBytes: number) => Effect.Effect<Uint8Array>
   readonly readTextPageResolved: (target: ReadTarget, page?: TextPageInput) => Effect.Effect<TextPage>
+  readonly readToolResolved: (target: ReadTarget, page?: TextPageInput) => Effect.Effect<Content | TextPage>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   /** Select a contained canonical read root without asserting leaf policy. */
   readonly resolveRoot: (input?: ListInput) => Effect.Effect<RootTarget>
@@ -508,6 +529,148 @@ export const layer = Layer.effect(
         }),
       )
     })
+    const readToolResolved = Effect.fn("FileSystem.readToolResolved")(function* (
+      target: ReadTarget,
+      page: TextPageInput = {},
+    ) {
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
+          const info = yield* file.stat.pipe(Effect.orDie)
+          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
+            return yield* Effect.die(new Error("File changed after permission approval"))
+
+          const first = Option.getOrElse(
+            yield* file.readAlloc(Math.min(64 * 1024, Number(info.size) || READ_SAMPLE_BYTES)).pipe(Effect.orDie),
+            () => new Uint8Array(),
+          )
+          const mime = supportedImageMime(first)
+          if (mime) {
+            if (info.size > MAX_MEDIA_INGEST_BYTES)
+              return yield* Effect.die(new MediaIngestLimitError(target.resource, MAX_MEDIA_INGEST_BYTES))
+            const chunks = [first]
+            let total = first.length
+            while (total <= MAX_MEDIA_INGEST_BYTES) {
+              const chunk = yield* file
+                .readAlloc(Math.min(64 * 1024, MAX_MEDIA_INGEST_BYTES + 1 - total))
+                .pipe(Effect.orDie)
+              if (Option.isNone(chunk)) break
+              chunks.push(chunk.value)
+              total += chunk.value.length
+            }
+            if (total > MAX_MEDIA_INGEST_BYTES)
+              return yield* Effect.die(new MediaIngestLimitError(target.resource, MAX_MEDIA_INGEST_BYTES))
+            return new BinaryContent({
+              type: "binary",
+              content: Buffer.concat(
+                chunks.map((chunk) => Buffer.from(chunk)),
+                total,
+              ).toString("base64"),
+              encoding: "base64",
+              mime,
+            })
+          }
+          if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || isBinary(target.resource, first))
+            return yield* Effect.die(new BinaryFileError(target.resource))
+
+          const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
+          if (!paged) {
+            const decoder = new TextDecoder("utf-8", { fatal: true })
+            const text = [yield* Effect.sync(() => decoder.decode(first, { stream: true }))]
+            while (true) {
+              const chunk = yield* file.readAlloc(64 * 1024).pipe(Effect.orDie)
+              if (Option.isNone(chunk)) break
+              if (chunk.value.includes(0)) return yield* Effect.die(new BinaryFileError(target.resource))
+              text.push(yield* Effect.sync(() => decoder.decode(chunk.value, { stream: true })))
+            }
+            text.push(yield* Effect.sync(() => decoder.decode()))
+            return new TextContent({ type: "text", content: text.join(""), mime: FSUtil.mimeType(target.real) })
+          }
+
+          const offset = page.offset ?? 1
+          const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
+          const lines: string[] = []
+          const decoder = new TextDecoder("utf-8", { fatal: true })
+          let pending = ""
+          let discard = false
+          let line = 1
+          let bytes = 0
+          let found = false
+          let truncated = false
+          let next: number | undefined
+
+          const append = (input: string) => {
+            if (line < offset) {
+              line++
+              return
+            }
+            if (lines.length >= limit || bytes >= MAX_READ_BYTES) {
+              truncated = true
+              next ??= line
+              line++
+              return
+            }
+            found = true
+            const text = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
+            const size = Buffer.byteLength(text, "utf-8") + (lines.length > 0 ? 1 : 0)
+            if (bytes + size > MAX_READ_BYTES) {
+              truncated = true
+              next ??= line
+              line++
+              return
+            }
+            lines.push(text)
+            bytes += size
+            line++
+          }
+
+          const consume = (chunk: Uint8Array) => {
+            if (chunk.includes(0)) throw new BinaryFileError(target.resource)
+            let text = decoder.decode(chunk, { stream: true })
+            while (true) {
+              const index = text.indexOf("\n")
+              if (index === -1) {
+                if (!discard) {
+                  pending += text
+                  if (pending.length > MAX_LINE_LENGTH) {
+                    pending = pending.slice(0, MAX_LINE_LENGTH + 1)
+                    discard = true
+                  }
+                }
+                break
+              }
+              const current = pending + (discard ? "" : text.slice(0, index))
+              pending = ""
+              discard = false
+              text = text.slice(index + 1)
+              append(current.endsWith("\r") ? current.slice(0, -1) : current)
+            }
+          }
+
+          yield* Effect.sync(() => consume(first))
+          while (true) {
+            const chunk = yield* file.readAlloc(64 * 1024).pipe(Effect.orDie)
+            if (Option.isNone(chunk)) break
+            yield* Effect.sync(() => consume(chunk.value))
+          }
+          const tail = yield* Effect.sync(() => decoder.decode())
+          if (!discard) pending += tail
+          if (pending) append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)
+          if (!found && offset !== 1) return yield* Effect.die(new Error(`Offset ${offset} is out of range`))
+
+          const text = lines.join("\n")
+          return new TextPage({
+            type: "text-page",
+            content: text,
+            mime: FSUtil.mimeType(target.real),
+            offset,
+            truncated,
+            ...(next === undefined ? {} : { next }),
+          })
+        }),
+      )
+    })
     const resolveList = Effect.fn("FileSystem.resolveList")(function* (input: ListInput = {}) {
       const directory = yield* resolve(input.path, input.reference)
       const info = yield* fs.stat(directory.real).pipe(Effect.orDie)
@@ -605,6 +768,7 @@ export const layer = Layer.effect(
       readResolved,
       readSampleResolved,
       readTextPageResolved,
+      readToolResolved,
       list: Effect.fn("FileSystem.list")(function* (input) {
         return yield* listResolved(yield* resolveList(input))
       }),

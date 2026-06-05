@@ -101,6 +101,34 @@ const filesystem = Layer.succeed(
             })
           })
         : Effect.die(readFailure),
+    readToolResolved: (_target, page = {}) => {
+      samples.push(FileSystem.READ_SAMPLE_BYTES)
+      if (readFailure !== undefined) return Effect.die(readFailure)
+      if (sample[0] === 0x89 && sample[1] === 0x50 && sample[2] === 0x4e && sample[3] === 0x47)
+        return Effect.succeed(
+          readContent.type === "binary"
+            ? new FileSystem.BinaryContent({ ...readContent, mime: "image/png" })
+            : readContent,
+        )
+      if (FileSystem.isBinary(real.split("/").at(-1) ?? real, sample))
+        return Effect.die(new FileSystem.BinaryFileError(real.split("/").at(-1) ?? real))
+      if (size > FileSystem.MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined)
+        return Effect.sync(() => {
+          textPageInputs.push(page)
+          return new FileSystem.TextPage({
+            type: "text-page",
+            content: "hello",
+            mime: "text/plain",
+            offset: page.offset ?? 1,
+            truncated: true,
+            next: (page.offset ?? 1) + 1,
+          })
+        })
+      return Effect.sync(() => {
+        reads.push({ path: RelativePath.make("README.md") })
+        return readContent
+      })
+    },
     resolveRoot: () => Effect.die("unused"),
     revalidateRoot: Effect.succeed,
     list: () => Effect.die("unused"),
@@ -221,7 +249,7 @@ describe("ReadTool", () => {
         ],
       })
       expect(samples).toEqual([FileSystem.READ_SAMPLE_BYTES])
-      expect(reads).toHaveLength(1)
+      expect(reads).toHaveLength(0)
 
       const settled = yield* registry.settle({
         sessionID,

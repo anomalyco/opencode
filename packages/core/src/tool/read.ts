@@ -8,7 +8,6 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { Config } from "../config"
 import { FileSystem } from "../filesystem"
-import { FSUtil } from "../fs-util"
 import { PermissionV2 } from "../permission"
 import { ToolRegistry } from "./registry"
 
@@ -18,15 +17,6 @@ const MAX_IMAGE_BASE64_BYTES = 5 * 1024 * 1024
 const MAX_IMAGE_WIDTH = 2_000
 const MAX_IMAGE_HEIGHT = 2_000
 const JPEG_QUALITIES = [80, 85, 70, 55, 40]
-const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
-const imageMime = (bytes: Uint8Array, fallback: string) => {
-  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
-  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
-  if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif"
-  if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50]))
-    return "image/webp"
-  return fallback
-}
 
 class ImageDecodeError extends Error {
   constructor(readonly resource: string) {
@@ -127,12 +117,13 @@ export const layer = Layer.effectDiscard(
             const final = yield* filesystem.resolveReadPath(input)
             if (final.type !== "file" || final.target.resource !== target.resource || final.target.real !== target.real)
               return yield* Effect.die(new Error("File changed after permission approval"))
-            const sample = yield* filesystem.readSampleResolved(final.target, FileSystem.READ_SAMPLE_BYTES)
-            const mime = imageMime(sample, FSUtil.mimeType(final.target.real))
-            if (SUPPORTED_IMAGE_MIMES.has(mime)) {
-              const content = yield* filesystem.readResolved(final.target)
-              const base64 =
-                content.type === "binary" ? content.content : Buffer.from(content.content, "utf-8").toString("base64")
+            const content = yield* filesystem.readToolResolved(final.target, {
+              offset: input.offset,
+              limit: input.limit,
+            })
+            if (content.type === "binary" && SUPPORTED_IMAGE_MIMES.has(content.mime)) {
+              const mime = content.mime
+              const base64 = content.content
               const image = Object.assign(
                 {},
                 ...(yield* config.entries()).flatMap((entry) =>
@@ -221,15 +212,6 @@ export const layer = Layer.effectDiscard(
                 decoded.free()
               }
             }
-            if (FileSystem.isBinary(final.target.resource, sample))
-              return yield* Effect.die(new FileSystem.BinaryFileError(final.target.resource))
-            if (
-              final.target.size > FileSystem.MAX_READ_BYTES ||
-              input.offset !== undefined ||
-              input.limit !== undefined
-            )
-              return yield* filesystem.readTextPageResolved(final.target, { offset: input.offset, limit: input.limit })
-            const content = yield* filesystem.readResolved(final.target, FileSystem.MAX_READ_BYTES)
             if (content.type === "binary")
               return yield* Effect.die(new FileSystem.BinaryFileError(final.target.resource))
             return content
@@ -240,6 +222,7 @@ export const layer = Layer.effectDiscard(
                 const message =
                   error instanceof FileSystem.BinaryFileError ||
                   error instanceof FileSystem.ReadLimitError ||
+                  error instanceof FileSystem.MediaIngestLimitError ||
                   error instanceof ImageDecodeError ||
                   error instanceof ImageSizeError
                     ? error.message
