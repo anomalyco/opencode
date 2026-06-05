@@ -55,8 +55,8 @@ function generateV2HueScale(seed: HexColor, isDark: boolean): HexColor[] {
   )
 }
 
-/** Grey ramp: 100 = lightest, 1200 = darkest. Palette themes interpolate neutral → ink like v1. */
-function generateV2NeutralScale(neutral: HexColor, ink: HexColor | undefined, isDark: boolean): HexColor[] {
+/** Grey ramp: 100 = lightest, 1200 = darkest. Derived from palette neutral → ink like v1. */
+function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolean): HexColor[] {
   const scale = generateNeutralScale(neutral, isDark, ink)
   return isDark ? scale.toReversed() : scale
 }
@@ -108,11 +108,7 @@ function readPalette(variant: ThemeVariant): PaletteInput {
 /** Build v2 primitive ramps (100 = lightest). Alpha ramps are static in `v2/styles/colors.css`. */
 export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Record<string, V2ColorValue> {
   const colors = readPalette(variant)
-  const grey = generateV2NeutralScale(
-    colors.neutral,
-    "palette" in variant && variant.palette ? colors.ink : undefined,
-    isDark,
-  )
+  const grey = generateV2NeutralScale(colors.neutral, colors.ink, isDark)
   const blue = generateV2HueScale(colors.interactive, isDark)
   const green = generateV2HueScale(colors.success, isDark)
   const yellow = generateV2HueScale(colors.warning, isDark)
