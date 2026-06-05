@@ -36,6 +36,7 @@ const retryRevisionMismatch = <A, E>(attempt: () => Effect.Effect<A, E>): Effect
 interface Prepared {
   readonly baseline: string
   readonly baselineSeq: number
+  readonly revision: number
 }
 
 export function initialize(
@@ -78,7 +79,7 @@ const prepareOnce = Effect.fnUntraced(function* (
   if (!stored) {
     const generation = yield* SystemContext.initialize(value)
     const baselineSeq = yield* insert(db, sessionID, location, agent, generation)
-    return { baseline: generation.baseline, baselineSeq }
+    return { baseline: generation.baseline, baselineSeq, revision: 0 }
   }
 
   const snapshot = yield* Schema.decodeUnknownEffect(SystemContext.Snapshot)(stored.snapshot).pipe(
@@ -95,12 +96,12 @@ const prepareOnce = Effect.fnUntraced(function* (
   }
   if (result._tag === "Unchanged" || result._tag === "ReplacementBlocked") {
     yield* fence(db, sessionID, agent, stored.revision)
-    return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
+    return { baseline: stored.baseline, baselineSeq: stored.baseline_seq, revision: stored.revision }
   }
   if (result._tag === "ReplacementReady") {
     const replacementSeq = stored.replacement_seq ?? (yield* SessionInput.latestSeq(db, sessionID))
     yield* replace(db, sessionID, agent, stored.revision, replacementSeq, result.generation)
-    return { baseline: result.generation.baseline, baselineSeq: replacementSeq }
+    return { baseline: result.generation.baseline, baselineSeq: replacementSeq, revision: stored.revision + 1 }
   }
 
   yield* events.publish(
@@ -108,7 +109,7 @@ const prepareOnce = Effect.fnUntraced(function* (
     { sessionID, messageID: SessionMessageID.ID.create(), timestamp: yield* DateTime.now, text: result.text },
     { commit: () => advance(db, sessionID, stored.revision, result.snapshot).pipe(Effect.orDie) },
   )
-  return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
+  return { baseline: stored.baseline, baselineSeq: stored.baseline_seq, revision: stored.revision + 1 }
 })
 
 const initializeOnce = Effect.fnUntraced(function* (
@@ -121,7 +122,7 @@ const initializeOnce = Effect.fnUntraced(function* (
   if (yield* exists(db, sessionID)) return
   const generation = yield* context.pipe(Effect.flatMap(SystemContext.initialize))
   const baselineSeq = yield* insert(db, sessionID, location, agent, generation)
-  return { baseline: generation.baseline, baselineSeq }
+  return { baseline: generation.baseline, baselineSeq, revision: 0 }
 })
 
 const exists = Effect.fn("SessionContextEpoch.exists")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
@@ -294,6 +295,22 @@ const fence = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
   if (!current || AgentV2.effectiveID(current.agent) !== agent) return yield* Effect.die(new AgentMismatch())
   if (current.revision !== expectedRevision) return yield* Effect.die(new RevisionMismatch())
+})
+
+export const current = Effect.fn("SessionContextEpoch.current")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  agent: AgentV2.ID,
+  revision: number,
+) {
+  const value = yield* db
+    .select({ agent: SessionTable.agent, revision: SessionContextEpochTable.revision })
+    .from(SessionContextEpochTable)
+    .innerJoin(SessionTable, eq(SessionTable.id, SessionContextEpochTable.session_id))
+    .where(eq(SessionContextEpochTable.session_id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  return value !== undefined && AgentV2.effectiveID(value.agent) === agent && value.revision === revision
 })
 
 const advance = Effect.fnUntraced(function* (

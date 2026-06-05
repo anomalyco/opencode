@@ -925,7 +925,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("applies an agent switch after the safe boundary to the next provider turn", () =>
+  it.effect("retries an agent switch before the final provider-dispatch boundary", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -951,12 +951,7 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       response = []
       yield* session.resume(sessionID)
-      modelResolveHook = Effect.void
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
-      yield* session.resume(sessionID)
-
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
-        ["Initial context\n\nBuild skills"],
         ["Initial context\n\nReviewer skills"],
       ])
       expect(
@@ -970,7 +965,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("applies a model switch after the safe boundary to the next provider turn", () =>
+  it.effect("retries a model switch before the final provider-dispatch boundary", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -993,16 +988,8 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       response = []
       yield* session.resume(sessionID)
-      modelResolveHook = Effect.void
-      systemBaseline = "Replacement context"
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
-      yield* session.resume(sessionID)
-
-      expect(requests.map((request) => request.model)).toEqual([model, replacementModel])
-      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
-        ["Initial context"],
-        ["Replacement context"],
-      ])
+      expect(requests.map((request) => request.model)).toEqual([replacementModel])
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([["Initial context"]])
     }),
   )
 
