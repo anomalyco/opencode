@@ -5,7 +5,7 @@ import { Effect, Fiber, Layer, Option, Stream } from "effect"
 import { Auth } from "@opencode-ai/core/auth"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { EventV2 } from "@opencode-ai/core/event"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
@@ -32,10 +32,7 @@ function context(
         updates.push({
           id: providerID,
           enabled: provider.enabled,
-          apiKey:
-            typeof provider.options.aisdk.provider.apiKey === "string"
-              ? provider.options.aisdk.provider.apiKey
-              : undefined,
+          apiKey: typeof provider.request.body.apiKey === "string" ? provider.request.body.apiKey : undefined,
         })
       },
       remove: (providerID) => {
@@ -57,7 +54,7 @@ function context(
 
 function testLayer(dir: string) {
   return Auth.layer.pipe(
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provide(
       Global.layerWith({

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -15,7 +14,7 @@ const model = {
 }
 
 function id(suffix: string) {
-  return EventV2.ID.make(`evt_${suffix}`)
+  return SessionMessage.ID.make(`msg_${suffix}`)
 }
 
 function user(suffix: string, time: number, input: Partial<SessionMessage.User>): SessionMessage.User {
@@ -50,9 +49,8 @@ function assistant(
 
 function completedTool(input?: Partial<SessionMessage.AssistantTool>): SessionMessage.AssistantTool {
   return new SessionMessage.AssistantTool({
-    id: id("tool"),
+    id: "call-1",
     type: "tool",
-    callID: "call-1",
     name: "bash",
     time: { created: DateTime.makeUnsafe(2), completed: DateTime.makeUnsafe(3) },
     state: new SessionMessage.ToolStateCompleted({
@@ -93,7 +91,6 @@ describe("session.message-v2-model.toModelMessages", () => {
           new SessionMessage.AssistantReasoning({
             id: id("reasoning"),
             type: "reasoning",
-            reasoningID: "reasoning-1",
             text: "thinking",
           }),
         ]),
@@ -116,7 +113,7 @@ describe("session.message-v2-model.toModelMessages", () => {
           "api-error",
           1,
           [new SessionMessage.AssistantText({ id: id("api-text"), type: "text", text: "do not replay" })],
-          { error: { type: "api", message: "failed", isRetryable: false } },
+          { error: { type: "unknown", message: "failed" } },
         ),
         assistant(
           "unknown-error",
@@ -128,17 +125,17 @@ describe("session.message-v2-model.toModelMessages", () => {
     ).toStrictEqual([])
   })
 
-  test("keeps aborted errored assistant turns with meaningful content", async () => {
+  test("skips errored assistant turns", async () => {
     expect(
       await MessageV2Model.toModelMessages([
         assistant(
           "aborted",
           1,
           [new SessionMessage.AssistantText({ id: id("aborted-text"), type: "text", text: "partial answer" })],
-          { error: { type: "aborted", message: "stopped" } },
+          { error: { type: "unknown", message: "stopped" } },
         ),
       ]),
-    ).toStrictEqual([{ role: "assistant", content: [{ type: "text", text: "partial answer" }] }])
+    ).toStrictEqual([])
   })
 
   test("converts completed tool text output to tool-call and tool-result messages", async () => {
@@ -182,7 +179,7 @@ describe("session.message-v2-model.toModelMessages", () => {
                 new ToolOutput.TextContent({ type: "text", text: "read image" }),
                 new ToolOutput.FileContent({
                   type: "file",
-                  uri: "data:image/png;base64,Zm9v",
+                  source: { type: "data", data: "Zm9v" },
                   mime: "image/png",
                   name: "image.png",
                 }),
@@ -237,7 +234,7 @@ describe("session.message-v2-model.toModelMessages", () => {
                 new ToolOutput.TextContent({ type: "text", text: "read image" }),
                 new ToolOutput.FileContent({
                   type: "file",
-                  uri: "file:///tmp/image.png",
+                  source: { type: "file", uri: "file:///tmp/image.png" },
                   mime: "image/png",
                   name: "image.png",
                 }),
@@ -310,17 +307,15 @@ describe("session.message-v2-model.toModelMessages", () => {
       await MessageV2Model.toModelMessages([
         assistant("assistant", 1, [
           new SessionMessage.AssistantTool({
-            id: id("pending"),
+            id: "call-pending",
             type: "tool",
-            callID: "call-pending",
             name: "bash",
             time: { created: DateTime.makeUnsafe(2) },
             state: new SessionMessage.ToolStatePending({ status: "pending", input: "{\"cmd\":\"ls\"}" }),
           }),
           new SessionMessage.AssistantTool({
-            id: id("running"),
+            id: "call-running",
             type: "tool",
-            callID: "call-running",
             name: "read",
             time: { created: DateTime.makeUnsafe(3), ran: DateTime.makeUnsafe(4) },
             state: new SessionMessage.ToolStateRunning({
@@ -377,9 +372,8 @@ describe("session.message-v2-model.toModelMessages", () => {
       await MessageV2Model.toModelMessages([
         assistant("assistant", 1, [
           new SessionMessage.AssistantTool({
-            id: id("error"),
+            id: "call-error",
             type: "tool",
-            callID: "call-error",
             name: "bash",
             time: { created: DateTime.makeUnsafe(2), ran: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
             state: new SessionMessage.ToolStateError({
@@ -441,7 +435,6 @@ describe("session.message-v2-model.toModelMessages", () => {
           new SessionMessage.AssistantReasoning({
             id: id("reasoning"),
             type: "reasoning",
-            reasoningID: "reasoning-1",
             text: "thinking",
           }),
           completedTool({ provider: { executed: true, metadata: { openai: { signature: "deferred" } } } }),

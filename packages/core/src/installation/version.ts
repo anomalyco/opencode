@@ -12,6 +12,7 @@ export const InstallationLocal = InstallationChannel === "local"
 export function normalizeInstallationDependencyVersion(version: string) {
   const parsed = semver.parse(version)
   if (!parsed) return version
+  if (!/^c0dn\.\d+$/.test(parsed.prerelease.join("."))) return version
   return `${parsed.major}.${parsed.minor}.${parsed.patch}`
 }
 

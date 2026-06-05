@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
@@ -48,7 +49,7 @@ function ensureGlobal() {
       .insert(ProjectTable)
       .values({
         id: ProjectV2.ID.global,
-        worktree: "/",
+        worktree: AbsolutePath.make("/"),
         time_created: Date.now(),
         time_updated: Date.now(),
         sandboxes: [],
@@ -118,7 +119,7 @@ describe("migrateFromGlobal", () => {
     }),
   )
 
-  it.live("migrates global sessions when non-git directories get local project IDs", () =>
+  it.live("keeps global sessions when non-git directories resolve to global", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       const id = legacySessionID()
@@ -127,14 +128,14 @@ describe("migrateFromGlobal", () => {
 
       const projects = yield* Project.Service
       const { project } = yield* projects.fromDirectory(tmp)
-      expect(project.id).not.toBe(ProjectV2.ID.global)
+      expect(project.id).toBe(ProjectV2.ID.global)
       expect(project.vcs).toBeUndefined()
 
       const row = yield* Database.Service.use(({ db }) =>
         db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie),
       )
       expect(row).toBeDefined()
-      expect(row!.project_id).toBe(project.id)
+      expect(row!.project_id).toBe(ProjectV2.ID.global)
     }),
   )
 

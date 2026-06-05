@@ -31,7 +31,7 @@ describe("OpenAPI EventV2 schemas", () => {
 
   test("keeps assistant message content as typed content entries with canonical evt ids", () => {
     const encoded = Schema.encodeUnknownSync(SessionMessage.Message)(new SessionMessage.Assistant({
-      id: EventV2.ID.make("evt_assistant"),
+      id: SessionMessage.ID.make("msg_assistant"),
       type: "assistant",
       agent: "general",
       model: {
@@ -40,17 +40,15 @@ describe("OpenAPI EventV2 schemas", () => {
         variant: ModelV2.VariantID.make("default"),
       },
       content: [
-        new SessionMessage.AssistantText({ type: "text", id: EventV2.ID.make("evt_text"), text: "hello" }),
+        new SessionMessage.AssistantText({ type: "text", id: "txt_1", text: "hello" }),
         new SessionMessage.AssistantReasoning({
           type: "reasoning",
-          id: EventV2.ID.make("evt_reasoning"),
-          reasoningID: "rsn_1",
+          id: "rsn_1",
           text: "thinking",
         }),
         new SessionMessage.AssistantTool({
           type: "tool",
-          id: EventV2.ID.make("evt_tool"),
-          callID: "call_1",
+          id: "call_1",
           name: "read",
           state: new SessionMessage.ToolStatePending({ status: "pending", input: "{}" }),
           time: { created: DateTime.makeUnsafe(1234) },
@@ -59,15 +57,14 @@ describe("OpenAPI EventV2 schemas", () => {
       time: { created: DateTime.makeUnsafe(1234) },
     })) as Record<string, unknown>
 
-    expect(encoded).toMatchObject({ id: "evt_assistant", type: "assistant" })
+    expect(encoded).toMatchObject({ id: "msg_assistant", type: "assistant" })
     expect(encoded).not.toHaveProperty("parts")
     expect(encoded.content).toEqual([
-      { type: "text", id: "evt_text", text: "hello" },
-      { type: "reasoning", id: "evt_reasoning", reasoningID: "rsn_1", text: "thinking" },
+      { type: "text", id: "txt_1", text: "hello" },
+      { type: "reasoning", id: "rsn_1", text: "thinking" },
       {
         type: "tool",
-        id: "evt_tool",
-        callID: "call_1",
+        id: "call_1",
         name: "read",
         state: { status: "pending", input: "{}" },
         time: { created: 1234 },

@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { ToolFailure } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
+import { LLMEvent, ToolFailure } from "@opencode-ai/llm"
+import { LLMClient, RequestExecutor, WebSocketExecutor, type LLMClientShape } from "@opencode-ai/llm/route"
 import { jsonSchema, tool, type ModelMessage, type Tool } from "ai"
-import { Effect, Layer, Stream } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
@@ -11,9 +10,10 @@ import type { Provider } from "@/provider/provider"
 import { OAUTH_DUMMY_KEY } from "@/auth"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const baseModel: Provider.Model = {
-  id: ProviderV2.ModelID.make("gpt-5-mini"),
+  id: ModelV2.ID.make("gpt-5-mini"),
   providerID: ProviderV2.ID.make("openai"),
   api: {
     id: "gpt-5-mini",
@@ -365,23 +365,6 @@ describe("session.llm-native.request", () => {
     expect(compatible.route.id).toBe("openai-compatible-chat")
     expect(compatible.route.endpoint.baseURL).toBe("https://ai.example.test/v1")
 
-    const bifrost = LLMNative.model({
-      model: {
-        ...baseModel,
-        providerID: ProviderV2.ID.bifrost,
-        api: {
-          ...baseModel.api,
-          id: "codex/gpt-5.5",
-          url: "http://localhost:8081/v1",
-          npm: "@ai-sdk/openai",
-        },
-      },
-      apiKey: "test-key",
-      messages: [],
-    })
-    expect(bifrost.route.id).toBe("openai-responses")
-    expect(bifrost.route.endpoint.baseURL).toBe("http://localhost:8081/v1")
-
     const openrouter = LLMNative.model({
       model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@openrouter/ai-sdk-provider" } },
       apiKey: "test-key",
@@ -433,34 +416,6 @@ describe("session.llm-native.request", () => {
       LLMNativeRuntime.status({
         model: { ...baseModel, providerID: ProviderV2.ID.make("google") },
         provider: { ...providerInfo, id: ProviderV2.ID.make("google") },
-        auth: undefined,
-      }),
-    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, anthropic, or bifrost" })
-    expect(
-      LLMNativeRuntime.status({
-        model: {
-          ...baseModel,
-          providerID: ProviderV2.ID.bifrost,
-          api: { ...baseModel.api, npm: "@ai-sdk/openai", url: "http://localhost:8080/openai" },
-        },
-        provider: {
-          ...providerInfo,
-          id: ProviderV2.ID.bifrost,
-          name: "Bifrost",
-          env: [],
-          options: { apiKey: "bifrost-key", baseURL: "http://localhost:8080/openai" },
-        },
-        auth: undefined,
-      }),
-    ).toMatchObject({ type: "supported", apiKey: "bifrost-key", baseURL: "http://localhost:8080/openai" })
-    expect(
-      LLMNativeRuntime.status({
-        model: {
-          ...baseModel,
-          providerID: ProviderV2.ID.make("custom-provider"),
-          api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" },
-        },
-        provider: { ...providerInfo, id: ProviderV2.ID.make("custom-provider") },
         auth: undefined,
       }),
     ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, anthropic, or bifrost" })
@@ -578,6 +533,66 @@ describe("session.llm-native.request", () => {
       const failure = yield* Effect.flip(wrapped.incomplete.execute({}, { id: "call-1", name: "incomplete" }))
       expect(failure).toBeInstanceOf(ToolFailure)
       expect(failure.message).toContain("incomplete")
+    }),
+  )
+
+  it.effect("emits native tool calls before overlapping local settlements complete", () =>
+    Effect.gen(function* () {
+      const observed: string[] = []
+      const started: string[] = []
+      let release: (() => void) | undefined
+      let notifyStarted: (() => void) | undefined
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const bothStarted = new Promise<void>((resolve) => {
+        notifyStarted = resolve
+      })
+      const lookup = {
+        description: "Lookup data",
+        inputSchema: jsonSchema({ type: "object" }),
+        execute: async (_args: unknown, options: { toolCallId: string }) => {
+          started.push(options.toolCallId)
+          if (started.length === 2) notifyStarted?.()
+          await gate
+          return { output: options.toolCallId }
+        },
+      } satisfies Tool
+      const llmClient = {
+        prepare: () => Effect.die("unused"),
+        stream: () =>
+          Stream.fromIterable([
+            LLMEvent.toolCall({ id: "call-1", name: "lookup", input: {} }),
+            LLMEvent.toolCall({ id: "call-2", name: "lookup", input: {} }),
+            LLMEvent.finish({ reason: "tool-calls" }),
+          ]),
+        generate: () => Effect.die("unused"),
+      } as LLMClientShape
+      const native = LLMNativeRuntime.stream({
+        model: baseModel,
+        provider: providerInfo,
+        auth: undefined,
+        llmClient,
+        messages: [],
+        tools: { lookup },
+        headers: {},
+        abort: new AbortController().signal,
+      })
+      expect(native.type).toBe("supported")
+      if (native.type === "unsupported") throw new Error(native.reason)
+
+      const fiber = yield* native.stream.pipe(
+        Stream.runForEach((event) => Effect.sync(() => observed.push(event.type))),
+        Effect.forkScoped,
+      )
+      yield* Effect.promise(() => bothStarted)
+
+      expect(started).toEqual(["call-1", "call-2"])
+      expect(observed).toEqual(["tool-call", "tool-call", "finish"])
+
+      release?.()
+      yield* Fiber.join(fiber)
+      expect(observed).toEqual(["tool-call", "tool-call", "finish", "tool-result", "tool-result"])
     }),
   )
 
@@ -731,77 +746,6 @@ describe("session.llm-native.request", () => {
         body: {
           model: "gpt-5-mini",
           instructions: "You are concise.",
-          input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
-        },
-      })
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ type: "text-delta", text: "Hello" }),
-          expect.objectContaining({ type: "finish" }),
-        ]),
-      )
-    }),
-  )
-
-  it.effect("streams Bifrost Responses requests with bearer auth", () =>
-    Effect.gen(function* () {
-      const captures: Array<{ url: string; authorization: string | null; body: unknown }> = []
-      const customFetch = Object.assign(
-        async (input: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1]) => {
-          const request = input instanceof Request ? input : new Request(input, init)
-          captures.push({
-            url: request.url,
-            authorization: request.headers.get("Authorization"),
-            body: await request.clone().json(),
-          })
-          return responsesStream([
-            { type: "response.created", item: null },
-            { type: "response.in_progress", item: null },
-            { type: "response.output_text.delta", item: null, item_id: "msg_1", delta: "Hello" },
-            { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
-          ])
-        },
-        { preconnect: () => undefined },
-      ) satisfies typeof fetch
-
-      const llmClient = yield* LLMClient.Service
-      const native = LLMNativeRuntime.stream({
-        model: {
-          ...baseModel,
-          id: ProviderV2.ModelID.make("codex/gpt-5.5"),
-          providerID: ProviderV2.ID.bifrost,
-          api: {
-            id: "codex/gpt-5.5",
-            url: "http://bifrost.example.test/v1",
-            npm: "@ai-sdk/openai",
-          },
-        },
-        provider: {
-          ...providerInfo,
-          id: ProviderV2.ID.bifrost,
-          name: "Bifrost",
-          env: [],
-          options: { apiKey: "bifrost-key", baseURL: "http://bifrost.example.test/v1" },
-        },
-        auth: undefined,
-        llmClient,
-        messages: [{ role: "user", content: "hello" }],
-        tools: {},
-        headers: {},
-        abort: new AbortController().signal,
-      })
-      expect(native.type).toBe("supported")
-      if (native.type === "unsupported") throw new Error(native.reason)
-      const events = Array.from(
-        yield* native.stream.pipe(Stream.provideService(FetchHttpClient.Fetch, customFetch), Stream.runCollect),
-      )
-
-      expect(captures).toHaveLength(1)
-      expect(captures[0]).toMatchObject({
-        url: "http://bifrost.example.test/v1/responses",
-        authorization: "Bearer bifrost-key",
-        body: {
-          model: "codex/gpt-5.5",
           input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
         },
       })

@@ -225,6 +225,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     onCleanup(unsub)
 
     createEffect(() => {
+      console.log("settings", { ready: ready() })
+    })
+
+    createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
       root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))

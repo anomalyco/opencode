@@ -1,5 +1,6 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import path from "path"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import os from "os"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
@@ -36,7 +37,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@/shell/shell"
 import { ShellID } from "@/tool/shell/id"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
@@ -50,7 +51,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionMailbox } from "@opencode-ai/core/session/mailbox"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AgentAttachment, FileAttachment, Prompt, ReferenceAttachment, Source } from "@opencode-ai/core/session/prompt"
@@ -66,8 +67,8 @@ import { LLMEvent } from "@opencode-ai/llm"
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
-const decodeMessageInfo = Schema.decodeUnknownExit(SessionLegacy.Info)
-const decodeMessagePart = Schema.decodeUnknownExit(SessionLegacy.Part)
+const decodeMessageInfo = Schema.decodeUnknownExit(SessionV1.Info)
+const decodeMessagePart = Schema.decodeUnknownExit(SessionV1.Part)
 
 const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
 
@@ -82,7 +83,7 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
 
-function isOrphanedInterruptedTool(part: SessionLegacy.ToolPart) {
+function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
   // They are not pending work and must not trigger an assistant-prefill request.
   return part.state.status === "error" && part.state.metadata?.interrupted === true
@@ -90,11 +91,10 @@ function isOrphanedInterruptedTool(part: SessionLegacy.ToolPart) {
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error>
-  readonly promptAsync: (input: PromptInput) => Effect.Effect<void>
-  readonly loop: (input: LoopInput) => Effect.Effect<SessionLegacy.WithParts>
-  readonly shell: (input: ShellInput) => Effect.Effect<SessionLegacy.WithParts, Session.BusyError>
-  readonly command: (input: CommandInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error>
+  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
+  readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
+  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -113,7 +113,7 @@ export const layer = Layer.effect(
     const commands = yield* Command.Service
     const config = yield* Config.Service
     const permission = yield* Permission.Service
-    const fsys = yield* AppFileSystem.Service
+    const fsys = yield* FSUtil.Service
     const mcp = yield* MCP.Service
     const lsp = yield* LSP.Service
     const registry = yield* ToolRegistry.Service
@@ -129,7 +129,6 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
-    const mailbox = yield* SessionMailbox.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const { db } = database
@@ -180,7 +179,7 @@ export const layer = Layer.effect(
 
             const target = name.slice(slash + 1)
             const targetPath = path.resolve(reference.path, target)
-            if (!AppFileSystem.contains(reference.path, targetPath)) {
+            if (!FSUtil.contains(reference.path, targetPath)) {
               parts.push(
                 referenceTextPart({
                   reference,
@@ -241,14 +240,14 @@ export const layer = Layer.effect(
 
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
       session: Session.Info
-      history: SessionLegacy.WithParts[]
+      history: SessionV1.WithParts[]
       providerID: ProviderV2.ID
-      modelID: ProviderV2.ModelID
+      modelID: ModelV2.ID
     }) {
       if (input.session.parentID) return
       if (!Session.isDefaultTitle(input.session.title)) return
 
-      const real = (m: SessionLegacy.WithParts) =>
+      const real = (m: SessionV1.WithParts) =>
         m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
       const idx = input.history.findIndex(real)
       if (idx === -1) return
@@ -259,7 +258,7 @@ export const layer = Layer.effect(
       if (!firstUser || firstUser.info.role !== "user") return
       const firstInfo = firstUser.info
 
-      const subtasks = firstUser.parts.filter((p): p is SessionLegacy.SubtaskPart => p.type === "subtask")
+      const subtasks = firstUser.parts.filter((p): p is SessionV1.SubtaskPart => p.type === "subtask")
       const onlySubtasks = subtasks.length > 0 && firstUser.parts.every((p) => p.type === "subtask")
 
       const ag = yield* agents.get("title")
@@ -302,19 +301,19 @@ export const layer = Layer.effect(
     })
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
-      task: SessionLegacy.SubtaskPart
+      task: SessionV1.SubtaskPart
       model: Provider.Model
-      lastUser: SessionLegacy.User
+      lastUser: SessionV1.User
       sessionID: SessionID
       session: Session.Info
-      msgs: SessionLegacy.WithParts[]
+      msgs: SessionV1.WithParts[]
     }) {
       const { task, model, lastUser, sessionID, session, msgs } = input
       const ctx = yield* InstanceState.context
       const promptOps = yield* ops()
       const { task: taskTool } = yield* registry.named()
       const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
-      const assistantMessage: SessionLegacy.Assistant = yield* sessions.updateMessage({
+      const assistantMessage: SessionV1.Assistant = yield* sessions.updateMessage({
         id: MessageID.ascending(),
         role: "assistant",
         parentID: lastUser.id,
@@ -329,7 +328,7 @@ export const layer = Layer.effect(
         providerID: taskModel.providerID,
         time: { created: Date.now() },
       })
-      let part: SessionLegacy.ToolPart = yield* sessions.updatePart({
+      let part: SessionV1.ToolPart = yield* sessions.updatePart({
         id: PartID.ascending(),
         messageID: assistantMessage.id,
         sessionID: assistantMessage.sessionID,
@@ -385,7 +384,7 @@ export const layer = Layer.effect(
                 ...part,
                 type: "tool",
                 state: { ...part.state, ...val },
-              } satisfies SessionLegacy.ToolPart)
+              } satisfies SessionV1.ToolPart)
             }),
           ask: (req: any) =>
             permission
@@ -419,7 +418,7 @@ export const layer = Layer.effect(
                     metadata: part.state.metadata,
                     input: part.state.input,
                   },
-                } satisfies SessionLegacy.ToolPart)
+                } satisfies SessionV1.ToolPart)
               }
             }),
           ),
@@ -454,7 +453,7 @@ export const layer = Layer.effect(
             attachments,
             time: { ...part.state.time, end: Date.now() },
           },
-        } satisfies SessionLegacy.ToolPart)
+        } satisfies SessionV1.ToolPart)
       }
 
       if (!result) {
@@ -470,12 +469,12 @@ export const layer = Layer.effect(
             metadata: part.state.status === "pending" ? undefined : part.state.metadata,
             input: part.state.input,
           },
-        } satisfies SessionLegacy.ToolPart)
+        } satisfies SessionV1.ToolPart)
       }
 
       if (!task.command) return
 
-      const summaryUserMsg: SessionLegacy.User = {
+      const summaryUserMsg: SessionV1.User = {
         id: MessageID.ascending(),
         sessionID,
         role: "user",
@@ -491,7 +490,7 @@ export const layer = Layer.effect(
         type: "text",
         text: "Summarize the task tool output above and continue with your task.",
         synthetic: true,
-      } satisfies SessionLegacy.TextPart)
+      } satisfies SessionV1.TextPart)
     })
 
     const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput, ready?: Latch.Latch) {
@@ -513,7 +512,7 @@ export const layer = Layer.effect(
               throw error
             }
             const model = input.model ?? agent.model ?? (yield* currentModel(input.sessionID))
-            const userMsg: SessionLegacy.User = {
+            const userMsg: SessionV1.User = {
               id: input.messageID ?? MessageID.ascending(),
               sessionID: input.sessionID,
               time: { created: Date.now() },
@@ -522,7 +521,7 @@ export const layer = Layer.effect(
               model: { providerID: model.providerID, modelID: model.modelID },
             }
             yield* sessions.updateMessage(userMsg)
-            const userPart: SessionLegacy.Part = {
+            const userPart: SessionV1.Part = {
               type: "text",
               id: PartID.ascending(),
               messageID: userMsg.id,
@@ -532,7 +531,7 @@ export const layer = Layer.effect(
             }
             yield* sessions.updatePart(userPart)
 
-            const msg: SessionLegacy.Assistant = {
+            const msg: SessionV1.Assistant = {
               id: MessageID.ascending(),
               sessionID: input.sessionID,
               parentID: userMsg.id,
@@ -548,7 +547,7 @@ export const layer = Layer.effect(
             }
             yield* sessions.updateMessage(msg)
             const started = Date.now()
-            const part: SessionLegacy.ToolPart = {
+            const part: SessionV1.ToolPart = {
               type: "tool",
               id: PartID.ascending(),
               messageID: msg.id,
@@ -564,6 +563,7 @@ export const layer = Layer.effect(
             yield* sessions.updatePart(part)
             yield* events.publish(SessionEvent.Shell.Started, {
               sessionID: input.sessionID,
+              messageID: SessionMessage.ID.create(),
               timestamp: DateTime.makeUnsafe(started),
               callID: part.callID,
               command: input.command,
@@ -651,7 +651,7 @@ export const layer = Layer.effect(
 
     const getModel = Effect.fn("SessionPrompt.getModel")(function* (
       providerID: ProviderV2.ID,
-      modelID: ProviderV2.ModelID,
+      modelID: ModelV2.ID,
       sessionID: SessionID,
     ) {
       const exit = yield* provider.getModel(providerID, modelID).pipe(Effect.exit)
@@ -679,7 +679,7 @@ export const layer = Layer.effect(
       if (current?.model) {
         return {
           providerID: ProviderV2.ID.make(current.model.providerID),
-          modelID: ProviderV2.ModelID.make(current.model.id),
+          modelID: ModelV2.ID.make(current.model.id),
           ...(current.model.variant && current.model.variant !== "default" ? { variant: current.model.variant } : {}),
         }
       }
@@ -717,7 +717,7 @@ export const layer = Layer.effect(
           : undefined
       const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
-      const info: SessionLegacy.User = {
+      const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
         role: "user",
         sessionID: input.sessionID,
@@ -736,6 +736,7 @@ export const layer = Layer.effect(
       if (current?.agent !== info.agent) {
         yield* events.publish(SessionEvent.AgentSwitched, {
           sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
           timestamp: DateTime.makeUnsafe(info.time.created),
           agent: info.agent,
         })
@@ -747,6 +748,7 @@ export const layer = Layer.effect(
       ) {
         yield* events.publish(SessionEvent.ModelSwitched, {
           sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
           timestamp: DateTime.makeUnsafe(info.time.created),
           model: {
             id: ModelV2.ID.make(info.model.modelID),
@@ -758,8 +760,8 @@ export const layer = Layer.effect(
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
 
-      type Draft<T> = T extends SessionLegacy.Part ? Omit<T, "id"> & { id?: string } : never
-      const assign = (part: Draft<SessionLegacy.Part>): SessionLegacy.Part => ({
+      type Draft<T> = T extends SessionV1.Part ? Omit<T, "id"> & { id?: string } : never
+      const assign = (part: Draft<SessionV1.Part>): SessionV1.Part => ({
         ...part,
         id: part.id ? PartID.make(part.id) : PartID.ascending(),
       })
@@ -775,7 +777,7 @@ export const layer = Layer.effect(
 
         const reference = yield* references.get(name.slice(0, slash))
         if (!reference || reference.kind === "invalid") return
-        if (!AppFileSystem.contains(reference.path, filepath)) return
+        if (!FSUtil.contains(reference.path, filepath)) return
 
         const target = path.relative(reference.path, filepath).split(path.sep).join("/")
         if (!target || target.startsWith("../") || target === "..") return
@@ -788,14 +790,14 @@ export const layer = Layer.effect(
         })
       })
 
-      const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<SessionLegacy.Part>[]> = Effect.fn(
+      const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<SessionV1.Part>[]> = Effect.fn(
         "SessionPrompt.resolveUserPart",
       )(function* (part) {
         if (part.type === "file") {
           if (part.source?.type === "resource") {
             const { clientName, uri } = part.source
             log.info("mcp resource", { clientName, uri, mime: part.mime })
-            const pieces: Draft<SessionLegacy.Part>[] = [
+            const pieces: Draft<SessionV1.Part>[] = [
               {
                 messageID: info.id,
                 sessionID: input.sessionID,
@@ -915,7 +917,7 @@ export const layer = Layer.effect(
                   if (end) limit = end - (offset - 1)
                 }
                 const args = { filePath: filepath, offset, limit }
-                const pieces: Draft<SessionLegacy.Part>[] = [
+                const pieces: Draft<SessionV1.Part>[] = [
                   ...(referenceContext
                     ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
                     : []),
@@ -1187,7 +1189,9 @@ export const layer = Layer.effect(
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
       yield* events.publish(SessionEvent.Prompted, {
         sessionID: input.sessionID,
+        messageID: SessionMessage.ID.create(),
         timestamp: DateTime.makeUnsafe(info.time.created),
+        delivery: "steer",
         prompt: new Prompt({
           text: nextPrompt.text.join("\n"),
           files: nextPrompt.files,
@@ -1199,6 +1203,7 @@ export const layer = Layer.effect(
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
         yield* events.publish(SessionEvent.Synthetic, {
           sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
           timestamp: DateTime.makeUnsafe(info.time.created),
           text,
         })
@@ -1207,15 +1212,15 @@ export const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const applyPromptInput: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error> = Effect.fn(
-      "SessionPrompt.applyPromptInput",
+    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
 
-      const permissions: Permission.Rule[] = []
+      const permissions: PermissionV1.Rule[] = []
       for (const [t, enabled] of Object.entries(input.tools ?? {})) {
         permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
       }
@@ -1224,13 +1229,6 @@ export const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      return message
-    })
-
-    const prompt: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error> = Effect.fn(
-      "SessionPrompt.prompt",
-    )(function* (input: PromptInput) {
-      const message = yield* applyPromptInput(input)
       if (input.noReply === true) return message
       return yield* loop({ sessionID: input.sessionID })
     })
@@ -1243,7 +1241,7 @@ export const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionLegacy.WithParts> = Effect.fn("SessionPrompt.run")(
+    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         const slog = elog.with({ sessionID })
@@ -1281,7 +1279,7 @@ export const layer = Layer.effect(
             lastUser.id < lastAssistant.id
           ) {
             const orphan = lastAssistantMsg?.parts.find(
-              (part): part is SessionLegacy.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
+              (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
             )
             if (orphan) {
               yield* slog.warn("loop exit with orphaned interrupted tool", {
@@ -1344,11 +1342,11 @@ export const layer = Layer.effect(
           const isLastStep = step >= maxSteps
           msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
             Effect.provideService(RuntimeFlags.Service, flags),
-            Effect.provideService(AppFileSystem.Service, fsys),
+            Effect.provideService(FSUtil.Service, fsys),
             Effect.provideService(Session.Service, sessions),
           )
 
-          const msg: SessionLegacy.Assistant = {
+          const msg: SessionV1.Assistant = {
             id: MessageID.ascending(),
             parentID: lastUser.id,
             role: "assistant",
@@ -1468,7 +1466,7 @@ export const layer = Layer.effect(
             const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
             if (finished && !handle.message.error) {
               if (format.type === "json_schema") {
-                handle.message.error = new SessionLegacy.StructuredOutputError({
+                handle.message.error = new SessionV1.StructuredOutputError({
                   message: "Model did not produce structured output",
                   retries: 0,
                 }).toObject()
@@ -1501,108 +1499,13 @@ export const layer = Layer.effect(
       },
     )
 
-    const mailboxText = (input: PromptInput) =>
-      input.parts
-        .map((part) => {
-          switch (part.type) {
-            case "text":
-              return part.text
-            case "file":
-              return part.filename ?? part.url
-            case "agent":
-              return part.name
-            case "subtask":
-              return part.prompt
-          }
-        })
-        .filter(Boolean)
-        .join("\n")
-
-    const mailboxPromptInput = Effect.fn("SessionPrompt.mailboxPromptInput")(function* (message: SessionMailbox.Message) {
-      const prompt = message.metadata?.prompt
-      if (!prompt || typeof prompt !== "object") throw new Error(`Mailbox message ${message.id} is missing prompt metadata`)
-      return yield* Schema.decodeUnknownEffect(PromptInput)(prompt)
+    const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
+      input: LoopInput,
+    ) {
+      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
     })
 
-    const drainMailbox: (sessionID: SessionID) => Effect.Effect<SessionLegacy.WithParts> = Effect.fn(
-      "SessionPrompt.drainMailbox",
-    )(function* (sessionID: SessionID) {
-      let last: SessionLegacy.WithParts | undefined
-      while (true) {
-        const [message] = yield* mailbox.claim({ toSessionID: sessionID, kind: "user", limit: 1 })
-        if (!message) break
-
-        last = yield* Effect.gen(function* () {
-          const input = yield* mailboxPromptInput(message).pipe(
-            Effect.catchCause((cause) =>
-              mailbox.failed({ id: message.id, error: Cause.pretty(cause) }).pipe(
-                Effect.orDie,
-                Effect.andThen(Effect.die(Cause.squash(cause))),
-              ),
-            ),
-          )
-          const created = yield* applyPromptInput(input).pipe(
-            Effect.catchCause((cause) =>
-              mailbox.failed({ id: message.id, error: Cause.pretty(cause) }).pipe(
-                Effect.orDie,
-                Effect.andThen(Effect.die(Cause.squash(cause))),
-              ),
-            ),
-          )
-          // Delivered means the queued prompt was applied to the transcript; the assistant reply may still be running.
-          yield* mailbox.delivered(message.id).pipe(Effect.orDie)
-          return input.noReply === true ? created : yield* runLoop(input.sessionID)
-        }).pipe(
-          // An interrupted drain owns a processing claim but has not completed delivery. Cancel the row so it
-          // does not remain stuck in processing forever; explicit processing failures still mark the row failed.
-          Effect.onInterrupt(() => mailbox.cancel(message.id).pipe(Effect.orDie, Effect.asVoid)),
-        )
-      }
-      if (last) return last
-      return yield* lastAssistant(sessionID)
-    })
-
-    const loop: (input: LoopInput) => Effect.Effect<SessionLegacy.WithParts> = Effect.fn("SessionPrompt.loop")(
-      function* (input: LoopInput) {
-        return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
-      },
-    )
-
-    const promptAsync = Effect.fn("SessionPrompt.promptAsync")(function* (input: PromptInput) {
-      yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      yield* mailbox.enqueue({
-        toSessionID: input.sessionID,
-        kind: "user",
-        delivery: "async",
-        text: mailboxText(input),
-        metadata: { prompt: input },
-      })
-
-      const wake = Effect.gen(function* () {
-        while (true) {
-          yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), drainMailbox(input.sessionID))
-          const queued = yield* mailbox.list({ toSessionID: input.sessionID, kind: "user", state: "queued", limit: 1 })
-          if (queued.length === 0) return
-        }
-      })
-
-      yield* wake.pipe(
-        Effect.catchCause((cause) =>
-          Effect.gen(function* () {
-            yield* Effect.logError("prompt_async mailbox wake failed").pipe(
-              Effect.annotateLogs({ sessionID: input.sessionID, cause }),
-            )
-            yield* events.publish(Session.Event.Error, {
-              sessionID: input.sessionID,
-              error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
-            })
-          }),
-        ),
-        Effect.forkIn(scope, { startImmediately: true }),
-      )
-    })
-
-    const shell: (input: ShellInput) => Effect.Effect<SessionLegacy.WithParts, Session.BusyError> = Effect.fn(
+    const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
       "SessionPrompt.shell",
     )(function* (input: ShellInput) {
       const ready = yield* Latch.make()
@@ -1729,7 +1632,6 @@ export const layer = Layer.effect(
     return Service.of({
       cancel,
       prompt,
-      promptAsync,
       loop,
       shell,
       command,
@@ -1753,7 +1655,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(Session.defaultLayer),
     Layer.provide(SessionRevert.defaultLayer),
@@ -1769,14 +1671,13 @@ export const defaultLayer = Layer.suspend(() =>
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
-        SessionMailbox.defaultLayer,
       ),
     ),
   ),
 )
 const ModelRef = Schema.Struct({
   providerID: ProviderV2.ID,
-  modelID: ProviderV2.ModelID,
+  modelID: ModelV2.ID,
 })
 
 export const PromptInput = Schema.Struct({
@@ -1789,15 +1690,15 @@ export const PromptInput = Schema.Struct({
     description:
       "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
   }),
-  format: Schema.optional(SessionLegacy.Format),
+  format: Schema.optional(SessionV1.Format),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
   parts: Schema.Array(
     Schema.Union([
-      SessionLegacy.TextPartInput,
-      SessionLegacy.FilePartInput,
-      SessionLegacy.AgentPartInput,
-      SessionLegacy.SubtaskPartInput,
+      SessionV1.TextPartInput,
+      SessionV1.FilePartInput,
+      SessionV1.AgentPartInput,
+      SessionV1.SubtaskPartInput,
     ]).annotate({ discriminator: "type" }),
   ),
 })
@@ -1836,7 +1737,7 @@ export const CommandInput = Schema.Struct({
           mime: Schema.String,
           filename: Schema.optional(Schema.String),
           url: Schema.String,
-          source: Schema.optional(SessionLegacy.FilePartSource),
+          source: Schema.optional(SessionV1.FilePartSource),
         }),
       ]).annotate({ discriminator: "type" }),
     ),

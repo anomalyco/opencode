@@ -14,14 +14,7 @@ const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
-const ALLOWED_MODELS = new Set([
-  "gpt-5.5",
-  "gpt-5.2",
-  "gpt-5.3-codex",
-  "gpt-5.3-codex-spark",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-])
+const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
 
 interface PkceCodes {
   verifier: string
@@ -368,6 +361,10 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     async dispose() {
       for (const websocketFetch of websocketFetches) websocketFetch.close()
       websocketFetches.length = 0
+    },
+    async event(input) {
+      if (input.event.type !== "session.deleted") return
+      for (const websocketFetch of websocketFetches) websocketFetch.remove(input.event.properties.info.id)
     },
     provider: {
       id: "openai",

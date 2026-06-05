@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -33,6 +34,7 @@ import { TestConfig } from "../fixture/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LLMEvent, Usage } from "@opencode-ai/llm"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 void Log.init({ print: false })
 
@@ -47,7 +49,7 @@ const summary = Layer.succeed(
 
 const ref = {
   providerID: ProviderV2.ID.make("test"),
-  modelID: ProviderV2.ModelID.make("test-model"),
+  modelID: ModelV2.ID.make("test-model"),
 }
 
 const usage = (input: ConstructorParameters<typeof Usage>[0]) => new Usage(input)
@@ -219,8 +221,8 @@ function layer(result: "continue" | "compact") {
   )
 }
 
-function cfg(compaction?: Config.Info["compaction"]) {
-  const base = Schema.decodeUnknownSync(Config.Info)({}) as Config.Info
+function cfg(compaction?: ConfigV1.Info["compaction"]) {
+  const base = Schema.decodeUnknownSync(ConfigV1.Info)({}) as ConfigV1.Info
   return TestConfig.layer({
     get: () => Effect.succeed({ ...base, compaction }),
   })
@@ -304,7 +306,7 @@ function readCompactionPart(sessionID: SessionID) {
     .messages({ sessionID })
     .pipe(
       Effect.map((messages) =>
-        messages.at(-2)?.parts.find((item): item is SessionLegacy.CompactionPart => item.type === "compaction"),
+        messages.at(-2)?.parts.find((item): item is SessionV1.CompactionPart => item.type === "compaction"),
       ),
     )
 }
@@ -650,7 +652,7 @@ describe("session.compaction.prune", () => {
             type: "text",
             text: "first",
           })
-          const b: SessionLegacy.Assistant = {
+          const b: SessionV1.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID: info.id,
@@ -746,7 +748,7 @@ describe("session.compaction.prune", () => {
           type: "text",
           text: "first",
         })
-        const b: SessionLegacy.Assistant = {
+        const b: SessionV1.Assistant = {
           id: MessageID.ascending(),
           role: "assistant",
           sessionID: info.id,
@@ -1695,6 +1697,20 @@ describe("SessionNs.getUsage", () => {
     })
 
     expect(result.cost).toBe(3 + 1.5)
+  })
+
+  test("uses authoritative Copilot billed cost when provided", () => {
+    const result = SessionNs.getUsage({
+      model: createModel({
+        context: 100_000,
+        output: 32_000,
+        cost: { input: 3, output: 15, cache: { read: 0.3, write: 0.3 } },
+      }),
+      usage: usage({ inputTokens: 11_774, outputTokens: 39, totalTokens: 11_813 }),
+      metadata: { copilot: { totalNanoAiu: 4_473_525_000 } },
+    })
+
+    expect(result.cost).toBe(0.04473525)
   })
 
   test("uses matching context cost tier before over-200k fallback", () => {

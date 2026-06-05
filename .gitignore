@@ -16,6 +16,8 @@ ts-dist
 .turbo
 **/.serena
 .serena/
+**/.omo
+.omo/
 /result
 refs
 Session.vim

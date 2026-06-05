@@ -1,3 +1,4 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
@@ -8,7 +9,6 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
-import { PermissionID } from "../../src/permission/schema"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { QuestionID } from "../../src/question/schema"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
@@ -167,7 +167,7 @@ describe("instance HttpApi", () => {
             handlerContext,
           ),
         )
-      const permissionID = PermissionID.ascending()
+      const permissionID = PermissionV1.ID.ascending()
       const questionReplyID = QuestionID.ascending()
       const questionRejectID = QuestionID.ascending()
       const [permission, questionReply, questionReject] = yield* Effect.all(

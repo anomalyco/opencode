@@ -15,9 +15,10 @@ import { Effect, Layer } from "effect"
 import { SessionPaths } from "@/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MessageID } from "@/session/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -79,11 +80,11 @@ describe("session diff with missing patch (#26574)", () => {
           role: "user",
           time: { created: Date.now() },
           agent: "build",
-          model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("model") },
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
           summary: {
             diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified" }],
           },
-        } satisfies SessionLegacy.User)
+        } satisfies SessionV1.User)
 
         const response = yield* requestInDirectory(
           `${pathFor(SessionPaths.diff, { sessionID: session.id })}?messageID=${messageID}`,

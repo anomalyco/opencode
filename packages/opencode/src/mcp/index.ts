@@ -1,4 +1,5 @@
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -13,12 +14,12 @@ import {
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "@/config/config"
-import { ConfigMCP } from "../config/mcp"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
@@ -106,9 +107,9 @@ const pendingOAuthTransports = new Map<string, TransportWithAuth>()
 // Prompt cache types
 type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
-type McpEntry = NonNullable<Config.Info["mcp"]>[string]
+type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
 
-function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
+function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
   return typeof entry === "object" && entry !== null && "type" in entry
 }
 
@@ -119,7 +120,7 @@ function remoteURL(key: string, value: string) {
   log.warn("invalid remote mcp url", { key })
 }
 
-function remoteHeaders(mcp: ConfigMCP.Info & { type: "remote" }) {
+function remoteHeaders(mcp: ConfigMCPV1.Info & { type: "remote" }) {
   const derived: Record<string, string> = {}
   if (mcp.bifrost?.virtualKey) derived["x-bf-vk"] = mcp.bifrost.virtualKey
   if (mcp.bifrost?.includeClients !== undefined) {
@@ -133,7 +134,7 @@ function remoteHeaders(mcp: ConfigMCP.Info & { type: "remote" }) {
   return Object.keys(headers).length > 0 ? headers : undefined
 }
 
-function isOAuthDisabled(mcp: ConfigMCP.Info & { type: "remote" }) {
+function isOAuthDisabled(mcp: ConfigMCPV1.Info & { type: "remote" }) {
   return mcp.oauth === false || (mcp.bifrost !== undefined && mcp.oauth === undefined)
 }
 
@@ -253,7 +254,7 @@ interface AuthResult {
 // --- Effect Service ---
 
 interface State {
-  config: Record<string, ConfigMCP.Info>
+  config: Record<string, ConfigMCPV1.Info>
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
@@ -294,7 +295,7 @@ function stableJson(input: unknown) {
   return JSON.stringify(input)
 }
 
-function poolKey(name: string, mcp: ConfigMCP.Info, cwd: string) {
+function poolKey(name: string, mcp: ConfigMCPV1.Info, cwd: string) {
   if (mcp.enabled === false) return undefined
   if (mcp.type === "local") {
     const [command, ...args] = mcp.command
@@ -391,7 +392,7 @@ export interface Interface {
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
-  readonly add: (name: string, mcp: ConfigMCP.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
+  readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly getPrompt: (
@@ -449,7 +450,7 @@ export const layer = Layer.effect(
 
     const connectRemote = Effect.fn("MCP.connectRemote")(function* (
       key: string,
-      mcp: ConfigMCP.Info & { type: "remote" },
+      mcp: ConfigMCPV1.Info & { type: "remote" },
     ) {
       const oauthDisabled = isOAuthDisabled(mcp)
       const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
@@ -568,7 +569,7 @@ export const layer = Layer.effect(
 
     const connectLocal = Effect.fn("MCP.connectLocal")(function* (
       key: string,
-      mcp: ConfigMCP.Info & { type: "local" },
+      mcp: ConfigMCPV1.Info & { type: "local" },
     ) {
       const [cmd, ...args] = mcp.command
       const cwd = yield* InstanceState.directory
@@ -601,7 +602,7 @@ export const layer = Layer.effect(
       )
     })
 
-    const create = Effect.fn("MCP.create")(function* (key: string, mcp: ConfigMCP.Info) {
+    const create = Effect.fn("MCP.create")(function* (key: string, mcp: ConfigMCPV1.Info) {
       if (mcp.enabled === false) {
         log.info("mcp server disabled", { key })
         return DISABLED_RESULT
@@ -626,8 +627,8 @@ export const layer = Layer.effect(
 
       const { client: mcpClient, status } =
         mcp.type === "remote"
-          ? yield* connectRemote(key, mcp as ConfigMCP.Info & { type: "remote" })
-          : yield* connectLocal(key, mcp as ConfigMCP.Info & { type: "local" })
+          ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
+          : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
 
       if (!mcpClient) {
         return { status } satisfies CreateResult
@@ -861,7 +862,7 @@ export const layer = Layer.effect(
       return s.clients
     })
 
-    const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCP.Info) {
+    const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCPV1.Info) {
       const s = yield* InstanceState.get(state)
       yield* closeClient(s, name)
       const result = yield* create(name, mcp)
@@ -874,7 +875,7 @@ export const layer = Layer.effect(
       return yield* storeClient(s, name, result.mcpClient, result.defs!, result.claim, mcp.timeout)
     })
 
-    const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCP.Info) {
+    const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
       const s = yield* InstanceState.get(state)
       s.config[name] = mcp
       yield* createAndStore(name, mcp)
@@ -1202,7 +1203,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
 )
 
 export * as MCP from "."

@@ -35,13 +35,18 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "personal_tag=${personal_tag}" >> "$GITHUB_OUTPUT"
 
-          if gh release view "$personal_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Personal release $personal_tag already exists. Skipping upstream sync."
+          release_json=$(gh release view "$personal_tag" --repo "$GITHUB_REPOSITORY" --json isDraft,assets 2>/dev/null || true)
+          has_x64=$(jq -r '.assets[]?.name // empty' <<< "$release_json" | grep -Fxq opencode-linux-x64.tar.gz && echo true || echo false)
+          has_arm64=$(jq -r '.assets[]?.name // empty' <<< "$release_json" | grep -Fxq opencode-linux-arm64.tar.gz && echo true || echo false)
+          is_published=$(jq -r 'if .isDraft == false then "true" else "false" end' <<< "$release_json" 2>/dev/null || echo false)
+
+          if [ "$is_published" = "true" ] && [ "$has_x64" = "true" ] && [ "$has_arm64" = "true" ]; then
+            echo "Personal release $personal_tag is published with expected Linux assets. Skipping upstream sync."
             echo "should_sync=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "Personal release $personal_tag is missing. Syncing upstream release $upstream_tag."
+          echo "Personal release $personal_tag is missing or incomplete. Syncing upstream release $upstream_tag."
           echo "should_sync=true" >> "$GITHUB_OUTPUT"
 
   sync:
@@ -52,6 +57,7 @@ jobs:
       contents: write
     outputs:
       release_version: ${{ steps.release.outputs.version }}
+      release_ref: ${{ steps.release.outputs.ref }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,6 +115,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.gate.outputs.version }}
         run: |
           echo "version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   mirror-release:
     needs: sync
@@ -118,4 +125,4 @@ jobs:
     uses: ./.github/workflows/personal-release.yml
     with:
       version: ${{ needs.sync.outputs.release_version }}
-      ref: dev
+      ref: ${{ needs.sync.outputs.release_ref }}

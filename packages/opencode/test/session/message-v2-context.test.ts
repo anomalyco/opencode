@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -13,7 +12,7 @@ const model = {
 }
 
 function id(suffix: string) {
-  return EventV2.ID.make(`evt_${suffix}`)
+  return SessionMessage.ID.make(`msg_${suffix}`)
 }
 
 function ids(messages: SessionMessage.Message[]) {

@@ -4,8 +4,8 @@ import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { asc } from "drizzle-orm"
 import { TodoTable } from "@opencode-ai/core/session/sql"
+import { SessionTodo } from "@opencode-ai/core/session/todo"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
 
 export const Info = Schema.Struct({
   content: Schema.String.annotate({ description: "Brief description of the task" }),
@@ -17,13 +17,7 @@ export const Info = Schema.Struct({
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const Event = {
-  Updated: EventV2.define({
-    type: "todo.updated",
-    schema: {
-      sessionID: SessionID,
-      todos: Schema.Array(Info),
-    },
-  }),
+  Updated: SessionTodo.Event.Updated,
 }
 
 export interface Interface {

@@ -3,13 +3,12 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Project } from "@/project/project"
 import * as Log from "@opencode-ai/core/util/log"
 import { $ } from "bun"
-import fs from "fs/promises"
 import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { PermissionTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
@@ -18,9 +17,10 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -34,18 +34,6 @@ const it = testEffect(layer)
 
 function remoteProjectID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
-}
-
-function localProjectID(store: string) {
-  return ProjectV2.ID.make(Hash.fast(`git-local:${store}`))
-}
-
-function localDirectoryProjectID(directory: string) {
-  return ProjectV2.ID.make(Hash.fast(`local-directory:${path.resolve(directory)}`))
-}
-
-function realLocalProjectID(store: string) {
-  return Effect.promise(() => fs.realpath(store)).pipe(Effect.map(localProjectID))
 }
 
 /**
@@ -88,8 +76,9 @@ function projectLayerWithFailure(failArg: string) {
     Layer.provide(AppProcess.layer.pipe(Layer.provide(mockGitFailure(failArg)))),
     Layer.provide(mockGitFailure(failArg)),
     Layer.provide(ProjectV2.defaultLayer),
+    Layer.provide(ProjectCopy.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
@@ -100,8 +89,9 @@ function projectLayerWithRuntimeFlags(flags: Parameters<typeof RuntimeFlags.laye
   return Project.layer.pipe(
     Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(ProjectV2.defaultLayer),
+    Layer.provide(ProjectCopy.defaultLayer),
     Layer.provide(AppProcess.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),
@@ -134,15 +124,10 @@ describe("Project.fromDirectory", () => {
       yield* Effect.promise(() => $`git init`.cwd(tmp).quiet())
 
       const result = yield* project.fromDirectory(tmp)
-      const opencodeFile = path.join(tmp, ".git", "opencode")
-
       expect(result.project).toBeDefined()
-      expect(result.project.id).toBe(yield* realLocalProjectID(path.join(tmp, ".git")))
-      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.id).toBe(ProjectV2.ID.global)
       expect(result.project.vcs).toBe("git")
       expect(result.project.worktree).toBe(tmp)
-
-      expect(yield* Effect.promise(() => Bun.file(opencodeFile).text())).toBe(result.project.id)
     }),
   )
 
@@ -167,12 +152,11 @@ describe("Project.fromDirectory", () => {
       const result = yield* project.fromDirectory(tmp)
       const next = yield* project.fromDirectory(tmp)
 
-      expect(result.project.id).toBe(localDirectoryProjectID(tmp))
-      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.id).toBe(ProjectV2.ID.global)
       expect(result.project.vcs).toBeUndefined()
-      expect(result.project.worktree).toBe(tmp)
+      expect(result.project.worktree).toBe(path.parse(tmp).root)
       expect(next.project.id).toBe(result.project.id)
-      expect(next.project.worktree).toBe(tmp)
+      expect(next.project.worktree).toBe(result.project.worktree)
     }),
   )
 
@@ -198,7 +182,7 @@ describe("Project.fromDirectory", () => {
     }),
   )
 
-  it.live("keeps cached local project ID after a later root commit", () =>
+  it.live("migrates empty git repo from global after a later root commit", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const tmp = yield* tmpdirScoped()
@@ -211,8 +195,8 @@ describe("Project.fromDirectory", () => {
       yield* Effect.promise(() => $`git commit --allow-empty -m "root"`.cwd(tmp).quiet())
       const committed = yield* project.fromDirectory(tmp)
 
-      expect(empty.project.id).toBe(yield* realLocalProjectID(path.join(tmp, ".git")))
-      expect(committed.project.id).toBe(empty.project.id)
+      expect(empty.project.id).toBe(ProjectV2.ID.global)
+      expect(committed.project.id).not.toBe(ProjectV2.ID.global)
     }),
   )
 
@@ -270,16 +254,6 @@ describe("Project.fromDirectory", () => {
         .run()
         .pipe(Effect.orDie)
       yield* db
-        .insert(PermissionTable)
-        .values({
-          project_id: rootProject.id,
-          data: [{ permission: "edit", pattern: "*", action: "allow" }],
-          time_created: Date.now(),
-          time_updated: Date.now(),
-        })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
         .insert(WorkspaceTable)
         .values({ id: workspaceID, type: "local", name: "test", project_id: rootProject.id })
         .run()
@@ -296,14 +270,6 @@ describe("Project.fromDirectory", () => {
         (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
           ?.project_id,
       ).toBe(remoteID)
-      expect(
-        yield* db
-          .select()
-          .from(PermissionTable)
-          .where(eq(PermissionTable.project_id, remoteID))
-          .get()
-          .pipe(Effect.orDie),
-      ).toBeDefined()
       expect(
         (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
           ?.project_id,
@@ -322,8 +288,7 @@ describe("Project.fromDirectory git failure paths", () => {
       // rev-list fails because HEAD doesn't exist yet: this is the natural scenario.
       const result = yield* project.fromDirectory(tmp)
       expect(result.project.vcs).toBe("git")
-      expect(result.project.id).toBe(yield* realLocalProjectID(path.join(tmp, ".git")))
-      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.id).toBe(ProjectV2.ID.global)
       expect(result.project.worktree).toBe(tmp)
     }),
   )
