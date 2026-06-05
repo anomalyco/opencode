@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
 import { Effect, FileSystem, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
@@ -16,6 +16,7 @@ import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdirS
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer, testInstanceStoreLayer))
 
@@ -63,7 +64,7 @@ const tmpWithFiles = (files: Record<string, string>) =>
     return dir
   })
 
-function loaded(filepath: string): SessionLegacy.WithParts[] {
+function loaded(filepath: string): SessionV1.WithParts[] {
   const sessionID = SessionID.make("session-loaded-1")
   const messageID = MessageID.make("msg_message-loaded-1")
 
@@ -77,7 +78,7 @@ function loaded(filepath: string): SessionLegacy.WithParts[] {
         agent: "build",
         model: {
           providerID: ProviderV2.ID.make("anthropic"),
-          modelID: ProviderV2.ModelID.make("claude-sonnet-4-20250514"),
+          modelID: ModelV2.ID.make("claude-sonnet-4-20250514"),
         },
       },
       parts: [

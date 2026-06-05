@@ -26,14 +26,17 @@ import { Installation } from "@/installation"
 import { InstanceLayer } from "@/project/instance-layer"
 import { Plugin } from "@/plugin"
 import { Project } from "@/project/project"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectCopy } from "@opencode-ai/core/project/copy"
+import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { ProviderAuth } from "@/provider/auth"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
-import { Pty } from "@/pty"
-import { PtyTicket } from "@/pty/ticket"
+import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Question } from "@/question"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
+import { LLM } from "@/session/llm"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
@@ -43,6 +46,7 @@ import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Database } from "@opencode-ai/core/database/database"
 import { Skill } from "@/skill"
 import { Snapshot } from "@/snapshot"
@@ -55,6 +59,7 @@ import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
+import { V2Api } from "@opencode-ai/server/api"
 import { PublicApi } from "./public"
 import {
   authorizationLayer,
@@ -67,6 +72,7 @@ import { PtyConnectApi } from "./groups/pty"
 import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
+import { controlPlaneHandlers } from "./handlers/control-plane"
 import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
@@ -74,13 +80,15 @@ import { instanceHandlers } from "./handlers/instance"
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
+import { projectCopyHandlers } from "./handlers/project-copy"
 import { providerHandlers } from "./handlers/provider"
 import { ptyConnectHandlers, ptyHandlers } from "./handlers/pty"
 import { questionHandlers } from "./handlers/question"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
-import { v2Handlers } from "./handlers/v2"
+import { v2Handlers } from "@opencode-ai/server/handlers"
+import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer } from "./middleware/instance-context"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
@@ -115,7 +123,7 @@ const ptyConnectHttpApiAuthLayer = ptyConnectAuthorizationLayer.pipe(Layer.provi
 const v2HttpApiAuthLayer = v2AuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const workspaceRoutingLive = workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
-  Layer.provide([controlHandlers, globalHandlers]),
+  Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers]),
   Layer.provide(schemaErrorLayer),
   Layer.provide(httpApiAuthLayer),
 )
@@ -135,20 +143,24 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     instanceHandlers,
     mcpHandlers,
     projectHandlers,
+    projectCopyHandlers,
     ptyHandlers,
     questionHandlers,
     permissionHandlers,
     providerHandlers,
     sessionHandlers,
     syncHandlers,
-    v2Handlers,
     tuiHandlers,
     workspaceHandlers,
   ]),
 )
 
 const instanceRoutes = instanceApiRoutes.pipe(
-  Layer.provide([httpApiAuthLayer, v2HttpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, schemaErrorLayer]),
+  Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, schemaErrorLayer]),
+)
+const v2Routes = HttpApiBuilder.layer(V2Api).pipe(
+  Layer.provide(v2Handlers),
+  Layer.provide([v2HttpApiAuthLayer, v2SchemaErrorLayer]),
 )
 
 // `OpenApi.fromApi` is non-trivial; defer until /doc is actually hit so
@@ -183,7 +195,15 @@ type RouteRequirements =
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, ptyConnectApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
+  return Layer.mergeAll(
+    rootApiRoutes,
+    eventApiRoutes,
+    ptyConnectApiRoutes,
+    instanceRoutes,
+    v2Routes,
+    docRoute,
+    uiRoute,
+  ).pipe(
     Layer.provide([
       errorLayer,
       compressionLayer,
@@ -198,15 +218,18 @@ export function createRoutes(
       Config.defaultLayer,
       Format.defaultLayer,
       LSP.defaultLayer,
+      LLM.defaultLayer,
       Installation.defaultLayer,
       MCP.defaultLayer,
       ModelsDev.defaultLayer,
       Permission.defaultLayer,
       Plugin.defaultLayer,
       Project.defaultLayer,
+      ProjectV2.defaultLayer,
+      ProjectCopy.defaultLayer,
+      MoveSession.defaultLayer,
       ProviderAuth.defaultLayer,
       Provider.defaultLayer,
-      Pty.defaultLayer,
       PtyTicket.defaultLayer,
       Question.defaultLayer,
       Ripgrep.defaultLayer,
@@ -222,6 +245,7 @@ export function createRoutes(
       ShareNext.defaultLayer,
       Snapshot.defaultLayer,
       EventV2Bridge.defaultLayer,
+      EventV2.defaultLayer,
       Skill.defaultLayer,
       Todo.defaultLayer,
       ToolRegistry.defaultLayer,

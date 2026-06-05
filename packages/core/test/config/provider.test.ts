@@ -8,7 +8,7 @@ import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { it } from "../plugin/provider-helper"
 
-function options(headers: Record<string, string>, variant?: string) {
+function request(headers: Record<string, string>, variant?: string) {
   return {
     headers,
     variant,
@@ -25,18 +25,17 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = ProviderV2.ID.make("custom")
       const modelID = ModelV2.ID.make("chat")
       const config = Config.Service.of({
-        directories: () => Effect.succeed([]),
-        get: () =>
+        entries: () =>
           Effect.succeed([
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 providers: {
                   custom: {
                     name: "Configured",
                     env: ["CUSTOM_API_KEY"],
-                    endpoint: { type: "unknown" },
-                    options: options({ first: "first", shared: "first" }),
+                    api: { type: "native", settings: {} },
+                    request: request({ first: "first", shared: "first" }),
                     models: {
                       chat: {
                         name: "First",
@@ -44,7 +43,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
                         disabled: true,
                         limit: { context: 100, output: 50 },
                         cost: { input: 1, output: 2 },
-                        options: options({ first: "first", shared: "first" }, "retained"),
+                        request: request({ first: "first", shared: "first" }, "retained"),
                         variants: [
                           {
                             id: "fast",
@@ -57,19 +56,19 @@ describe("ConfigProviderPlugin.Plugin", () => {
                 },
               }),
             }),
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 providers: {
                   custom: {
-                    endpoint: { type: "aisdk", package: "custom-sdk", url: "https://example.test" },
-                    options: options({ last: "last", shared: "last" }),
+                    api: { type: "aisdk", package: "custom-sdk", url: "https://example.test" },
+                    request: request({ last: "last", shared: "last" }),
                     models: {
                       chat: {
-                        api_id: "api-chat",
+                        api: { id: "api-chat" },
                         name: "Last",
                         limit: { output: 75 },
-                        options: options({ last: "last", shared: "last" }),
+                        request: request({ last: "last", shared: "last" }),
                         variants: [
                           {
                             id: "fast",
@@ -86,8 +85,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
                 },
               }),
             }),
-            new Config.Loaded({
-              source: { type: "memory" },
+            new Config.Document({
+              type: "document",
               info: decode({
                 providers: {
                   custom: { name: "Renamed" },
@@ -110,16 +109,16 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(provider.name).toBe("Renamed")
       expect(provider.env).toEqual(["CUSTOM_API_KEY"])
       expect(provider.enabled).toEqual({ via: "custom", data: {} })
-      expect(provider.endpoint).toEqual({ type: "aisdk", package: "custom-sdk", url: "https://example.test" })
-      expect(provider.options.headers).toEqual({ first: "first", shared: "last", last: "last" })
-      expect(model.apiID).toBe(ModelV2.ID.make("api-chat"))
+      expect(provider.api).toEqual({ type: "aisdk", package: "custom-sdk", url: "https://example.test" })
+      expect(provider.request.headers).toEqual({ first: "first", shared: "last", last: "last" })
+      expect(model.api.id).toBe(ModelV2.ID.make("api-chat"))
       expect(model.name).toBe("Last")
       expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
       expect(model.enabled).toBe(false)
       expect(model.limit).toEqual({ context: 100, output: 75 })
       expect(model.cost).toEqual([{ input: 1, output: 2, cache: { read: 0, write: 0 }, tier: undefined }])
-      expect(model.options.headers).toEqual({ first: "first", shared: "last", last: "last" })
-      expect(model.options.variant).toBe("retained")
+      expect(model.request.headers).toEqual({ first: "first", shared: "last", last: "last" })
+      expect(model.request.variant).toBe("retained")
       expect(model.variants.map((variant) => variant.id)).toEqual([
         ModelV2.VariantID.make("fast"),
         ModelV2.VariantID.make("slow"),

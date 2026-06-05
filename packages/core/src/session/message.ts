@@ -1,15 +1,16 @@
 export * as SessionMessage from "./message"
 
 import { Schema } from "effect"
-import { EventV2 } from "../event"
+import { ProviderMetadata } from "@opencode-ai/llm"
 import { ModelV2 } from "../model"
 import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
 import { SessionEvent } from "./event"
 import { Prompt } from "./prompt"
+import { SessionMessageID } from "./message-id"
 
-export const ID = EventV2.ID
-export type ID = Schema.Schema.Type<typeof ID>
+export const ID = SessionMessageID.ID
+export type ID = typeof ID.Type
 
 const Base = {
   id: ID,
@@ -80,6 +81,7 @@ export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Sessio
   attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
   content: ToolOutput.Content.pipe(Schema.Array),
   structured: ToolOutput.Structured,
+  result: SessionEvent.Tool.Success.data.fields.result,
 }) {}
 
 export class ToolStateError extends Schema.Class<ToolStateError>("Session.Message.ToolState.Error")({
@@ -88,6 +90,7 @@ export class ToolStateError extends Schema.Class<ToolStateError>("Session.Messag
   content: ToolOutput.Content.pipe(Schema.Array),
   structured: ToolOutput.Structured,
   error: SessionEvent.UnknownError,
+  result: SessionEvent.Tool.Failed.data.fields.result,
 }) {}
 
 export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(
@@ -101,7 +104,8 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.
   name: Schema.String,
   provider: Schema.Struct({
     executed: Schema.Boolean,
-    metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+    metadata: ProviderMetadata.pipe(Schema.optional),
+    resultMetadata: ProviderMetadata.pipe(Schema.optional),
   }).pipe(Schema.optional),
   state: ToolState,
   time: Schema.Struct({
@@ -114,6 +118,7 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.
 
 export class AssistantText extends Schema.Class<AssistantText>("Session.Message.Assistant.Text")({
   type: Schema.Literal("text"),
+  id: Schema.String,
   text: Schema.String,
 }) {}
 
@@ -121,6 +126,7 @@ export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Sessio
   type: Schema.Literal("reasoning"),
   id: Schema.String,
   text: Schema.String,
+  providerMetadata: ProviderMetadata.pipe(Schema.optional),
 }) {}
 
 export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
