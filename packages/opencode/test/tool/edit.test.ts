@@ -227,13 +227,11 @@ describe("tool.edit", () => {
         yield* put(filepath, original)
 
         expect(
-          (
-            yield* fail({
-              filePath: filepath,
-              oldString: ["function configure() {", "  const enabled = true", "}"].join("\n"),
-              newString: ["function configure() {", "  const enabled = false", "}"].join("\n"),
-            })
-          ).message,
+          (yield* fail({
+            filePath: filepath,
+            oldString: ["function configure() {", "  const enabled = true", "}"].join("\n"),
+            newString: ["function configure() {", "  const enabled = false", "}"].join("\n"),
+          })).message,
         ).toContain("Could not find oldString")
         expect(yield* load(filepath)).toBe(original)
       }),
@@ -247,13 +245,11 @@ describe("tool.edit", () => {
         yield* put(filepath, original)
 
         expect(
-          (
-            yield* fail({
-              filePath: filepath,
-              oldString: ["function configure() {", "  const enabled = true", "}"].join("\n"),
-              newString: ["function configure() {", "  const enabled = false", "}"].join("\n"),
-            })
-          ).message,
+          (yield* fail({
+            filePath: filepath,
+            oldString: ["function configure() {", "  const enabled = true", "}"].join("\n"),
+            newString: ["function configure() {", "  const enabled = false", "}"].join("\n"),
+          })).message,
         ).toContain("Could not find oldString")
         expect(yield* load(filepath)).toBe(original)
       }),
