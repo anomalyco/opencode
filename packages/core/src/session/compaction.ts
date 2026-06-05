@@ -69,6 +69,13 @@ type Dependencies = {
   readonly config: readonly Config.Entry[]
 }
 
+type Input = {
+  readonly sessionID: SessionSchema.ID
+  readonly entries: readonly Entry[]
+  readonly model: Model
+  readonly request: LLMRequest
+}
+
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
 
 const truncate = (value: string) =>
@@ -160,18 +167,12 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
 
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
-  return Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: {
-    readonly sessionID: SessionSchema.ID
-    readonly entries: readonly Entry[]
-    readonly model: Model
-    readonly request: LLMRequest
-    readonly trigger?: "threshold" | "overflow"
-  }) {
+  const compact = Effect.fn("SessionCompaction.compact")(function* (input: Input & { readonly forced: boolean }) {
     const context = input.model.route.defaults.limits?.context
-    if ((!config.auto && input.trigger !== "overflow") || context === undefined || context <= 0) return false
+    if ((!config.auto && !input.forced) || context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
     if (
-      input.trigger !== "overflow" &&
+      !input.forced &&
       estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
         context - Math.max(output, config.buffer)
     )
@@ -223,4 +224,8 @@ export const make = (dependencies: Dependencies) => {
     })
     return true
   })
+  return {
+    compactIfNeeded: (input: Input) => compact({ ...input, forced: false }),
+    compactAfterOverflow: (input: Input) => compact({ ...input, forced: true }),
+  }
 }

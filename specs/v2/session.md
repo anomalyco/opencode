@@ -98,7 +98,7 @@ Current Context Epoch follow-ups:
 
 - Add configured, remote, and nested instruction sources with explicit precedence and removal semantics.
 - Add durable post-crash activity recovery for promoted or provider-dispatched work.
-- Add provider-overflow recovery and explicit manual compaction on top of automatic request-budget compaction.
+- Add explicit manual compaction on top of automatic request-budget compaction.
 - Add operational metrics for observation latency, unavailable sources, contention, baseline size, and chronological-update growth.
 - Consider watcher-backed per-file caching only if measurements show direct safe-boundary observation is too expensive.
 - Expose plugin-defined Context Sources only after plugin reload and scoped cleanup semantics are designed.
@@ -112,7 +112,9 @@ Compaction keeps the full transcript durable while replacing its active model re
 
 `session.next.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.next.compaction.ended.2` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message and requests Context Epoch replacement. A failed or interrupted attempt therefore leaves the previous history boundary active.
 
-Repeated compactions update the previous structured summary with newly compacted messages. The runner then reloads projected history and executes the original pending turn. Provider overflow recovery and deterministic old tool-result pruning remain separate follow-ups.
+Repeated compactions update the previous structured summary with newly compacted messages. The runner then reloads projected history and executes the original pending turn.
+
+When a provider rejects a request as context overflow before durable assistant output or tool activity, the runner attempts one overflow-triggered compaction even when the local estimate did not predict pressure. A completed checkpoint rebuilds the same logical provider turn with one remaining physical attempt. A second overflow, unavailable compaction, or overflow after durable output becomes the ordinary terminal failure; recovery never loops or replays partial side effects. Deterministic old tool-result pruning remains a separate follow-up.
 
 ## V1 Runtime Context Parity
 
