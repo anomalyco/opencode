@@ -74,24 +74,39 @@ describe("AISDK.evict", () => {
     }),
   )
 
-  it.effect(
-    "evict clears language cache for target model but not other models (language eviction is model-scoped, SDK eviction is provider-wide by design)",
-    () =>
-      Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
-        const sdkCalls: string[] = []
-        yield* plugin.add(pluginWithCounter(sdkCalls))
+  it.effect("language eviction is model-scoped: evicting A1 does not clear A2's language cache", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
+      const sdkCalls: string[] = []
+      yield* plugin.add(pluginWithCounter(sdkCalls))
 
-        yield* aisdk.language(modelA1)
-        yield* aisdk.language(modelA2)
-        expect(sdkCalls).toHaveLength(2)
+      yield* aisdk.language(modelA1)
+      yield* aisdk.language(modelA2)
+      expect(sdkCalls).toHaveLength(2)
 
-        yield* aisdk.evict({ providerID: providerA, id: ModelV2.ID.make("model-1") })
+      yield* aisdk.evict({ providerID: providerA, id: ModelV2.ID.make("model-1") })
 
-        yield* aisdk.language(modelA2)
-        expect(sdkCalls).toHaveLength(2)
-      }),
+      yield* aisdk.language(modelA2)
+      expect(sdkCalls).toHaveLength(2)
+    }),
+  )
+
+  it.effect("SDK eviction is provider-wide: evicting any model on a provider forces SDK rebuild for that model", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
+      const sdkCalls: string[] = []
+      yield* plugin.add(pluginWithCounter(sdkCalls))
+
+      yield* aisdk.language(modelA1)
+      expect(sdkCalls).toHaveLength(1)
+
+      yield* aisdk.evict({ providerID: providerA, id: ModelV2.ID.make("model-1") })
+
+      yield* aisdk.language(modelA1)
+      expect(sdkCalls).toHaveLength(2)
+    }),
   )
 
   it.effect("evict does not remove entries for different providers", () =>

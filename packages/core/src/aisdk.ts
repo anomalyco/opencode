@@ -131,9 +131,9 @@ export const layer = Layer.effect(
     const sdks = new Map<string, SDK>()
 
     function buildLanguageKey(model: ModelV2.Info) {
-      // \x00 as separator: ProviderV2.ID and ModelV2.ID are validated as branded strings
-      // from config/models.dev and cannot contain null bytes in practice, making this
-      // prefix unambiguous for eviction matching.
+      // \x00 as separator: assumes ProviderV2.ID and ModelV2.ID never contain null bytes
+      // (branded types do not enforce this at runtime). If that assumption ever breaks,
+      // the prefix match could cross model boundaries.
       return `${model.providerID}\x00${model.id}\x00${model.request.variant ?? "default"}`
     }
 
