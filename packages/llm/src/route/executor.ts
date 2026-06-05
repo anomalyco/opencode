@@ -22,6 +22,7 @@ import {
   TransportReason,
   UnknownProviderReason,
 } from "../schema"
+import { isContextOverflow } from "../provider-error"
 
 export interface Interface {
   readonly execute: (
@@ -249,8 +250,21 @@ const statusReason = (input: {
       http: input.http,
     })
   }
-  if (input.status === 400 || input.status === 404 || input.status === 409 || input.status === 422) {
-    return new InvalidRequestReason({ message: input.message, http: input.http })
+  if (
+    input.status === 400 ||
+    input.status === 404 ||
+    input.status === 409 ||
+    input.status === 413 ||
+    input.status === 422
+  ) {
+    return new InvalidRequestReason({
+      message: input.message,
+      classification:
+        /"code"\s*:\s*"context_length_exceeded"/i.test(body) || isContextOverflow(body)
+          ? "context-overflow"
+          : undefined,
+      http: input.http,
+    })
   }
   if (input.status >= 500 || retryableStatus(input.status)) {
     return new ProviderInternalReason({

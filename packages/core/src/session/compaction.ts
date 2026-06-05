@@ -165,13 +165,15 @@ export const make = (dependencies: Dependencies) => {
     readonly entries: readonly Entry[]
     readonly model: Model
     readonly request: LLMRequest
+    readonly trigger?: "threshold" | "overflow"
   }) {
     const context = input.model.route.defaults.limits?.context
-    if (!config.auto || context === undefined || context <= 0) return false
+    if ((!config.auto && input.trigger !== "overflow") || context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
     if (
+      input.trigger !== "overflow" &&
       estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
+        context - Math.max(output, config.buffer)
     )
       return false
 

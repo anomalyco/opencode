@@ -18,6 +18,7 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { isContextOverflow } from "../provider-error"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
@@ -880,14 +881,25 @@ const providerErrorMessage = (event: OpenAIResponsesEvent, fallback: string): st
   return message || code || fallback
 }
 
+const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
+  const code = event.code || event.response?.error?.code || undefined
+  return LLMEvent.providerError({
+    message: providerErrorMessage(event, fallback),
+    classification:
+      code === "context_length_exceeded" || isContextOverflow(providerErrorMessage(event, fallback))
+        ? "context-overflow"
+        : undefined,
+  })
+}
+
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses response failed") })],
+  [providerError(event, "OpenAI Responses response failed")],
 ]
 
 const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses stream error") })],
+  [providerError(event, "OpenAI Responses stream error")],
 ]
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {

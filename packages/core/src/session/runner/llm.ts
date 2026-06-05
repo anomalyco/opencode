@@ -1,4 +1,4 @@
-import { LLM, LLMClient, LLMError, LLMEvent, SystemPart } from "@opencode-ai/llm"
+import { LLM, LLMClient, LLMError, LLMEvent, SystemPart, type ProviderErrorEvent } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Schema, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
@@ -131,7 +131,10 @@ export const layer = Layer.effect(
       cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
 
     class RetryTurn extends Error {
-      constructor(readonly promotion: SessionInput.Delivery | undefined) {
+      constructor(
+        readonly promotion: SessionInput.Delivery | undefined,
+        readonly consumeOverflowRetry = false,
+      ) {
         super()
       }
     }
@@ -149,6 +152,7 @@ export const layer = Layer.effect(
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
+      overflowRetryAvailable: boolean,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -209,11 +213,19 @@ export const layer = Layer.effect(
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
+      let overflowFailure: ProviderErrorEvent | undefined
       if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
         return yield* Effect.die(new RetryTurn(undefined))
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
+            if (overflowFailure || publisher.hasProviderError()) return
+            if (event.type === "provider-error") {
+              if (event.classification === "context-overflow" && !publisher.hasAssistantStarted()) {
+                overflowFailure = event
+                return
+              }
+            }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
@@ -255,6 +267,14 @@ export const layer = Layer.effect(
               if (reason.error instanceof LLMError) llmFailure = reason.error
             }
           }
+          const overflow =
+            overflowFailure !== undefined ||
+            (llmFailure?.reason._tag === "InvalidRequest" && llmFailure.reason.classification === "context-overflow")
+          if (overflowRetryAvailable && overflow && !publisher.hasAssistantStarted()) {
+            const compacted = yield* compact({ sessionID: session.id, entries, model, request, trigger: "overflow" })
+            if (compacted) return yield* Effect.die(new RetryTurn(undefined, true))
+          }
+          if (overflowFailure) yield* withPublication(publisher.publish(overflowFailure))
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(
@@ -293,11 +313,16 @@ export const layer = Layer.effect(
     const runTurn: (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
-    ) => Effect.Effect<boolean, RunError> = (sessionID, promotion) =>
-      runTurnAttempt(sessionID, promotion).pipe(
+      overflowRetryAvailable?: boolean,
+    ) => Effect.Effect<boolean, RunError> = (sessionID, promotion, overflowRetryAvailable = true) =>
+      runTurnAttempt(sessionID, promotion, overflowRetryAvailable).pipe(
         Effect.catchDefect((defect) =>
           defect instanceof RetryTurn
-            ? Effect.yieldNow.pipe(Effect.andThen(runTurn(sessionID, defect.promotion)))
+            ? Effect.yieldNow.pipe(
+                Effect.andThen(
+                  runTurn(sessionID, defect.promotion, defect.consumeOverflowRetry ? false : overflowRetryAvailable),
+                ),
+              )
             : Effect.die(defect),
         ),
       )
