@@ -578,7 +578,11 @@ describe("SessionV2.prompt", () => {
       wakeCalls.length = 0
       wakeSeqs.length = 0
 
-      const admitted = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run explicitly" }), resume: true })
+      const admitted = yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Run explicitly" }),
+        resume: true,
+      })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([sessionID])

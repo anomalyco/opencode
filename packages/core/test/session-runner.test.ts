@@ -221,7 +221,11 @@ const execution = Layer.effect(
   SessionExecution.Service,
   SessionRunCoordinator.Service.pipe(
     Effect.map((coordinator) =>
-      SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake, interrupt: coordinator.interrupt }),
+      SessionExecution.Service.of({
+        resume: coordinator.run,
+        wake: coordinator.wake,
+        interrupt: coordinator.interrupt,
+      }),
     ),
   ),
 ).pipe(Layer.provide(coordinator))

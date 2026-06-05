@@ -325,9 +325,7 @@ describe("SessionRunCoordinator", () => {
           drain: () =>
             Effect.sync(() => ++runs).pipe(
               Effect.flatMap((run) =>
-                run === 1
-                  ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Effect.never))
-                  : Effect.void,
+                run === 1 ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Effect.never)) : Effect.void,
               ),
             ),
         })

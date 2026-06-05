@@ -86,17 +86,9 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(model),
       Layer.provide(skillGuidance),
     )
-    return Layer.mergeAll(
-      services,
-      commits,
-      searches,
-      resources,
-      todos,
-      questions,
-      model,
-      runner,
-      builtInTools,
-    ).pipe(Layer.fresh)
+    return Layer.mergeAll(services, commits, searches, resources, todos, questions, model, runner, builtInTools).pipe(
+      Layer.fresh,
+    )
   },
   idleTimeToLive: "60 minutes",
   dependencies: [

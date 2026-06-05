@@ -95,7 +95,10 @@ export const make = <Key, A, E>(options: {
       // Initial work retains immediate-start behavior but cannot run before ownership is published.
       // Observer-started successors yield once so synchronous drains cannot recurse on the JS stack.
       const owner = fork(
-        (successor ? Effect.yieldNow.pipe(Effect.andThen(drain)) : Deferred.await(ready).pipe(Effect.andThen(drain))).pipe(
+        (successor
+          ? Effect.yieldNow.pipe(Effect.andThen(drain))
+          : Deferred.await(ready).pipe(Effect.andThen(drain))
+        ).pipe(
           Effect.onExit((exit) => Effect.sync(() => settle(key, entry, demand, exit))),
           Effect.exit,
           Effect.asVoid,
@@ -194,7 +197,12 @@ export const make = <Key, A, E>(options: {
           return entry?.stopping && entry.owner !== undefined ? Fiber.interrupt(entry.owner) : Effect.void
         if (seq !== undefined) interruptSeq.set(key, seq)
         if (entry?.owner === undefined) return Effect.void
-        if (seq !== undefined && entry.current._tag === "wake" && entry.current.seq !== undefined && entry.current.seq > seq)
+        if (
+          seq !== undefined &&
+          entry.current._tag === "wake" &&
+          entry.current.seq !== undefined &&
+          entry.current.seq > seq
+        )
           return Effect.void
         if (entry.stopping) {
           entry.interruptSeq = maxSeq(entry.interruptSeq, seq)
@@ -246,7 +254,12 @@ export const make = <Key, A, E>(options: {
     }
 
     function suppressPendingAtOrBefore(entry: Entry<A, E>, seq: number | undefined) {
-      if (entry.pending?._tag === "wake" && seq !== undefined && entry.pending.seq !== undefined && entry.pending.seq > seq)
+      if (
+        entry.pending?._tag === "wake" &&
+        seq !== undefined &&
+        entry.pending.seq !== undefined &&
+        entry.pending.seq > seq
+      )
         return
       entry.pending = undefined
     }
