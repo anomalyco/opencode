@@ -212,6 +212,66 @@
         ]
       }
     },
+    "/experimental/control-plane/move-session": {
+      "post": {
+        "tags": ["controlPlane"],
+        "operationId": "experimental.controlPlane.moveSession",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "Session moved"
+          },
+          "400": {
+            "description": "MoveSessionError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MoveSessionError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Move a session to another project directory, optionally transferring local changes.",
+        "summary": "Move session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/MoveSessionDestination"
+                  },
+                  "moveChanges": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["sessionID", "destination"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.controlPlane.moveSession({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/global/health": {
       "get": {
         "tags": ["global"],
@@ -1504,6 +1564,77 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.session.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/session/{sessionID}/background": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.session.background",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Backgrounded subagents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Backgrounded subagents"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Detach any synchronous subagents currently blocking the session and continue them in the background.",
+        "summary": "Background subagents",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.session.background({\n  ...\n})"
           }
         ]
       }
@@ -3775,14 +3906,6 @@
             "required": true
           },
           {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
             "name": "workspace",
             "in": "query",
             "schema": {
@@ -3803,13 +3926,13 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "ProjectCopyError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/ProjectCopyError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -3833,6 +3956,12 @@
                     "enum": ["git_worktree"]
                   },
                   "directory": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "context": {
                     "type": "string"
                   }
                 },
@@ -3883,13 +4012,13 @@
             "description": "Project copy removed"
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "ProjectCopyError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/ProjectCopyError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -3961,13 +4090,13 @@
             "description": "Project copies refreshed"
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "ProjectCopyError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                      "$ref": "#/components/schemas/ProjectCopyError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -8175,7 +8304,8 @@
                       "type": "object",
                       "properties": {
                         "id": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^evt_"
                         },
                         "aggregateID": {
                           "type": "string"
@@ -8330,7 +8460,8 @@
                     "type": "object",
                     "properties": {
                       "id": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^evt_"
                       },
                       "aggregate_id": {
                         "type": "string"
@@ -10064,7 +10195,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionMessageUser"
+                      "$ref": "#/components/schemas/SessionInputAdmitted"
                     }
                   },
                   "required": ["data"],
@@ -10123,7 +10254,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "prompt": {
                     "$ref": "#/components/schemas/Prompt"
@@ -11954,7 +12086,19 @@
             "$ref": "#/components/schemas/EventSessionNextModelSwitched"
           },
           {
+            "$ref": "#/components/schemas/EventSessionNextMoved"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionNextPrompted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextPromptAdmitted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextPromptPromoted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextContextUpdated"
           },
           {
             "$ref": "#/components/schemas/EventSessionNextSynthetic"
@@ -12310,6 +12454,27 @@
           }
         },
         "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "MoveSessionError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["MoveSessionError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "SnapshotFileDiff": {
@@ -14014,7 +14179,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14032,7 +14198,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14056,7 +14223,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14080,7 +14248,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14108,7 +14277,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14136,7 +14306,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14164,7 +14335,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14192,7 +14364,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14221,7 +14394,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14252,7 +14426,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14285,7 +14460,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14301,11 +14477,15 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "agent": {
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "agent"],
+                    "required": ["timestamp", "sessionID", "messageID", "agent"],
                     "additionalProperties": false
                   }
                 },
@@ -14316,7 +14496,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14331,6 +14512,10 @@
                       "sessionID": {
                         "type": "string",
                         "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "model": {
                         "type": "object",
@@ -14349,7 +14534,7 @@
                         "additionalProperties": false
                       }
                     },
-                    "required": ["timestamp", "sessionID", "model"],
+                    "required": ["timestamp", "sessionID", "messageID", "model"],
                     "additionalProperties": false
                   }
                 },
@@ -14360,7 +14545,43 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.moved"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "location": {
+                        "$ref": "#/components/schemas/LocationRef"
+                      },
+                      "subdirectory": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "location"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14376,6 +14597,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "prompt": {
                         "$ref": "#/components/schemas/Prompt"
                       },
@@ -14384,7 +14609,7 @@
                         "enum": ["steer", "queue"]
                       }
                     },
-                    "required": ["timestamp", "sessionID", "prompt", "delivery"],
+                    "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
                     "additionalProperties": false
                   }
                 },
@@ -14395,7 +14620,123 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.prompt.admitted"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "prompt": {
+                        "$ref": "#/components/schemas/Prompt"
+                      },
+                      "delivery": {
+                        "type": "string",
+                        "enum": ["steer", "queue"]
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.prompt.promoted"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "prompt": {
+                        "$ref": "#/components/schemas/Prompt"
+                      },
+                      "timeCreated": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.context.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "messageID", "text"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14411,11 +14752,15 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "text": {
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "text"],
+                    "required": ["timestamp", "sessionID", "messageID", "text"],
                     "additionalProperties": false
                   }
                 },
@@ -14426,7 +14771,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14442,6 +14788,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "callID": {
                         "type": "string"
                       },
@@ -14449,7 +14799,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "callID", "command"],
+                    "required": ["timestamp", "sessionID", "messageID", "callID", "command"],
                     "additionalProperties": false
                   }
                 },
@@ -14460,7 +14810,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14494,7 +14845,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14509,6 +14861,10 @@
                       "sessionID": {
                         "type": "string",
                         "pattern": "^ses"
+                      },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "agent": {
                         "type": "string"
@@ -14533,7 +14889,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "agent", "model"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "agent", "model"],
                     "additionalProperties": false
                   }
                 },
@@ -14544,7 +14900,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14561,7 +14918,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "finish": {
                         "type": "string"
@@ -14613,7 +14971,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14630,7 +14989,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "error": {
                         "$ref": "#/components/schemas/SessionErrorUnknown"
@@ -14647,7 +15007,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14663,11 +15024,15 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "textID": {
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "textID"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "textID"],
                     "additionalProperties": false
                   }
                 },
@@ -14678,7 +15043,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14694,6 +15060,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "textID": {
                         "type": "string"
                       },
@@ -14701,7 +15071,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "textID", "delta"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "delta"],
                     "additionalProperties": false
                   }
                 },
@@ -14712,7 +15082,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14728,6 +15099,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "textID": {
                         "type": "string"
                       },
@@ -14735,7 +15110,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "textID", "text"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "text"],
                     "additionalProperties": false
                   }
                 },
@@ -14746,7 +15121,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14762,6 +15138,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "reasoningID": {
                         "type": "string"
                       },
@@ -14772,7 +15152,7 @@
                         }
                       }
                     },
-                    "required": ["timestamp", "sessionID", "reasoningID"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
                     "additionalProperties": false
                   }
                 },
@@ -14783,7 +15163,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14799,6 +15180,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "reasoningID": {
                         "type": "string"
                       },
@@ -14806,7 +15191,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "reasoningID", "delta"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "delta"],
                     "additionalProperties": false
                   }
                 },
@@ -14817,7 +15202,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14833,6 +15219,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "reasoningID": {
                         "type": "string"
                       },
@@ -14846,7 +15236,7 @@
                         }
                       }
                     },
-                    "required": ["timestamp", "sessionID", "reasoningID", "text"],
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
                     "additionalProperties": false
                   }
                 },
@@ -14857,7 +15247,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14874,7 +15265,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -14894,7 +15286,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14911,7 +15304,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -14931,7 +15325,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14948,7 +15343,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -14968,7 +15364,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -14985,7 +15382,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15024,7 +15422,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15041,7 +15440,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15074,7 +15474,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15091,7 +15492,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15149,7 +15551,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15166,7 +15569,8 @@
                         "pattern": "^ses"
                       },
                       "assistantMessageID": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^msg_"
                       },
                       "callID": {
                         "type": "string"
@@ -15203,7 +15607,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15237,7 +15642,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15253,12 +15659,16 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "reason": {
                         "type": "string",
                         "enum": ["auto", "manual"]
                       }
                     },
-                    "required": ["timestamp", "sessionID", "reason"],
+                    "required": ["timestamp", "sessionID", "messageID", "reason"],
                     "additionalProperties": false
                   }
                 },
@@ -15269,7 +15679,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15300,7 +15711,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15334,7 +15746,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15373,7 +15786,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15404,7 +15818,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15453,7 +15868,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15477,7 +15893,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15501,7 +15918,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15525,7 +15943,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15549,7 +15968,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15573,7 +15993,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15603,7 +16024,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15653,7 +16075,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15685,7 +16108,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15713,7 +16137,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15737,7 +16162,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15761,7 +16187,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15790,7 +16217,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15815,7 +16243,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15854,7 +16283,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15889,7 +16319,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15918,7 +16349,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15949,7 +16381,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -15967,7 +16400,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16027,7 +16461,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16060,7 +16495,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16084,7 +16520,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16133,7 +16570,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16168,7 +16606,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16194,7 +16633,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16218,7 +16658,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16245,7 +16686,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16280,7 +16722,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16304,7 +16747,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16388,7 +16832,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16427,7 +16872,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16462,7 +16908,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16491,7 +16938,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16519,7 +16967,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16544,7 +16993,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16569,7 +17019,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16592,7 +17043,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16619,7 +17071,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16643,7 +17096,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16667,7 +17121,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16691,7 +17146,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16720,7 +17176,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16738,7 +17195,8 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^evt_"
                   },
                   "type": {
                     "type": "string",
@@ -16783,7 +17241,19 @@
                 "$ref": "#/components/schemas/SyncEventSessionNextModelSwitched"
               },
               {
+                "$ref": "#/components/schemas/SyncEventSessionNextMoved"
+              },
+              {
                 "$ref": "#/components/schemas/SyncEventSessionNextPrompted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextPromptAdmitted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextPromptPromoted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextContextUpdated"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextSynthetic"
@@ -19094,6 +19564,27 @@
         "required": ["_tag", "projectID", "message"],
         "additionalProperties": false
       },
+      "ProjectCopyError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["ProjectCopyError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "PtyNotFoundError": {
         "type": "object",
         "properties": {
@@ -19987,7 +20478,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -20011,7 +20503,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -20060,7 +20553,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -20095,7 +20589,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -20115,6 +20610,16 @@
           }
         },
         "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "MoveSessionDestination": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"],
         "additionalProperties": false
       },
       "ModelV2Info": {
@@ -20353,6 +20858,20 @@
           "enabled",
           "limit"
         ],
+        "additionalProperties": false
+      },
+      "LocationRef": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "workspaceID": {
+            "type": "string",
+            "pattern": "^wrk"
+          }
+        },
+        "required": ["directory"],
         "additionalProperties": false
       },
       "PromptSource": {
@@ -20748,7 +21267,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -20758,7 +21278,8 @@
                 "enum": ["session.created.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -20796,7 +21317,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -20806,7 +21328,8 @@
                 "enum": ["session.updated.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -20844,7 +21367,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -20854,7 +21378,8 @@
                 "enum": ["session.deleted.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -20892,7 +21417,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -20902,7 +21428,8 @@
                 "enum": ["message.updated.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -20940,7 +21467,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -20950,7 +21478,8 @@
                 "enum": ["message.removed.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -20989,7 +21518,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -20999,7 +21529,8 @@
                 "enum": ["message.part.updated.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21040,7 +21571,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21050,7 +21582,8 @@
                 "enum": ["message.part.removed.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21093,7 +21626,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21103,7 +21637,8 @@
                 "enum": ["session.next.agent.switched.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21121,11 +21656,15 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "agent": {
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "agent"],
+                "required": ["timestamp", "sessionID", "messageID", "agent"],
                 "additionalProperties": false
               }
             },
@@ -21144,7 +21683,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21154,7 +21694,8 @@
                 "enum": ["session.next.model.switched.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21171,6 +21712,10 @@
                   "sessionID": {
                     "type": "string",
                     "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "model": {
                     "type": "object",
@@ -21189,7 +21734,63 @@
                     "additionalProperties": false
                   }
                 },
-                "required": ["timestamp", "sessionID", "model"],
+                "required": ["timestamp", "sessionID", "messageID", "model"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextMoved": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.moved.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "location": {
+                    "$ref": "#/components/schemas/LocationRef"
+                  },
+                  "subdirectory": {
+                    "type": "string"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "location"],
                 "additionalProperties": false
               }
             },
@@ -21208,7 +21809,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21218,7 +21820,8 @@
                 "enum": ["session.next.prompted.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21236,6 +21839,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "prompt": {
                     "$ref": "#/components/schemas/Prompt"
                   },
@@ -21244,7 +21851,185 @@
                     "enum": ["steer", "queue"]
                   }
                 },
-                "required": ["timestamp", "sessionID", "prompt", "delivery"],
+                "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextPromptAdmitted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.prompt.admitted.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "prompt": {
+                    "$ref": "#/components/schemas/Prompt"
+                  },
+                  "delivery": {
+                    "type": "string",
+                    "enum": ["steer", "queue"]
+                  }
+                },
+                "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextPromptPromoted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.prompt.promoted.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "prompt": {
+                    "$ref": "#/components/schemas/Prompt"
+                  },
+                  "timeCreated": {
+                    "type": "number"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextContextUpdated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.context.updated.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "messageID", "text"],
                 "additionalProperties": false
               }
             },
@@ -21263,7 +22048,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21273,7 +22059,8 @@
                 "enum": ["session.next.synthetic.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21291,11 +22078,15 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "text": {
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "text"],
+                "required": ["timestamp", "sessionID", "messageID", "text"],
                 "additionalProperties": false
               }
             },
@@ -21314,7 +22105,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21324,7 +22116,8 @@
                 "enum": ["session.next.shell.started.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21342,6 +22135,10 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "callID": {
                     "type": "string"
                   },
@@ -21349,7 +22146,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "callID", "command"],
+                "required": ["timestamp", "sessionID", "messageID", "callID", "command"],
                 "additionalProperties": false
               }
             },
@@ -21368,7 +22165,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21378,7 +22176,8 @@
                 "enum": ["session.next.shell.ended.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21422,7 +22221,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21432,7 +22232,8 @@
                 "enum": ["session.next.step.started.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21449,6 +22250,10 @@
                   "sessionID": {
                     "type": "string",
                     "pattern": "^ses"
+                  },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "agent": {
                     "type": "string"
@@ -21473,7 +22278,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "agent", "model"],
+                "required": ["timestamp", "sessionID", "assistantMessageID", "agent", "model"],
                 "additionalProperties": false
               }
             },
@@ -21492,7 +22297,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21502,7 +22308,8 @@
                 "enum": ["session.next.step.ended.2"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21521,7 +22328,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "finish": {
                     "type": "string"
@@ -21581,7 +22389,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21591,7 +22400,8 @@
                 "enum": ["session.next.step.failed.2"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21610,7 +22420,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "error": {
                     "$ref": "#/components/schemas/SessionErrorUnknown"
@@ -21635,7 +22446,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21645,229 +22457,8 @@
                 "enum": ["session.next.text.started.1"]
               },
               "id": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "number"
-              },
-              "aggregateID": {
-                "type": "string"
-              },
-              "data": {
-                "type": "object",
-                "properties": {
-                  "timestamp": {
-                    "type": "number"
-                  },
-                  "sessionID": {
-                    "type": "string",
-                    "pattern": "^ses"
-                  },
-                  "textID": {
-                    "type": "string"
-                  }
-                },
-                "required": ["timestamp", "sessionID", "textID"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["type", "id", "seq", "aggregateID", "data"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["type", "id", "syncEvent"],
-        "additionalProperties": false
-      },
-      "SyncEventSessionNextTextEnded": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["sync"]
-          },
-          "id": {
-            "type": "string"
-          },
-          "syncEvent": {
-            "type": "object",
-            "properties": {
-              "type": {
                 "type": "string",
-                "enum": ["session.next.text.ended.1"]
-              },
-              "id": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "number"
-              },
-              "aggregateID": {
-                "type": "string"
-              },
-              "data": {
-                "type": "object",
-                "properties": {
-                  "timestamp": {
-                    "type": "number"
-                  },
-                  "sessionID": {
-                    "type": "string",
-                    "pattern": "^ses"
-                  },
-                  "textID": {
-                    "type": "string"
-                  },
-                  "text": {
-                    "type": "string"
-                  }
-                },
-                "required": ["timestamp", "sessionID", "textID", "text"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["type", "id", "seq", "aggregateID", "data"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["type", "id", "syncEvent"],
-        "additionalProperties": false
-      },
-      "SyncEventSessionNextReasoningStarted": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["sync"]
-          },
-          "id": {
-            "type": "string"
-          },
-          "syncEvent": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["session.next.reasoning.started.1"]
-              },
-              "id": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "number"
-              },
-              "aggregateID": {
-                "type": "string"
-              },
-              "data": {
-                "type": "object",
-                "properties": {
-                  "timestamp": {
-                    "type": "number"
-                  },
-                  "sessionID": {
-                    "type": "string",
-                    "pattern": "^ses"
-                  },
-                  "reasoningID": {
-                    "type": "string"
-                  },
-                  "providerMetadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
-                  }
-                },
-                "required": ["timestamp", "sessionID", "reasoningID"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["type", "id", "seq", "aggregateID", "data"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["type", "id", "syncEvent"],
-        "additionalProperties": false
-      },
-      "SyncEventSessionNextReasoningEnded": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["sync"]
-          },
-          "id": {
-            "type": "string"
-          },
-          "syncEvent": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["session.next.reasoning.ended.1"]
-              },
-              "id": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "number"
-              },
-              "aggregateID": {
-                "type": "string"
-              },
-              "data": {
-                "type": "object",
-                "properties": {
-                  "timestamp": {
-                    "type": "number"
-                  },
-                  "sessionID": {
-                    "type": "string",
-                    "pattern": "^ses"
-                  },
-                  "reasoningID": {
-                    "type": "string"
-                  },
-                  "text": {
-                    "type": "string"
-                  },
-                  "providerMetadata": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object"
-                    }
-                  }
-                },
-                "required": ["timestamp", "sessionID", "reasoningID", "text"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["type", "id", "seq", "aggregateID", "data"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["type", "id", "syncEvent"],
-        "additionalProperties": false
-      },
-      "SyncEventSessionNextToolInputStarted": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["sync"]
-          },
-          "id": {
-            "type": "string"
-          },
-          "syncEvent": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["session.next.tool.input.started.1"]
-              },
-              "id": {
-                "type": "string"
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21886,7 +22477,254 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "textID": {
                     "type": "string"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "assistantMessageID", "textID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextTextEnded": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.text.ended.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "textID": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "text"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextReasoningStarted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.reasoning.started.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "reasoningID": {
+                    "type": "string"
+                  },
+                  "providerMetadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextReasoningEnded": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.reasoning.ended.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "reasoningID": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "providerMetadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextToolInputStarted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.tool.input.started.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -21914,7 +22752,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21924,7 +22763,8 @@
                 "enum": ["session.next.tool.input.ended.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -21943,7 +22783,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -21971,7 +22812,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -21981,7 +22823,8 @@
                 "enum": ["session.next.tool.called.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -22000,7 +22843,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22047,7 +22891,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -22057,7 +22902,8 @@
                 "enum": ["session.next.tool.progress.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -22076,7 +22922,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22117,7 +22964,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -22127,7 +22975,8 @@
                 "enum": ["session.next.tool.success.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -22146,7 +22995,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22212,7 +23062,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -22222,7 +23073,8 @@
                 "enum": ["session.next.tool.failed.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -22241,7 +23093,8 @@
                     "pattern": "^ses"
                   },
                   "assistantMessageID": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^msg_"
                   },
                   "callID": {
                     "type": "string"
@@ -22286,7 +23139,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -22296,7 +23150,8 @@
                 "enum": ["session.next.retried.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -22340,7 +23195,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -22350,7 +23206,8 @@
                 "enum": ["session.next.compaction.started.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -22368,12 +23225,16 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
                   "reason": {
                     "type": "string",
                     "enum": ["auto", "manual"]
                   }
                 },
-                "required": ["timestamp", "sessionID", "reason"],
+                "required": ["timestamp", "sessionID", "messageID", "reason"],
                 "additionalProperties": false
               }
             },
@@ -22392,7 +23253,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -22402,7 +23264,8 @@
                 "enum": ["session.next.compaction.delta.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -22443,7 +23306,8 @@
             "enum": ["sync"]
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "syncEvent": {
             "type": "object",
@@ -22453,7 +23317,8 @@
                 "enum": ["session.next.compaction.ended.1"]
               },
               "id": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^evt_"
               },
               "seq": {
                 "type": "number"
@@ -22653,20 +23518,6 @@
         "required": ["id", "request", "mode", "hidden", "permissions"],
         "additionalProperties": false
       },
-      "LocationRef": {
-        "type": "object",
-        "properties": {
-          "directory": {
-            "type": "string"
-          },
-          "workspaceID": {
-            "type": "string",
-            "pattern": "^wrk"
-          }
-        },
-        "required": ["directory"],
-        "additionalProperties": false
-      },
       "SessionV2Info": {
         "type": "object",
         "properties": {
@@ -22761,11 +23612,120 @@
         "required": ["id", "projectID", "cost", "tokens", "time", "title", "location"],
         "additionalProperties": false
       },
+      "SessionInputAdmitted": {
+        "type": "object",
+        "properties": {
+          "admittedSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "prompt": {
+            "$ref": "#/components/schemas/Prompt"
+          },
+          "delivery": {
+            "type": "string",
+            "enum": ["steer", "queue"]
+          },
+          "timeCreated": {
+            "type": "number"
+          },
+          "promotedSeq": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["admittedSeq", "id", "sessionID", "prompt", "delivery", "timeCreated"],
+        "additionalProperties": false
+      },
+      "SessionMessageAgentSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["agent-switched"]
+          },
+          "agent": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "time", "type", "agent"],
+        "additionalProperties": false
+      },
+      "SessionMessageModelSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["model-switched"]
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "providerID": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "providerID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "time", "type", "model"],
+        "additionalProperties": false
+      },
       "SessionMessageUser": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -22809,84 +23769,12 @@
         "required": ["id", "time", "text", "type"],
         "additionalProperties": false
       },
-      "SessionMessageAgentSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              }
-            },
-            "required": ["created"],
-            "additionalProperties": false
-          },
-          "type": {
-            "type": "string",
-            "enum": ["agent-switched"]
-          },
-          "agent": {
-            "type": "string"
-          }
-        },
-        "required": ["id", "time", "type", "agent"],
-        "additionalProperties": false
-      },
-      "SessionMessageModelSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              }
-            },
-            "required": ["created"],
-            "additionalProperties": false
-          },
-          "type": {
-            "type": "string",
-            "enum": ["model-switched"]
-          },
-          "model": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "providerID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "time", "type", "model"],
-        "additionalProperties": false
-      },
       "SessionMessageSynthetic": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -22916,11 +23804,43 @@
         "required": ["id", "time", "sessionID", "text", "type"],
         "additionalProperties": false
       },
+      "SessionMessageSystem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["system"]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "time", "type", "text"],
+        "additionalProperties": false
+      },
       "SessionMessageShell": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -23188,7 +24108,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -23317,7 +24238,8 @@
             "type": "string"
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg_"
           },
           "metadata": {
             "type": "object"
@@ -23349,6 +24271,9 @@
           },
           {
             "$ref": "#/components/schemas/SessionMessageSynthetic"
+          },
+          {
+            "$ref": "#/components/schemas/SessionMessageSystem"
           },
           {
             "$ref": "#/components/schemas/SessionMessageShell"
@@ -23703,7 +24628,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -23721,7 +24647,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -23979,7 +24906,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24003,7 +24931,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24031,7 +24960,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24059,7 +24989,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24087,7 +25018,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24115,7 +25047,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24144,7 +25077,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24175,7 +25109,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24208,7 +25143,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24224,11 +25160,15 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "agent": {
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "agent"],
+            "required": ["timestamp", "sessionID", "messageID", "agent"],
             "additionalProperties": false
           }
         },
@@ -24239,7 +25179,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24254,6 +25195,10 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
               },
               "model": {
                 "type": "object",
@@ -24272,7 +25217,42 @@
                 "additionalProperties": false
               }
             },
-            "required": ["timestamp", "sessionID", "model"],
+            "required": ["timestamp", "sessionID", "messageID", "model"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextMoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.moved"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "location": {
+                "$ref": "#/components/schemas/LocationRef"
+              },
+              "subdirectory": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "location"],
             "additionalProperties": false
           }
         },
@@ -24283,7 +25263,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24299,6 +25280,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "prompt": {
                 "$ref": "#/components/schemas/Prompt"
               },
@@ -24307,7 +25292,122 @@
                 "enum": ["steer", "queue"]
               }
             },
-            "required": ["timestamp", "sessionID", "prompt", "delivery"],
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextPromptAdmitted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompt.admitted"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": ["steer", "queue"]
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextPromptPromoted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompt.promoted"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "timeCreated": {
+                "type": "number"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextContextUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.context.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "text"],
             "additionalProperties": false
           }
         },
@@ -24318,7 +25418,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24334,11 +25435,15 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "text": {
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "text"],
+            "required": ["timestamp", "sessionID", "messageID", "text"],
             "additionalProperties": false
           }
         },
@@ -24349,7 +25454,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24365,6 +25471,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "callID": {
                 "type": "string"
               },
@@ -24372,7 +25482,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "callID", "command"],
+            "required": ["timestamp", "sessionID", "messageID", "callID", "command"],
             "additionalProperties": false
           }
         },
@@ -24383,7 +25493,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24417,7 +25528,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24432,6 +25544,10 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
               },
               "agent": {
                 "type": "string"
@@ -24456,7 +25572,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "agent", "model"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "agent", "model"],
             "additionalProperties": false
           }
         },
@@ -24467,7 +25583,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24484,7 +25601,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "finish": {
                 "type": "string"
@@ -24536,7 +25654,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24553,7 +25672,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "error": {
                 "$ref": "#/components/schemas/SessionErrorUnknown"
@@ -24570,7 +25690,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24586,11 +25707,15 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "textID": {
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "textID"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID"],
             "additionalProperties": false
           }
         },
@@ -24601,7 +25726,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24617,6 +25743,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "textID": {
                 "type": "string"
               },
@@ -24624,7 +25754,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "textID", "delta"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "delta"],
             "additionalProperties": false
           }
         },
@@ -24635,7 +25765,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24651,6 +25782,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "textID": {
                 "type": "string"
               },
@@ -24658,7 +25793,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "textID", "text"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "text"],
             "additionalProperties": false
           }
         },
@@ -24669,7 +25804,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24685,6 +25821,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "reasoningID": {
                 "type": "string"
               },
@@ -24695,7 +25835,7 @@
                 }
               }
             },
-            "required": ["timestamp", "sessionID", "reasoningID"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
             "additionalProperties": false
           }
         },
@@ -24706,7 +25846,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24722,6 +25863,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "reasoningID": {
                 "type": "string"
               },
@@ -24729,7 +25874,7 @@
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "reasoningID", "delta"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "delta"],
             "additionalProperties": false
           }
         },
@@ -24740,7 +25885,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24756,6 +25902,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "reasoningID": {
                 "type": "string"
               },
@@ -24769,7 +25919,7 @@
                 }
               }
             },
-            "required": ["timestamp", "sessionID", "reasoningID", "text"],
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
             "additionalProperties": false
           }
         },
@@ -24780,7 +25930,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24797,7 +25948,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -24817,7 +25969,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24834,7 +25987,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -24854,7 +26008,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24871,7 +26026,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -24891,7 +26047,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24908,7 +26065,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -24947,7 +26105,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -24964,7 +26123,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -24997,7 +26157,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25014,7 +26175,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25064,7 +26226,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25081,7 +26244,8 @@
                 "pattern": "^ses"
               },
               "assistantMessageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg_"
               },
               "callID": {
                 "type": "string"
@@ -25118,7 +26282,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25152,7 +26317,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25168,12 +26334,16 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "reason": {
                 "type": "string",
                 "enum": ["auto", "manual"]
               }
             },
-            "required": ["timestamp", "sessionID", "reason"],
+            "required": ["timestamp", "sessionID", "messageID", "reason"],
             "additionalProperties": false
           }
         },
@@ -25184,7 +26354,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25215,7 +26386,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25249,7 +26421,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25288,7 +26461,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25319,7 +26493,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25368,7 +26543,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25392,7 +26568,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25416,7 +26593,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25440,7 +26618,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25464,7 +26643,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25488,7 +26668,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25518,7 +26699,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25568,7 +26750,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25600,7 +26783,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25628,7 +26812,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25652,7 +26837,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25676,7 +26862,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25705,7 +26892,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25730,7 +26918,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25769,7 +26958,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25804,7 +26994,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25833,7 +27024,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25864,7 +27056,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25882,7 +27075,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25942,7 +27136,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25975,7 +27170,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -25999,7 +27195,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26026,7 +27223,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26061,7 +27259,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26085,7 +27284,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26169,7 +27369,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26208,7 +27409,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26243,7 +27445,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26272,7 +27475,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26300,7 +27504,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26325,7 +27530,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26350,7 +27556,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26373,7 +27580,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26400,7 +27608,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26424,7 +27633,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26448,7 +27658,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26472,7 +27683,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26501,7 +27713,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26519,7 +27732,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^evt_"
           },
           "type": {
             "type": "string",
@@ -26563,6 +27777,10 @@
     {
       "name": "control",
       "description": "Control plane routes."
+    },
+    {
+      "name": "controlPlane",
+      "description": "Control-plane orchestration routes."
     },
     {
       "name": "global",

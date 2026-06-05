@@ -73,6 +73,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       servers: {
         list: allServers,
         health: serverHealth,
+        default: () => allServers().find((s) => ServerConnection.key(s) === props.defaultServer) ?? allServers()[0]!,
       },
       settings: {
         server: {

@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { Cause, DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
+import { Cause, Effect, Layer, Schema, Context, Stream } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -10,7 +10,6 @@ import { Location } from "./location"
 import { SessionMessage } from "./session/message"
 import { Prompt } from "./session/prompt"
 import { EventV2 } from "./event"
-import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
@@ -77,11 +76,6 @@ type CreateInput = {
   location: Location.Ref
 }
 
-type MoveInput = {
-  sessionID: SessionSchema.ID
-  location: Location.Ref
-}
-
 type CompactInput = {
   sessionID: SessionSchema.ID
   prompt?: Prompt
@@ -110,7 +104,6 @@ export type Error = NotFoundError | MessageDecodeError | OperationUnavailableErr
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
-  readonly move: (input: MoveInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -146,7 +139,7 @@ export interface Interface {
     prompt: Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionMessage.User, NotFoundError | PromptConflictError>
+  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -203,20 +196,6 @@ export const layer = Layer.effect(
             }),
         ),
       )
-
-    const findExistingPrompt = Effect.fnUntraced(function* (input: {
-      sessionID: SessionSchema.ID
-      messageID: SessionMessage.ID
-      prompt: Prompt
-      delivery: SessionInput.Delivery
-    }) {
-      const stored = yield* SessionInput.find(db, input.messageID)
-      if (!stored) return yield* SessionInput.reconcileProjected(db, { id: input.messageID, ...input })
-      if (!SessionInput.equivalent(stored, input)) {
-        return yield* new PromptConflictError({ sessionID: input.sessionID, messageID: input.messageID })
-      }
-      return stored
-    })
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
@@ -373,20 +352,23 @@ export const layer = Layer.effect(
             yield* result.get(input.sessionID)
             const returnPrompt = Effect.fnUntraced(function* (admitted: SessionInput.Admitted) {
               if (input.resume !== false) yield* enqueueWake(input.sessionID)
-              return SessionInput.toMessage(admitted)
+              return admitted
             }, Effect.uninterruptible)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
-            const existing = yield* findExistingPrompt(expected)
-            if (existing) return yield* returnPrompt(existing)
-            const admitted = yield* SessionInput.admit(db, {
+            const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
               prompt: input.prompt,
               delivery,
-            })
-            if (!admitted) return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
+            }).pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof SessionInput.LifecycleConflict
+                  ? new PromptConflictError({ sessionID: input.sessionID, messageID })
+                  : Effect.die(defect),
+              ),
+            )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             return yield* returnPrompt(admitted)
@@ -416,9 +398,6 @@ export const layer = Layer.effect(
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
-      }),
-      move: Effect.fn("V2Session.move")(function* () {
-        return yield* new OperationUnavailableError({ operation: "move" })
       }),
     })
 

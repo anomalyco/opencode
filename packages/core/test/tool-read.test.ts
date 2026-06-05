@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ReadTool } from "@opencode-ai/core/tool/read"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { RelativePath } from "@opencode-ai/core/schema"
@@ -127,7 +127,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const resources = Layer.succeed(
   ToolOutputStore.Service,
   ToolOutputStore.Service.of({

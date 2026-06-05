@@ -84,6 +84,7 @@ type RunFooterOptions = {
   theme: RunTheme
   keymap: Keymap<Renderable, KeyEvent>
   tuiConfig: RunTuiConfig
+  backgroundSubagents: boolean
   diffStyle: RunDiffStyle
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onQuestionReply: (input: QuestionReply) => void | Promise<void>
@@ -92,6 +93,7 @@ type RunFooterOptions = {
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
+  onBackground?: () => void
   onExit?: () => void
   onSubagentSelect?: (sessionID: string | undefined) => void
   treeSitterClient?: TreeSitterClient
@@ -294,6 +296,7 @@ export class RunFooter implements FooterApi {
               theme: options.theme,
               diffStyle: options.diffStyle,
               tuiConfig: options.tuiConfig,
+              backgroundSubagents: options.backgroundSubagents,
               history: options.history,
               agent: options.agentLabel,
               onSubmit: footer.handlePrompt,
@@ -302,6 +305,7 @@ export class RunFooter implements FooterApi {
               onQuestionReject: footer.handleQuestionReject,
               onCycle: footer.handleCycle,
               onInterrupt: footer.handleInterrupt,
+              onBackground: options.onBackground,
               onInputClear: footer.handleInputClear,
               onExitRequest: footer.handleExit,
               onRequestExit: footer.setRequestExitHandler,

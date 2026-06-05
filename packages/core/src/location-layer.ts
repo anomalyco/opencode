@@ -27,7 +27,8 @@ import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
 import { BuiltInTools } from "./tool/builtins"
-import { ToolRegistry } from "./tool-registry"
+import { ToolRegistry } from "./tool/registry"
+import { ApplicationTools } from "./tool/application-tools"
 import { ToolOutputStore } from "./tool-output-store"
 import { AppProcess } from "./process"
 import { Ripgrep } from "./ripgrep"
@@ -39,12 +40,14 @@ import { RequestExecutor } from "@opencode-ai/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SessionRunCoordinator } from "./session/run-coordinator"
+import { SystemContextBuiltIns } from "./system-context-builtins"
 import { FetchHttpClient } from "effect/unstable/http"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const location = Location.layer(ref)
     const permissionsAndTools = ToolRegistry.layer.pipe(Layer.provideMerge(PermissionV2.locationLayer))
+    const systemContext = SystemContextBuiltIns.locationLayer
     const services = Layer.mergeAll(
       location,
       Policy.locationLayer,
@@ -59,6 +62,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Watcher.locationLayer,
       Pty.locationLayer,
       SkillV2.locationLayer,
+      systemContext,
       permissionsAndTools,
       LocationMutation.locationLayer.pipe(Layer.orDie),
     ).pipe(Layer.provideMerge(location))
@@ -108,5 +112,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
+    ApplicationTools.layer,
   ],
 }) {}

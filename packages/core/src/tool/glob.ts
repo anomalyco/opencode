@@ -4,7 +4,7 @@ import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
 import { Cause, Effect, Layer, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { LocationSearch } from "../location-search"
-import { ToolRegistry } from "../tool-registry"
+import { ToolRegistry } from "./registry"
 
 export const name = "glob"
 
