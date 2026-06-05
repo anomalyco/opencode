@@ -1,4 +1,5 @@
 import { cmd } from "./cmd"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { effectCmd } from "../effect-cmd"
 import { Cause } from "effect"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
@@ -10,7 +11,7 @@ import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
-import { ConfigMCP } from "../../config/mcp"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
@@ -43,9 +44,9 @@ function getAuthStatusText(status: MCP.AuthStatus): string {
   }
 }
 
-type McpEntry = NonNullable<Config.Info["mcp"]>[string]
+type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
 
-type McpConfigured = ConfigMCP.Info
+type McpConfigured = ConfigMCPV1.Info
 function isMcpConfigured(config: McpEntry): config is McpConfigured {
   return typeof config === "object" && config !== null && "type" in config
 }
@@ -55,17 +56,13 @@ function isMcpRemote(config: McpEntry): config is McpRemote {
   return isMcpConfigured(config) && config.type === "remote"
 }
 
-function isOAuthDisabled(config: McpRemote) {
-  return config.oauth === false || (config.bifrost !== undefined && config.oauth === undefined)
-}
-
-function configuredServers(config: Config.Info) {
+function configuredServers(config: ConfigV1.Info) {
   return Object.entries(config.mcp ?? {}).filter((entry): entry is [string, McpConfigured] => isMcpConfigured(entry[1]))
 }
 
-function oauthServers(config: Config.Info) {
+function oauthServers(config: ConfigV1.Info) {
   return configuredServers(config).filter(
-    (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && !isOAuthDisabled(entry[1]),
+    (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && entry[1].oauth !== false,
   )
 }
 
@@ -235,7 +232,7 @@ export const McpAuthCommand = effectCmd({
       return
     }
 
-    if (!isMcpRemote(serverConfig) || isOAuthDisabled(serverConfig)) {
+    if (!isMcpRemote(serverConfig) || serverConfig.oauth === false) {
       prompts.log.error(`MCP server ${serverName} is not an OAuth-capable remote server`)
       prompts.outro("Done")
       return
@@ -422,7 +419,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
   return candidates[0]
 }
 
-async function addMcpToConfig(name: string, mcpConfig: ConfigMCP.Info, configPath: string) {
+async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
   let text = "{}"
   if (await Filesystem.exists(configPath)) {
     text = await Filesystem.readText(configPath)
@@ -511,7 +508,7 @@ export const McpAddCommand = effectCmd({
         })
         if (prompts.isCancel(command)) throw new UI.CancelledError()
 
-        const mcpConfig: ConfigMCP.Info = {
+        const mcpConfig: ConfigMCPV1.Info = {
           type: "local",
           command: command.split(" "),
         }
@@ -541,7 +538,7 @@ export const McpAddCommand = effectCmd({
         })
         if (prompts.isCancel(useOAuth)) throw new UI.CancelledError()
 
-        let mcpConfig: ConfigMCP.Info
+        let mcpConfig: ConfigMCPV1.Info
 
         if (useOAuth) {
           const hasClientId = await prompts.confirm({
@@ -636,8 +633,8 @@ export const McpDebugCommand = effectCmd({
         return
       }
 
-      if (isOAuthDisabled(serverConfig)) {
-        prompts.log.warn(`MCP server ${serverName} has OAuth disabled`)
+      if (serverConfig.oauth === false) {
+        prompts.log.warn(`MCP server ${serverName} has OAuth explicitly disabled`)
         prompts.outro("Done")
         return
       }

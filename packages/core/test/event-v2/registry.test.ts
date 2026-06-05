@@ -6,7 +6,10 @@ import { Schema } from "effect"
 const sessionNextTypes = [
   "session.next.agent.switched",
   "session.next.model.switched",
+  "session.next.moved",
   "session.next.prompted",
+  "session.next.prompt.admitted",
+  "session.next.prompt.promoted",
   "session.next.synthetic",
   "session.next.shell.started",
   "session.next.shell.ended",
@@ -32,6 +35,17 @@ const sessionNextTypes = [
   "session.next.compaction.ended",
 ] as const
 
+const syncVersions = {
+  "session.next.step.ended": 2,
+  "session.next.step.failed": 2,
+} as const
+
+const ephemeralTypes = new Set<string>([
+  "session.next.text.delta",
+  "session.next.reasoning.delta",
+  "session.next.tool.input.delta",
+])
+
 describe("EventV2 registry", () => {
   test("registers the session.next catalog once in deterministic declaration order", () => {
     expect(SessionEvent.All).toBeDefined()
@@ -49,9 +63,15 @@ describe("EventV2 registry", () => {
       const definition = EventV2.registry.get(type)
 
       expect(definition, `${type} should be registered`).toBeDefined()
+      if (ephemeralTypes.has(type)) {
+        expect(definition?.sync, `${type} should be live-only`).toBeUndefined()
+        expect(definition?.data, `${type} should expose a data schema`).toBeDefined()
+        continue
+      }
+
       expect(definition?.sync, `${type} should be a durable sync event`).toEqual({
         aggregate: "sessionID",
-        version: 1,
+        version: syncVersions[type as keyof typeof syncVersions] ?? 1,
       })
       expect(definition?.data, `${type} should expose a data schema`).toBeDefined()
     }

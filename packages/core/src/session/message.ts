@@ -1,15 +1,16 @@
 export * as SessionMessage from "./message"
 
 import { Schema } from "effect"
-import { EventV2 } from "../event"
+import { ProviderMetadata } from "@opencode-ai/llm"
 import { ModelV2 } from "../model"
 import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
 import { SessionEvent } from "./event"
 import { Prompt } from "./prompt"
+import { SessionMessageID } from "./message-id"
 
-export const ID = EventV2.ID
-export type ID = Schema.Schema.Type<typeof ID>
+export const ID = SessionMessageID.ID
+export type ID = typeof ID.Type
 
 const Base = {
   id: ID,
@@ -77,8 +78,10 @@ export class ToolStateRunning extends Schema.Class<ToolStateRunning>("Session.Me
 export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Session.Message.ToolState.Completed")({
   status: Schema.Literal("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
+  attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
   content: ToolOutput.Content.pipe(Schema.Array),
   structured: ToolOutput.Structured,
+  result: SessionEvent.Tool.Success.data.fields.result,
 }) {}
 
 export class ToolStateError extends Schema.Class<ToolStateError>("Session.Message.ToolState.Error")({
@@ -87,6 +90,7 @@ export class ToolStateError extends Schema.Class<ToolStateError>("Session.Messag
   content: ToolOutput.Content.pipe(Schema.Array),
   structured: ToolOutput.Structured,
   error: SessionEvent.UnknownError,
+  result: SessionEvent.Tool.Failed.data.fields.result,
 }) {}
 
 export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(
@@ -96,12 +100,12 @@ export type ToolState = Schema.Schema.Type<typeof ToolState>
 
 export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.Assistant.Tool")({
   type: Schema.Literal("tool"),
-  id: ID,
-  callID: Schema.String,
+  id: Schema.String,
   name: Schema.String,
   provider: Schema.Struct({
     executed: Schema.Boolean,
-    metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+    metadata: ProviderMetadata.pipe(Schema.optional),
+    resultMetadata: ProviderMetadata.pipe(Schema.optional),
   }).pipe(Schema.optional),
   state: ToolState,
   time: Schema.Struct({
@@ -114,29 +118,21 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.
 
 export class AssistantText extends Schema.Class<AssistantText>("Session.Message.Assistant.Text")({
   type: Schema.Literal("text"),
-  id: ID,
+  id: Schema.String,
   text: Schema.String,
 }) {}
 
 export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Session.Message.Assistant.Reasoning")({
   type: Schema.Literal("reasoning"),
-  id: ID,
-  reasoningID: Schema.String,
+  id: Schema.String,
   text: Schema.String,
+  providerMetadata: ProviderMetadata.pipe(Schema.optional),
 }) {}
 
 export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
   Schema.toTaggedUnion("type"),
 )
 export type AssistantContent = Schema.Schema.Type<typeof AssistantContent>
-
-export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Message.Assistant.Retry")({
-  attempt: SessionEvent.Retried.data.fields.attempt,
-  error: SessionEvent.Retried.data.fields.error,
-  time: Schema.Struct({
-    created: V2Schema.DateTimeUtcFromMillis,
-  }),
-}) {}
 
 export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistant")({
   ...Base,
@@ -150,7 +146,6 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
   }).pipe(Schema.optional),
   finish: Schema.String.pipe(Schema.optional),
   cost: Schema.Finite.pipe(Schema.optional),
-  retries: AssistantRetry.pipe(Schema.Array, Schema.optional),
   tokens: Schema.Struct({
     input: Schema.Finite,
     output: Schema.Finite,

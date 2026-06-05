@@ -1,10 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import { HttpServer } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
@@ -24,13 +25,14 @@ import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixt
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Database } from "@opencode-ai/core/database/database"
 import { httpApiLayer } from "./httpapi-layer"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
   Layer.mergeAll(
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
     Database.defaultLayer,
@@ -50,7 +52,7 @@ type Captured = { status: number; data?: unknown; error?: unknown }
 type ProjectFixture = { sdk: Sdk; directory: string }
 type LlmProjectFixture = ProjectFixture & { llm: TestLLMServer["Service"] }
 type TestServices =
-  | AppFileSystem.Service
+  | FSUtil.Service
   | ChildProcessSpawner.ChildProcessSpawner
   | InstanceStore.Service
   | HttpServer.HttpServer
@@ -59,13 +61,20 @@ type TestScope = Scope.Scope | TestServices
 function client(
   serverPath: ServerPath,
   directory?: string,
-  input?: { password?: string; username?: string; headers?: Record<string, string> },
+  input?: {
+    password?: string
+    username?: string
+    headers?: Record<string, string>
+    workspaceID?: string
+    onRequest?: (request: Request) => void
+  },
 ) {
   return serverFetch(serverPath, input).pipe(
     Effect.map((fetch) =>
       createOpencodeClient({
         baseUrl: "http://localhost",
         directory,
+        experimental_workspaceID: input?.workspaceID,
         headers: input?.headers,
         fetch,
       }),
@@ -73,7 +82,10 @@ function client(
   )
 }
 
-function serverFetch(serverPath: ServerPath, input?: { password?: string; username?: string }) {
+function serverFetch(
+  serverPath: ServerPath,
+  input?: { password?: string; username?: string; onRequest?: (request: Request) => void },
+) {
   return HttpServer.HttpServer.use((server) =>
     Effect.sync(() => {
       void serverPath
@@ -83,6 +95,7 @@ function serverFetch(serverPath: ServerPath, input?: { password?: string; userna
       return Object.assign(
         async (request: RequestInfo | URL, init?: RequestInit) => {
           const source = request instanceof Request ? request : new Request(request, init)
+          input?.onRequest?.(source)
           const url = new URL(source.url)
           return globalThis.fetch(new Request(new URL(`${url.pathname}${url.search}`, baseUrl), source))
         },
@@ -190,7 +203,7 @@ function httpapiInstance<A, E>(
   options: {
     serverPath: ServerPath
     git?: boolean
-    config?: Partial<Config.Info>
+    config?: Partial<ConfigV1.Info>
     setup?: (dir: string) => Effect.Effect<void, E, TestServices>
   },
   run: (input: ProjectFixture) => Effect.Effect<A, E, TestScope>,
@@ -214,7 +227,7 @@ function withProject<A, E, E2 = never>(
   serverPath: ServerPath,
   options: {
     git?: boolean
-    config?: Partial<Config.Info>
+    config?: Partial<ConfigV1.Info>
     setup?: (dir: string) => Effect.Effect<void, E2, TestServices>
   },
   run: (input: ProjectFixture) => Effect.Effect<A, E, TestScope>,
@@ -262,7 +275,7 @@ function withFakeLlmProject<A, E>(
 }
 
 function writeStandardFiles(dir: string) {
-  return AppFileSystem.Service.use((fs) =>
+  return FSUtil.Service.use((fs) =>
     Effect.all([
       fs.writeWithDirs(path.join(dir, "hello.txt"), "hello"),
       fs.writeWithDirs(path.join(dir, "needle.ts"), "export const needle = 'sdk-parity'\n"),
@@ -271,7 +284,7 @@ function writeStandardFiles(dir: string) {
 }
 
 function writeProjectSkill(dir: string) {
-  return AppFileSystem.Service.use((fs) =>
+  return FSUtil.Service.use((fs) =>
     fs.writeWithDirs(
       path.join(dir, ".opencode", "skills", "project-rest-skill", "SKILL.md"),
       `---
@@ -298,9 +311,9 @@ function seedMessage(directory: string, sessionID: string) {
             role: "user",
             time: { created: Date.now() },
             agent: "test",
-            model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
             tools: {},
-          } satisfies SessionLegacy.User)
+          } satisfies SessionV1.User)
           const part = yield* svc.updatePart({
             id: PartID.ascending(),
             sessionID: id,
@@ -364,6 +377,31 @@ describe("HttpApi SDK", () => {
           expectStatus(() => sdk.find.files({ query: "hello", limit: 10 }), 200),
         ])
       }),
+  )
+
+  httpapi(
+    "routes configured SDK directory and workspace for v2 location GETs",
+    withProject("raw", { setup: writeStandardFiles }, ({ directory }) =>
+      Effect.gen(function* () {
+        const workspaceID = "wrk_sdk"
+        let request: Request | undefined
+        const sdk = yield* client("raw", directory, {
+          workspaceID,
+          onRequest: (value) => (request = value),
+        })
+        const file = yield* call(() => sdk.v2.fs.read({ path: "hello.txt" }))
+        const url = new URL(request!.url)
+
+        expect(file.response.status).toBe(200)
+        expect(file.data).toMatchObject({ data: { content: "hello" } })
+        expect(url.searchParams.get("directory")).toBe(directory)
+        expect(url.searchParams.get("workspace")).toBe(workspaceID)
+        expect(url.searchParams.get("location[directory]")).toBe(directory)
+        expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
+        expect(request!.headers.has("x-opencode-directory")).toBe(false)
+        expect(request!.headers.has("x-opencode-workspace")).toBe(false)
+      }),
+    ),
   )
 
   serverPathParity("matches generated SDK global and control behavior", (serverPath) =>

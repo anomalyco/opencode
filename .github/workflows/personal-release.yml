@@ -56,9 +56,31 @@ jobs:
         run: bun --cwd packages/opencode test test/installation/installation.test.ts
 
       - name: Create draft release
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          echo "skip_upload=false" >> "$GITHUB_OUTPUT"
+          release_json=$(gh release view "${{ steps.vars.outputs.tag }}" --json isDraft,assets 2>/dev/null || true)
+          has_x64=$(jq -r '.assets[]?.name // empty' <<< "$release_json" | grep -Fxq opencode-linux-x64.tar.gz && echo true || echo false)
+          has_arm64=$(jq -r '.assets[]?.name // empty' <<< "$release_json" | grep -Fxq opencode-linux-arm64.tar.gz && echo true || echo false)
+          is_published=$(jq -r 'if .isDraft == false then "true" else "false" end' <<< "$release_json" 2>/dev/null || echo false)
+
+          if [ "$is_published" = "true" ] && [ "$has_x64" = "true" ] && [ "$has_arm64" = "true" ]; then
+            echo "Release ${{ steps.vars.outputs.tag }} is already published with expected Linux assets."
+            echo "skip_upload=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "$release_json" ] && [ "$is_published" = "true" ]; then
+            echo "Release ${{ steps.vars.outputs.tag }} exists but is missing expected Linux assets; clean it up manually before retrying." >&2
+            exit 1
+          fi
+
+          if [ -n "$release_json" ]; then
+            gh release delete "${{ steps.vars.outputs.tag }}" --cleanup-tag --yes
+          fi
+
           gh release create "${{ steps.vars.outputs.tag }}" \
             --draft \
             --target "${{ inputs.ref }}" \
@@ -66,6 +88,7 @@ jobs:
             --notes "Personal Linux CLI build from c0dn/opencode-personal."
 
       - name: Build and upload Linux CLI artifacts
+        if: steps.release.outputs.skip_upload != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -75,6 +98,7 @@ jobs:
         run: bun ./packages/opencode/script/build.ts
 
       - name: Publish release
+        if: steps.release.outputs.skip_upload != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "${{ steps.vars.outputs.tag }}" --draft=false --latest

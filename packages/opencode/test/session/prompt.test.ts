@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { SessionMailbox } from "@opencode-ai/core/session/mailbox"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { eq } from "drizzle-orm"
@@ -30,7 +31,7 @@ import { Session } from "@/session/session"
 import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { SessionCompaction } from "../../src/session/compaction"
 import { SessionSummary } from "../../src/session/summary"
 import { Instruction } from "../../src/session/instruction"
@@ -49,7 +50,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "../../src/file/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
 import { RepositoryCache } from "../../src/reference/repository-cache"
@@ -58,6 +59,7 @@ import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 void Log.init({ print: false })
 
@@ -72,7 +74,7 @@ const summary = Layer.succeed(
 
 const ref = {
   providerID: ProviderV2.ID.make("test"),
-  modelID: ProviderV2.ModelID.make("test-model"),
+  modelID: ModelV2.ID.make("test-model"),
 }
 
 function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
@@ -93,21 +95,21 @@ function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   )
 }
 
-function toolPart(parts: SessionLegacy.Part[]) {
-  return parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+function toolPart(parts: SessionV1.Part[]) {
+  return parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
 }
 
-type CompletedToolPart = SessionLegacy.ToolPart & { state: SessionLegacy.ToolStateCompleted }
-type ErrorToolPart = SessionLegacy.ToolPart & { state: SessionLegacy.ToolStateError }
+type CompletedToolPart = SessionV1.ToolPart & { state: SessionV1.ToolStateCompleted }
+type ErrorToolPart = SessionV1.ToolPart & { state: SessionV1.ToolStateError }
 const mcpReadResourceStarted: Array<() => void> = []
 
-function completedTool(parts: SessionLegacy.Part[]) {
+function completedTool(parts: SessionV1.Part[]) {
   const part = toolPart(parts)
   expect(part?.state.status).toBe("completed")
   return part?.state.status === "completed" ? (part as CompletedToolPart) : undefined
 }
 
-function errorTool(parts: SessionLegacy.Part[]) {
+function errorTool(parts: SessionV1.Part[]) {
   const part = toolPart(parts)
   expect(part?.state.status).toBe("error")
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
@@ -186,7 +188,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     ProviderSvc.defaultLayer,
     lsp,
     mcp,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     BackgroundJob.defaultLayer,
     SessionMailbox.defaultLayer,
     status,
@@ -304,33 +306,32 @@ function providerCfg(url: string) {
 }
 
 const writeText = Effect.fn("test.writeText")(function* (file: string, text: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(file, text)
 })
 
 const ensureDir = Effect.fn("test.ensureDir")(function* (dir: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.ensureDir(dir)
 })
 
-const writeConfig = Effect.fn("test.writeConfig")(function* (dir: string, config: Partial<Config.Info>) {
+const writeConfig = Effect.fn("test.writeConfig")(function* (dir: string, config: Partial<ConfigV1.Info>) {
   yield* writeText(
     path.join(dir, "opencode.json"),
     JSON.stringify({ $schema: "https://opencode.ai/config.json", ...config }),
   )
 })
 
-const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (url: string) => Partial<Config.Info>) {
+const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (url: string) => Partial<ConfigV1.Info>) {
   const { directory: dir } = yield* TestInstance
   const llm = yield* TestLLMServer
   yield* writeConfig(dir, config(llm.url))
   return { dir, llm }
 })
 
-// Wait for a session's runner to enter a busy state. SessionStatus is flipped to
-// "busy" inside Runner.startShell's modifyEffect at the same moment the runner
-// is registered, so this is a deterministic readiness signal — cancel can't
-// no-op once we observe it.
+// Wait for a session's runner to enter a busy state. SessionStatus is flipped
+// inside Runner.startShell's serialized transition, so cancel can't no-op once
+// we observe it.
 const waitForBusy = (sessionID: SessionID, duration: Duration.Input = "2 seconds") =>
   pollWithTimeout(
     Effect.gen(function* () {
@@ -397,7 +398,7 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: strin
 const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { finish?: string }) {
   const session = yield* Session.Service
   const msg = yield* user(sessionID, "hello")
-  const assistant: SessionLegacy.Assistant = {
+  const assistant: SessionV1.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     parentID: msg.id,
@@ -549,6 +550,36 @@ noLLMServer.instance(
       expect(seen).toContain(SessionEvent.Synthetic.type)
     }),
   { config: cfg },
+)
+
+it.instance("loop stops provider overflow instead of auto-compacting when disabled", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => ({
+      ...providerCfg(url),
+      compaction: { auto: false },
+    }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* llm.error(413, { error: { message: "request entity too large" } })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.error?.name).toBe("ContextOverflowError")
+      expect(result.info.finish).toBe("error")
+    }
+    expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(false)
+  }),
 )
 
 noLLMServer.instance.skip(
@@ -798,7 +829,7 @@ it.instance("failed subtask preserves metadata on error tool state", () =>
     expect(tool.state.metadata?.sessionId).toBeDefined()
     expect(tool.state.metadata?.model).toEqual({
       providerID: ProviderV2.ID.make("test"),
-      modelID: ProviderV2.ModelID.make("missing-model"),
+      modelID: ModelV2.ID.make("missing-model"),
     })
   }),
 )
@@ -821,7 +852,7 @@ it.instance(
         Effect.gen(function* () {
           const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
-          const tool = taskMsg?.parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+          const tool = taskMsg?.parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
         }),
         "timed out waiting for running subtask metadata",
@@ -864,7 +895,7 @@ it.instance(
           const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
           const tool = assistant?.parts.find(
-            (part): part is SessionLegacy.ToolPart => part.type === "tool" && part.tool === "task",
+            (part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "task",
           )
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
         }),
@@ -1157,187 +1188,6 @@ it.instance(
     }),
   { git: true },
   3_000,
-)
-
-// Queue semantics
-
-it.instance(
-  "promptAsync enqueues while busy and delivers at the next runner boundary",
-  () =>
-    Effect.gen(function* () {
-      const { llm } = yield* useServerConfig(providerCfg)
-      const gate = yield* Deferred.make<void>()
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const mailbox = yield* SessionMailbox.Service
-      const chat = yield* sessions.create({ title: "Pinned" })
-
-      yield* llm.hold("first", deferredAsPromise(gate))
-      yield* llm.text("second")
-
-      const first = yield* prompt
-        .prompt({ sessionID: chat.id, agent: "build", model: ref, parts: [{ type: "text", text: "first" }] })
-        .pipe(Effect.forkChild)
-      yield* llm.wait(1)
-
-      const asyncID = MessageID.ascending()
-      yield* prompt.promptAsync({
-        sessionID: chat.id,
-        messageID: asyncID,
-        agent: "build",
-        model: ref,
-        parts: [{ type: "text", text: "queued async" }],
-      })
-
-      const queued = yield* mailbox.list({ toSessionID: chat.id, kind: "user", state: "queued" })
-      expect(queued).toHaveLength(1)
-      expect(queued[0]?.text).toBe("queued async")
-      expect((yield* sessions.messages({ sessionID: chat.id })).some((msg) => msg.info.id === asyncID)).toBe(false)
-
-      yield* Deferred.succeed(gate, void 0)
-      yield* Fiber.await(first)
-      yield* pollWithTimeout(
-        mailbox
-          .list({ toSessionID: chat.id, kind: "user", state: "delivered" })
-          .pipe(Effect.map((rows) => (rows.length === 1 ? rows[0] : undefined))),
-        "async prompt mailbox row was not delivered",
-      )
-
-      const msgs = yield* sessions.messages({ sessionID: chat.id })
-      expect(msgs.some((msg) => msg.info.role === "user" && msg.info.id === asyncID)).toBe(true)
-      yield* pollWithTimeout(
-        Effect.gen(function* () {
-          return (yield* llm.calls) === 2 ? true : undefined
-        }),
-        "async prompt did not reach the model after mailbox delivery",
-      )
-      expect(yield* llm.calls).toBe(2)
-    }),
-  { git: true },
-  5_000,
-)
-
-it.instance(
-  "idle promptAsync wakes the runner and marks one mailbox row delivered",
-  () =>
-    Effect.gen(function* () {
-      const { llm } = yield* useServerConfig(providerCfg)
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const mailbox = yield* SessionMailbox.Service
-      const chat = yield* sessions.create({ title: "Pinned" })
-      const id = MessageID.ascending()
-
-      yield* llm.text("async response")
-      yield* prompt.promptAsync({
-        sessionID: chat.id,
-        messageID: id,
-        agent: "build",
-        model: ref,
-        parts: [{ type: "text", text: "wake me" }],
-      })
-
-      yield* pollWithTimeout(
-        Effect.gen(function* () {
-          const rows = yield* mailbox.list({ toSessionID: chat.id, kind: "user", state: "delivered" })
-          const msgs = yield* sessions.messages({ sessionID: chat.id })
-          const delivered = rows.length === 1 && msgs.some((msg) => msg.info.role === "user" && msg.info.id === id)
-          return delivered && (yield* llm.calls) === 1
-            ? true
-            : undefined
-        }),
-        "idle async prompt was not delivered",
-      )
-      expect(yield* llm.calls).toBe(1)
-    }),
-  { git: true },
-  5_000,
-)
-
-noLLMServer.instance(
-  "cancelled promptAsync drain does not leave a mailbox row processing",
-  () =>
-    Effect.gen(function* () {
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const mailbox = yield* SessionMailbox.Service
-      const chat = yield* sessions.create({ title: "Pinned" })
-      const started = yield* Deferred.make<void>()
-
-      mcpReadResourceStarted.push(() => succeedVoid(started))
-      yield* prompt.promptAsync({
-        sessionID: chat.id,
-        messageID: MessageID.ascending(),
-        agent: "build",
-        model: ref,
-        parts: [
-          {
-            type: "file",
-            mime: "text/plain",
-            filename: "resource.txt",
-            url: "file:///tmp/resource.txt",
-            source: {
-              type: "resource",
-              clientName: "test",
-              uri: "test://slow",
-              text: { value: "resource", start: 0, end: 8 },
-            },
-          },
-        ],
-      })
-
-      yield* awaitWithTimeout(Deferred.await(started), "async mailbox drain never started resource processing")
-      expect(yield* mailbox.list({ toSessionID: chat.id, kind: "user", state: "processing" })).toHaveLength(1)
-
-      yield* prompt.cancel(chat.id)
-      yield* pollWithTimeout(
-        mailbox
-          .list({ toSessionID: chat.id, kind: "user", state: "processing" })
-          .pipe(Effect.map((rows) => (rows.length === 0 ? true : undefined))),
-        "cancelled async prompt left a mailbox row processing",
-      )
-
-      const rows = yield* mailbox.list({ toSessionID: chat.id, kind: "user" })
-      expect(rows.map((row) => row.state)).toEqual(["cancelled"])
-    }),
-  { git: true },
-  5_000,
-)
-
-noLLMServer.instance("promptAsync drains queued messages in mailbox FIFO order", () =>
-  Effect.gen(function* () {
-    const { prompt, sessions, chat } = yield* boot()
-    const mailbox = yield* SessionMailbox.Service
-    const firstID = MessageID.ascending()
-    const secondID = MessageID.ascending()
-
-    yield* prompt.promptAsync({
-      sessionID: chat.id,
-      messageID: firstID,
-      agent: "build",
-      model: ref,
-      noReply: true,
-      parts: [{ type: "text", text: "first async" }],
-    })
-    yield* prompt.promptAsync({
-      sessionID: chat.id,
-      messageID: secondID,
-      agent: "build",
-      model: ref,
-      noReply: true,
-      parts: [{ type: "text", text: "second async" }],
-    })
-
-    yield* pollWithTimeout(
-      mailbox
-        .list({ toSessionID: chat.id, kind: "user", state: "delivered" })
-        .pipe(Effect.map((rows) => (rows.length === 2 ? rows : undefined))),
-      "FIFO async prompts were not delivered",
-    )
-
-    const users = (yield* sessions.messages({ sessionID: chat.id })).filter((msg) => msg.info.role === "user")
-    expect(users.map((msg) => msg.info.id)).toEqual([firstID, secondID])
-  }),
 )
 
 noLLMServer.instance("concurrent loop callers get same result", () =>
@@ -1846,7 +1696,7 @@ unixNoLLMServer(
       Effect.gen(function* () {
         const { prompt, chat } = yield* boot()
         const { directory: dir } = yield* TestInstance
-        const afs = yield* AppFileSystem.Service
+        const afs = yield* FSUtil.Service
         const ready = path.join(dir, ".trap-ready")
 
         const sh = yield* prompt
@@ -2181,11 +2031,11 @@ noLLMServer.instance(
         "Use @docs and @docs/README.md and @docs/guide and @docs/missing.md and @docs/README.md and @build",
       )
       const references = parts.filter(
-        (part): part is SessionLegacy.TextPartInput =>
+        (part): part is SessionV1.TextPartInput =>
           part.type === "text" && part.synthetic === true && part.text.startsWith("Referenced configured reference "),
       )
-      const files = parts.filter((part): part is SessionLegacy.FilePartInput => part.type === "file")
-      const agents = parts.filter((part): part is SessionLegacy.AgentPartInput => part.type === "agent")
+      const files = parts.filter((part): part is SessionV1.FilePartInput => part.type === "file")
+      const agents = parts.filter((part): part is SessionV1.AgentPartInput => part.type === "agent")
       const bare = references.find((part) => part.text.includes("@docs."))
       const missing = references.find((part) => part.text.includes("@docs/missing.md"))
       const guide = files.find((part) => part.filename === "docs/guide")
@@ -2238,13 +2088,13 @@ noLLMServer.instance(
 
       const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
-        (part): part is SessionLegacy.TextPart => part.type === "text" && part.synthetic === true,
+        (part): part is SessionV1.TextPart => part.type === "text" && part.synthetic === true,
       )
       const reference = synthetic.find((part) => part.text.startsWith("Referenced configured reference @docs."))
 
       expect(reference?.metadata?.reference).toMatchObject({ name: "docs", kind: "local", path: docs })
       expect(synthetic.some((part) => part.text.includes(`Reference root: ${docs}`))).toBe(true)
-      expect(synthetic.some((part) => part.text.includes("subagent scout"))).toBe(true)
+      expect(synthetic.some((part) => part.text.includes("Inspect the configured reference"))).toBe(true)
 
       yield* sessions.remove(session.id)
     }),
@@ -2293,7 +2143,7 @@ noLLMServer.instance(
 
       const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
-        (part): part is SessionLegacy.TextPart => part.type === "text" && part.synthetic === true,
+        (part): part is SessionV1.TextPart => part.type === "text" && part.synthetic === true,
       )
       const reference = synthetic.find((part) =>
         part.text.startsWith("Referenced configured reference @docs/README.md."),
@@ -2440,7 +2290,7 @@ noLLMServer.instance(
       const other = yield* prompt.prompt({
         sessionID: session.id,
         agent: "build",
-        model: { providerID: ProviderV2.ID.make("opencode"), modelID: ProviderV2.ModelID.make("kimi-k2.5-free") },
+        model: { providerID: ProviderV2.ID.make("opencode"), modelID: ModelV2.ID.make("kimi-k2.5-free") },
         noReply: true,
         parts: [{ type: "text", text: "hello" }],
       })
@@ -2456,7 +2306,7 @@ noLLMServer.instance(
       if (match.info.role !== "user") throw new Error("expected user message")
       expect(match.info.model).toEqual({
         providerID: ProviderV2.ID.make("test"),
-        modelID: ProviderV2.ModelID.make("test-model"),
+        modelID: ModelV2.ID.make("test-model"),
         variant: "xhigh",
       })
       expect(match.info.model.variant).toBe("xhigh")

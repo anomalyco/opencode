@@ -162,7 +162,14 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             continue
           }
 
-          state.active = prompt
+          const sent =
+            prompt.mode === "shell"
+              ? prompt
+              : {
+                  ...prompt,
+                  messageID: prompt.messageID ?? queued?.messageID ?? MessageID.ascending(),
+                }
+          state.active = sent
 
           emit(
             {
@@ -185,18 +192,24 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               break
             }
 
-            if (prompt.mode !== "shell") {
-              const commit = { kind: "user", text: prompt.text, phase: "start", source: "system" } as const
+            if (sent.mode !== "shell") {
+              const commit = {
+                kind: "user",
+                text: sent.text,
+                phase: "start",
+                source: "system",
+                messageID: sent.messageID,
+              } as const
               input.trace?.write("ui.commit", commit)
               input.footer.append(commit)
             }
-            input.onSend?.(prompt)
+            input.onSend?.(sent)
 
             if (state.closed) {
               break
             }
 
-            const task = input.run(prompt, ctrl.signal).then(
+            const task = input.run(sent, ctrl.signal).then(
               () => ({ type: "done" as const }),
               (error) => ({ type: "error" as const, error }),
             )

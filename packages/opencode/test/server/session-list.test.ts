@@ -100,6 +100,33 @@ describe("session.list", () => {
   )
 
   it.instance(
+    "matches a session regardless of directory separator on Windows",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+        const test = yield* TestInstance
+        const dir = path.join(test.directory, "packages", "opencode")
+        yield* Effect.promise(() => mkdir(dir, { recursive: true }))
+
+        const created = yield* withSession({ title: "separator" }).pipe(provideInstance(dir))
+
+        // A forward-slash query (e.g. from the SDK/HTTP layer) must still find it —
+        // this is the regression: backslash-stored vs forward-slash-queried.
+        const forwardIDs = (yield* SessionNs.Service.use((session) =>
+          session.list({ directory: dir.replaceAll("\\", "/") }),
+        )).map((session) => session.id)
+        expect(forwardIDs).toContain(created.id)
+
+        // The native form must keep matching too.
+        const nativeIDs = (yield* SessionNs.Service.use((session) => session.list({ directory: dir }))).map(
+          (session) => session.id,
+        )
+        expect(nativeIDs).toContain(created.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "filters by path and ignores directory when path is provided",
     () =>
       Effect.gen(function* () {
@@ -132,6 +159,14 @@ describe("session.list", () => {
         expect(pathIDs).toContain(current.id)
         expect(pathIDs).toContain(deeper.id)
         expect(pathIDs).not.toContain(sibling.id)
+
+        if (process.platform === "win32") {
+          const windowsPathIDs = (yield* SessionNs.Service.use((session) =>
+            session.list({ path: "packages\\opencode\\src" }),
+          )).map((session) => session.id)
+          expect(windowsPathIDs).toContain(current.id)
+          expect(windowsPathIDs).toContain(deeper.id)
+        }
       }),
     { git: true },
   )

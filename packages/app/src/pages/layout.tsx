@@ -1647,7 +1647,7 @@ export default function Layout(props: ParentProps) {
     })
 
     onMount(() => {
-      serverSDK.client.file
+      serverSDK.client.vcs
         .status({ directory: props.directory })
         .then((x) => {
           const files = x.data ?? []
@@ -1715,7 +1715,7 @@ export default function Layout(props: ParentProps) {
     }
 
     onMount(() => {
-      serverSDK.client.file
+      serverSDK.client.vcs
         .status({ directory: props.directory })
         .then((x) => {
           const files = x.data ?? []

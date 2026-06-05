@@ -13,6 +13,22 @@ Versioning note: automated upstream mirrors are published as
 
 - No unreleased personal changes.
 
+## v1.16.0-c0dn.1 - 2026-06-05
+
+### Changed
+- Synced the personal fork onto upstream `anomalyco/opencode` v1.16.0 while
+  preserving the `c0dn/opencode-personal` installer/updater release channel,
+  Linux-only artifacts, and blocked package-manager upgrades.
+- Re-applied compatible upstream release-channel changes: curl upgrades now fall
+  back from `bash` to `sh`, and Linux builds carry libc metadata through
+  `OPENTUI_LIBC`.
+- Hardened sync/release automation so upstream mirrors are skipped only when the
+  expected Linux release assets exist, and personal releases are built from the
+  validated merge SHA.
+- Narrowed personal version normalization to strip only `-c0dn.N` suffixes for
+  dependency compatibility, without treating arbitrary upstream prereleases as
+  stable versions.
+
 ## v1.15.13-c0dn.8 - 2026-06-05
 
 ### Fixed
@@ -93,8 +109,9 @@ They are maintained across upstream syncs.
 - `OPENCODE_BUILD_TARGETS` filters CLI build targets.
 
 ### Automation
-- `sync-upstream.yml` merges `anomalyco/opencode:dev` into this fork's `dev`,
-  runs typecheck/tests, and mirrors the latest upstream release as
-  `v<upstream-version>-c0dn.1` when the upstream tag is contained in `dev`.
+- `sync-upstream.yml` merges the latest upstream release tag into this fork's
+  `dev`, runs typecheck/tests, pushes the validated merge, and mirrors it as
+  `v<upstream-version>-c0dn.1` from the validated SHA when the expected Linux
+  assets are not already published.
 - `personal-release.yml` publishes manual Linux CLI builds and can be called by
   the upstream sync after a successful merge.

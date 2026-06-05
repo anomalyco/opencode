@@ -68,7 +68,8 @@ function chronological(input: SessionMessage.Message[]) {
 }
 
 function isAbortedAssistantWithContent(message: SessionMessage.Assistant) {
-  return message.error?.type === "aborted" && message.content.some(isMeaningfulAssistantContent)
+  void message
+  return false
 }
 
 function isMeaningfulAssistantContent(content: SessionMessage.AssistantContent) {
@@ -81,7 +82,7 @@ function toolPart(content: SessionMessage.AssistantTool): UIMessage["parts"][num
   const metadata = providerMetadata(content.provider?.metadata)
   const base = {
     type: `tool-${content.name}` as `tool-${string}`,
-    toolCallId: content.callID,
+    toolCallId: content.id,
     input: content.state.input,
     ...(content.provider?.executed ? { providerExecuted: true } : {}),
     ...(metadata ? { callProviderMetadata: metadata } : {}),
@@ -138,7 +139,7 @@ function toolOutput(content: SessionMessage.ToolStateCompleted["content"]) {
     .join("")
   const attachments = content
     .filter((item) => item.type === "file")
-    .map((item) => ({ mime: item.mime, url: item.uri, filename: item.name }))
+    .map((item) => ({ mime: item.mime, url: fileSourceUrl(item), filename: item.name }))
 
   if (attachments.length === 0) return text
   return { text, attachments }
@@ -183,6 +184,12 @@ function dataUrlPayload(input: string) {
   const comma = input.indexOf(",")
   if (comma === -1) return input
   return input.slice(comma + 1)
+}
+
+function fileSourceUrl(content: SessionMessage.ToolStateCompleted["content"][number] & { type: "file" }) {
+  if (content.source.type === "data") return `data:${content.mime};base64,${content.source.data}`
+  if (content.source.type === "url") return content.source.url
+  return content.source.uri
 }
 
 export * as MessageV2Model from "./message-v2-model"

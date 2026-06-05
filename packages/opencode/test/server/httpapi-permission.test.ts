@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "../../src/permission"
-import { PermissionID } from "../../src/permission/schema"
 import { SessionID } from "../../src/session/schema"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
@@ -22,7 +22,7 @@ describe("permission HttpApi", () => {
       Effect.gen(function* () {
         const test = yield* TestInstance
         const permission = yield* Permission.Service
-        const requestID = PermissionID.ascending()
+        const requestID = PermissionV1.ID.ascending()
         const sessionID = SessionID.make("ses_httpapi_permission_patch")
         const shared = { source: "shared" }
         const metadata = {

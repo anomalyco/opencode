@@ -20,8 +20,14 @@ type OpenApiResponse = {
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
 }
 type OpenApiOperation = {
-  readonly parameters?: ReadonlyArray<{ readonly name: string; readonly in: string }>
+  readonly parameters?: ReadonlyArray<{
+    readonly name: string
+    readonly in: string
+    readonly required?: boolean
+    readonly schema?: { readonly type?: string }
+  }>
   readonly responses?: Record<string, OpenApiResponse>
+  readonly requestBody?: { readonly required?: boolean }
   readonly security?: unknown
 }
 type OpenApiPathItem = Partial<Record<Method, OpenApiOperation>>
@@ -51,6 +57,12 @@ function responseRef(response: OpenApiResponse | undefined) {
 
 function componentName(ref: string) {
   return ref.replace("#/components/schemas/", "")
+}
+
+function componentNames(response: OpenApiResponse | undefined) {
+  const schema = response?.content?.["application/json"]?.schema
+  if (!schema) return []
+  return [schema, ...(schema.anyOf ?? [])].flatMap((item) => (item.$ref ? [componentName(item.$ref)] : []))
 }
 
 function isBuiltInEndpointError(name: string) {
@@ -102,12 +114,54 @@ function collectRefs(value: OpenApiSchema | undefined): string[] {
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  test("documents nested legacy global sync events", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const schema = spec.components?.schemas?.SyncEventSessionCreated
+
+    expect(schema?.required).toEqual(["type", "id", "syncEvent"])
+    expect(schema?.properties?.type?.enum).toEqual(["sync"])
+    expect(schema?.properties?.syncEvent).toMatchObject({
+      required: ["type", "id", "seq", "aggregateID", "data"],
+      properties: {
+        type: { enum: ["session.created.1"] },
+        id: { type: "string" },
+        seq: { type: "number" },
+        aggregateID: { type: "string" },
+      },
+    })
+  })
+
   test("preserves /api auth responses", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
     for (const route of v2Operations(spec)) {
       expect(route.operation.responses?.["401"], `${route.method.toUpperCase()} ${route.path}`).toBeDefined()
       expect(route.operation.security, `${route.method.toUpperCase()} ${route.path}`).toEqual([])
+    }
+  })
+
+  test("documents optional project reference aliases for filesystem reads and lists", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const path of ["/api/fs/read", "/api/fs/list"]) {
+      expect(spec.paths[path]?.get?.parameters, path).toContainEqual({
+        in: "query",
+        name: "reference",
+        required: false,
+        schema: { type: "string" },
+      })
+    }
+  })
+
+  test("preserves required request bodies for v2 mutations", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const path of [
+      "/api/session/{sessionID}/prompt",
+      "/api/session/{sessionID}/permission/request/{requestID}/reply",
+      "/api/session/{sessionID}/question/request/{requestID}/reply",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
   })
 
@@ -179,7 +233,6 @@ describe("PublicApi OpenAPI v2 errors", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
     for (const route of [
-      ["post", "/api/session/{sessionID}/prompt"],
       ["post", "/api/session/{sessionID}/compact"],
       ["post", "/api/session/{sessionID}/wait"],
     ] as const) {
@@ -202,39 +255,20 @@ describe("PublicApi OpenAPI v2 errors", () => {
     }
   })
 
-  test("documents v2 assistant retry metadata on session messages", () => {
-    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
-    const assistant = schema(spec, "SessionMessageAssistant")
-    const retry = schema(spec, "SessionMessageAssistantRetry")
-
-    expect(assistant.properties?.retries).toEqual({
-      type: "array",
-      items: { $ref: "#/components/schemas/SessionMessageAssistantRetry" },
-    })
-    expect(assistant.required ?? []).not.toContain("retries")
-    expect(retry.required).toEqual(["attempt", "error", "time"])
-    expect(retry.properties?.attempt?.type).toBe("number")
-    expect(retry.properties?.error?.$ref).toBe("#/components/schemas/SessionNextRetry_error")
-    expect(retry.properties?.time?.properties?.created?.type).toBe("number")
-    expect(retry.properties?.time?.required).toEqual(["created"])
-  })
-
-  test("documents rich assistant error variants on session messages", () => {
+  test("documents assistant error variants on session messages", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
     const assistant = schema(spec, "SessionMessageAssistant")
 
     expect(assistant.required ?? []).not.toContain("error")
-    expect(new Set(collectTypeDiscriminators(spec, assistant.properties?.error))).toEqual(
-      new Set(["aborted", "api", "auth", "context_overflow", "output_length", "structured_output", "unknown"]),
-    )
+    expect(new Set(collectTypeDiscriminators(spec, assistant.properties?.error))).toEqual(new Set(["unknown"]))
   })
 
-  test("documents completed tool file content without state attachments", () => {
+  test("documents completed tool file content and legacy state attachments", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
     const completed = schema(spec, "SessionMessageToolStateCompleted")
 
-    expect(completed.properties?.attachments).toBeUndefined()
     expect(completed.required ?? []).not.toContain("attachments")
+    expect(completed.properties?.attachments).toBeDefined()
     expect(new Set(collectRefs(completed.properties?.content))).toContain("#/components/schemas/ToolFileContent")
   })
 
@@ -266,6 +300,15 @@ describe("PublicApi OpenAPI v2 errors", () => {
       expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
         "QuestionNotFoundError",
       )
+    }
+    for (const route of [
+      ["post", "/api/session/{sessionID}/question/request/{requestID}/reply"],
+      ["post", "/api/session/{sessionID}/question/request/{requestID}/reject"],
+    ] as const) {
+      expect(componentNames(spec.paths[route[1]]?.[route[0]]?.responses?.["404"])).toEqual([
+        "SessionNotFoundError",
+        "QuestionNotFoundError",
+      ])
     }
   })
 

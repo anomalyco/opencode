@@ -7,6 +7,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { Session } from "@/session/session"
 import { V2Schema } from "@opencode-ai/core/v2-schema"
@@ -58,6 +59,7 @@ const it = testEffect(Layer.mergeAll(httpApiLayer, EventV2Bridge.defaultLayer, D
 
 const sessionNextData = (sessionID: SessionSchema.ID, timestamp = 1234) => ({
   sessionID,
+  assistantMessageID: SessionMessage.ID.make("msg_assistant"),
   timestamp: DateTime.makeUnsafe(timestamp),
   agent: "test-agent",
   model: { id: ModelV2.ID.make("test-model"), providerID: ProviderV2.ID.make("test-provider") },
@@ -242,7 +244,7 @@ describe("event HttpApi", () => {
           {
             id: EventV2.ID.create(),
             aggregateID: sessionID,
-            seq: 0,
+            seq: 1,
             type: EventV2.versionedType(SessionEvent.Step.Started.type, 1),
             data: { ...sessionNextData(sessionID), timestamp: 1234 },
           },
@@ -269,7 +271,7 @@ describe("event HttpApi", () => {
           {
             id: EventV2.ID.create(),
             aggregateID: sessionID,
-            seq: 0,
+            seq: 1,
             type: EventV2.versionedType(SessionEvent.Step.Started.type, 1),
             data: { ...sessionNextData(sessionID), timestamp: new Date(1234).toISOString() },
           },

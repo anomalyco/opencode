@@ -1,3 +1,4 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { test, expect } from "bun:test"
 import os from "os"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
@@ -5,7 +6,6 @@ import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
 import { Permission } from "../../src/permission"
-import { PermissionID } from "../../src/permission/schema"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
@@ -261,8 +261,8 @@ test("merge - preserves rule order", () => {
 })
 
 test("merge - config permission overrides default ask", () => {
-  const defaults: Permission.Ruleset = [{ permission: "*", pattern: "*", action: "ask" }]
-  const config: Permission.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
+  const defaults: PermissionV1.Ruleset = [{ permission: "*", pattern: "*", action: "ask" }]
+  const config: PermissionV1.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
   const merged = Permission.merge(defaults, config)
 
   expect(Permission.evaluate("bash", "ls", merged).action).toBe("allow")
@@ -270,8 +270,8 @@ test("merge - config permission overrides default ask", () => {
 })
 
 test("merge - config ask overrides default allow", () => {
-  const defaults: Permission.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
-  const config: Permission.Ruleset = [{ permission: "bash", pattern: "*", action: "ask" }]
+  const defaults: PermissionV1.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
+  const config: PermissionV1.Ruleset = [{ permission: "bash", pattern: "*", action: "ask" }]
   const merged = Permission.merge(defaults, config)
 
   expect(Permission.evaluate("bash", "ls", merged).action).toBe("ask")
@@ -443,8 +443,8 @@ test("evaluate - later wildcard permission can override earlier specific permiss
 })
 
 test("evaluate - merges multiple rulesets", () => {
-  const config: Permission.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
-  const approved: Permission.Ruleset = [{ permission: "bash", pattern: "rm", action: "deny" }]
+  const config: PermissionV1.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
+  const approved: PermissionV1.Ruleset = [{ permission: "bash", pattern: "rm", action: "deny" }]
   const result = Permission.evaluate("bash", "rm", config, approved)
   expect(result.action).toBe("deny")
 })
@@ -588,7 +588,7 @@ it.instance(
           ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
         }),
       )
-      expect(err).toBeInstanceOf(Permission.DeniedError)
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
     }),
   { git: true },
 )
@@ -711,10 +711,10 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const events = yield* EventV2Bridge.Service
-      const seen = yield* Deferred.make<Permission.Request>()
+      const seen = yield* Deferred.make<PermissionV1.Request>()
       const unsub = yield* events.listen((event) => {
         if (event.type === Permission.Event.Asked.type)
-          Deferred.doneUnsafe(seen, Effect.succeed(event.data as Permission.Request))
+          Deferred.doneUnsafe(seen, Effect.succeed(event.data as PermissionV1.Request))
         return Effect.void
       })
       yield* Effect.addFinalizer(() => unsub)
@@ -759,7 +759,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const fiber = yield* ask({
-        id: PermissionID.make("per_test1"),
+        id: PermissionV1.ID.make("per_test1"),
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
@@ -769,7 +769,7 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       yield* waitForPending(1)
-      yield* reply({ requestID: PermissionID.make("per_test1"), reply: "once" })
+      yield* reply({ requestID: PermissionV1.ID.make("per_test1"), reply: "once" })
       yield* Fiber.join(fiber)
     }),
   { git: true },
@@ -780,7 +780,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const fiber = yield* ask({
-        id: PermissionID.make("per_test2"),
+        id: PermissionV1.ID.make("per_test2"),
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
@@ -790,11 +790,11 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       yield* waitForPending(1)
-      yield* reply({ requestID: PermissionID.make("per_test2"), reply: "reject" })
+      yield* reply({ requestID: PermissionV1.ID.make("per_test2"), reply: "reject" })
 
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.RejectedError)
     }),
   { git: true },
 )
@@ -804,7 +804,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const fiber = yield* ask({
-        id: PermissionID.make("per_test2b"),
+        id: PermissionV1.ID.make("per_test2b"),
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
@@ -815,7 +815,7 @@ it.instance(
 
       yield* waitForPending(1)
       yield* reply({
-        requestID: PermissionID.make("per_test2b"),
+        requestID: PermissionV1.ID.make("per_test2b"),
         reply: "reject",
         message: "Use a safer command",
       })
@@ -824,7 +824,7 @@ it.instance(
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         const err = Cause.squash(exit.cause)
-        expect(err).toBeInstanceOf(Permission.CorrectedError)
+        expect(err).toBeInstanceOf(PermissionV1.CorrectedError)
         expect(String(err)).toContain("Use a safer command")
       }
     }),
@@ -836,7 +836,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const fiber = yield* ask({
-        id: PermissionID.make("per_test3"),
+        id: PermissionV1.ID.make("per_test3"),
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
@@ -846,7 +846,7 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       yield* waitForPending(1)
-      yield* reply({ requestID: PermissionID.make("per_test3"), reply: "always" })
+      yield* reply({ requestID: PermissionV1.ID.make("per_test3"), reply: "always" })
       yield* Fiber.join(fiber)
 
       const result = yield* ask({
@@ -867,7 +867,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const a = yield* ask({
-        id: PermissionID.make("per_test4a"),
+        id: PermissionV1.ID.make("per_test4a"),
         sessionID: SessionID.make("session_same"),
         permission: "bash",
         patterns: ["ls"],
@@ -877,7 +877,7 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       const b = yield* ask({
-        id: PermissionID.make("per_test4b"),
+        id: PermissionV1.ID.make("per_test4b"),
         sessionID: SessionID.make("session_same"),
         permission: "edit",
         patterns: ["foo.ts"],
@@ -887,13 +887,13 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       yield* waitForPending(2)
-      yield* reply({ requestID: PermissionID.make("per_test4a"), reply: "reject" })
+      yield* reply({ requestID: PermissionV1.ID.make("per_test4a"), reply: "reject" })
 
       const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
       expect(Exit.isFailure(ea)).toBe(true)
       expect(Exit.isFailure(eb)).toBe(true)
-      if (Exit.isFailure(ea)) expect(Cause.squash(ea.cause)).toBeInstanceOf(Permission.RejectedError)
-      if (Exit.isFailure(eb)) expect(Cause.squash(eb.cause)).toBeInstanceOf(Permission.RejectedError)
+      if (Exit.isFailure(ea)) expect(Cause.squash(ea.cause)).toBeInstanceOf(PermissionV1.RejectedError)
+      if (Exit.isFailure(eb)) expect(Cause.squash(eb.cause)).toBeInstanceOf(PermissionV1.RejectedError)
     }),
   { git: true },
 )
@@ -903,7 +903,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const a = yield* ask({
-        id: PermissionID.make("per_test5a"),
+        id: PermissionV1.ID.make("per_test5a"),
         sessionID: SessionID.make("session_same"),
         permission: "bash",
         patterns: ["ls"],
@@ -913,7 +913,7 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       const b = yield* ask({
-        id: PermissionID.make("per_test5b"),
+        id: PermissionV1.ID.make("per_test5b"),
         sessionID: SessionID.make("session_same"),
         permission: "bash",
         patterns: ["ls"],
@@ -923,7 +923,7 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       yield* waitForPending(2)
-      yield* reply({ requestID: PermissionID.make("per_test5a"), reply: "always" })
+      yield* reply({ requestID: PermissionV1.ID.make("per_test5a"), reply: "always" })
 
       yield* Fiber.join(a)
       yield* Fiber.join(b)
@@ -937,7 +937,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const a = yield* ask({
-        id: PermissionID.make("per_test6a"),
+        id: PermissionV1.ID.make("per_test6a"),
         sessionID: SessionID.make("session_a"),
         permission: "bash",
         patterns: ["ls"],
@@ -947,7 +947,7 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       const b = yield* ask({
-        id: PermissionID.make("per_test6b"),
+        id: PermissionV1.ID.make("per_test6b"),
         sessionID: SessionID.make("session_b"),
         permission: "bash",
         patterns: ["ls"],
@@ -957,10 +957,10 @@ it.instance(
       }).pipe(Effect.forkScoped)
 
       yield* waitForPending(2)
-      yield* reply({ requestID: PermissionID.make("per_test6a"), reply: "always" })
+      yield* reply({ requestID: PermissionV1.ID.make("per_test6a"), reply: "always" })
 
       yield* Fiber.join(a)
-      expect((yield* list()).map((item) => item.id)).toEqual([PermissionID.make("per_test6b")])
+      expect((yield* list()).map((item) => item.id)).toEqual([PermissionV1.ID.make("per_test6b")])
 
       yield* rejectAll()
       yield* Fiber.await(b)
@@ -973,10 +973,14 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const events = yield* EventV2Bridge.Service
-      const seen = yield* Deferred.make<{ sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }>()
+      const seen = yield* Deferred.make<{
+        sessionID: SessionID
+        requestID: PermissionV1.ID
+        reply: PermissionV1.Reply
+      }>()
 
       const fiber = yield* ask({
-        id: PermissionID.make("per_test7"),
+        id: PermissionV1.ID.make("per_test7"),
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
@@ -991,13 +995,15 @@ it.instance(
         if (event.type === Permission.Event.Replied.type)
           Deferred.doneUnsafe(
             seen,
-            Effect.succeed(event.data as { sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }),
+            Effect.succeed(
+              event.data as { sessionID: SessionID; requestID: PermissionV1.ID; reply: PermissionV1.Reply },
+            ),
           )
         return Effect.void
       })
       yield* Effect.addFinalizer(() => unsub)
 
-      yield* reply({ requestID: PermissionID.make("per_test7"), reply: "once" })
+      yield* reply({ requestID: PermissionV1.ID.make("per_test7"), reply: "once" })
       yield* Fiber.join(fiber)
       expect(
         yield* Deferred.await(seen).pipe(
@@ -1008,7 +1014,7 @@ it.instance(
         ),
       ).toEqual({
         sessionID: SessionID.make("session_test"),
-        requestID: PermissionID.make("per_test7"),
+        requestID: PermissionV1.ID.make("per_test7"),
         reply: "once",
       })
     }),
@@ -1025,7 +1031,7 @@ it.live("permission requests stay isolated by directory", () =>
       .provide(
         { directory: one },
         ask({
-          id: PermissionID.make("per_dir_a"),
+          id: PermissionV1.ID.make("per_dir_a"),
           sessionID: SessionID.make("session_dir_a"),
           permission: "bash",
           patterns: ["ls"],
@@ -1040,7 +1046,7 @@ it.live("permission requests stay isolated by directory", () =>
       .provide(
         { directory: two },
         ask({
-          id: PermissionID.make("per_dir_b"),
+          id: PermissionV1.ID.make("per_dir_b"),
           sessionID: SessionID.make("session_dir_b"),
           permission: "bash",
           patterns: ["pwd"],
@@ -1056,8 +1062,8 @@ it.live("permission requests stay isolated by directory", () =>
 
     expect(onePending).toHaveLength(1)
     expect(twoPending).toHaveLength(1)
-    expect(onePending[0].id).toBe(PermissionID.make("per_dir_a"))
-    expect(twoPending[0].id).toBe(PermissionID.make("per_dir_b"))
+    expect(onePending[0].id).toBe(PermissionV1.ID.make("per_dir_a"))
+    expect(twoPending[0].id).toBe(PermissionV1.ID.make("per_dir_b"))
 
     yield* store.provide({ directory: one }, reply({ requestID: onePending[0].id, reply: "reject" }))
     yield* store.provide({ directory: two }, reply({ requestID: twoPending[0].id, reply: "reject" }))
@@ -1074,7 +1080,7 @@ it.instance(
       const test = yield* TestInstance
       const store = yield* InstanceStore.Service
       const fiber = yield* ask({
-        id: PermissionID.make("per_dispose"),
+        id: PermissionV1.ID.make("per_dispose"),
         sessionID: SessionID.make("session_dispose"),
         permission: "bash",
         patterns: ["ls"],
@@ -1089,7 +1095,7 @@ it.instance(
 
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.RejectedError)
     }),
   { git: true },
 )
@@ -1101,7 +1107,7 @@ it.instance(
       const test = yield* TestInstance
       const store = yield* InstanceStore.Service
       const fiber = yield* ask({
-        id: PermissionID.make("per_reload"),
+        id: PermissionV1.ID.make("per_reload"),
         sessionID: SessionID.make("session_reload"),
         permission: "bash",
         patterns: ["ls"],
@@ -1115,7 +1121,7 @@ it.instance(
 
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.RejectedError)
     }),
   { git: true },
 )
@@ -1124,7 +1130,7 @@ it.instance(
   "reply - fails for unknown requestID",
   () =>
     Effect.gen(function* () {
-      const exit = yield* reply({ requestID: PermissionID.make("per_unknown"), reply: "once" }).pipe(Effect.exit)
+      const exit = yield* reply({ requestID: PermissionV1.ID.make("per_unknown"), reply: "once" }).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Permission.NotFoundError", requestID: "per_unknown" })
@@ -1151,7 +1157,7 @@ it.instance(
           ],
         }),
       )
-      expect(err).toBeInstanceOf(Permission.DeniedError)
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
     }),
   { git: true },
 )
@@ -1191,7 +1197,7 @@ it.instance(
         }),
       )
 
-      expect(err).toBeInstanceOf(Permission.DeniedError)
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
       expect(yield* list()).toHaveLength(0)
     }),
   { git: true },
@@ -1205,7 +1211,7 @@ it.instance(
       const store = yield* InstanceStore.Service
 
       const fiber = yield* ask({
-        id: PermissionID.make("per_reload"),
+        id: PermissionV1.ID.make("per_reload"),
         sessionID: SessionID.make("session_reload"),
         permission: "bash",
         patterns: ["ls"],
@@ -1220,7 +1226,7 @@ it.instance(
 
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.RejectedError)
     }),
   { git: true },
 )
