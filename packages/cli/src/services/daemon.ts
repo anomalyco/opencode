@@ -159,13 +159,12 @@ export const layer = Layer.effect(
         { mode: 0o600 },
       )
       yield* fs.rename(temp, file)
-      yield* registration()
-        .pipe(
-          Effect.flatMap((info) => (info.id === id ? Effect.void : signal(process.pid, "SIGTERM"))),
-          Effect.catch(() => signal(process.pid, "SIGTERM")),
-          Effect.repeat(Schedule.spaced("10 seconds")),
-          Effect.forkScoped,
-        )
+      yield* registration().pipe(
+        Effect.flatMap((info) => (info.id === id ? Effect.void : signal(process.pid, "SIGTERM"))),
+        Effect.catch(() => signal(process.pid, "SIGTERM")),
+        Effect.repeat(Schedule.spaced("10 seconds")),
+        Effect.forkScoped,
+      )
       yield* Effect.addFinalizer(() =>
         registration().pipe(
           Effect.flatMap((info) => (info.id === id ? fs.remove(file) : Effect.void)),
