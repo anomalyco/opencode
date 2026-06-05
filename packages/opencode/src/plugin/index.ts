@@ -30,11 +30,110 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { createServer } from "node:http"
+import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
+import { readFile } from "node:fs/promises"
 
 const log = Log.create({ service: "plugin" })
 
 type State = {
   hooks: Hooks[]
+}
+
+type BunServeOptions = {
+  hostname?: string
+  port?: number
+  fetch: (request: Request) => Response | Promise<Response>
+}
+
+type BunServeResult = {
+  url: URL
+  stop(force?: boolean): void
+}
+
+type BunServeCompat = {
+  serve?: (options: BunServeOptions) => BunServeResult
+  which?: (command: string) => string | null
+}
+
+function which(command: string) {
+  const result = spawnSync(
+    process.platform === "win32" ? "where.exe" : "command",
+    process.platform === "win32" ? [command] : ["-v", command],
+    {
+      encoding: "utf8",
+      shell: process.platform !== "win32",
+      windowsHide: true,
+    },
+  )
+  if (result.status !== 0) return null
+  return result.stdout.split(/\r?\n/).find((line) => line.trim())?.trim() ?? null
+}
+
+function port(input: number | undefined) {
+  if (input && input > 0) return input
+  return 20_000 + Math.floor(Math.random() * 40_000)
+}
+
+function withBunServeCompat<T>(enabled: boolean, callback: () => Promise<T>) {
+  if (!enabled) return callback()
+
+  const runtime = globalThis as unknown as { Bun?: BunServeCompat }
+  const original = runtime.Bun
+  if (original?.serve) return callback()
+
+  runtime.Bun = {
+    ...original,
+    which: original?.which ?? which,
+    serve(options: BunServeOptions) {
+      const hostname = options.hostname ?? "127.0.0.1"
+      const listenPort = port(options.port)
+      const server = createServer(async (incoming, outgoing) => {
+        try {
+          const response = await options.fetch(
+            new Request(new URL(incoming.url ?? "/", `http://${hostname}:${listenPort}`), {
+              method: incoming.method,
+              headers: incoming.headers as HeadersInit,
+              body:
+                incoming.method === "GET" || incoming.method === "HEAD"
+                  ? undefined
+                  : (incoming as unknown as BodyInit),
+            }),
+          )
+          outgoing.statusCode = response.status
+          response.headers.forEach((value, key) => outgoing.setHeader(key, value))
+          outgoing.end(Buffer.from(await response.arrayBuffer()))
+        } catch (error) {
+          log.error("Bun.serve compatibility handler failed", { error })
+          outgoing.statusCode = 500
+          outgoing.end("Internal Server Error")
+        }
+      })
+      server.listen(listenPort, hostname)
+
+      return {
+        url: new URL(`http://${hostname}:${listenPort}`),
+        stop() {
+          server.close()
+        },
+      }
+    },
+  }
+
+  return Promise.resolve()
+    .then(callback)
+    .finally(() => {
+      if (original) runtime.Bun = original
+      else delete runtime.Bun
+    })
+}
+
+export async function needsBunServeCompat(load: Pick<PluginLoader.Loaded, "entry">) {
+  const source = await readFile(load.entry.startsWith("file://") ? fileURLToPath(load.entry) : load.entry, "utf8").catch(
+    () => "",
+  )
+  return /\b[Bb]un\.serve\s*\(/.test(source) || /\b[Bb]un\.which\s*\(/.test(source) || source.includes("requires Bun.serve")
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -226,7 +325,7 @@ export const layer = Layer.effect(
           // Keep plugin execution sequential so hook registration and execution
           // order remains deterministic across plugin runs.
           yield* Effect.tryPromise({
-            try: () => applyPlugin(load, input, hooks),
+            try: async () => withBunServeCompat(await needsBunServeCompat(load), () => applyPlugin(load, input, hooks)),
             catch: (err) => {
               const message = errorMessage(err)
               log.error("failed to load plugin", { path: load.spec, error: message })
