@@ -60,12 +60,15 @@ describe("ConfigProviderPlugin.Plugin", () => {
             new Config.Document({
               type: "document",
               info: decode({
-                model: "custom/chat",
+                model: "custom/default",
                 providers: {
                   custom: {
                     api: { type: "aisdk", package: "custom-sdk", url: "https://example.test" },
                     request: request({ last: "last", shared: "last" }),
                     models: {
+                      default: {
+                        name: "Default",
+                      },
                       chat: {
                         api: { id: "api-chat" },
                         name: "Last",
@@ -108,7 +111,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const provider = yield* catalog.provider.get(providerID)
       const model = yield* catalog.model.get(providerID, modelID)
-      expect(Option.getOrUndefined(yield* catalog.model.default())?.id).toBe(modelID)
+      expect(Option.getOrUndefined(yield* catalog.model.default())?.id).toBe(ModelV2.ID.make("default"))
       expect(provider.name).toBe("Renamed")
       expect(provider.env).toEqual(["CUSTOM_API_KEY"])
       expect(provider.enabled).toEqual({ via: "custom", data: {} })
