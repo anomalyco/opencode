@@ -1804,26 +1804,17 @@ You can configure opencode to use local models through [QVAC](https://qvac.com),
 Once QVAC lands in [models.dev](https://models.dev), it appears automatically in the `/connect` list — the manual config below is the explicit equivalent and is useful for pinning models and context limits.
 :::
 
-First, install [`@qvac/cli`](https://www.npmjs.com/package/@qvac/cli) and start a server. Coding agents fire concurrent requests (a main chat completion plus a "title generation" call), and QVAC serializes inference per model file — so preload **two different model files** under aliases that match the model IDs you reference in `opencode.json`:
+First, install [`@qvac/cli`](https://www.npmjs.com/package/@qvac/cli) and start a server. Preload the model alias you reference in `opencode.json`; QVAC queues same-model completion requests, so opencode's background title, summary, and compaction calls can share the same local model instead of requiring a second model file.
 
 ```json title="qvac.config.json"
 {
   "serve": {
     "models": {
-      "qwen3-4b": {
-        "model": "QWEN3_4B_INST_Q4_K_M",
+      "gpt-oss-20b": {
+        "model": "GPT_OSS_20B_INST_Q4_K_M",
         "preload": true,
         "config": {
-          "ctx_size": 16384,
-          "reasoning_budget": 0
-        }
-      },
-      "qwen3-1.7b": {
-        "model": "QWEN3_1_7B_INST_Q4",
-        "preload": true,
-        "config": {
-          "ctx_size": 8192,
-          "reasoning_budget": 0
+          "ctx_size": 32768
         }
       }
     }
@@ -1850,25 +1841,18 @@ Then point opencode at it:
         "apiKey": "qvac"
       },
       "models": {
-        "qwen3-4b": {
-          "name": "Qwen3 4B (local)",
+        "gpt-oss-20b": {
+          "name": "GPT-OSS 20B (local)",
           "limit": {
-            "context": 16384,
+            "context": 32768,
             "output": 8192
-          }
-        },
-        "qwen3-1.7b": {
-          "name": "Qwen3 1.7B (local)",
-          "limit": {
-            "context": 8192,
-            "output": 4096
           }
         }
       }
     }
   },
-  "model": "qvac/qwen3-4b",
-  "small_model": "qvac/qwen3-1.7b"
+  "model": "qvac/gpt-oss-20b",
+  "small_model": "qvac/gpt-oss-20b"
 }
 ```
 
@@ -1878,32 +1862,15 @@ In this example:
 - `npm` specifies the package to use for this provider — `@qvac/ai-sdk-provider`, the branded QVAC wrapper around `@ai-sdk/openai-compatible`.
 - `options.baseURL` is the endpoint for your local `qvac serve` (set this to match your serve port). Note that `qvac serve openai` defaults to port `11434` — the same default as Ollama. If you run both, pass `--port` to one of them and update `baseURL` to match.
 - `options.apiKey` can be any non-empty string — `qvac serve` does not validate it, but some clients refuse to send a request without an `Authorization` header.
-- The model IDs (`qwen3-4b`, `qwen3-1.7b`) must match the **serve aliases** in `qvac.config.json` — those aliases are what the provider sends as the OpenAI `model` field.
-- `model` is the main chat model; `small_model` is the lighter model opencode uses for titles, summarization, and compaction. Give it enough context (8k+) for those tasks, and point it at a different file from `model` so QVAC can run both concurrently.
+- The model ID (`gpt-oss-20b`) must match the **serve alias** in `qvac.config.json` — that alias is what the provider sends as the OpenAI `model` field.
+- `model` is the main chat model; `small_model` is the model opencode uses for titles, summarization, and compaction. Pointing both at the same QVAC alias is supported; if you want those utility calls to avoid waiting behind a long chat response, add a second lighter model alias and point `small_model` at it.
 
 :::note
-QVAC's LLM `ctx_size` defaults to 1024 tokens — too small for an agent's tool definitions and system prompt. Set it explicitly (16k+ for chat) in `qvac.config.json`, and set `reasoning_budget: 0` to suppress `<think>` blocks that opencode would otherwise render verbatim.
+QVAC's LLM `ctx_size` defaults to 1024 tokens — too small for an agent's tool definitions and system prompt. Set it explicitly in `qvac.config.json`, and set `reasoning_budget: 0` for reasoning-tuned models such as Qwen3 if you want to suppress `<think>` blocks that opencode would otherwise render verbatim.
 :::
 
 :::tip
-The Qwen3 models above are a fast, low-footprint starting point, but small Instruct models won't reliably **invoke tools**. For real agent workflows use a larger, agent-tuned model — `gpt-oss-20b` (OpenAI's open-weight model, ~12&nbsp;GB download, ~16&nbsp;GB RAM) is the recommended local backend, and QVAC parses its tool calls natively. Add it as a third model and point `model` at it:
-
-```json title="qvac.config.json"
-"gpt-oss-20b": {
-  "model": "GPT_OSS_20B_INST_Q4_K_M",
-  "preload": true,
-  "config": { "ctx_size": 32768 }
-}
-```
-
-```json title="opencode.json"
-"gpt-oss-20b": {
-  "name": "GPT-OSS 20B (local)",
-  "limit": { "context": 32768, "output": 8192 }
-}
-```
-
-Then set `"model": "qvac/gpt-oss-20b"` and keep a small Qwen3 model as `small_model` for fast title generation. See the [QVAC provider README](https://www.npmjs.com/package/@qvac/ai-sdk-provider) for the full agent setup notes.
+Local tool-calling quality is bounded by the model. Small Qwen3 Instruct models are a fast, low-footprint starting point but won't reliably **invoke tools**; for real agent workflows, use a larger agent-tuned model such as `gpt-oss-20b`.
 :::
 
 ---
