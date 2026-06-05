@@ -242,7 +242,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
           : undefined,
         "align-self": electronWindows() ? "flex-start" : undefined,
       }}
-      // data-tauri-drag-region
+      data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
     >
@@ -434,9 +434,12 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
-                <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar" ref={tabScrollRef}>
+                <div
+                  class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+                  ref={tabScrollRef}
+                >
                   <div class="flex min-w-0 flex-row items-center gap-1.5">
-                    <For each={[...tabsStore, ...tabsStore, ...tabsStore]}>
+                    <For each={tabsStore}>
                       {(tab, i) => {
                         let ref!: HTMLDivElement
 
@@ -660,7 +663,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 "flex items-center min-w-0 justify-end": true,
                 "pr-2": !windows(),
               }}
-              // data-tauri-drag-region
+              data-tauri-drag-region
               onMouseDown={drag}
             >
               <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
@@ -757,7 +760,6 @@ function TabNavItem(props: {
   const [session] = createResource(
     () => {
       const ctx = dirSyncCtx()
-      console.log({ ctx, sessionId: props.sessionId })
       if (!ctx || !props.sessionId) return
       return [props.sessionId, ctx] as const
     },
