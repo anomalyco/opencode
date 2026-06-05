@@ -25,6 +25,8 @@ export type ViewDiff = {
 }
 
 const diffCacheLimit = 16
+const completeDiffLimit = 500_000
+const completeDiffChangedLineLimit = 500
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
@@ -71,6 +73,9 @@ function fileDiffFromPatch(file: string, patch: string) {
 }
 
 function completePatchContents(patch: string) {
+  // Reconstructing complete contents feeds the whole file back through Myers diff.
+  if (patch.length > completeDiffLimit) return
+
   try {
     const parsed = parsePatch(patch)[0]
     if (!parsed || (!parsed.index && !parsed.oldFileName && !parsed.newFileName)) return
@@ -81,6 +86,8 @@ function completePatchContents(patch: string) {
 
     const hunk = parsed.hunks[0]
     if (!hunk || hunk.oldStart > 1 || hunk.newStart > 1) return
+    if (hunk.lines.filter((line) => line.startsWith("-") || line.startsWith("+")).length > completeDiffChangedLineLimit)
+      return
 
     const before: Array<{ text: string; newline: boolean }> = []
     const after: Array<{ text: string; newline: boolean }> = []

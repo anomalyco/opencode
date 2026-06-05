@@ -45,6 +45,42 @@ describe("session diff", () => {
     expect(fileDiff.additionLines).toEqual(["one\n", "new\n"])
   })
 
+  test("keeps whole-file patches with many changes on the partial parser path", () => {
+    const lines = 300
+    const fileDiff = resolveFileDiff({
+      file: "large.ts",
+      patch: `diff --git a/large.ts b/large.ts
+index 1a2b3c4..5d6e7f8 100644
+--- a/large.ts
++++ b/large.ts
+@@ -1,${lines} +1,${lines} @@
+${"-old\n".repeat(lines)}${"+new\n".repeat(lines)}`,
+    })
+
+    expect(fileDiff.isPartial).toBe(true)
+    expect(fileDiff.deletionLines[0]).toBe("old\n")
+    expect(fileDiff.additionLines[0]).toBe("new\n")
+  })
+
+  test("keeps large whole-file patches on the partial parser path", () => {
+    const context = " context\n".repeat(62_500)
+    const fileDiff = resolveFileDiff({
+      file: "large.ts",
+      patch: `diff --git a/large.ts b/large.ts
+index 1a2b3c4..5d6e7f8 100644
+--- a/large.ts
++++ b/large.ts
+@@ -1,62501 +1,62501 @@
+-old
++new
+${context}`,
+    })
+
+    expect(fileDiff.isPartial).toBe(true)
+    expect(fileDiff.deletionLines[0]).toBe("old\n")
+    expect(fileDiff.additionLines[0]).toBe("new\n")
+  })
+
   test("keeps ordinary leading tool patches partial", () => {
     const fileDiff = resolveFileDiff({
       file: "a.ts",
