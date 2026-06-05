@@ -43,11 +43,6 @@ const mantleModelConfig = {
   },
 }
 
-const mantleOpenAIModelConfig = {
-  ...mantleModelConfig,
-  provider: { npm: "@ai-sdk/amazon-bedrock/mantle", api: "https://bedrock-mantle.us-east-2.api.aws/openai/v1" },
-}
-
 const withAuthJson = (contents: string) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
@@ -113,7 +108,10 @@ it.instance(
   "Bedrock Mantle: GPT-5.5 uses Responses API and OpenAI base path",
   () =>
     Effect.gen(function* () {
-      yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
+      yield* set("AWS_REGION", "")
+      yield* set("AWS_PROFILE", "")
+      yield* set("AWS_ACCESS_KEY_ID", "")
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "")
       const model = yield* Provider.use.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5"))
       const language = yield* Provider.use.getLanguage(model)
       expect((language as { provider: string }).provider).toBe("bedrock-mantle.responses")
@@ -129,8 +127,16 @@ it.instance(
     config: {
       provider: {
         "amazon-bedrock": {
-          options: { region: "us-east-2" },
-          models: { "openai.gpt-5.5": mantleOpenAIModelConfig },
+          options: { region: "us-east-2", apiKey: "test-bearer-token" },
+          models: {
+            "openai.gpt-5.5": {
+              ...mantleModelConfig,
+              provider: {
+                npm: "@ai-sdk/amazon-bedrock/mantle",
+                api: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+              },
+            },
+          },
         },
       },
     },
