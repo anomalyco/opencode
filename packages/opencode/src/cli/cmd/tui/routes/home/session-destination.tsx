@@ -1,4 +1,12 @@
-import { createContext, createMemo, createSignal, useContext, type Accessor, type ParentProps, type Setter } from "solid-js"
+import {
+  createContext,
+  createMemo,
+  createSignal,
+  useContext,
+  type Accessor,
+  type ParentProps,
+  type Setter,
+} from "solid-js"
 import { useSync } from "../../context/sync"
 
 export type HomeSessionDestination = { type: "directory"; directory: string } | { type: "new" }
@@ -14,8 +22,8 @@ const HomeSessionDestinationContext = createContext<Context>()
 export function HomeSessionDestinationProvider(props: ParentProps) {
   const sync = useSync()
   const [selected, setDestination] = createSignal<HomeSessionDestination>()
-  const destination = createMemo<HomeSessionDestination>(() =>
-    selected() ?? { type: "directory", directory: sync.path.directory || process.cwd() },
+  const destination = createMemo<HomeSessionDestination>(
+    () => selected() ?? { type: "directory", directory: sync.path.directory || process.cwd() },
   )
   return (
     <HomeSessionDestinationContext.Provider
