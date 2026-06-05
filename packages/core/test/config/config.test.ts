@@ -479,7 +479,10 @@ describe("Config", () => {
                     npm: "@ai-sdk/openai",
                     options: { apiKey: "secret", organization: "org" },
                     models: {
-                      model: { options: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" } },
+                      model: {
+                        options: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                        variants: { high: { reasoningEffort: "high", reasoningSummary: "auto" } },
+                      },
                     },
                   },
                   anthropic: {
@@ -542,7 +545,7 @@ describe("Config", () => {
               models: {
                 model: {
                   request: { body: { reasoningEffort: "high" } },
-                  variants: [{ id: "fast", generation: { temperature: 0.2 } }],
+                  variants: [{ id: "fast", body: { temperature: 0.2 } }],
                 },
               },
             })
@@ -552,10 +555,9 @@ describe("Config", () => {
               models: {
                 model: {
                   request: {
-                    generation: { temperature: 0.3 },
-                    options: { reasoningEffort: "high", serviceTier: "priority" },
-                    body: {},
+                    body: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
                   },
+                  variants: [{ id: "high", body: { reasoningEffort: "high", reasoningSummary: "auto" } }],
                 },
               },
             })

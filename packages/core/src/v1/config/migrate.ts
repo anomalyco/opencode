@@ -188,7 +188,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
   const lowerer = ConfigProviderOptionsV1.get(packageID)
   const ingest = (options: Readonly<Record<string, unknown>>) => {
     const request = ModelRequest.ingest(packageID, options)
-    return { ...request, body: lowerer.request(request.body) }
+    return { ...lowerer.request(request.body), ...request.generation, ...request.options }
   }
   const request = info.options && ingest(info.options)
   const costs = info.cost && [
@@ -229,13 +229,13 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
     capabilities,
     request: (info.headers || request) && {
       headers: info.headers,
-      ...request,
+      body: request,
     },
     variants:
       info.variants &&
       Object.entries(info.variants).map(([id, options]) => ({
         id,
-        ...ingest(options),
+        body: ingest(options),
       })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,

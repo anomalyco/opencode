@@ -35,12 +35,15 @@ export const Plugin = PluginV2.define({
               ModelRequest.assign(provider.request, item.request)
             }
           })
+          const providerApi = catalog.provider.get(providerID)?.provider.api
+          const providerPackage = providerApi?.type === "aisdk" ? providerApi.package : undefined
 
           for (const [id, config] of Object.entries(item.models ?? {})) {
             catalog.model.update(providerID, ModelV2.ID.make(id), (model) => {
               if (config.family !== undefined) model.family = config.family
               if (config.name !== undefined) model.name = config.name
               if (config.api !== undefined) model.api = { ...model.api, ...config.api }
+              const packageName = model.api.type === "aisdk" ? model.api.package : providerPackage
               if (config.capabilities !== undefined) {
                 model.capabilities = {
                   tools: config.capabilities.tools,
@@ -49,7 +52,10 @@ export const Plugin = PluginV2.define({
                 }
               }
               if (config.request !== undefined) {
-                ModelRequest.assign(model.request, config.request)
+                ModelRequest.assign(model.request, {
+                  headers: config.request.headers,
+                  ...ModelRequest.ingest(packageName, config.request.body ?? {}),
+                })
                 if (config.request.variant !== undefined) model.request.variant = config.request.variant
               }
               if (config.variants !== undefined) {
@@ -65,7 +71,10 @@ export const Plugin = PluginV2.define({
                     }
                     model.variants.push(existing)
                   }
-                  ModelRequest.assign(existing, variant)
+                  ModelRequest.assign(existing, {
+                    headers: variant.headers,
+                    ...ModelRequest.ingest(packageName, variant.body ?? {}),
+                  })
                 }
               }
               if (config.cost !== undefined) {
