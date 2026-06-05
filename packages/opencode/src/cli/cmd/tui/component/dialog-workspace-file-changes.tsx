@@ -103,7 +103,7 @@ export function DialogWorkspaceFileChanges(props: {
       </scrollbox>
       <box paddingLeft={2} paddingRight={2}>
         <text fg={theme.textMuted} wrapMode="word">
-          Do you want to apply these changes after warping?
+          Do you want to move these changes with the session?
         </text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingLeft={2} paddingRight={2} paddingBottom={1}>

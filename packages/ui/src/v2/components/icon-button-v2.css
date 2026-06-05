@@ -5,7 +5,6 @@
 }
 
 [data-component="icon-button-v2"] {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;

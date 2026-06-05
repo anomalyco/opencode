@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
@@ -9,6 +9,7 @@ import {
   Usage,
   type FinishReason,
   type LLMRequest,
+  type ReasoningPart,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
@@ -164,7 +165,7 @@ const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: tool.inputSchema,
+    parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
   },
 })
 
@@ -202,12 +203,17 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   message: OpenAIChatRequestMessage,
 ) {
   const content: TextPart[] = []
+  const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["text", "tool-call"]))
-      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "tool-call"])
+    if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
       content.push(part)
+      continue
+    }
+    if (part.type === "reasoning") {
+      reasoning.push(part)
       continue
     }
     if (part.type === "tool-call") {
@@ -219,7 +225,10 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
-    reasoning_content: openAICompatibleReasoningContent(message.native?.openaiCompatible),
+    reasoning_content:
+      reasoning.length > 0
+        ? reasoning.map((part) => part.text).join("")
+        : openAICompatibleReasoningContent(message.native?.openaiCompatible),
   }
 })
 
@@ -242,7 +251,19 @@ const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: Op
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
-  return [...system, ...Arr.flatten(yield* Effect.forEach(request.messages, lowerMessage))]
+  const messages = [...system]
+  for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
+      const previous = messages.at(-1)
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: `${previous.content}\n${part.text}` }
+      else messages.push({ role: "user", content: part.text })
+      continue
+    }
+    messages.push(...(yield* lowerMessage(message)))
+  }
+  return messages
 })
 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {

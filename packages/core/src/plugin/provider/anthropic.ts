@@ -6,11 +6,11 @@ export const AnthropicPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
-          if (item.provider.endpoint.type !== "aisdk") continue
-          if (item.provider.endpoint.package !== "@ai-sdk/anthropic") continue
+        for (const item of evt.provider.list()) {
+          if (item.provider.api.type !== "aisdk") continue
+          if (item.provider.api.package !== "@ai-sdk/anthropic") continue
           evt.provider.update(item.provider.id, (provider) => {
-            provider.options.headers["anthropic-beta"] =
+            provider.request.headers["anthropic-beta"] =
               "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
           })
         }
