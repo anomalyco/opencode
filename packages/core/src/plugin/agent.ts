@@ -9,6 +9,8 @@ import { PermissionV2 } from "../permission"
 import { PluginV2 } from "../plugin"
 
 const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
+const BUILD_SYSTEM =
+  "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
@@ -121,8 +123,9 @@ export const Plugin = PluginV2.define({
     ]
 
     yield* agent.update((editor) => {
-      editor.update(AgentV2.ID.make("build"), (item) => {
+      editor.update(AgentV2.defaultID, (item) => {
         item.description = "The default agent. Executes tools based on configured permissions."
+        item.system ??= BUILD_SYSTEM
         item.mode = "primary"
         item.permissions.push(
           ...PermissionV2.merge(defaults, [

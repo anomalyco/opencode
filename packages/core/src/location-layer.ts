@@ -26,6 +26,7 @@ import { ProjectReference } from "./project-reference"
 import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
+import { SkillGuidance } from "./skill/guidance"
 import { BuiltInTools } from "./tool/builtins"
 import { ToolRegistry } from "./tool/registry"
 import { ApplicationTools } from "./tool/application-tools"
@@ -40,7 +41,7 @@ import { RequestExecutor } from "@opencode-ai/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SessionRunCoordinator } from "./session/run-coordinator"
-import { SystemContextBuiltIns } from "./system-context-builtins"
+import { SystemContextBuiltIns } from "./system-context/builtins"
 import { FetchHttpClient } from "effect/unstable/http"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
@@ -68,6 +69,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     ).pipe(Layer.provideMerge(location))
     const commits = FileMutation.locationLayer.pipe(Layer.provide(services))
     const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
+    const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
     const resources = ToolOutputStore.layer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
@@ -80,7 +82,11 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(questions),
     )
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
-    const runner = SessionRunnerLLM.defaultLayer.pipe(Layer.provide(services), Layer.provide(model))
+    const runner = SessionRunnerLLM.defaultLayer.pipe(
+      Layer.provide(services),
+      Layer.provide(model),
+      Layer.provide(skillGuidance),
+    )
     const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
     return Layer.mergeAll(
       services,

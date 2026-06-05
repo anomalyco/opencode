@@ -347,14 +347,19 @@ export const layer = Layer.effectDiscard(
         if (next) yield* applyUsage(db, sessionID, next)
       }),
     )
-    yield* events.project(SessionEvent.AgentSwitched, (event) =>
-      db
+    yield* events.project(SessionEvent.AgentSwitched, (event) => {
+      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+      return db
         .update(SessionTable)
         .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
-        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
-    )
+        .pipe(
+          Effect.orDie,
+          Effect.andThen(run(db, event)),
+          Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)),
+        )
+    })
     yield* events.project(SessionEvent.ModelSwitched, (event) =>
       Effect.gen(function* () {
         yield* db
