@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, mapArray, Match, Show, startTransition, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, For, Match, Show, startTransition, Switch, untrack } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useLocation, useMatch, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -9,7 +9,7 @@ import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 
-import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
+import { getProjectAvatarVariant, LayoutRoute, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -17,7 +17,6 @@ import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useServerSync } from "@/context/server-sync"
-import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
@@ -29,6 +28,9 @@ import {
   SESSION_TABS_REMOVED_EVENT,
   type SessionTabsRemovedDetail,
 } from "@/components/titlebar-session-events"
+import { Persist, persisted } from "@/utils/persist"
+import { useGlobal } from "@/context/global"
+import { decode64 } from "@/utils/base64"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -243,6 +245,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const serverSync = useServerSync()
             const navigate = useNavigate()
             const homeMatch = useMatch(() => "/")
+            const layout = useLayout()
 
             const newSessionHref = () => {
               if (params.dir) return `/${params.dir}/session`
@@ -253,41 +256,38 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return `/${base64Encode(project.worktree)}/session`
             }
 
-            type Tab = { dir: string; sessionId: string; href: string }
+            type SessionTab = { type: "session"; dirBase64: string; sessionId: string }
+            type Tab = SessionTab
+
+            const tabHref = (tab: Tab) => {
+              if (tab.type === "session") {
+                return makeSessionHref(tab.dirBase64, tab.sessionId)
+              }
+              return "/"
+            }
 
             const [tabsStore, tabsStoreActions] = iife(() => {
-              const [store, setStore] = createStore<Tab[]>(
-                iife(() => {
-                  if (!params.dir || !params.id) return []
-                  return [
-                    {
-                      dir: decodeDirectory(params.dir) ?? "",
-                      sessionId: params.id,
-                      href: makeSessionHref(params.dir, params.id),
-                    },
-                  ]
-                }),
-              )
+              const [store, setStore] = persisted(Persist.global("tabs"), createStore<Tab[]>([]))
 
               const actions = {
-                addTab: (tab: Tab) => {
+                addSessionTab: (tab: Omit<SessionTab, "type">) => {
                   setStore(
                     produce((tabs) => {
-                      if (tabs.some((t) => t.href === tab.href)) return
+                      if (tabs.some((t) => t.type === "session" && tabHref(t) === tabHref({ type: "session", ...tab })))
+                        return
 
-                      tabs.push(tab)
+                      tabs.push({ type: "session", ...tab })
                     }),
                   )
                 },
-                removeTab: (href: string) => {
+                removeTab: (index: number) => {
+                  if (index < 0) return
                   void startTransition(() => {
                     setStore(
                       produce((tabs) => {
-                        const index = tabs.findIndex((t) => t.href === href)
-                        if (index === -1) return
+                        const nextTab = tabs[index + 1] ?? tabs[index - 1]
                         tabs.splice(index, 1)
-                        const nextTab = tabs[index] ?? tabs[tabs.length - 1]
-                        if (nextTab) navigate(nextTab.href)
+                        if (nextTab) navigate(tabHref(nextTab))
                         else navigate("/")
                       }),
                     )
@@ -299,23 +299,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       produce((tabs) => {
                         const sessionIDs = new Set(input.sessionIDs)
                         const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
-                        const currentIndex = currentHref ? tabs.findIndex((tab) => tab.href === currentHref) : -1
+                        const currentIndex = currentHref
+                          ? tabs.findIndex((tab) => tab.type === "session" && tabHref(tab) === currentHref)
+                          : -1
+                        const currentTab = tabs[currentIndex]
                         const removedCurrent =
-                          currentIndex !== -1 &&
-                          tabs[currentIndex]?.dir === input.directory &&
-                          sessionIDs.has(tabs[currentIndex]?.sessionId ?? "")
+                          currentTab?.type === "session" &&
+                          atob(currentTab.dirBase64) === input.directory &&
+                          sessionIDs.has(currentTab.sessionId)
 
                         for (let i = tabs.length - 1; i >= 0; i--) {
                           const tab = tabs[i]
-                          if (!tab) continue
-                          if (tab.dir !== input.directory) continue
+                          if (!tab || tab.type !== "session") continue
+                          if (atob(tab.dirBase64) !== input.directory) continue
                           if (!sessionIDs.has(tab.sessionId)) continue
                           tabs.splice(i, 1)
                         }
 
                         if (!removedCurrent) return
-                        const nextTab = tabs[currentIndex] ?? tabs[tabs.length - 1]
-                        if (nextTab) navigate(nextTab.href)
+                        const nextTab =
+                          tabs.slice(currentIndex).find((tab) => tab.type === "session") ??
+                          tabs.slice(0, currentIndex).findLast((tab) => tab.type === "session")
+                        if (nextTab) navigate(tabHref(nextTab))
                         else navigate("/")
                       }),
                     )
@@ -326,55 +331,54 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return [store, actions]
             })
 
+            const matchRoute = (route: LayoutRoute) => {
+              if (route.type === "home") return
+              if (route.type === "dir-new-sesssion") {
+              }
+              if (route.type === "session") {
+                const main = tabsStore.find((s) => s.type === "session" && s.sessionId === route.sessionId)
+                if (main) return main
+                const sync = serverSync.createDirSyncContext(route.dir)
+                const session = sync.session.get(route.sessionId)
+                if (session?.parentID) {
+                  const parentID = session.parentID
+                  const parent = tabsStore.find((s) => s.type === "session" && s.sessionId === parentID)
+                  if (parent) return parent
+                }
+              }
+            }
+
+            const currentTab = () => matchRoute(layout.route())
+
+            createEffect(() => {
+              const route = layout.route()
+              const tab = currentTab()
+              if (tab) return
+
+              if (route.type === "session") {
+                const sync = serverSync.createDirSyncContext(route.dir)
+                const session = sync.session.get(route.sessionId)
+                if (!session) return
+                const sessionId = session.parentID ?? session.id
+                tabsStoreActions.addSessionTab({
+                  dirBase64: route.dirBase64,
+                  sessionId,
+                })
+              }
+            })
+
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
               const detail = readSessionTabsRemovedDetail(event)
               if (!detail) return
               tabsStoreActions.removeSessions(detail)
             })
 
-            createEffect(() => {
-              const params = useParams()
-              if (!(params.dir && params.id)) return
-
-              tabsStoreActions.addTab({
-                dir: decodeDirectory(params.dir) ?? "",
-                sessionId: params.id,
-                href: makeSessionHref(params.dir, params.id),
-              })
-            })
-
-            const projects = createMemo(() => layout.projects.list())
-            const projectByID = createMemo(
-              () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
-            )
-
-            const currentSessionTab = () => {
-              if (!params.dir || !params.id) return
-              const href = makeSessionHref(params.dir, params.id)
-              return tabsStore.find((tab) => tab.href === href)
-            }
-
-            const closeCurrentSessionTab = () => {
-              const tab = currentSessionTab()
-              if (!tab) return false
-              tabsStoreActions.removeTab(tab.href)
-              return true
-            }
-
-            const closeNewSessionTab = () => {
-              if (!(params.dir && !params.id)) return false
-              const last = tabsStore[tabsStore.length - 1]
-              if (last) navigate(last.href)
-              else navigate("/")
-              return true
-            }
-
             const openNewTab = () => navigate(newSessionHref())
 
-            const closeActiveTab = () => closeCurrentSessionTab() || closeNewSessionTab()
+            command.register("tabs", () => {
+              const current = currentTab()
 
-            command.register(() => {
-              const commands = [
+              return [
                 {
                   id: "tab.new",
                   category: "tab",
@@ -383,13 +387,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   hidden: true,
                   onSelect: openNewTab,
                 },
-                {
+                current && {
                   id: "tab.close",
                   category: "tab",
                   title: language.t("command.tab.close"),
                   keybind: "mod+w",
                   hidden: true,
-                  onSelect: closeActiveTab,
+                  onSelect: () => {
+                    tabsStoreActions.removeTab(tabsStore.findIndex((tab) => current === tab))
+                  },
                 },
                 {
                   id: `tab.prev`,
@@ -398,14 +404,14 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: `mod+option+ArrowLeft`,
                   hidden: true,
                   onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab()?.href)
+                    let index = tabsStore.findIndex((tab) => tab === currentTab())
                     if (index === -1) return
 
                     index -= 1
                     if (index === -1) index = tabsStore.length - 1
 
                     const next = tabsStore[index]
-                    if (next) navigate(next.href)
+                    if (next) navigate(tabHref(next))
                   },
                 },
                 {
@@ -415,14 +421,14 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: `mod+option+ArrowRight`,
                   hidden: true,
                   onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab()?.href)
+                    let index = tabsStore.findIndex((tab) => tab === currentTab())
                     if (index === -1) return
 
                     index += 1
                     if (index === tabsStore.length) index = 0
 
                     const next = tabsStore[index]
-                    if (next) navigate(next.href)
+                    if (next) navigate(tabHref(next))
                   },
                 },
                 ...Array.from({ length: 9 }, (_, i) => {
@@ -437,26 +443,11 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     hidden: true,
                     onSelect: () => {
                       const tab = tabsStore[index]
-                      if (tab) navigate(tab.href)
+                      if (tab) navigate(tabHref(tab))
                     },
                   }
                 }),
-              ]
-
-              return commands
-            })
-
-            const tabsEnriched = iife(() => {
-              const base = mapArray(
-                () => tabsStore,
-                (tab) => {
-                  const sync = serverSync.createDirSyncContext(tab.dir)
-                  const session = sync.session.get(tab.sessionId)
-                  return session ? { ...tab, info: session } : null
-                },
-              )
-
-              return () => base().flatMap((s) => (s ? [s] : []))
+              ].filter((v) => v !== undefined)
             })
 
             return (
@@ -483,19 +474,18 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
                 <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
                   <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
-                    <For each={tabsEnriched()}>
+                    <For each={tabsStore}>
                       {(tab, i) => (
                         <>
                           {i() !== 0 && (
                             <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
                           )}
                           <TabNavItem
-                            href={tab.href}
-                            title={tab.info.title}
-                            project={projectForSession(tab.info, projects(), projectByID())}
-                            directory={tab.dir}
-                            sessionId={tab.info.id}
-                            onClose={() => tabsStoreActions.removeTab(tab.href)}
+                            href={tabHref(tab)}
+                            directory={decode64(tab.dirBase64)!}
+                            sessionId={tab.sessionId}
+                            onClose={() => tabsStoreActions.removeTab(i())}
+                            active={currentTab() === tab}
                           />
                         </>
                       )}
@@ -519,7 +509,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     <NewSessionTabItem
                       href={`/${params.dir}/session`}
                       title={language.t("command.session.new")}
-                      onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
+                      onClose={() => navigate(tabsStore.at(-1) ? tabHref(tabsStore.at(-1)!) : "/")}
                     />
                   </Show>
                   <div class="min-w-0 flex-1" />
@@ -746,38 +736,58 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
 
 function TabNavItem(props: {
   href: string
-  title: string
-  project?: LocalProject
   directory: string
-  sessionId: string
+  sessionId?: string
   hideClose?: boolean
   onClose: () => void
+  active?: boolean
 }) {
-  const match = useMatch(() => props.href)
-  const isActive = () => !!match()
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
     props.onClose()
   }
+  const global = useGlobal()
+  const serverCtx = global.createServerCtx(global.servers.default())
+
+  const [session] = createResource(
+    () => {
+      const dirSyncCtx = serverCtx.sync.createDirSyncContext(props.directory)
+      return props.sessionId ? ([props.sessionId, dirSyncCtx] as const) : undefined
+    },
+    async ([sessionId, dirSyncCtx]) => {
+      await dirSyncCtx.session.sync(sessionId).catch(() => {})
+      return dirSyncCtx.session.get(sessionId)
+    },
+  )
+
   return (
     <div
       class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
-      data-active={isActive()}
+      data-active={props.active}
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
       }}
     >
-      <a
-        href={props.href}
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
-      >
-        <span data-slot="project-avatar-slot">
-          <ProjectTabAvatar project={props.project} directory={props.directory} sessionId={props.sessionId} />
-        </span>
-        <span class="min-w-0 flex-1">{props.title}</span>
-      </a>
+      <Show when={session()}>
+        {(session) => {
+          const layout = useLayout()
+          const project = createMemo(() => projectForSession(session(), layout.projects.list()))
+
+          return (
+            <a
+              href={props.href}
+              class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
+            >
+              <span data-slot="project-avatar-slot">
+                <ProjectTabAvatar project={project()} directory={props.directory} sessionId={session().id} />
+              </span>
+              <span class="min-w-0 flex-1">{session().title}</span>
+            </a>
+          )
+        }}
+      </Show>
 
       <div class="absolute not-group-hover:not-group-data-[active=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
         <div

@@ -26,7 +26,7 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 
   createResource(
     () => params.id,
-    (id) => sync.session.sync(id),
+    (id) => sync.session.sync(id).catch(() => {}),
   )
 
   return (

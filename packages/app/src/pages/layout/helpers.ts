@@ -67,7 +67,7 @@ export function getProjectAvatarSource(id?: string, icon?: { color?: string; url
 export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
   session: Session,
   projects: T[],
-  byID: Map<string, T>,
+  byID: Map<string, T> = new Map(projects.flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
 ) {
   const direct = byID.get(session.projectID)
   if (direct) return direct
