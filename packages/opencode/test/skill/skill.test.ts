@@ -176,6 +176,44 @@ description: Second test skill.
     ),
   )
 
+  it.live("ignores skills under .opencode/node_modules", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "kept-skill", "SKILL.md"),
+              `---
+name: kept-skill
+description: Should be discovered.
+---
+
+# Kept Skill
+`,
+            ),
+          )
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "node_modules", "pkg", "skill", "ignored-skill", "SKILL.md"),
+              `---
+name: ignored-skill
+description: Should be ignored.
+---
+
+# Ignored Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.find((x) => x.name === "kept-skill")).toBeDefined()
+          expect(list.find((x) => x.name === "ignored-skill")).toBeUndefined()
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("skips skills with missing frontmatter", () =>
     provideTmpdirInstance(
       (dir) =>

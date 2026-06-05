@@ -23,6 +23,7 @@ export async function load(dir: string) {
     absolute: true,
     dot: true,
     symlink: true,
+    ignore: ["**/node_modules/**"],
   })) {
     plugins.push(pathToFileURL(item).href)
   }

@@ -74,6 +74,17 @@ describe("Glob", () => {
       expect(results).toEqual([])
     })
 
+    test("supports ignore patterns", async () => {
+      await using tmp = await tmpdir()
+      await fs.mkdir(path.join(tmp.path, "node_modules", "pkg"), { recursive: true })
+      await fs.writeFile(path.join(tmp.path, "node_modules", "pkg", "blocked.md"), "", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "allowed.md"), "", "utf-8")
+
+      const results = await Glob.scan("**/*.md", { cwd: tmp.path, ignore: ["**/node_modules/**"] })
+
+      expect(results).toEqual(["allowed.md"])
+    })
+
     test("does not follow symlinks by default", async () => {
       await using tmp = await tmpdir()
       await fs.mkdir(path.join(tmp.path, "realdir"))

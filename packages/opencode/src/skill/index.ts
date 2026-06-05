@@ -154,6 +154,7 @@ const scan = Effect.fnUntraced(function* (
         include: "file",
         symlink: true,
         dot: opts?.dot,
+        ignore: ["**/node_modules/**"],
       }),
     catch: (error) => error,
   }).pipe(
