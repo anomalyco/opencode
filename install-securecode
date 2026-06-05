@@ -33,7 +33,7 @@ set -euo pipefail
 
 APP=securecode
 ARCHIVE_PREFIX=securecode
-GH_REPO=acompany-develop/securecode-release
+GH_REPO=acompany-develop/securecode
 
 # Resolve the directory containing this script when invoked via a file (e.g.
 # `bash install`, `./install`). When piped from curl, BASH_SOURCE[0] is not a
@@ -143,7 +143,7 @@ detect_target() {
       err "WSL のインストール: https://learn.microsoft.com/windows/wsl/install"
       err ""
       err "WSL をインストール後、WSL のターミナルを開き以下を実行してください:"
-      err "  curl -fsSL https://github.com/acompany-develop/securecode-release/releases/latest/download/install | bash"
+      err "  gh release download -R acompany-develop/securecode --pattern install -O - | bash"
       exit 1 ;;
     *) err "Unsupported OS: $raw_os"; exit 1 ;;
   esac
