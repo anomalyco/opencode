@@ -1,4 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import { describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
@@ -20,6 +21,7 @@ import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceStore } from "@/project/instance-store"
+import { ACPTerminal } from "@/acp/terminal"
 
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
@@ -213,6 +215,84 @@ describe("tool.shell", () => {
         }),
       )
     }),
+  )
+
+  it.live("does not rerun locally after an ACP terminal command has started", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        let releases = 0
+        const terminal = ACPTerminal.make({
+          connection: {
+            createTerminal: async () =>
+              ({
+                id: "term_no_fallback",
+                currentOutput: async () => ({ output: "partial", truncated: false }),
+                waitForExit: async () => {
+                  throw new Error("wait failed")
+                },
+                kill: async () => undefined,
+                release: async () => {
+                  releases += 1
+                },
+                [Symbol.asyncDispose]: async () => undefined,
+              }) as unknown as Awaited<ReturnType<AgentSideConnection["createTerminal"]>>,
+          },
+        })
+        terminal.configure({ enabled: true })
+        terminal.register(ctx.sessionID)
+        return { releases: () => releases, terminal }
+      }),
+      (state) =>
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const error = yield* fail({
+              command: "echo fallback",
+              description: "Should not fallback",
+            })
+            expect(ACPTerminal.commandStarted(error)).toBe(true)
+            expect(state.releases()).toBe(1)
+          }),
+        ),
+      (state) => Effect.sync(() => state.terminal.unregister(ctx.sessionID)),
+    ),
+  )
+
+  it.live("saves full ACP terminal output when truncated", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const terminal = ACPTerminal.make({
+          connection: {
+            createTerminal: async () =>
+              ({
+                id: "term_truncated",
+                currentOutput: async () => ({ output: "line 1\nline 2\nline 3", truncated: true }),
+                waitForExit: async () => ({ exitCode: 0 }),
+                kill: async () => undefined,
+                release: async () => undefined,
+                [Symbol.asyncDispose]: async () => undefined,
+              }) as unknown as Awaited<ReturnType<AgentSideConnection["createTerminal"]>>,
+          },
+        })
+        terminal.configure({ enabled: true })
+        terminal.register(ctx.sessionID)
+        return terminal
+      }),
+      (terminal) =>
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const result = yield* run({
+              command: "printf output",
+              description: "Truncated terminal output",
+            })
+            expect(result.output).toContain("Full output saved to:")
+            expect(result.metadata.truncated).toBe(true)
+            expect(typeof result.metadata.outputPath).toBe("string")
+          }),
+        ),
+      (terminal) => Effect.sync(() => terminal.unregister(ctx.sessionID)),
+    ),
   )
 })
 

@@ -22,6 +22,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { ACPTerminal } from "@/acp/terminal"
 
 export { Parameters } from "./shell/prompt"
 
@@ -80,6 +81,15 @@ type Scan = {
 type Chunk = {
   text: string
   size: number
+}
+
+type ShellMetadata = {
+  output: string
+  exit: number | null
+  description: string
+  truncated: boolean
+  outputPath?: string
+  terminalId?: string
 }
 
 export const log = Log.create({ service: "shell-tool" })
@@ -447,6 +457,79 @@ export const ShellTool = Tool.define(
     ) {
       const limits = yield* trunc.limits()
       const keep = limits.maxBytes * 2
+      yield* ctx.metadata({
+        metadata: {
+          output: "",
+          description: input.description,
+        },
+      })
+
+      if (ACPTerminal.available(ctx.sessionID)) {
+        const terminal = yield* Effect.tryPromise(() =>
+          ACPTerminal.run({
+            sessionId: ctx.sessionID,
+            command: input.shell,
+            args: Shell.args(input.shell, input.command, input.cwd),
+            cwd: input.cwd,
+            env: input.env,
+            timeout: input.timeout + 100,
+            outputByteLimit: keep,
+            signal: ctx.abort,
+            onStart: (terminalId) =>
+              Effect.runPromise(
+                ctx.metadata({
+                  metadata: {
+                    output: "",
+                    description: input.description,
+                    terminalId,
+                  },
+                }),
+              ),
+          }),
+        ).pipe(
+          Effect.catch((error) => {
+            log.error("failed to execute shell command in ACP terminal", { error })
+            if (ACPTerminal.commandStarted(error)) return Effect.die(error)
+            return Effect.succeed(undefined)
+          }),
+        )
+
+        if (terminal) {
+          const meta: string[] = []
+          if (terminal.expired) {
+            meta.push(
+              `shell tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
+            )
+          }
+          if (terminal.aborted) meta.push("User aborted the command")
+
+          const text = ACPTerminal.outputText(terminal.output)
+          const end = tail(text, limits.maxLines, limits.maxBytes)
+          let output = end.text || "(no output)"
+          const cut = terminal.output.truncated || end.cut
+          const file = cut ? yield* trunc.write(text) : ""
+          if (cut && file) output = `...output truncated...\n\nFull output saved to: ${file}\n\n` + output
+          if (meta.length > 0) {
+            output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
+          }
+
+          const metadata: ShellMetadata = {
+            output: preview(text || output),
+            exit: terminal.exitCode ?? terminal.output.exitStatus?.exitCode ?? null,
+            description: input.description,
+            truncated: cut,
+            terminalId: terminal.terminalId,
+            ...(cut && file ? { outputPath: file } : {}),
+          }
+
+          return {
+            title: input.description,
+            metadata,
+            output,
+          }
+        }
+      }
+
       let full = ""
       let last = ""
       const list: Chunk[] = []
@@ -480,13 +563,6 @@ export const ShellTool = Tool.define(
               stream.end(done)
             }),
         ).pipe(Effect.catch(() => Effect.void))
-      })
-
-      yield* ctx.metadata({
-        metadata: {
-          output: "",
-          description: input.description,
-        },
       })
 
       const code: number | null = yield* Effect.scoped(
@@ -595,15 +671,17 @@ export const ShellTool = Tool.define(
       if (meta.length > 0) {
         output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
+      const metadata: ShellMetadata = {
+        output: last || preview(output),
+        exit: code,
+        description: input.description,
+        truncated: cut,
+        ...(cut && file ? { outputPath: file } : {}),
+      }
+
       return {
         title: input.description,
-        metadata: {
-          output: last || preview(output),
-          exit: code,
-          description: input.description,
-          truncated: cut,
-          ...(cut && file ? { outputPath: file } : {}),
-        },
+        metadata,
         output,
       }
     })

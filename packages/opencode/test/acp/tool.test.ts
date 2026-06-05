@@ -211,6 +211,29 @@ describe("acp tool conversion", () => {
     expect(shellOutputSnapshot({ metadata: undefined })).toBeUndefined()
   })
 
+  test("embeds ACP terminal content for shell tools with terminal metadata", () => {
+    expect(
+      runningToolUpdate({
+        toolCallId: "call_terminal",
+        toolName: "bash",
+        state: {
+          status: "running",
+          input: { command: "npm test" },
+          metadata: { terminalId: "term_1", output: "" },
+        },
+      }).content,
+    ).toEqual([{ type: "terminal", terminalId: "term_1" }])
+
+    expect(
+      completedToolContent("bash", {
+        status: "completed",
+        input: { command: "npm test" },
+        output: "passed",
+        metadata: { terminalId: "term_1" },
+      }),
+    ).toEqual([{ type: "terminal", terminalId: "term_1" }])
+  })
+
   test("uses shell command instead of description for execute tool titles", () => {
     expect(
       runningToolUpdate({

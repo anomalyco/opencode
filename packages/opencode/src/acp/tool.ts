@@ -20,6 +20,7 @@ export type RunningToolState = {
   readonly status: "running"
   readonly input: ToolInput
   readonly title?: string
+  readonly metadata?: unknown
 }
 
 export type ErrorToolState = {
@@ -98,6 +99,9 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
 }
 
 export function completedToolContent(toolName: string, state: CompletedToolState): ToolCallContent[] {
+  const terminal = terminalContents(state.metadata)
+  if (terminal.length > 0) return terminal
+
   const text =
     toolName.toLocaleLowerCase() === "read" ? (readDisplayText(state.metadata) ?? state.output) : state.output
   const content: ToolCallContent[] = [
@@ -118,14 +122,20 @@ export function completedToolContent(toolName: string, state: CompletedToolState
   return content
 }
 
-export function pendingToolCall(input: { readonly toolCallId: string; readonly toolName: string }): ToolCall {
+export function pendingToolCall(input: {
+  readonly toolCallId: string
+  readonly toolName: string
+  readonly rawInput?: ToolInput
+  readonly title?: string
+}): ToolCall {
+  const rawInput = input.rawInput ?? {}
   return {
     toolCallId: input.toolCallId,
-    title: input.toolName,
+    title: toolTitle(input.toolName, rawInput, input.title ?? input.toolName),
     kind: toToolKind(input.toolName),
     status: "pending",
     locations: [],
-    rawInput: {},
+    rawInput,
   }
 }
 
@@ -135,7 +145,8 @@ export function runningToolUpdate(input: {
   readonly state: RunningToolState
   readonly output?: string
 }): ToolCallUpdate {
-  const content = input.output
+  const terminal = terminalContents(input.state.metadata)
+  const outputContent = input.output
     ? [
         {
           type: "content" as const,
@@ -145,7 +156,8 @@ export function runningToolUpdate(input: {
           },
         },
       ]
-    : undefined
+    : []
+  const content = [...terminal, ...outputContent]
 
   return {
     toolCallId: input.toolCallId,
@@ -154,7 +166,7 @@ export function runningToolUpdate(input: {
     title: toolTitle(input.toolName, input.state.input, input.state.title ?? input.toolName),
     locations: toLocations(input.toolName, input.state.input),
     rawInput: input.state.input,
-    ...(content ? { content } : {}),
+    ...(content.length > 0 ? { content } : {}),
   }
 }
 
@@ -300,6 +312,12 @@ function readDisplayText(metadata: unknown) {
     return info.entries.filter((item): item is string => typeof item === "string").join("\n")
   }
   return undefined
+}
+
+function terminalContents(metadata: unknown): ToolCallContent[] {
+  if (!metadata || typeof metadata !== "object") return []
+  const terminalId = stringValue((metadata as Record<string, unknown>).terminalId)
+  return terminalId ? [{ type: "terminal", terminalId }] : []
 }
 
 function toolTitle(toolName: string, input: ToolInput, fallback: string) {

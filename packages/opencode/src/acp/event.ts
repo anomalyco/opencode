@@ -21,6 +21,7 @@ import {
   shellOutputSnapshot,
   completedToolUpdate,
 } from "./tool"
+import { ACPTerminal } from "./terminal"
 
 const log = Log.create({ service: "acp-event" })
 
@@ -32,8 +33,15 @@ type GlobalEventEnvelope = {
 type GlobalEventStream = {
   stream: AsyncIterable<GlobalEventEnvelope>
 }
+type ShellStartedEvent = Extract<Event, { type: "session.next.shell.started" }>
+type ShellEndedEvent = Extract<Event, { type: "session.next.shell.ended" }>
 
-export function start(input: { sdk: OpencodeClient; connection: Connection; session: ACPSession.Interface }) {
+export function start(input: {
+  sdk: OpencodeClient
+  connection: Connection
+  session: ACPSession.Interface
+  terminal: ACPTerminal.Interface
+}) {
   const subscription = new Subscription(input)
   subscription.start()
   return subscription
@@ -42,6 +50,7 @@ export function start(input: { sdk: OpencodeClient; connection: Connection; sess
 export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
+  private readonly shellCommandsByCallID = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
   private readonly permission: ACPPermission.Handler
   private started = false
@@ -51,6 +60,7 @@ export class Subscription {
       sdk: OpencodeClient
       connection: Connection
       session: ACPSession.Interface
+      terminal?: ACPTerminal.Interface
     },
   ) {
     this.permission = new ACPPermission.Handler(input)
@@ -78,6 +88,10 @@ export class Subscription {
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+      case "session.next.shell.started":
+        return this.handleShellStarted(event)
+      case "session.next.shell.ended":
+        return this.handleShellEnded(event)
     }
   }
 
@@ -254,34 +268,118 @@ export class Subscription {
 
       case "completed":
         this.clearTool(part.callID)
-        await this.input.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "tool_call_update",
-            ...completedToolUpdate({
-              toolCallId: part.callID,
-              toolName: part.tool,
-              state: part.state,
-            }),
-          },
-        })
+        try {
+          await this.input.connection.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call_update",
+              ...completedToolUpdate({
+                toolCallId: part.callID,
+                toolName: part.tool,
+                state: part.state,
+              }),
+            },
+          })
+        } finally {
+          await this.terminal.releaseFromMetadata(part.state.metadata)
+        }
         return
 
       case "error":
         this.clearTool(part.callID)
-        await this.input.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "tool_call_update",
-            ...errorToolUpdate({
-              toolCallId: part.callID,
-              toolName: part.tool,
-              state: part.state,
-            }),
-          },
-        })
+        try {
+          await this.input.connection.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call_update",
+              ...errorToolUpdate({
+                toolCallId: part.callID,
+                toolName: part.tool,
+                state: part.state,
+              }),
+            },
+          })
+        } finally {
+          await this.terminal.releaseFromMetadata(part.state.metadata)
+        }
         return
     }
+  }
+
+  private async handleShellStarted(event: ShellStartedEvent) {
+    const session = await Effect.runPromise(this.input.session.tryGet(event.properties.sessionID))
+    if (!session) return
+
+    this.shellCommandsByCallID.set(event.properties.callID, event.properties.command)
+    await this.toolStart(session.id, {
+      id: event.properties.callID,
+      sessionID: session.id,
+      messageID: event.properties.messageID,
+      type: "tool",
+      callID: event.properties.callID,
+      tool: "bash",
+      state: {
+        status: "running",
+        input: { command: event.properties.command },
+        title: event.properties.command,
+        time: { start: event.properties.timestamp },
+      },
+    })
+    await this.input.connection.sessionUpdate({
+      sessionId: session.id,
+      update: {
+        sessionUpdate: "tool_call_update",
+        ...runningToolUpdate({
+          toolCallId: event.properties.callID,
+          toolName: "bash",
+          state: {
+            status: "running",
+            input: { command: event.properties.command },
+            title: event.properties.command,
+          },
+        }),
+      },
+    })
+  }
+
+  private async handleShellEnded(event: ShellEndedEvent) {
+    const session = await Effect.runPromise(this.input.session.tryGet(event.properties.sessionID))
+    if (!session) return
+
+    const command = this.shellCommandsByCallID.get(event.properties.callID) ?? ""
+    if (!this.toolStarts.has(event.properties.callID)) {
+      await this.toolStart(session.id, {
+        id: event.properties.callID,
+        sessionID: session.id,
+        messageID: event.properties.callID,
+        type: "tool",
+        callID: event.properties.callID,
+        tool: "bash",
+        state: {
+          status: "running",
+          input: command ? { command } : {},
+          title: command || "bash",
+          time: { start: event.properties.timestamp },
+        },
+      })
+    }
+    this.clearTool(event.properties.callID)
+    await this.input.connection.sessionUpdate({
+      sessionId: session.id,
+      update: {
+        sessionUpdate: "tool_call_update",
+        ...completedToolUpdate({
+          toolCallId: event.properties.callID,
+          toolName: "bash",
+          state: {
+            status: "completed",
+            input: command ? { command } : {},
+            output: event.properties.output,
+            title: command || "bash",
+          },
+        }),
+      },
+    })
   }
 
   private async runningTool(sessionId: string, part: ToolPart) {
@@ -323,6 +421,8 @@ export class Subscription {
   private async toolStart(sessionId: string, part: ToolPart) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
+    const rawInput = part.state.status === "pending" ? undefined : part.state.input
+    const title = "title" in part.state ? part.state.title : undefined
     await this.input.connection.sessionUpdate({
       sessionId,
       update: {
@@ -330,6 +430,8 @@ export class Subscription {
         ...pendingToolCall({
           toolCallId: part.callID,
           toolName: part.tool,
+          rawInput,
+          title,
         }),
       },
     })
@@ -338,6 +440,11 @@ export class Subscription {
   private clearTool(toolCallId: string) {
     this.toolStarts.delete(toolCallId)
     this.shellSnapshots.delete(toolCallId)
+    this.shellCommandsByCallID.delete(toolCallId)
+  }
+
+  private get terminal() {
+    return this.input.terminal ?? ACPTerminal.make({})
   }
 }
 

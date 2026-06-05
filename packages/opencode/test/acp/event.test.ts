@@ -6,6 +6,7 @@ import { ACPEvent } from "@/acp/event"
 import * as ACPService from "@/acp/service"
 import { Directory } from "@/acp/directory"
 import { ACPSession } from "@/acp/session"
+import { ACPTerminal } from "@/acp/terminal"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
 type ToolSessionUpdateParams = SessionUpdateParams & {
@@ -77,7 +78,13 @@ function createEventStream() {
   return { push, close, stream }
 }
 
-function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
+function createHarness(
+  messages: Record<string, SessionMessageResponse> = {},
+  options: {
+    sessionUpdate?: (params: SessionUpdateParams) => Promise<void>
+    terminal?: ACPTerminal.Interface
+  } = {},
+) {
   const updates: SessionUpdateParams[] = []
   const calls = {
     eventSubscribe: 0,
@@ -103,13 +110,14 @@ function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
   const connection = {
     sessionUpdate: (params: SessionUpdateParams) => {
       updates.push(params)
-      return Promise.resolve()
+      return options.sessionUpdate?.(params) ?? Promise.resolve()
     },
   } satisfies Pick<AgentSideConnection, "sessionUpdate">
   const session = makeSessionService()
-  const subscription = new ACPEvent.Subscription({ sdk, connection, session })
+  const terminal = options.terminal ?? ACPTerminal.make({})
+  const subscription = new ACPEvent.Subscription({ sdk, connection, session, terminal })
 
-  return { calls, connection, events, sdk, session, subscription, updates }
+  return { calls, connection, events, sdk, session, subscription, terminal, updates }
 }
 
 function textDelta(sessionID: string, messageID: string, partID: string, delta: string): Event {
@@ -162,6 +170,33 @@ function toolUpdated(part: ToolPart): Event {
       sessionID: part.sessionID,
       time: Date.now(),
       part,
+    },
+  }
+}
+
+function shellStarted(sessionID: string, callID: string, command: string): Event {
+  return {
+    id: `evt_${sessionID}_${callID}_shell_started`,
+    type: "session.next.shell.started",
+    properties: {
+      timestamp: Date.now(),
+      sessionID,
+      messageID: `msg_${callID}`,
+      callID,
+      command,
+    },
+  }
+}
+
+function shellEnded(sessionID: string, callID: string, output: string): Event {
+  return {
+    id: `evt_${sessionID}_${callID}_shell_ended`,
+    type: "session.next.shell.ended",
+    properties: {
+      timestamp: Date.now(),
+      sessionID,
+      callID,
+      output,
     },
   }
 }
@@ -607,6 +642,112 @@ describe("acp event routing", () => {
       status: "completed",
       content: [{ type: "content", content: { type: "text", text: "finished" } }],
       rawOutput: { output: "finished", metadata: { exit: 0 } },
+    })
+  })
+
+  it("releases terminal metadata even when final completed update fails", async () => {
+    let releases = 0
+    const terminal = {
+      id: "term_release_on_failure",
+      currentOutput: async () => ({ output: "done", truncated: false }),
+      waitForExit: async () => ({ exitCode: 0 }),
+      kill: async () => undefined,
+      release: async () => {
+        releases += 1
+      },
+      [Symbol.asyncDispose]: async () => undefined,
+    } as unknown as Awaited<ReturnType<AgentSideConnection["createTerminal"]>>
+    const terminalService = ACPTerminal.make({
+      connection: {
+        createTerminal: async () => terminal,
+      } as unknown as Pick<AgentSideConnection, "createTerminal">,
+    })
+    const harness = createHarness(
+      {},
+      {
+        terminal: terminalService,
+        sessionUpdate: (params) => {
+          if (params.update.sessionUpdate === "tool_call_update" && params.update.status === "completed") {
+            return Promise.reject(new Error("update failed"))
+          }
+          return Promise.resolve()
+        },
+      },
+    )
+    await Effect.runPromise(harness.session.create({ id: "ses_release", cwd: "/workspace" }))
+
+    terminalService.configure({ enabled: true })
+    terminalService.register("ses_release")
+    try {
+      await terminalService.run({
+        sessionId: "ses_release",
+        command: "bash",
+        args: ["-c", "echo done"],
+        cwd: "/workspace",
+        env: {},
+        timeout: 1000,
+        outputByteLimit: 1024,
+        signal: new AbortController().signal,
+        onStart: async () => undefined,
+      })
+
+      await harness.subscription.handle(toolUpdated(runningTool("ses_release", "call_release", "")))
+      await expect(
+        harness.subscription.handle(
+          toolUpdated(
+            completedTool("ses_release", "call_release", "done", [], {
+              metadata: { terminalId: "term_release_on_failure" },
+            }),
+          ),
+        ),
+      ).rejects.toThrow("update failed")
+      expect(releases).toBe(1)
+    } finally {
+      terminalService.unregister("ses_release")
+    }
+  })
+
+  it("emits shell event output and raw payloads", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_shell_events", cwd: "/workspace" }))
+
+    await harness.subscription.handle(shellStarted("ses_shell_events", "call_shell_event", "printf hello"))
+    await harness.subscription.handle(shellEnded("ses_shell_events", "call_shell_event", "hello"))
+
+    expect(toolUpdates(harness.updates).map((item) => item.update.sessionUpdate)).toEqual([
+      "tool_call",
+      "tool_call_update",
+      "tool_call_update",
+    ])
+    expect(harness.updates[0]?.update).toMatchObject({
+      sessionUpdate: "tool_call",
+      toolCallId: "call_shell_event",
+      title: "printf hello",
+      rawInput: { command: "printf hello" },
+    })
+    expect(harness.updates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_shell_event",
+      status: "completed",
+      content: [{ type: "content", content: { type: "text", text: "hello" } }],
+      rawInput: { command: "printf hello" },
+      rawOutput: { output: "hello" },
+    })
+  })
+
+  it("emits shell ended output even if the start event was missed", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_shell_end", cwd: "/workspace" }))
+
+    await harness.subscription.handle(shellEnded("ses_shell_end", "call_shell_end", "late output"))
+
+    expect(harness.updates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_shell_end",
+      status: "completed",
+      content: [{ type: "content", content: { type: "text", text: "late output" } }],
+      rawInput: {},
+      rawOutput: { output: "late output" },
     })
   })
 

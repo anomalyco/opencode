@@ -41,6 +41,7 @@ import { ACPEvent } from "./event"
 import { ACPSession } from "./session"
 import { UsageService } from "./usage"
 import { ACPProfile } from "./profile"
+import { ACPTerminal } from "./terminal"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
@@ -51,7 +52,7 @@ const log = Log.create({ service: "acp-service" })
 
 export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
-  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile" | "createTerminal">>
 
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
@@ -83,15 +84,21 @@ export function make(input: {
 }): Interface {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
+  const terminal = ACPTerminal.make({
+    connection: input.connection?.createTerminal
+      ? { createTerminal: input.connection.createTerminal.bind(input.connection) }
+      : undefined,
+  })
   const registeredMcp = new Map<string, Set<string>>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
   const events = input.connection
-    ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
+    ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session, terminal })
     : undefined
   if (events) input.eventSubscription?.(events)
 
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
+    terminal.configure({ enabled: params.clientCapabilities?.terminal === true })
     const authMethod: AuthMethod = {
       description: "Run `opencode auth login` in the terminal",
       name: "Login with opencode",
@@ -190,6 +197,7 @@ export function make(input: {
       variant,
       modeId,
     })
+    terminal.register(state.id)
     sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
@@ -227,6 +235,7 @@ export function make(input: {
       variant: restored.variant ?? selectVariant(snapshot, model),
       modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
     })
+    terminal.register(state.id)
     sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
@@ -312,6 +321,7 @@ export function make(input: {
       variant: restored.variant ?? selectVariant(snapshot, model),
       modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
     })
+    terminal.register(state.id)
     sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
@@ -344,6 +354,7 @@ export function make(input: {
     const removed = yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
     sessionSnapshots.delete(params.sessionId)
+    terminal.unregister(params.sessionId)
     if (!removed) return {}
 
     yield* abortBackingSession(removed)
@@ -383,6 +394,7 @@ export function make(input: {
       variant: restored.variant ?? selectVariant(snapshot, model),
       modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
     })
+    terminal.register(state.id)
     sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
