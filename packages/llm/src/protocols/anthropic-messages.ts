@@ -18,6 +18,7 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { isContextOverflow } from "../provider-error"
 import * as Cache from "./utils/cache"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
@@ -786,7 +787,12 @@ const providerErrorMessage = (event: AnthropicEvent): string => {
 
 const onError = (state: ParserState, event: AnthropicEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event) })],
+  [
+    LLMEvent.providerError({
+      message: providerErrorMessage(event),
+      classification: isContextOverflow(event.error?.message ?? "") ? "context-overflow" : undefined,
+    }),
+  ],
 ]
 
 const step = (state: ParserState, event: AnthropicEvent) => {

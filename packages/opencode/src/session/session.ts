@@ -1013,7 +1013,7 @@ function listByProject(
           : or(...conds)!,
       )
     }
-  } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
+  } else if (input.scope !== "project") {
     if (input.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }

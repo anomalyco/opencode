@@ -18,9 +18,12 @@ import { State } from "../state"
 import { SessionSchema } from "../session/schema"
 import type { SessionV2 } from "../session"
 import { ApplicationTools } from "./application-tools"
+import { ToolOutputStore } from "../tool-output-store"
+import { AgentV2 } from "../agent"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
+  readonly agent?: AgentV2.ID
   readonly call: ToolCall
 }
 
@@ -37,7 +40,7 @@ export type ExecuteInput = {
 export type Invocation = ExecuteInput & {
   readonly source?: PermissionV2.Source
   readonly assertPermission: (
-    input: Omit<PermissionV2.AssertInput, "sessionID" | "source">,
+    input: Omit<PermissionV2.AssertInput, "sessionID" | "agent" | "source">,
   ) => Effect.Effect<void, PermissionV2.Error | SessionV2.NotFoundError>
 }
 
@@ -55,6 +58,7 @@ export type Entry<
   readonly execute?: (
     input: AuthorizeInput<Schema.Schema.Type<Parameters>>,
   ) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
+  readonly outputPaths?: (output: Schema.Schema.Type<Success>) => ReadonlyArray<string>
 }
 
 type Data = {
@@ -76,7 +80,11 @@ export interface Interface {
   readonly contribute: (update: State.Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
   readonly definitions: () => Effect.Effect<ReadonlyArray<ReturnType<typeof Tool.toDefinitions>[number]>>
   readonly execute: (input: ExecuteInput) => Effect.Effect<ToolResultValue>
-  readonly settle: (input: ExecuteInput) => Effect.Effect<ToolSettlement>
+  readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement>
+}
+
+export interface Settlement extends ToolSettlement {
+  readonly outputPaths?: ReadonlyArray<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
@@ -88,6 +96,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const permission = yield* PermissionV2.Service
     const applications = yield* ApplicationTools.Service
+    const resources = yield* ToolOutputStore.Service
     const state = State.create<Data, Editor>({
       initial: () => ({ entries: new Map() }),
       editor: (draft) => ({
@@ -129,7 +138,8 @@ export const layer = Layer.effect(
     const invocation = (input: ExecuteInput): Invocation => ({
       ...input,
       // Source needs the durable owning assistant message ID, which the registry does not receive yet.
-      assertPermission: (request) => permission.assert({ ...request, sessionID: input.sessionID }),
+      assertPermission: (request) =>
+        permission.assert({ ...request, sessionID: input.sessionID, ...(input.agent ? { agent: input.agent } : {}) }),
     })
 
     const settleEntry = Effect.fn("ToolRegistry.settleEntry")(function* (
@@ -159,12 +169,16 @@ export const layer = Layer.effect(
                 ),
               ),
             ),
-            Effect.map((value): ToolSettlement => {
-              if (entry.tool._legacyResult && ToolResult.is(value))
-                return { result: value, output: ToolOutput.fromResultValue(value) }
-              const output = entry.tool._project(parameters, input.call.id, value)
-              const result = ToolOutput.toResultValue(output)
-              return result.type === "error" ? { result } : { result, output }
+            Effect.map((value): Settlement => {
+              const settled = (() => {
+                if (entry.tool._legacyResult && ToolResult.is(value))
+                  return { result: value, output: ToolOutput.fromResultValue(value) }
+                const output = entry.tool._project(parameters, input.call.id, value)
+                const result = ToolOutput.toResultValue(output)
+                return result.type === "error" ? { result } : { result, output }
+              })()
+              const retained = entry.outputPaths?.(value) ?? []
+              return retained.length > 0 ? { ...settled, outputPaths: retained } : settled
             }),
           )
         }),
@@ -174,7 +188,25 @@ export const layer = Layer.effect(
       )
     })
 
-    const settle = Effect.fn("ToolRegistry.settle")((input: ExecuteInput) => settleEntry(entry(input.call.name), input))
+    const settle = Effect.fn("ToolRegistry.settle")((input: ExecuteInput) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const settled = yield* restore(settleEntry(entry(input.call.name), input))
+          if (!settled.output) return settled
+          const bounded = yield* resources.bound({
+            sessionID: input.sessionID,
+            toolCallID: input.call.id,
+            output: settled.output,
+          })
+          if (bounded.output === settled.output && bounded.outputPaths.length === 0) return settled
+          const retained = [...(settled.outputPaths ?? []), ...bounded.outputPaths]
+          const result = ToolOutput.toResultValue(bounded.output)
+          return result.type === "error"
+            ? { result, outputPaths: retained }
+            : { result, output: bounded.output, outputPaths: retained }
+        }),
+      ),
+    )
     const execute = Effect.fn("ToolRegistry.execute")(function* (input: ExecuteInput) {
       return (yield* settle(input)).result
     })
@@ -192,4 +224,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(ApplicationTools.layer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(ApplicationTools.layer),
+  Layer.provide(ToolOutputStore.defaultLayer),
+)

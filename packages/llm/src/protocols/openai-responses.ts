@@ -18,6 +18,7 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { isContextOverflow } from "../provider-error"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
@@ -126,6 +127,7 @@ const OpenAIResponsesCoreFields = {
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
+  service_tier: Schema.optional(OpenAIOptions.OpenAIServiceTier),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(OpenAIOptions.OpenAIResponseIncludable),
   reasoning: Schema.optional(
@@ -447,6 +449,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   const include = OpenAIOptions.include(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
   const instructions = OpenAIOptions.instructions(request)
+  const serviceTier = OpenAIOptions.serviceTier(request)
   return {
     ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
@@ -454,6 +457,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
     ...(include ? { include } : {}),
     ...(effort || summary ? { reasoning: { effort, summary } } : {}),
     ...(verbosity ? { text: { verbosity } } : {}),
+    ...(serviceTier ? { service_tier: serviceTier } : {}),
   }
 })
 
@@ -877,14 +881,23 @@ const providerErrorMessage = (event: OpenAIResponsesEvent, fallback: string): st
   return message || code || fallback
 }
 
+const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
+  const code = event.code || event.response?.error?.code || undefined
+  const message = providerErrorMessage(event, fallback)
+  return LLMEvent.providerError({
+    message,
+    classification: code === "context_length_exceeded" || isContextOverflow(message) ? "context-overflow" : undefined,
+  })
+}
+
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses response failed") })],
+  [providerError(event, "OpenAI Responses response failed")],
 ]
 
 const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses stream error") })],
+  [providerError(event, "OpenAI Responses stream error")],
 ]
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {

@@ -53,7 +53,7 @@ export const toModelOutput = (output: Success) => {
 
 const definition = Tool.make({
   description:
-    "Search file contents by regular expression within the active Location or a named project reference. Use a relative path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise relative file resources, line numbers, and bounded line previews.",
+    "Search file contents by regular expression within the active Location, a named project reference, or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
   parameters: Parameters,
   success: LocationSearch.GrepResult,
   toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],

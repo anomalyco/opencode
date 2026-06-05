@@ -8,6 +8,7 @@
     --v2-background-bg-layer-01: var(--v2-grey-200);
     --v2-background-bg-layer-02: var(--v2-grey-300);
     --v2-background-bg-layer-03: var(--v2-grey-400);
+    --v2-background-bg-layer-04: var(--v2-grey-600);
     --v2-background-bg-inverse: var(--v2-grey-1000);
     --v2-background-bg-contrast: var(--v2-grey-900);
     --v2-background-bg-button-neutral: var(--v2-grey-100);
@@ -229,6 +230,7 @@
     --v2-background-bg-layer-01: var(--v2-grey-200);
     --v2-background-bg-layer-02: var(--v2-grey-300);
     --v2-background-bg-layer-03: var(--v2-grey-400);
+    --v2-background-bg-layer-04: var(--v2-grey-600);
     --v2-background-bg-inverse: var(--v2-grey-1000);
     --v2-background-bg-contrast: var(--v2-grey-900);
     --v2-background-bg-button-neutral: var(--v2-grey-100);
@@ -337,6 +339,7 @@
     --v2-background-bg-layer-01: var(--v2-grey-900);
     --v2-background-bg-layer-02: var(--v2-grey-800);
     --v2-background-bg-layer-03: var(--v2-grey-700);
+    --v2-background-bg-layer-04: var(--v2-grey-600);
     --v2-background-bg-inverse: var(--v2-grey-100);
     --v2-background-bg-contrast: var(--v2-grey-700);
     --v2-background-bg-button-neutral: var(--v2-alpha-light-6);

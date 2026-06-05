@@ -189,7 +189,7 @@ export function DialogSelectServer() {
   )
 }
 
-export function useServerManagementController(options: { onSelect?: () => void } = {}) {
+export function useServerManagementController(options: { onSelect?: () => void; navigateOnAdd?: boolean } = {}) {
   const navigate = useNavigate()
   const server = useServer()
   const tabs = useTabs()
@@ -265,6 +265,11 @@ export function useServerManagementController(options: { onSelect?: () => void }
       }
 
       resetAdd()
+      if (options.navigateOnAdd === false) {
+        server.add(conn)
+        options.onSelect?.()
+        return
+      }
       await select(conn, true)
     },
   }))
