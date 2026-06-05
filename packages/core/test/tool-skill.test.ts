@@ -69,7 +69,6 @@ describe("SkillTool", () => {
               transform: () => Effect.die("unused"),
               sources: () => Effect.die("unused"),
               list: () => Effect.succeed([info]),
-              forAgent: () => Effect.die("unused"),
             }),
           )
           const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))

@@ -116,8 +116,10 @@ export function merge(...rulesets: Ruleset[]): Ruleset {
 }
 
 export function disabled(action: string, ruleset: Ruleset) {
-  const rule = ruleset.findLast((rule) => Wildcard.match(action, rule.action))
-  return rule?.resource === "*" && rule.effect === "deny"
+  return (
+    ruleset.findLast((rule) => Wildcard.match(action, rule.action) && (rule.resource === "*" || rule.effect !== "deny"))
+      ?.effect === "deny"
+  )
 }
 
 export interface Interface {

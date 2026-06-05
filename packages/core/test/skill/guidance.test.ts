@@ -97,6 +97,23 @@ describe("SkillGuidance", () => {
     }).pipe(Effect.provide(layer(agent, () => [effect])))
   })
 
+  it.effect("omits guidance when a resource-specific denial follows the global denial", () => {
+    const agent = new AgentV2.Info({
+      ...AgentV2.Info.empty(build),
+      permissions: [
+        { action: "skill", resource: "*", effect: "deny" },
+        { action: "skill", resource: "hidden", effect: "deny" },
+      ],
+    })
+    return Effect.gen(function* () {
+      const guidance = yield* SkillGuidance.Service
+      expect(yield* guidance.load(build).pipe(Effect.flatMap(SystemContext.initialize))).toEqual({
+        baseline: "",
+        snapshot: {},
+      })
+    }).pipe(Effect.provide(layer(agent, () => [effect])))
+  })
+
   it.effect("retains specifically allowed skills after a global denial", () => {
     const agent = new AgentV2.Info({
       ...AgentV2.Info.empty(build),
