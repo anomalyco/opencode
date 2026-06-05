@@ -1,5 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { Config } from "@opencode-ai/core/config"
+import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -28,6 +30,7 @@ let readContent: FileSystem.Content = new FileSystem.TextContent({
 })
 let sample = new TextEncoder().encode("hello")
 let readFailure: unknown
+let configEntries: Config.Entry[] = []
 const filesystem = Layer.succeed(
   FileSystem.Service,
   FileSystem.Service.of({
@@ -143,8 +146,14 @@ const permission = Layer.succeed(
   }),
 )
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const read = ReadTool.layer.pipe(Layer.provide(registry), Layer.provide(filesystem), Layer.provide(permission))
-const it = testEffect(Layer.mergeAll(registry, filesystem, permission, read))
+const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
+const read = ReadTool.layer.pipe(
+  Layer.provide(registry),
+  Layer.provide(filesystem),
+  Layer.provide(permission),
+  Layer.provide(config),
+)
+const it = testEffect(Layer.mergeAll(registry, filesystem, permission, config, read))
 const sessionID = SessionV2.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
@@ -161,6 +170,7 @@ describe("ReadTool", () => {
       readContent = new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
       sample = new TextEncoder().encode("hello")
       readFailure = undefined
+      configEntries = []
       resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
@@ -195,6 +205,7 @@ describe("ReadTool", () => {
         mime: "image/png",
       })
       readFailure = undefined
+      configEntries = []
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -211,6 +222,170 @@ describe("ReadTool", () => {
       })
       expect(samples).toEqual([FileSystem.READ_SAMPLE_BYTES])
       expect(reads).toHaveLength(1)
+
+      const settled = yield* registry.settle({
+        sessionID,
+        call: { type: "tool-call", id: "call-image-settle", name: "read", input: { path: "pixel.png" } },
+      })
+      expect(settled.output?.structured).toEqual({ type: "media", mime: "image/png" })
+      expect(JSON.stringify(settled.output?.structured)).not.toContain(png)
+      expect(settled.output?.content).toMatchObject([
+        { type: "text", text: "Image read successfully" },
+        { type: "file", mime: "image/png", source: { type: "data", data: png } },
+      ])
+    }),
+  )
+
+  it.effect("rejects invalid or truncated image data after signature classification", () =>
+    Effect.gen(function* () {
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = 8
+      real = "/project/truncated.png"
+      afterApproval = () => {}
+      sample = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      readContent = new FileSystem.BinaryContent({
+        type: "binary",
+        content: Buffer.from(sample).toString("base64"),
+        encoding: "base64",
+        mime: "image/png",
+      })
+      readFailure = undefined
+      configEntries = []
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-truncated-image", name: "read", input: { path: "truncated.png" } },
+        }),
+      ).toEqual({ type: "error", value: "Image could not be decoded: truncated.png" })
+    }),
+  )
+
+  it.effect("rejects oversized images when resizing is disabled", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
+      const base64 = Buffer.from(source.get_bytes()).toString("base64")
+      source.free()
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = Buffer.from(base64, "base64").length
+      real = "/project/wide.png"
+      afterApproval = () => {}
+      sample = Buffer.from(base64, "base64")
+      readContent = new FileSystem.BinaryContent({
+        type: "binary",
+        content: base64,
+        encoding: "base64",
+        mime: "image/png",
+      })
+      readFailure = undefined
+      configEntries = [
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({
+            attachments: new ConfigAttachments.Info({
+              image: new ConfigAttachments.Image({ auto_resize: false, max_width: 4 }),
+            }),
+          }),
+        }),
+      ]
+      const registry = yield* ToolRegistry.Service
+      const result = yield* registry.execute({
+        sessionID,
+        call: { type: "tool-call", id: "call-wide-image", name: "read", input: { path: "wide.png" } },
+      })
+
+      expect(result.type).toBe("error")
+      if (result.type === "error") expect(result.value).toContain("exceeding configured limits 4x2000")
+    }),
+  )
+
+  it.effect("resizes images to configured dimensions before returning media", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
+      const base64 = Buffer.from(source.get_bytes()).toString("base64")
+      source.free()
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = Buffer.from(base64, "base64").length
+      real = "/project/wide.png"
+      afterApproval = () => {}
+      sample = Buffer.from(base64, "base64")
+      readContent = new FileSystem.BinaryContent({
+        type: "binary",
+        content: base64,
+        encoding: "base64",
+        mime: "image/png",
+      })
+      readFailure = undefined
+      configEntries = [
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({
+            attachments: new ConfigAttachments.Info({ image: new ConfigAttachments.Image({ max_width: 4 }) }),
+          }),
+        }),
+      ]
+      const registry = yield* ToolRegistry.Service
+      const result = yield* registry.execute({
+        sessionID,
+        call: { type: "tool-call", id: "call-resize-image", name: "read", input: { path: "wide.png" } },
+      })
+
+      expect(result.type).toBe("content")
+      if (result.type !== "content") return
+      const media = result.value[1]
+      expect(media?.type).toBe("media")
+      if (media?.type !== "media") return
+      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(media.data, "base64"))
+      expect(resized.get_width()).toBeLessThanOrEqual(4)
+      expect(resized.get_height()).toBeLessThanOrEqual(2_000)
+      resized.free()
+    }),
+  )
+
+  it.effect("enforces max base64 bytes after resize attempts", () =>
+    Effect.gen(function* () {
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = Buffer.from(png, "base64").length
+      real = "/project/pixel.png"
+      afterApproval = () => {}
+      sample = Buffer.from(png, "base64")
+      readContent = new FileSystem.BinaryContent({
+        type: "binary",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      })
+      readFailure = undefined
+      configEntries = [
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({
+            attachments: new ConfigAttachments.Info({
+              image: new ConfigAttachments.Image({ max_base64_bytes: 1 }),
+            }),
+          }),
+        }),
+      ]
+      const registry = yield* ToolRegistry.Service
+      const result = yield* registry.execute({
+        sessionID,
+        call: { type: "tool-call", id: "call-max-bytes", name: "read", input: { path: "pixel.png" } },
+      })
+
+      expect(result.type).toBe("error")
+      if (result.type === "error") expect(result.value).toContain("/1 bytes")
     }),
   )
 
@@ -231,6 +406,7 @@ describe("ReadTool", () => {
         mime: "application/octet-stream",
       })
       readFailure = undefined
+      configEntries = []
       const registry = yield* ToolRegistry.Service
 
       expect(

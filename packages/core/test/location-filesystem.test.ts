@@ -97,6 +97,24 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("revalidates file identity before sampled classification", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, "image.png")
+        yield* Effect.promise(() => fs.writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47])))
+        const service = yield* FileSystem.Service
+        const target = yield* service.resolveRead({ path: RelativePath.make("image.png") })
+
+        yield* Effect.promise(() => fs.rename(file, path.join(directory, "original.png")))
+        yield* Effect.promise(() => fs.writeFile(file, Buffer.from([0xff, 0xd8, 0xff])))
+
+        expect(
+          Exit.isFailure(yield* service.readSampleResolved(target, FileSystem.READ_SAMPLE_BYTES).pipe(Effect.exit)),
+        ).toBe(true)
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("pages large UTF-8 text files by line with continuation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

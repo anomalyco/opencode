@@ -267,9 +267,10 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (m
       messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
       continue
     }
-    const text = part.result.value.filter((item) => item.type === "text").map((item) => item.text)
+    const content: ReadonlyArray<ToolResultContentPart> = part.result.value
+    const text = content.filter((item) => item.type === "text").map((item) => item.text)
     messages.push({ role: "tool", tool_call_id: part.id, content: text.join("\n") })
-    const media = part.result.value.filter(
+    const media = content.filter(
       (item): item is Extract<ToolResultContentPart, { type: "media" }> => item.type === "media",
     )
     if (media.some((item) => !item.mediaType.startsWith("image/")))
