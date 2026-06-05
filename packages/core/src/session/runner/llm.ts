@@ -213,6 +213,7 @@ export const layer = Layer.effect(
       const context = entries.map((entry) => entry.message)
       const request = LLM.request({
         model,
+        providerOptions: { openai: { promptCacheKey: session.id } },
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),

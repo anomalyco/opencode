@@ -2812,6 +2812,10 @@ describe("SessionRunnerLLM", () => {
       yield* Effect.yieldNow
 
       expect(requests).toHaveLength(2)
+      expect(requests.map((request) => request.providerOptions?.openai?.promptCacheKey)).toEqual([
+        sessionID,
+        otherSessionID,
+      ])
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       yield* Fiber.join(second)
