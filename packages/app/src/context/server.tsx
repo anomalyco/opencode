@@ -1,11 +1,10 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { type Accessor, batch, createMemo } from "solid-js"
+import { batch, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { LocalProject } from "./layout"
 
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
-type StoredProject = { worktree: string; expanded: boolean }
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
 export function normalizeServerUrl(input: string) {
@@ -24,12 +23,6 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
 function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
-}
-
-function projectsKey(key: ServerConnection.Key) {
-  if (key === "sidecar") return "local"
-  if (isLocalHost(key)) return "local"
-  return key
 }
 
 export function resolveServerList(input: {
@@ -128,12 +121,16 @@ export namespace ServerConnection {
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
   init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
+    const migrate = (value: unknown) => {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return value
+      const current = value as { list?: unknown }
+      return { list: current.list }
+    }
+
     const [store, setStore, _, ready] = persisted(
-      Persist.global("server", ["server.v3"]),
+      { ...Persist.global("server", ["server.v3"]), migrate },
       createStore({
         list: [] as StoredServer[],
-        projects: {} as Record<string, StoredProject[]>,
-        lastProject: {} as Record<string, string>,
       }),
     )
 
@@ -180,15 +177,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const isReady = createMemo(() => ready() && !!state.active)
 
-    const current: Accessor<ServerConnection.Any | undefined> = createMemo(
+    const current = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
     const isLocal = createMemo(() => {
       const c = current()
       return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))
     })
-    const storeKey = createMemo(() => projectsKey(state.active))
-    const projectList = createMemo((): LocalProject[] => store.projects[storeKey()] ?? [])
+    const emptyProjects = createMemo((): LocalProject[] => [])
 
     return {
       ready: isReady,
@@ -209,46 +205,16 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       add,
       remove,
       projects: {
-        list: projectList,
-        open(directory: string) {
-          const current = store.projects[storeKey()] ?? []
-          if (current.find((x) => x.worktree === directory)) return
-          setStore("projects", storeKey(), [{ worktree: directory, expanded: true }, ...current])
+        list: emptyProjects,
+        open(_directory: string) {},
+        close(_directory: string) {},
+        expand(_directory: string) {},
+        collapse(_directory: string) {},
+        move(_directory: string, _toIndex: number) {},
+        last() {
+          return undefined
         },
-        close(directory: string) {
-          const current = store.projects[storeKey()] ?? []
-          setStore(
-            "projects",
-            storeKey(),
-            current.filter((x) => x.worktree !== directory),
-          )
-        },
-        expand(directory: string) {
-          const current = store.projects[storeKey()] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
-          if (index !== -1) setStore("projects", storeKey(), index, "expanded", true)
-        },
-        collapse(directory: string) {
-          const current = store.projects[storeKey()] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
-          if (index !== -1) setStore("projects", storeKey(), index, "expanded", false)
-        },
-        move(directory: string, toIndex: number) {
-          const current = store.projects[storeKey()] ?? []
-          const fromIndex = current.findIndex((x) => x.worktree === directory)
-          if (fromIndex === -1 || fromIndex === toIndex) return
-          const result = [...current]
-          const [item] = result.splice(fromIndex, 1)
-          if (!item) return
-          result.splice(toIndex, 0, item)
-          setStore("projects", storeKey(), result)
-        },
-        last(): string | undefined {
-          return store.lastProject[storeKey()]
-        },
-        touch(directory: string) {
-          setStore("lastProject", storeKey(), directory)
-        },
+        touch(_directory: string) {},
       },
     }
   },

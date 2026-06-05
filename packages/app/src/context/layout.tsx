@@ -5,7 +5,8 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
-import { ServerConnection, useServer } from "./server"
+import { ServerConnection } from "./server"
+import { useProjectView } from "./project-view"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
@@ -138,7 +139,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
   init: () => {
     const globalSdk = useServerSDK()
     const serverSync = useServerSync()
-    const server = useServer()
+    const projectView = useProjectView()
     const platform = usePlatform()
     const location = useLocation()
     const route = createMemo(() => currentRoute(location.pathname))
@@ -438,7 +439,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     createEffect(() => {
-      const projects = server.projects.list()
+      const projects = projectView.projects.list()
       const seen = new Set(projects.map((project) => project.worktree))
 
       batch(() => {
@@ -446,19 +447,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const root = rootFor(project.worktree)
           if (root === project.worktree) continue
 
-          server.projects.close(project.worktree)
+          projectView.projects.close(project.worktree)
 
           if (!seen.has(root)) {
-            server.projects.open(root)
+            projectView.projects.open(root)
             seen.add(root)
           }
 
-          if (project.expanded) server.projects.expand(root)
+          if (project.expanded) projectView.projects.expand(root)
         }
       })
     })
 
-    const enriched = createMemo(() => server.projects.list().map(enrich))
+    const enriched = createMemo(() => projectView.projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()
       return projects.map((project) => {
@@ -523,26 +524,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     })
 
-    let sessionFrame: number | undefined
-    let sessionTimer: number | undefined
-
-    onMount(() => {
-      sessionFrame = requestAnimationFrame(() => {
-        sessionFrame = undefined
-        sessionTimer = window.setTimeout(() => {
-          sessionTimer = undefined
-          void Promise.all(
-            server.projects.list().map((project) => {
-              return serverSync.project.loadSessions(project.worktree)
-            }),
-          )
-        }, 0)
-      })
-    })
-
-    onCleanup(() => {
-      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
-      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
+    const loadedSessions = new Set<string>()
+    createEffect(() => {
+      if (!projectView.ready()) return
+      for (const project of projectView.projects.list()) {
+        if (loadedSessions.has(project.worktree)) continue
+        loadedSessions.add(project.worktree)
+        void serverSync.project.loadSessions(project.worktree).catch(() => {
+          loadedSessions.delete(project.worktree)
+        })
+      }
     })
 
     return {
@@ -562,27 +553,27 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
+          if (projectView.projects.list().find((x) => x.worktree === root)) return
           void serverSync.project.loadSessions(root)
-          server.projects.open(root)
+          projectView.projects.open(root)
         },
         close(directory: string) {
-          server.projects.close(directory)
+          projectView.projects.close(directory)
         },
         expand(directory: string) {
-          server.projects.expand(directory)
+          projectView.projects.expand(directory)
         },
         collapse(directory: string) {
-          server.projects.collapse(directory)
+          projectView.projects.collapse(directory)
         },
         move(directory: string, toIndex: number) {
-          server.projects.move(directory, toIndex)
+          projectView.projects.move(directory, toIndex)
         },
         last() {
-          return server.projects.last()
+          return projectView.projects.last()
         },
         touch(directory: string) {
-          server.projects.touch(rootFor(directory))
+          projectView.projects.touch(rootFor(directory))
         },
       },
       sidebar: {

@@ -194,7 +194,7 @@ function HomeDesign() {
     }
 
     layout.projects.open(root)
-    server.projects.touch(root)
+    layout.projects.touch(root)
     if (root !== directory) setSelectedDirectory(root, true)
   })
 
@@ -215,7 +215,7 @@ function HomeDesign() {
     const root = canonicalProjectRoot(directory)
     if (!root) return
     layout.projects.open(root)
-    server.projects.touch(root)
+    layout.projects.touch(root)
     setSelectedDirectory(root)
   }
 

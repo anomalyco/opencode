@@ -8,7 +8,6 @@ import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { displayName, getProjectAvatarSource, hasProjectPermissions } from "@/pages/layout/helpers"
 import { isProjectBottomBarActive, projectBottomBarHref } from "./session-mobile-bottom-bar-helpers"
@@ -26,7 +25,6 @@ export function SessionMobileBottomBar(props: {
 }) {
   const layout = useLayout()
   const language = useLanguage()
-  const server = useServer()
   const navigate = useNavigate()
 
   const projects = createMemo(() => layout.projects.list())
@@ -36,7 +34,7 @@ export function SessionMobileBottomBar(props: {
   function openProject(project: LocalProject) {
     const root = project.worktree
     layout.projects.open(root)
-    server.projects.touch(root)
+    layout.projects.touch(root)
     navigate(projectBottomBarHref(project))
   }
 
