@@ -121,7 +121,7 @@ const clearAuthToken = () => {
 
 const platform: Platform = {
   platform: "web",
-  version: pkg.version,
+  version: import.meta.env.VITE_OPENCODE_VERSION ?? pkg.version,
   openLink,
   back,
   forward,
@@ -138,7 +138,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
-    release: import.meta.env.VITE_SENTRY_RELEASE ?? `web@${pkg.version}`,
+    release: import.meta.env.VITE_SENTRY_RELEASE ?? `web@${import.meta.env.VITE_OPENCODE_VERSION ?? pkg.version}`,
     initialScope: {
       tags: {
         platform: "web",

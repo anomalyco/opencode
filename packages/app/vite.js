@@ -27,6 +27,7 @@ export default [
         },
         define: {
           "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+          "import.meta.env.VITE_OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION) ?? "undefined",
         },
         worker: {
           format: "es",
