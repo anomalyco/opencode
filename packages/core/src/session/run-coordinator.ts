@@ -19,8 +19,8 @@ export type Mode = "run" | "wake"
  * `wake` reports that durable work may now be available. It starts a chain while idle or
  * requests one coalesced follow-up while draining. Repeated wakes collapse together.
  *
- * `interrupt` stops the current ownership chain. Wakes and explicit runs arriving after the
- * interruption request become a fresh successor; previously queued reruns are suppressed.
+ * `interrupt` stops the current ownership chain. Advisory wakes received while stopping are
+ * suppressed; explicit runs wait for interruption cleanup before starting a fresh chain.
  */
 export interface Coordinator<Key, A, E> {
   /** Starts or joins one explicit drain generation. */
@@ -29,7 +29,7 @@ export interface Coordinator<Key, A, E> {
   readonly wake: (key: Key) => Effect.Effect<void>
   /** Waits until the current ownership chain settles. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void, E>
-  /** Interrupts the active ownership chain. Later requests may start a fresh successor. */
+  /** Interrupts the active ownership chain without automatically draining pending wakes. */
   readonly interrupt: (key: Key) => Effect.Effect<void>
 }
 
@@ -39,7 +39,6 @@ type Entry<A, E> = {
   mode: Mode
   rerun?: Mode
   explicit?: Deferred.Deferred<A, E>
-  successorExplicit?: Deferred.Deferred<A, E>
   owner?: Fiber.Fiber<void, never>
   stopping: boolean
 }
@@ -122,8 +121,7 @@ export const make = <Key, A, E>(options: {
         return
       }
 
-      const successorExplicit = entry.successorExplicit ?? (mode === "wake" ? entry.explicit : undefined)
-      const successor = entry.rerun !== undefined ? makeEntry(entry.rerun, successorExplicit) : undefined
+      const successor = !entry.stopping && entry.rerun !== undefined ? makeEntry(entry.rerun, entry.explicit) : undefined
       if (successor === undefined) active.delete(key)
       else active.set(key, successor)
       if (successor !== undefined) start(key, successor, successor.mode, true)
@@ -144,6 +142,7 @@ export const make = <Key, A, E>(options: {
         if (closed) return
         const entry = active.get(key)
         if (entry !== undefined) {
+          if (entry.stopping) return
           entry.rerun = strongest(entry.rerun, "wake")
           return
         }
@@ -188,9 +187,7 @@ export const make = <Key, A, E>(options: {
         const entry = active.get(key)
         if (entry !== undefined) {
           if (entry.stopping) {
-            entry.rerun = strongest(entry.rerun, "run")
-            entry.successorExplicit ??= Deferred.makeUnsafe<A, E>()
-            return restore(awaitRun(entry.successorExplicit))
+            return restore(Deferred.await(entry.settled).pipe(Effect.andThen(run(key))))
           }
           if (entry.mode === "wake") {
             entry.rerun = "run"

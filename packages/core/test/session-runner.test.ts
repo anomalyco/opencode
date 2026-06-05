@@ -1567,6 +1567,7 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const session = yield* SessionV2.Service
       const coordinator = yield* SessionRunCoordinator.Service
+      const { db } = yield* Database.Service
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt current work" }), resume: false })
 
       requests.length = 0
@@ -1591,6 +1592,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.interrupt(sessionID)
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
       expect(requests).toHaveLength(1)
+      expect(yield* SessionInput.hasPending(db, sessionID, "queue")).toBe(true)
       yield* coordinator.wake(sessionID)
       while (requests.length < 2) yield* Effect.yieldNow
       yield* Deferred.succeed(streamGate, undefined)
@@ -1601,6 +1603,49 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[0]!)).toEqual(["Interrupt current work"])
       expect(userTexts(requests[1]!)).toEqual(["Interrupt current work", "Run after interrupt"])
+    }),
+  )
+
+  it.effect("preserves durable steering input for a later resume after interruption", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt current work" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Steer after interrupt" }),
+      })
+      yield* session.interrupt(sessionID)
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      expect(requests).toHaveLength(1)
+      expect(yield* SessionInput.hasPending(db, sessionID, "steer")).toBe(true)
+
+      const resumed = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      while (requests.length < 2) yield* Effect.yieldNow
+      yield* Deferred.succeed(streamGate, undefined)
+      yield* Fiber.join(resumed)
+      streamGate = undefined
+      streamStarted = undefined
+
+      expect(requests).toHaveLength(2)
+      expect(userTexts(requests[0]!)).toEqual(["Interrupt current work"])
+      expect(userTexts(requests[1]!)).toEqual(["Interrupt current work", "Steer after interrupt"])
     }),
   )
 

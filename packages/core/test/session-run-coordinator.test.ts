@@ -115,11 +115,12 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("allows a wake received after interruption to start a successor", () =>
+  it.effect("suppresses a wake received during interruption cleanup", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const firstInterrupted = yield* Deferred.make<void>()
+        const cleanupGate = yield* Deferred.make<void>()
         const secondStarted = yield* Deferred.make<void>()
         let runs = 0
         const coordinator = yield* SessionRunCoordinator.make({
@@ -129,7 +130,9 @@ describe("SessionRunCoordinator", () => {
                 run === 1
                   ? Deferred.succeed(firstStarted, undefined).pipe(
                       Effect.andThen(Effect.never),
-                      Effect.onInterrupt(() => Deferred.succeed(firstInterrupted, undefined)),
+                      Effect.onInterrupt(() =>
+                        Deferred.succeed(firstInterrupted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
+                      ),
                     )
                   : Deferred.succeed(secondStarted, undefined),
               ),
@@ -142,10 +145,15 @@ describe("SessionRunCoordinator", () => {
         yield* Effect.yieldNow
         yield* coordinator.wake("session")
         yield* Deferred.await(firstInterrupted)
+        expect(runs).toBe(1)
+        yield* Deferred.succeed(cleanupGate, undefined)
         yield* Fiber.join(interrupt)
-        yield* Deferred.await(secondStarted)
         yield* coordinator.awaitIdle("session")
 
+        expect(runs).toBe(1)
+        yield* coordinator.wake("session")
+        yield* Deferred.await(secondStarted)
+        yield* coordinator.awaitIdle("session")
         expect(runs).toBe(2)
       }),
     ),
@@ -214,7 +222,7 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("routes an explicit run arriving during interrupt cleanup to the successor", () =>
+  it.effect("starts an explicit run arriving during interrupt cleanup after the stop barrier", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
@@ -252,7 +260,7 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("separates pre-interrupt and post-interrupt explicit waiters", () =>
+  it.effect("interrupts pre-stop waiters and runs post-stop waiters after cleanup", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
@@ -367,7 +375,7 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("does not discard a post-interrupt successor when interrupted again", () =>
+  it.effect("does not discard a post-stop explicit run when interrupted again", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
