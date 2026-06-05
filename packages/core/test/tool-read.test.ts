@@ -10,6 +10,7 @@ import { testEffect } from "./lib/effect"
 
 const assertions: PermissionV2.AssertInput[] = []
 const reads: FileSystem.ReadInput[] = []
+const samples: number[] = []
 const textPageInputs: FileSystem.TextPageInput[] = []
 const pages: FileSystem.ListTarget[] = []
 const pageInputs: Pick<FileSystem.ListPageInput, "offset" | "limit">[] = []
@@ -20,6 +21,13 @@ let listReal = "/project/src"
 let size = 5
 let real = "/project/README.md"
 let afterApproval = () => {}
+let readContent: FileSystem.Content = new FileSystem.TextContent({
+  type: "text",
+  content: "hello",
+  mime: "text/plain",
+})
+let sample = new TextEncoder().encode("hello")
+let readFailure: unknown
 const filesystem = Layer.succeed(
   FileSystem.Service,
   FileSystem.Service.of({
@@ -30,7 +38,7 @@ const filesystem = Layer.succeed(
             type: "file" as const,
             target: new FileSystem.ReadTarget({
               real,
-              resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
+              resource: input.reference === undefined ? input.path : `${input.reference}:${input.path}`,
               size,
               dev: 1,
             }),
@@ -56,7 +64,7 @@ const filesystem = Layer.succeed(
             ? Effect.succeed(
                 new FileSystem.ReadTarget({
                   real,
-                  resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
+                  resource: input.reference === undefined ? input.path : `${input.reference}:${input.path}`,
                   size,
                   dev: 1,
                 }),
@@ -65,22 +73,31 @@ const filesystem = Layer.succeed(
         ),
       ),
     readResolved: () =>
+      readFailure === undefined
+        ? Effect.sync(() => {
+            reads.push({ path: RelativePath.make("README.md") })
+            return readContent
+          })
+        : Effect.die(readFailure),
+    readSampleResolved: (_target, maximumBytes) =>
       Effect.sync(() => {
-        reads.push({ path: RelativePath.make("README.md") })
-        return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
+        samples.push(maximumBytes)
+        return sample.slice(0, maximumBytes)
       }),
     readTextPageResolved: (_target, page = {}) =>
-      Effect.sync(() => {
-        textPageInputs.push(page)
-        return new FileSystem.TextPage({
-          type: "text-page",
-          content: "hello",
-          mime: "text/plain",
-          offset: page.offset ?? 1,
-          truncated: true,
-          next: (page.offset ?? 1) + 1,
-        })
-      }),
+      readFailure === undefined
+        ? Effect.sync(() => {
+            textPageInputs.push(page)
+            return new FileSystem.TextPage({
+              type: "text-page",
+              content: "hello",
+              mime: "text/plain",
+              offset: page.offset ?? 1,
+              truncated: true,
+              next: (page.offset ?? 1) + 1,
+            })
+          })
+        : Effect.die(readFailure),
     resolveRoot: () => Effect.die("unused"),
     revalidateRoot: Effect.succeed,
     list: () => Effect.die("unused"),
@@ -141,6 +158,9 @@ describe("ReadTool", () => {
       size = 5
       real = "/project/README.md"
       afterApproval = () => {}
+      readContent = new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
+      sample = new TextEncoder().encode("hello")
+      readFailure = undefined
       resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
@@ -153,6 +173,107 @@ describe("ReadTool", () => {
       ).toEqual({ type: "json", value: { type: "text", content: "hello", mime: "text/plain" } })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
       expect(reads).toEqual([{ path: RelativePath.make("README.md") }])
+    }),
+  )
+
+  it.effect("returns a small PNG as native media instead of durable base64 text", () =>
+    Effect.gen(function* () {
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      reads.length = 0
+      samples.length = 0
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = Buffer.from(png, "base64").length
+      real = "/project/pixel.png"
+      afterApproval = () => {}
+      sample = Buffer.from(png, "base64")
+      readContent = new FileSystem.BinaryContent({
+        type: "binary",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      })
+      readFailure = undefined
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-image", name: "read", input: { path: "pixel.png" } },
+        }),
+      ).toEqual({
+        type: "content",
+        value: [
+          { type: "text", text: "Image read successfully" },
+          { type: "media", mediaType: "image/png", data: png, filename: "pixel.png" },
+        ],
+      })
+      expect(samples).toEqual([FileSystem.READ_SAMPLE_BYTES])
+      expect(reads).toHaveLength(1)
+    }),
+  )
+
+  it.effect("classifies supported image contents before a misleading binary extension", () =>
+    Effect.gen(function* () {
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = Buffer.from(png, "base64").length
+      real = "/project/pixel.bin"
+      afterApproval = () => {}
+      sample = Buffer.from(png, "base64")
+      readContent = new FileSystem.BinaryContent({
+        type: "binary",
+        content: png,
+        encoding: "base64",
+        mime: "application/octet-stream",
+      })
+      readFailure = undefined
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-disguised-image", name: "read", input: { path: "pixel.bin" } },
+        }),
+      ).toMatchObject({
+        type: "content",
+        value: [{ type: "text" }, { type: "media", mediaType: "image/png", filename: "pixel.bin" }],
+      })
+    }),
+  )
+
+  it.effect("rejects unsupported binary before direct reads or paging", () =>
+    Effect.gen(function* () {
+      reads.length = 0
+      textPageInputs.length = 0
+      samples.length = 0
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = FileSystem.MAX_READ_BYTES + 1
+      real = "/project/archive.dat"
+      afterApproval = () => {}
+      sample = new Uint8Array([0, 1, 2, 3])
+      readFailure = undefined
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: {
+            type: "tool-call",
+            id: "call-binary",
+            name: "read",
+            input: { path: "archive.dat", offset: 2, limit: 1 },
+          },
+        }),
+      ).toEqual({ type: "error", value: "Cannot read binary file: archive.dat" })
+      expect(samples).toEqual([FileSystem.READ_SAMPLE_BYTES])
+      expect(reads).toEqual([])
+      expect(textPageInputs).toEqual([])
     }),
   )
 
@@ -301,6 +422,8 @@ describe("ReadTool", () => {
       size = FileSystem.MAX_READ_BYTES + 1
       real = "/project/large.txt"
       afterApproval = () => {}
+      sample = new TextEncoder().encode("hello")
+      readFailure = undefined
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -321,6 +444,78 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("preserves safe read limit errors", () =>
+    Effect.gen(function* () {
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = 5
+      real = "/project/changed.txt"
+      afterApproval = () => {}
+      sample = new TextEncoder().encode("hello")
+      readFailure = new FileSystem.ReadLimitError("changed.txt", FileSystem.MAX_READ_BYTES)
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-read-limit", name: "read", input: { path: "changed.txt" } },
+        }),
+      ).toEqual({
+        type: "error",
+        value: `File exceeds ${FileSystem.MAX_READ_BYTES} byte read limit: changed.txt`,
+      })
+    }),
+  )
+
+  it.effect("preserves binary errors discovered after the sample", () =>
+    Effect.gen(function* () {
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = FileSystem.MAX_READ_BYTES + 1
+      real = "/project/late-binary"
+      afterApproval = () => {}
+      sample = new TextEncoder().encode("text prefix")
+      readFailure = new FileSystem.BinaryFileError("late-binary")
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-late-binary", name: "read", input: { path: "late-binary" } },
+        }),
+      ).toEqual({ type: "error", value: "Cannot read binary file: late-binary" })
+    }),
+  )
+
+  it.effect("rejects unsupported binary discovered by a direct read", () =>
+    Effect.gen(function* () {
+      allow = true
+      resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
+      size = 5
+      real = "/project/late-binary"
+      afterApproval = () => {}
+      sample = new TextEncoder().encode("text prefix")
+      readFailure = undefined
+      readContent = new FileSystem.BinaryContent({
+        type: "binary",
+        content: "AAECAw==",
+        encoding: "base64",
+        mime: "application/octet-stream",
+      })
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-direct-binary", name: "read", input: { path: "late-binary" } },
+        }),
+      ).toEqual({ type: "error", value: "Cannot read binary file: late-binary" })
+    }),
+  )
+
   it.effect("does not read when the file changes after permission approval", () =>
     Effect.gen(function* () {
       assertions.length = 0
@@ -330,6 +525,8 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/README.md"
+      sample = new TextEncoder().encode("hello")
+      readFailure = undefined
       afterApproval = () => {
         real = "/outside/README.md"
       }

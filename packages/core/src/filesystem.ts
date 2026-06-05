@@ -23,8 +23,68 @@ export type ReadInput = typeof ReadInput.Type
 
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
+export const READ_SAMPLE_BYTES = 4 * 1024
 const MAX_LINE_LENGTH = 2_000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
+
+export class ReadLimitError extends Error {
+  constructor(
+    readonly resource: string,
+    readonly maximumBytes: number,
+  ) {
+    super(`File exceeds ${maximumBytes} byte read limit: ${resource}`)
+    this.name = "ReadLimitError"
+  }
+}
+
+export class BinaryFileError extends Error {
+  constructor(readonly resource: string) {
+    super(`Cannot read binary file: ${resource}`)
+    this.name = "BinaryFileError"
+  }
+}
+
+const BINARY_EXTENSIONS = new Set([
+  ".zip",
+  ".tar",
+  ".gz",
+  ".exe",
+  ".dll",
+  ".so",
+  ".class",
+  ".jar",
+  ".war",
+  ".7z",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".bin",
+  ".dat",
+  ".obj",
+  ".o",
+  ".a",
+  ".lib",
+  ".wasm",
+  ".pyc",
+  ".pyo",
+])
+
+export const isBinary = (resource: string, bytes: Uint8Array) => {
+  if (BINARY_EXTENSIONS.has(path.extname(resource).toLowerCase())) return true
+  if (bytes.length === 0) return false
+  let nonPrintable = 0
+  for (const byte of bytes) {
+    if (byte === 0) return true
+    if (byte < 9 || (byte > 13 && byte < 32)) nonPrintable++
+  }
+  return nonPrintable / bytes.length > 0.3
+}
 
 export class TextContent extends Schema.Class<TextContent>("FileSystem.TextContent")({
   type: Schema.Literal("text"),
@@ -158,6 +218,7 @@ export interface Interface {
   readonly resolveReadPath: (input: ReadInput) => Effect.Effect<ReadPathTarget>
   readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
   readonly readResolved: (target: ReadTarget, maximumBytes?: number) => Effect.Effect<Content>
+  readonly readSampleResolved: (target: ReadTarget, maximumBytes: number) => Effect.Effect<Uint8Array>
   readonly readTextPageResolved: (target: ReadTarget, page?: TextPageInput) => Effect.Effect<TextPage>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   /** Select a contained canonical read root without asserting leaf policy. */
@@ -330,12 +391,26 @@ export const layer = Layer.effect(
           if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
           if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
             return yield* Effect.die(new Error("File changed after permission approval"))
-          if (info.size > maximumBytes)
-            return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
+          if (info.size > maximumBytes) return yield* Effect.die(new ReadLimitError(target.resource, maximumBytes))
           const bytes = yield* file.readAlloc(maximumBytes + 1).pipe(Effect.orDie)
           if (bytes._tag === "Some" && bytes.value.length > maximumBytes)
-            return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
+            return yield* Effect.die(new ReadLimitError(target.resource, maximumBytes))
           return yield* content(target, bytes._tag === "Some" ? bytes.value : new Uint8Array())
+        }),
+      )
+    })
+    const readSampleResolved = Effect.fn("FileSystem.readSampleResolved")(function* (
+      target: ReadTarget,
+      maximumBytes: number,
+    ) {
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
+          const info = yield* file.stat.pipe(Effect.orDie)
+          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
+            return yield* Effect.die(new Error("File changed after permission approval"))
+          return Option.getOrElse(yield* file.readAlloc(maximumBytes).pipe(Effect.orDie), () => new Uint8Array())
         }),
       )
     })
@@ -391,7 +466,7 @@ export const layer = Layer.effect(
           while (!done) {
             const chunk = yield* file.readAlloc(64 * 1024).pipe(Effect.orDie)
             if (Option.isNone(chunk)) break
-            if (chunk.value.includes(0)) return yield* Effect.die(new Error("Cannot page binary file"))
+            if (chunk.value.includes(0)) return yield* Effect.die(new BinaryFileError(target.resource))
             let text = decoder.decode(chunk.value, { stream: true })
             while (true) {
               const index = text.indexOf("\n")
@@ -528,6 +603,7 @@ export const layer = Layer.effect(
       resolveReadPath,
       resolveRead,
       readResolved,
+      readSampleResolved,
       readTextPageResolved,
       list: Effect.fn("FileSystem.list")(function* (input) {
         return yield* listResolved(yield* resolveList(input))
