@@ -162,7 +162,16 @@ export const layer = Layer.effect(
     })
 
     const loadFromDisk = fs.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).pipe(
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.catch((error) => {
+        if (
+          Flag.OPENCODE_MODELS_PATH === undefined &&
+          error._tag === "FileSystemError" &&
+          error.method === "readJson"
+        ) {
+          return fs.remove(filepath, { force: true }).pipe(Effect.ignore, Effect.as(undefined))
+        }
+        return Effect.succeed(undefined)
+      }),
       Effect.map((v) => v as Record<string, Provider> | undefined),
     )
 
@@ -172,7 +181,16 @@ export const layer = Layer.effect(
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
       const text = yield* fetchApi()
-      yield* fs.writeWithDirs(filepath, text)
+      const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
+      yield* fs.writeWithDirs(tempfile, text).pipe(
+        Effect.andThen(fs.rename(tempfile, filepath)),
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
+            return yield* Effect.fail(error)
+          }),
+        ),
+      )
       return text
     })
 

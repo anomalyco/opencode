@@ -109,6 +109,21 @@ describe("FSUtil", () => {
         expect(result).toEqual(data)
       }),
     )
+
+    it(
+      "fails invalid JSON through the error channel",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "broken.json")
+        yield* filesys.writeFileString(file, "{")
+
+        const result = yield* fs.readJson(file).pipe(Effect.catch((error) => Effect.succeed(error)))
+
+        expect(result).toHaveProperty("_tag", "FileSystemError")
+      }),
+    )
   })
 
   describe("ensureDir", () => {
