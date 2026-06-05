@@ -36,6 +36,7 @@ export type Source = typeof Source.Type
 export const Request = Schema.Struct({
   id: ID,
   sessionID: SessionV2.ID,
+  agent: AgentV2.ID.pipe(Schema.optional),
   action: Schema.String,
   resources: Schema.Array(Schema.String),
   save: Schema.Array(Schema.String).pipe(Schema.optional),
@@ -50,6 +51,7 @@ export type Reply = typeof Reply.Type
 export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
   sessionID: SessionV2.ID,
+  agent: AgentV2.ID.pipe(Schema.optional),
   action: Schema.String,
   resources: Schema.Array(Schema.String),
   save: Schema.Array(Schema.String).pipe(Schema.optional),
@@ -159,10 +161,14 @@ export const layer = Layer.effect(
       )
     })
 
-    const configured = EffectRuntime.fn("PermissionV2.configured")(function* (sessionID: SessionV2.ID) {
+    const configured = EffectRuntime.fn("PermissionV2.configured")(function* (
+      sessionID: SessionV2.ID,
+      agentID?: AgentV2.ID,
+    ) {
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionV2.NotFoundError({ sessionID })
-      return (yield* agents.resolve(session.agent))?.permissions ?? missingAgentPermissions
+      const agent = agentID ? yield* agents.get(agentID) : yield* agents.resolve(session.agent)
+      return agent?.permissions ?? missingAgentPermissions
     })
 
     function denied(input: AssertInput, rules: Ruleset) {
@@ -174,7 +180,7 @@ export const layer = Layer.effect(
     }
 
     const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
-      const rules = yield* configured(input.sessionID)
+      const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
@@ -186,6 +192,7 @@ export const layer = Layer.effect(
       return {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
+        agent: input.agent,
         action: input.action,
         resources: input.resources,
         save: input.save,
@@ -281,7 +288,7 @@ export const layer = Layer.effect(
           const rememberedRules = yield* savedRules()
           for (const [id, item] of pending) {
             const input = { ...item.request }
-            const rules = yield* configured(item.request.sessionID).pipe(
+            const rules = yield* configured(item.request.sessionID, item.request.agent).pipe(
               EffectRuntime.catchTag("Session.NotFoundError", () => EffectRuntime.succeed(undefined)),
             )
             if (!rules) continue

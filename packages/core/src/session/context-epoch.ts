@@ -89,10 +89,14 @@ const prepareOnce = Effect.fnUntraced(function* (
     stored.replacement_seq === null && !replacingAgent
       ? yield* SystemContext.reconcile(value, snapshot)
       : yield* SystemContext.replace(value, snapshot)
-  if (result._tag === "ReplacementBlocked" && replacingAgent)
+  if (result._tag === "ReplacementBlocked" && replacingAgent) {
+    yield* fence(db, sessionID, agent, stored.revision)
     return yield* new AgentReplacementBlocked({ sessionID, previous: stored.agent, current: agent })
-  if (result._tag === "Unchanged" || result._tag === "ReplacementBlocked")
+  }
+  if (result._tag === "Unchanged" || result._tag === "ReplacementBlocked") {
+    yield* fence(db, sessionID, agent, stored.revision)
     return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
+  }
   if (result._tag === "ReplacementReady") {
     const replacementSeq = stored.replacement_seq ?? (yield* SessionInput.latestSeq(db, sessionID))
     yield* replace(db, sessionID, agent, stored.revision, replacementSeq, result.generation)
@@ -261,6 +265,36 @@ const replace = Effect.fnUntraced(function* (
             .get()
             .pipe(Effect.orDie)
           if (!updated) return yield* Effect.die(new RevisionMismatch())
+        }),
+      { behavior: "immediate" },
+    )
+    .pipe(Effect.orDie)
+})
+
+const fence = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  agent: AgentV2.ID,
+  expectedRevision: number,
+) {
+  yield* db
+    .transaction(
+      () =>
+        Effect.gen(function* () {
+          const selected = yield* db
+            .select({ agent: SessionTable.agent })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, sessionID))
+            .get()
+            .pipe(Effect.orDie)
+          if (!selected || AgentV2.effectiveID(selected.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+          const epoch = yield* db
+            .select({ revision: SessionContextEpochTable.revision })
+            .from(SessionContextEpochTable)
+            .where(eq(SessionContextEpochTable.session_id, sessionID))
+            .get()
+            .pipe(Effect.orDie)
+          if (!epoch || epoch.revision !== expectedRevision) return yield* Effect.die(new RevisionMismatch())
         }),
       { behavior: "immediate" },
     )

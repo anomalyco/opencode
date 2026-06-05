@@ -970,6 +970,91 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("applies a model switch after the safe boundary to the next provider turn", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      let switched = false
+      modelResolveHook = Effect.suspend(() => {
+        if (switched) return Effect.void
+        switched = true
+        return events
+          .publish(SessionEvent.ModelSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            model: { id: ModelV2.ID.make("replacement"), providerID: ProviderV2.ID.make("fake") },
+          })
+          .pipe(Effect.asVoid)
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+      modelResolveHook = Effect.void
+      systemBaseline = "Replacement context"
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests.map((request) => request.model)).toEqual([model, replacementModel])
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
+        ["Initial context"],
+        ["Replacement context"],
+      ])
+    }),
+  )
+
+  it.effect("fences an unchanged epoch read across an agent ABA replacement request", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+      let switched = false
+      systemLoadHook = Effect.suspend(() => {
+        if (switched) return Effect.void
+        switched = true
+        return events
+          .publish(SessionEvent.AgentSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            agent: AgentV2.ID.make("reviewer"),
+          })
+          .pipe(
+            Effect.andThen(
+              events.publish(SessionEvent.AgentSwitched, {
+                sessionID,
+                messageID: SessionMessage.ID.create(),
+                timestamp: DateTime.makeUnsafe(2),
+                agent: AgentV2.defaultID,
+              }),
+            ),
+            Effect.asVoid,
+          )
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(
+        yield* db
+          .select({ replacementSeq: SessionContextEpochTable.replacement_seq })
+          .from(SessionContextEpochTable)
+          .where(eq(SessionContextEpochTable.session_id, sessionID))
+          .get()
+          .pipe(Effect.orDie),
+      ).toEqual({ replacementSeq: null })
+    }),
+  )
+
   it.effect("rejects stale agent guidance when committing an existing-epoch replacement", () =>
     Effect.gen(function* () {
       yield* setup

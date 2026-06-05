@@ -1,6 +1,5 @@
 export * as SkillGuidance from "./guidance"
 
-import { pathToFileURL } from "url"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
@@ -11,7 +10,6 @@ import { SystemContext } from "../system-context/index"
 const Summary = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
-  location: Schema.String,
 })
 type Summary = typeof Summary.Type
 
@@ -27,7 +25,6 @@ const render = (skills: ReadonlyArray<Summary>) =>
             "  <skill>",
             `    <name>${skill.name}</name>`,
             `    <description>${skill.description}</description>`,
-            `    <location>${skill.location}</location>`,
             "  </skill>",
           ]),
           "</available_skills>",
@@ -57,9 +54,7 @@ export const layer = Layer.effect(
           return SystemContext.empty
         const available = permitted
           .flatMap((skill) =>
-            skill.description === undefined
-              ? []
-              : [{ name: skill.name, description: skill.description, location: pathToFileURL(skill.location).href }],
+            skill.description === undefined ? [] : [{ name: skill.name, description: skill.description }],
           )
           .toSorted((a, b) => a.name.localeCompare(b.name))
         return SystemContext.make({

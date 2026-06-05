@@ -173,8 +173,8 @@ export const layer = Layer.effect(
           agentID,
         ).pipe(retryAgentMismatch(undefined)))
       const current = yield* getSession(sessionID)
-      if ((yield* agents.resolve(current.agent))?.id !== agent?.id) return yield* runTurn(sessionID, undefined)
-      const model = yield* models.resolve(current)
+      if ((yield* agents.resolve(current.agent))?.id !== agent?.id) return yield* Effect.die(new RetryTurn(undefined))
+      const model = yield* models.resolve(session)
       const context = yield* store.runnerContext(session.id, system.baselineSeq)
       const request = LLM.request({
         model,
@@ -190,7 +190,7 @@ export const layer = Layer.effect(
         model: {
           id: ModelV2.ID.make(model.id),
           providerID: ProviderV2.ID.make(model.provider),
-          ...(current.model?.variant === undefined ? {} : { variant: current.model.variant }),
+          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
         },
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
@@ -201,7 +201,7 @@ export const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
-            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
+            yield* tools.settle({ sessionID: session.id, agent: agentID, call: event }).pipe(
               Effect.catchCause((cause) => {
                 if (isQuestionRejected(cause)) return Effect.failCause(cause)
                 return Effect.succeed({

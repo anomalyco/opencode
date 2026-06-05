@@ -18,9 +18,11 @@ import { State } from "../state"
 import { SessionSchema } from "../session/schema"
 import type { SessionV2 } from "../session"
 import { ApplicationTools } from "./application-tools"
+import { AgentV2 } from "../agent"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
+  readonly agent?: AgentV2.ID
   readonly call: ToolCall
 }
 
@@ -37,7 +39,7 @@ export type ExecuteInput = {
 export type Invocation = ExecuteInput & {
   readonly source?: PermissionV2.Source
   readonly assertPermission: (
-    input: Omit<PermissionV2.AssertInput, "sessionID" | "source">,
+    input: Omit<PermissionV2.AssertInput, "sessionID" | "agent" | "source">,
   ) => Effect.Effect<void, PermissionV2.Error | SessionV2.NotFoundError>
 }
 
@@ -129,7 +131,8 @@ export const layer = Layer.effect(
     const invocation = (input: ExecuteInput): Invocation => ({
       ...input,
       // Source needs the durable owning assistant message ID, which the registry does not receive yet.
-      assertPermission: (request) => permission.assert({ ...request, sessionID: input.sessionID }),
+      assertPermission: (request) =>
+        permission.assert({ ...request, sessionID: input.sessionID, ...(input.agent ? { agent: input.agent } : {}) }),
     })
 
     const settleEntry = Effect.fn("ToolRegistry.settleEntry")(function* (

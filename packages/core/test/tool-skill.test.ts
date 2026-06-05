@@ -39,6 +39,7 @@ describe("SkillTool", () => {
             content: "# Effect\n\nGuidance",
           }
           const assertions: PermissionV2.AssertInput[] = []
+          let deny = false
           const truncations: ToolOutputStore.TruncateInput[] = []
           let truncate = (input: ToolOutputStore.TruncateInput): Effect.Effect<ToolOutputStore.TruncateResult> =>
             Effect.succeed({ content: input.content, truncated: false })
@@ -55,7 +56,10 @@ describe("SkillTool", () => {
           const permission = Layer.succeed(
             PermissionV2.Service,
             PermissionV2.Service.of({
-              assert: (input) => Effect.sync(() => assertions.push(input)),
+              assert: (input) =>
+                Effect.sync(() => assertions.push(input)).pipe(
+                  Effect.andThen(deny ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void),
+                ),
               ask: () => Effect.die("unused"),
               reply: () => Effect.die("unused"),
               get: () => Effect.die("unused"),
@@ -141,6 +145,13 @@ describe("SkillTool", () => {
                 call: { type: "tool-call", id: "call-missing-skill", name: "skill", input: { name: "missing" } },
               }),
             ).toEqual({ type: "error", value: "Unable to load skill missing" })
+            deny = true
+            expect(
+              yield* registry.execute({
+                sessionID,
+                call: { type: "tool-call", id: "call-denied-skill", name: "skill", input: { name: "effect" } },
+              }),
+            ).toEqual({ type: "error", value: "Unable to load skill effect" })
           }).pipe(Effect.provide(layer))
         }),
       ),

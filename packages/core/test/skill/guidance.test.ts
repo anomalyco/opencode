@@ -1,5 +1,4 @@
 import path from "path"
-import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
@@ -57,7 +56,6 @@ describe("SkillGuidance", () => {
           "  <skill>",
           "    <name>effect</name>",
           "    <description>Build applications with Effect</description>",
-          `    <location>${pathToFileURL(effect.location).href}</location>`,
           "  </skill>",
           "</available_skills>",
         ].join("\n"),
