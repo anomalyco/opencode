@@ -351,6 +351,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       dialog.show(() => <x.DialogFork />)
     })
   }
+  const forkWorktree = () => {
+    void import("@/components/dialog-fork").then((x) => {
+      dialog.show(() => <x.DialogFork mode="worktree" />)
+    })
+  }
 
   const shareCmds = () => {
     if (sync.data.config.share === "disabled") return []
@@ -415,6 +420,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
+    }),
+    sessionCommand({
+      id: "session.fork.worktree",
+      title: language.t("command.session.fork.worktree"),
+      description: language.t("command.session.fork.worktree.description"),
+      slash: "fork-worktree",
+      disabled: !params.id,
+      onSelect: forkWorktree,
     }),
   ]
 

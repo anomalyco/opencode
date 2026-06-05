@@ -87,6 +87,18 @@ function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL
   return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || process.cwd()
 }
 
+function hasExplicitTarget(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
+  return (
+    url.searchParams.has("directory") ||
+    url.searchParams.has("workspace") ||
+    request.headers["x-opencode-directory"] !== undefined
+  )
+}
+
+function isForkRouteWithExplicitTarget(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
+  return request.method === "POST" && /^\/session\/[^/]+\/fork$/.test(url.pathname) && hasExplicitTarget(request, url)
+}
+
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
   return isLocalWorkspaceRoute(request.method, url.pathname) || url.pathname.startsWith("/console")
 }
@@ -219,7 +231,8 @@ function routeHttpApiWorkspace<E>(
 > {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
-    const sessionID = getWorkspaceRouteSessionID(requestURL(request))
+    const url = requestURL(request)
+    const sessionID = isForkRouteWithExplicitTarget(request, url) ? null : getWorkspaceRouteSessionID(url)
     const session = sessionID
       ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(
           Effect.catchIf(
