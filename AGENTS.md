@@ -1,5 +1,15 @@
 @ECOSYSTEM.md
 
+## Private infrastructure docs
+
+Host IPs, deploy instructions, and homelab topology are in the **private** companion repo:
+
+```
+~/dev/docs-skein/
+```
+
+If not present: `git clone git@github.com:androidand/docs-skein.git ~/dev/docs-skein`
+
 ## Ecosystem position
 
 This is a fork of opencode. It adds local provider discovery (mDNS + LAN scan) and
