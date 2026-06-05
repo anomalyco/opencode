@@ -25,6 +25,7 @@ import { MessageID, SessionID } from "../../src/session/schema"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "../fixtures/recordings")
 
@@ -368,7 +369,7 @@ const driveToolLoop = (scenario: RecordedScenario) =>
 
     const stableID = scenario.stableID ?? scenario.providerID
     const sessionID = SessionID.make(`session-recorded-${stableID}-loop`)
-    const modelID = ProviderV2.ModelID.make(model.id)
+    const modelID = ModelV2.ID.make(model.id)
     const agent = {
       name: "test",
       mode: "primary",

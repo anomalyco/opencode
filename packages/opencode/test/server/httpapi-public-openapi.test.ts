@@ -3,7 +3,14 @@ import { OpenApi } from "effect/unstable/httpapi"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
-type OpenApiSchema = { readonly $ref?: string; readonly anyOf?: ReadonlyArray<OpenApiSchema> }
+type OpenApiSchema = {
+  readonly $ref?: string
+  readonly anyOf?: ReadonlyArray<OpenApiSchema>
+  readonly type?: string
+  readonly enum?: readonly unknown[]
+  readonly properties?: Record<string, OpenApiSchema>
+  readonly required?: readonly string[]
+}
 type OpenApiResponse = {
   readonly description?: string
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
@@ -20,7 +27,10 @@ type OpenApiOperation = {
   readonly security?: unknown
 }
 type OpenApiPathItem = Partial<Record<Method, OpenApiOperation>>
-type OpenApiSpec = { readonly paths: Record<string, OpenApiPathItem> }
+type OpenApiSpec = {
+  readonly paths: Record<string, OpenApiPathItem>
+  readonly components: { readonly schemas: Record<string, OpenApiSchema> }
+}
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
 
@@ -56,6 +66,23 @@ function isBuiltInEndpointError(name: string) {
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  test("documents nested legacy global sync events", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const schema = spec.components.schemas.SyncEventSessionCreated
+
+    expect(schema?.required).toEqual(["type", "id", "syncEvent"])
+    expect(schema?.properties?.type?.enum).toEqual(["sync"])
+    expect(schema?.properties?.syncEvent).toMatchObject({
+      required: ["type", "id", "seq", "aggregateID", "data"],
+      properties: {
+        type: { enum: ["session.created.1"] },
+        id: { type: "string" },
+        seq: { type: "number" },
+        aggregateID: { type: "string" },
+      },
+    })
+  })
+
   test("preserves /api auth responses", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 

@@ -12,6 +12,7 @@ import type {
 import { Effect } from "effect"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"
+import { partsToContentChunks, type ReplayPart } from "./content"
 import {
   duplicateRunningToolUpdate,
   errorToolUpdate,
@@ -87,7 +88,31 @@ export class Subscription {
       await this.recordFetchedPart(message.info.sessionID, message, part)
       if (part.type === "tool") {
         await this.handleToolPart(message.info.sessionID, part)
+        continue
       }
+      await this.replayContentPart(message, part)
+    }
+  }
+
+  private async replayContentPart(message: SessionMessageResponse, part: Part) {
+    if (part.type !== "text" && part.type !== "file" && part.type !== "reasoning") return
+
+    const sessionUpdate =
+      part.type === "reasoning"
+        ? "agent_thought_chunk"
+        : message.info.role === "user"
+          ? "user_message_chunk"
+          : "agent_message_chunk"
+
+    for (const chunk of partsToContentChunks([part as ReplayPart])) {
+      await this.input.connection.sessionUpdate({
+        sessionId: message.info.sessionID,
+        update: {
+          sessionUpdate,
+          messageId: message.info.id,
+          ...chunk,
+        },
+      })
     }
   }
 

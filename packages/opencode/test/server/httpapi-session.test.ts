@@ -88,7 +88,7 @@ function createTextMessage(sessionID: SessionIDType, text: string) {
       role: "user",
       sessionID,
       agent: "build",
-      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
       time: { created: Date.now() },
     })
     const part = yield* svc.updatePart({
@@ -391,8 +391,9 @@ describe("session HttpApi", () => {
         yield* insertLegacyAssistantMessage(parent.id)
 
         expect(
-          (yield* requestJson<{ items: SessionMessage.Message[] }>(`/api/session/${parent.id}/message`, { headers }))
-            .items,
+          (yield* requestJson<{ data: SessionMessage.Message[] }>(`/api/session/${parent.id}/message`, {
+            headers,
+          })).data,
         ).toMatchObject([{ type: "assistant" }])
       }),
     { git: true, config: { formatter: false, lsp: false } },
@@ -456,7 +457,8 @@ describe("session HttpApi", () => {
           })}`,
           { headers },
         )
-        const sessionCursor = (yield* json<{ cursor: { next?: string } }>(sessionPage)).cursor.next
+        const sessionCursor = (yield* json<{ data: Session.Info[]; cursor: { next?: string } }>(sessionPage)).cursor
+          .next
         expect(sessionCursor).toBeTruthy()
         expect(JSON.parse(Buffer.from(sessionCursor!, "base64url").toString("utf8"))).toMatchObject({
           order: "asc",
@@ -483,10 +485,10 @@ describe("session HttpApi", () => {
         })
 
         const messagePage = yield* request(`/api/session/${session.id}/message?limit=1`, { headers })
-        const messageBody = yield* json<{ items: SessionMessage.Message[]; cursor: { next?: string } }>(messagePage)
+        const messageBody = yield* json<{ data: SessionMessage.Message[]; cursor: { next?: string } }>(messagePage)
         const messageCursor = messageBody.cursor.next
         expect(messageCursor).toBeTruthy()
-        expect(messageBody.items.map((message) => message.id)).toEqual([secondMessage.id])
+        expect(messageBody.data.map((message) => message.id)).toEqual([secondMessage.id])
         expect(JSON.parse(Buffer.from(messageCursor!, "base64url").toString("utf8"))).toEqual({
           id: secondMessage.id,
           order: "desc",
@@ -497,7 +499,7 @@ describe("session HttpApi", () => {
           headers,
         })
         expect(
-          (yield* json<{ items: SessionMessage.Message[] }>(nextMessagePage)).items.map((message) => message.id),
+          (yield* json<{ data: SessionMessage.Message[] }>(nextMessagePage)).data.map((message) => message.id),
         ).toEqual([firstMessage.id])
 
         const legacyMessageCursor = Buffer.from(
@@ -507,7 +509,7 @@ describe("session HttpApi", () => {
           headers,
         })
         expect(
-          (yield* json<{ items: SessionMessage.Message[] }>(legacyMessagePage)).items.map((message) => message.id),
+          (yield* json<{ data: SessionMessage.Message[] }>(legacyMessagePage)).data.map((message) => message.id),
         ).toEqual([firstMessage.id])
 
         const messageCursorWithOrder = yield* request(
@@ -582,47 +584,48 @@ describe("session HttpApi", () => {
           request(`/api/session/${session.id}/prompt`, {
             method: "POST",
             headers: { ...headers, "content-type": "application/json" },
-            body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "hello" } }),
+            body: JSON.stringify({ id: "msg_http_prompt", prompt: { text: "hello" } }),
           })
         const first = yield* recordPrompt()
         const retried = yield* recordPrompt()
-        type PromptBody = { id: string; type: string; text: string }
-        const firstBody = yield* json<PromptBody>(first)
-        const retriedBody = yield* json<PromptBody>(retried)
+        type PromptBody = { id: string; prompt: { text: string }; delivery: string; promotedSeq?: number }
+        const firstBody = yield* json<{ data: PromptBody }>(first)
+        const retriedBody = yield* json<{ data: PromptBody }>(retried)
         expect(first.status).toBe(200)
         expect(retried.status).toBe(200)
         expect(retriedBody).toEqual(firstBody)
-        expect(firstBody).toMatchObject({ type: "user", text: "hello" })
+        expect(firstBody).toMatchObject({
+          data: { id: "msg_http_prompt", prompt: { text: "hello" }, delivery: "steer" },
+        })
 
-        const messages = yield* requestJson<{ items: PromptBody[] }>(`/api/session/${session.id}/message`, {
+        const messages = yield* requestJson<{ data: PromptBody[] }>(`/api/session/${session.id}/message`, {
           headers,
         })
-        expect(messages.items).toHaveLength(0)
+        expect(messages.data).toHaveLength(0)
         const admitted = yield* Database.Service.use(({ db }) =>
           db
             .select()
             .from(SessionInputTable)
-            .where(eq(SessionInputTable.id, SessionMessage.ID.make("evt_http_prompt")))
+            .where(eq(SessionInputTable.id, SessionMessage.ID.make("msg_http_prompt")))
             .get()
             .pipe(Effect.orDie),
         )
         expect(admitted).toMatchObject({
-          id: "evt_http_prompt",
+          id: "msg_http_prompt",
           session_id: session.id,
           delivery: "steer",
           promoted_seq: null,
         })
-
         const conflict = yield* request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "goodbye" } }),
+          body: JSON.stringify({ id: "msg_http_prompt", prompt: { text: "goodbye" } }),
         })
         expect(conflict.status).toBe(409)
         expect(yield* responseJson(conflict)).toEqual({
           _tag: "ConflictError",
-          message: "Prompt message ID conflicts with an existing durable record: evt_http_prompt",
-          resource: "evt_http_prompt",
+          message: "Prompt message ID conflicts with an existing durable record: msg_http_prompt",
+          resource: "msg_http_prompt",
         })
       }),
     { git: true, config: { formatter: false, lsp: false } },

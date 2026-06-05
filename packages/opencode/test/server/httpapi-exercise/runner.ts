@@ -12,6 +12,7 @@ import { original } from "./environment"
 import { runtime } from "./runtime"
 import type { ActiveScenario, Options, ProjectOptions, Result, Scenario, ScenarioContext, SeededContext } from "./types"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 export function runScenario(options: Options) {
   return (scenario: Scenario) => {
@@ -153,7 +154,7 @@ function withContext<A, E>(
                 agent: "build",
                 model: {
                   providerID: ProviderV2.ID.opencode,
-                  modelID: ProviderV2.ModelID.make("test"),
+                  modelID: ModelV2.ID.make("test"),
                 },
               }
               const part: SessionV1.TextPart = {

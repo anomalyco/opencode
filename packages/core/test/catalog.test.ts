@@ -6,6 +6,7 @@ import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { Policy } from "@opencode-ai/core/policy"
+import { Project } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
@@ -187,7 +188,12 @@ describe("CatalogV2", () => {
       yield* events.publish(
         PluginV2.Event.Added,
         { id: PluginV2.ID.make("test-transform") },
-        { location: { directory: AbsolutePath.make("other") } },
+        {
+          location: new Location.Info({
+            directory: AbsolutePath.make("other"),
+            project: { id: Project.ID.global, directory: AbsolutePath.make("other") },
+          }),
+        },
       )
       yield* Effect.yieldNow
 

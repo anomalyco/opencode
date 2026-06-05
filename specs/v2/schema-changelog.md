@@ -4,6 +4,28 @@ Record V2 database, durable-event, projected-message, HTTP, and generated SDK sc
 
 This document covers meaningful contract changes introduced on the `feat/opencode-embedded-api` branch since its divergence from `origin/dev`. Mechanical file moves and internal refactors are omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.
 
+## 2026-06-04 Event-Sourced Session Input Cutover
+
+Affected schema:
+
+- `session_input`, `session_message`, `event`, `event_sequence`, and disposable workspace beta storage.
+- New synchronized `session.next.prompt.admitted.1` and `session.next.prompt.promoted.1` events.
+- Experimental `SessionV2.prompt(...)`, HTTP, and generated SDK admission receipt.
+
+Change:
+
+- Replace inbox-local admission sequence with event-sourced prompt admission and promotion sequences.
+- Give projected Session messages stable `msg_*` resource IDs distinct from `evt_*` creator event IDs.
+- Give every event that creates a projected transcript resource an explicit `msg_*` resource ID. Assistant steps propagate one `assistantMessageID` through assistant-owned events.
+- Reset incompatible unreleased beta event history, derived Session projections, workspace rows, and Session workspace links.
+
+Compatibility:
+
+- The reset preserves canonical V1 `session`, `message`, and `part` rows.
+- Existing synchronized workspaces are disposable beta state and are removed by the reset.
+- Before starting the new build, discard adapter-managed external workspace resources created by unreleased builds. The SQL migration cannot remove external resources through runtime adapters, and rediscovering retained resources after startup can replay incompatible beta history.
+- Exact prompt retries reconcile one stable `msg_*` identity when Session, prompt, and delivery mode match.
+
 ## Earlier Branch History
 
 ### Replayable Session Event Refinement And Cursor Stream
@@ -60,7 +82,7 @@ Affected schema:
 
 Change:
 
-- Bind step settlement to an explicit `assistantMessageID`.
+- Bind step settlement to an explicit assistant message ID.
 
 Reason:
 
@@ -103,7 +125,7 @@ Affected schema:
 
 Change:
 
-- Add and backfill `session_message.seq` from matching synchronized events.
+- Reset pre-launch Session-message projections and add `session_message.seq` for newly projected synchronized events.
 - Add event aggregate-sequence and aggregate-type-sequence indexes.
 - Add Session-message sequence, type-sequence, and compatibility timestamp indexes.
 
@@ -114,7 +136,8 @@ Reason:
 
 Compatibility:
 
-- Migration fails rather than inventing chronology if an existing projected Session message has no matching durable event.
+- Pre-launch Session-message projections are disposable because historical versions could write them without durable creator events.
+- The migration resets those projections rather than inventing chronology or blocking startup.
 - The timestamp compatibility index remains for legacy or transitional query shapes.
 
 ### Structured Tool Registry And Canonical Output
@@ -408,7 +431,7 @@ Affected schema:
 Change:
 
 - Preserve stable IDs on projected assistant text parts.
-- Route durable tool projection updates through explicit owning `assistantMessageID` values rather than provider-local call IDs alone.
+- Route durable tool projection updates through explicit owning assistant message IDs rather than provider-local call IDs alone.
 - Replay full-value text and tool-input end checkpoints while keeping fragment deltas ephemeral.
 
 Reason:
@@ -663,3 +686,85 @@ Compatibility:
 
 - Foreground V2 bash execution is unchanged.
 - Reintroduce background bash only with durable status observation, completion delivery, and explicit cancellation semantics.
+
+## 2026-06-04: Add Durable Session Context Snapshots
+
+Affected schema:
+
+- Add `session_context_epoch` for one active immutable baseline string, structured JSON snapshot, and baseline sequence per Session.
+
+Change:
+
+- Lazily initialize one durable Context Epoch snapshot at the first safe provider-turn boundary.
+- Lower its exact baseline string through `LLMRequest.system` for every provider turn in the epoch.
+- Reuse the stored baseline verbatim after restart or producer changes instead of resampling privileged initial context.
+- Compare later observations against an overwriteable codec-encoded structured snapshot rather than rendered-text hashes.
+- Expose admitted chronological context as first-class `system` Session messages while keeping the active baseline in bounded context state.
+
+Compatibility:
+
+- The unpublished Context Epoch schema is consolidated into one database migration; baseline and structured snapshots are operational state rather than synchronized event history.
+- Existing experimental V2 Session databases remain disposable across incompatible pre-launch event-schema changes.
+- Chronological context updates, replacement epochs after compaction or model switches, project instructions, skills guidance, and plugin transforms remain follow-up slices.
+
+## 2026-06-04: Admit Chronological Session Context Updates
+
+Affected schema:
+
+- Add synchronized `session.next.context.updated.1` Session events containing a durable System-message ID and only exact combined model-visible text.
+- Add `session_context_epoch.revision` for transactional structured-snapshot advancement.
+- Add the first-class `system` Session message projection for chronological context updates.
+
+Change:
+
+- Reconcile Location-scoped Context Sources at each safe provider-turn boundary using one coherent observation.
+- Keep the stored baseline immutable while admitting changed source renderings as chronological `Message.system(...)` history.
+- Advance the overwriteable structured snapshot atomically with the rendered System-message event.
+- Emit the previously stored model-meaningful removal rendering when a source is removed.
+- Reject chronological system updates that would split a local tool call from its result across provider protocols; use wrapped user fallback when Anthropic native system-update placement is unsupported.
+
+Compatibility:
+
+- The synchronized event log retains only text actually shown to the model, not internal structured snapshots.
+- Existing experimental V2 Session databases remain disposable across incompatible pre-launch event-schema changes.
+- Replacement epochs after compaction or model switches, skills guidance, and plugin-defined context remain follow-up slices.
+
+## 2026-06-04: Replace Session Context Epochs Lazily
+
+Affected schema:
+
+- Add nullable `session_context_epoch.replacement_seq` for idempotent lazy replacement requests.
+
+Change:
+
+- Mark the active Context Epoch for replacement after a model switch or completed compaction projection.
+- Persist the triggering aggregate sequence so same-target replay cannot reopen an already-settled replacement.
+- Render and overwrite the fresh immutable baseline and structured snapshot lazily at the next safe provider-turn boundary.
+- Exclude chronological System messages from earlier epochs when assembling active provider history.
+
+Compatibility:
+
+- Baseline replacement is bounded operational state and does not add permanent synchronized events.
+- Existing experimental V2 Session databases remain disposable across incompatible pre-launch event-schema changes.
+- Compaction execution, skills guidance, and plugin-defined context remain follow-up slices.
+
+## 2026-06-05: Register Ambient System Context Producers
+
+Affected schema:
+
+- No database schema changes.
+
+Change:
+
+- Replace the Session-specific context loader with a Location-scoped registry of stable-keyed scoped context producers.
+- Register environment/date and ambient instruction producers independently, then evaluate producers concurrently in stable contribution-key order.
+- Directly discover and read global plus upward project `AGENTS.md` files at each safe provider-turn boundary.
+- Preserve admitted instructions across transient scan/read failures and block first-epoch initialization while any context source is unavailable.
+- Retry Context Epoch preparation until stable after optimistic revision mismatches.
+- Clear the active Context Epoch when a Session moves so the destination initializes a complete baseline before promoting more input.
+- Fence Context Epoch initialization against the authoritative Session Location so a concurrent old-Location runner cannot recreate stale privileged context after a move.
+- Canonicalize ambient instruction traversal boundaries, honor `OPENCODE_DISABLE_PROJECT_CONFIG`, and make non-empty aggregate updates explicitly supersede previously loaded instructions.
+
+Compatibility:
+
+- Watcher-backed per-file `Refreshable` instruction observations, configured sources, nested discovery, and plugin-defined context remain follow-up slices.

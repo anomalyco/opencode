@@ -23,6 +23,7 @@ import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
 export interface DialogSelectProps<T> {
   title: string
   placeholder?: string
+  footer?: JSX.Element
   options: DialogSelectOption<T>[]
   flat?: boolean
   ref?: (ref: DialogSelectRef<T>) => void
@@ -49,10 +50,13 @@ export interface DialogSelectProps<T> {
 
 export interface DialogSelectOption<T = any> {
   title: string
+  titleView?: JSX.Element
   value: T
   description?: string
   details?: string[]
   footer?: JSX.Element | string
+  titleWidth?: number
+  truncateTitle?: boolean | "left"
   category?: string
   categoryView?: JSX.Element
   disabled?: boolean
@@ -66,6 +70,7 @@ export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
   selected: DialogSelectOption<T> | undefined
+  moveTo(value: T): void
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -341,6 +346,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     get selected() {
       return selected()
     },
+    moveTo(value) {
+      const index = flat().findIndex((option) => isDeepEqual(option.value, value))
+      if (index >= 0) moveTo(index, true)
+    },
   }
   props.ref?.(ref)
 
@@ -467,7 +476,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             </Show>
                             <Option
                               title={option.title}
+                              titleView={option.titleView}
                               footer={flatten() ? (option.category ?? option.footer) : option.footer}
+                              titleWidth={option.titleWidth}
+                              truncateTitle={option.truncateTitle}
                               description={option.description !== category ? option.description : undefined}
                               active={active()}
                               current={current()}
@@ -493,7 +505,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </scrollbox>
         </Show>
       </box>
-      <Show when={visibleActions().length} fallback={<box flexShrink={0} />}>
+      <Show when={props.footer || visibleActions().length} fallback={<box flexShrink={0} />}>
         <box
           paddingRight={2}
           paddingLeft={4}
@@ -503,6 +515,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           paddingTop={1}
         >
           <box flexDirection="row" gap={2}>
+            {props.footer}
             <For each={left()}>
               {(item) => (
                 <text>
@@ -534,10 +547,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
 function Option(props: {
   title: string
+  titleView?: JSX.Element
   description?: string
   active?: boolean
   current?: boolean
   footer?: JSX.Element | string
+  titleWidth?: number
+  truncateTitle?: boolean | "left"
   gutter?: () => JSX.Element
   onMouseOver?: () => void
 }) {
@@ -551,7 +567,7 @@ function Option(props: {
           ●
         </text>
       </Show>
-      <Show when={!props.current && props.gutter}>
+      <Show when={props.gutter}>
         <box flexShrink={0} marginRight={0}>
           {props.gutter?.()}
         </box>
@@ -564,7 +580,12 @@ function Option(props: {
         wrapMode="none"
         paddingLeft={3}
       >
-        {Locale.truncate(props.title, 61)}
+        {props.titleView ??
+          (props.truncateTitle === false
+            ? props.title
+            : props.truncateTitle === "left"
+              ? Locale.truncateLeft(props.title, props.titleWidth ?? 61)
+              : Locale.truncate(props.title, props.titleWidth ?? 61))}
         <Show when={props.description}>
           <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
         </Show>

@@ -5,6 +5,7 @@ import { Context, Effect, Schema } from "effect"
 import { SessionSchema } from "../schema"
 import type { MessageDecodeError } from "../error"
 import { SessionRunnerModel } from "./model"
+import type { SystemContext } from "../../system-context"
 
 export class StepLimitExceededError extends Schema.TaggedErrorClass<StepLimitExceededError>()(
   "SessionRunner.StepLimitExceededError",
@@ -14,7 +15,12 @@ export class StepLimitExceededError extends Schema.TaggedErrorClass<StepLimitExc
   },
 ) {}
 
-export type RunError = LLMError | SessionRunnerModel.Error | MessageDecodeError | StepLimitExceededError
+export type RunError =
+  | LLMError
+  | SessionRunnerModel.Error
+  | MessageDecodeError
+  | StepLimitExceededError
+  | SystemContext.InitializationBlocked
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {

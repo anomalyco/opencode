@@ -14,7 +14,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { BashTool } from "@opencode-ai/core/tool/bash"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -113,7 +113,7 @@ const withTool = <A, E, R>(
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
   const mutation = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+  const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const bash = BashTool.layer.pipe(
     Layer.provide(registry),
     Layer.provide(permission),

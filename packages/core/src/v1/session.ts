@@ -5,6 +5,7 @@ import { EventV2 } from "../event"
 import { PermissionV1 } from "./permission"
 import { ProjectV2 } from "../project"
 import { ProviderV2 } from "../provider"
+import { ModelV2 } from "../model"
 import { optionalOmitUndefined, withStatics } from "../schema"
 import { Identifier } from "../util/identifier"
 import { NonNegativeInt } from "../schema"
@@ -200,7 +201,7 @@ export const SubtaskPart = Schema.Struct({
   model: Schema.optional(
     Schema.Struct({
       providerID: ProviderV2.ID,
-      modelID: ProviderV2.ModelID,
+      modelID: ModelV2.ID,
     }),
   ),
   command: Schema.optional(Schema.String),
@@ -344,7 +345,7 @@ export const User = Schema.Struct({
   agent: Schema.String,
   model: Schema.Struct({
     providerID: ProviderV2.ID,
-    modelID: ProviderV2.ModelID,
+    modelID: ModelV2.ID,
     variant: Schema.optional(Schema.String),
   }),
   system: Schema.optional(Schema.String),
@@ -440,7 +441,7 @@ export const SubtaskPartInput = Schema.Struct({
   model: Schema.optional(
     Schema.Struct({
       providerID: ProviderV2.ID,
-      modelID: ProviderV2.ModelID,
+      modelID: ModelV2.ID,
     }),
   ),
   command: Schema.optional(Schema.String),
@@ -456,7 +457,7 @@ export const Assistant = Schema.Struct({
   }),
   error: Schema.optional(AssistantErrorSchema),
   parentID: MessageID,
-  modelID: ProviderV2.ModelID,
+  modelID: ModelV2.ID,
   providerID: ProviderV2.ID,
   mode: Schema.String,
   agent: Schema.String,
@@ -532,7 +533,7 @@ const SessionRevert = Schema.Struct({
 })
 
 const SessionModel = Schema.Struct({
-  id: ProviderV2.ModelID,
+  id: ModelV2.ID,
   providerID: ProviderV2.ID,
   variant: optionalOmitUndefined(Schema.String),
 })
