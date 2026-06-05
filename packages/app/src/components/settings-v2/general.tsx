@@ -2,7 +2,7 @@ import { Component, Show, createMemo, createResource, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/icon"
-import { SelectV2 } from "@opencode-ai/ui/select-v2"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -179,12 +179,12 @@ export const SettingsGeneralV2: Component = () => {
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
-  const globalSync = useServerSync()
-  const globalSdk = useServerSDK()
+  const serverSync = useServerSync()
+  const serverSdk = useServerSDK()
 
   const [shells] = createResource(
     () =>
-      globalSdk.client.pty
+      serverSdk.client.pty
         .shells()
         .then((res) => res.data ?? [])
         .catch(() => [] as ShellOption[]),
@@ -208,11 +208,11 @@ export const SettingsGeneralV2: Component = () => {
   })
 
   const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
-  const currentShell = createMemo(() => globalSync.data.config.shell ?? "")
+  const currentShell = createMemo(() => serverSync.data.config.shell ?? "")
 
   const shellOptions = createMemo<ShellSelectOption[]>(() => {
     const list = shells.latest
-    const current = globalSync.data.config.shell
+    const current = serverSync.data.config.shell
 
     const nameCounts = new Map<string, number>()
     for (const s of list) {
@@ -289,7 +289,7 @@ export const SettingsGeneralV2: Component = () => {
       if (!option) return
       playDemoSound(option.id === "none" ? undefined : option.id)
     },
-    onSelect: (option: (typeof soundOptions)[number] | undefined) => {
+    onSelect: (option: (typeof soundOptions)[number] | null) => {
       if (!option) return
       if (option.id === "none") {
         setEnabled(false)
@@ -310,8 +310,11 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.language.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-language"
             options={languageOptions()}
+            placement="bottom-end"
+            gutter={6}
             current={languageOptions().find((o) => o.value === language.locale())}
             value={(o) => o.value}
             label={(o) => o.label}
@@ -333,15 +336,18 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.shell.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-shell"
             options={shellOptions()}
             current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
+            placement="bottom-end"
+            gutter={6}
             value={(o) => o.id}
             label={(o) => o.label}
             onSelect={(option) => {
               if (!option) return
               if (option.value === currentShell()) return
-              globalSync.updateConfig({ shell: option.value })
+              serverSync.updateConfig({ shell: option.value })
             }}
           />
         </SettingsRowV2>
@@ -505,9 +511,12 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.colorScheme.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-color-scheme"
             options={colorSchemeOptions()}
             current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
+            placement="bottom-end"
+            gutter={6}
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => option && theme.setColorScheme(option.value)}
@@ -531,9 +540,12 @@ export const SettingsGeneralV2: Component = () => {
           }
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-theme"
             options={themeOptions()}
             current={themeOptions().find((o) => o.id === theme.themeId())}
+            placement="bottom-end"
+            gutter={6}
             value={(o) => o.id}
             label={(o) => o.name}
             onSelect={(option) => {
@@ -671,6 +683,7 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.sounds.agent.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-sounds-agent"
             {...soundSelectProps(
               () => settings.sounds.agentEnabled(),
@@ -678,6 +691,8 @@ export const SettingsGeneralV2: Component = () => {
               (value) => settings.sounds.setAgentEnabled(value),
               (id) => settings.sounds.setAgent(id),
             )}
+            placement="bottom-end"
+            gutter={6}
           />
         </SettingsRowV2>
 
@@ -686,6 +701,7 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.sounds.permissions.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-sounds-permissions"
             {...soundSelectProps(
               () => settings.sounds.permissionsEnabled(),
@@ -693,6 +709,8 @@ export const SettingsGeneralV2: Component = () => {
               (value) => settings.sounds.setPermissionsEnabled(value),
               (id) => settings.sounds.setPermissions(id),
             )}
+            placement="bottom-end"
+            gutter={6}
           />
         </SettingsRowV2>
 
@@ -701,6 +719,7 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.sounds.errors.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-sounds-errors"
             {...soundSelectProps(
               () => settings.sounds.errorsEnabled(),
@@ -708,6 +727,8 @@ export const SettingsGeneralV2: Component = () => {
               (value) => settings.sounds.setErrorsEnabled(value),
               (id) => settings.sounds.setErrors(id),
             )}
+            placement="bottom-end"
+            gutter={6}
           />
         </SettingsRowV2>
       </SettingsListV2>
