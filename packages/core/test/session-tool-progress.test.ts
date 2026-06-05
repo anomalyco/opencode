@@ -50,12 +50,14 @@ describe("Tool.Progress", () => {
         })
         .run()
         .pipe(Effect.orDie)
-      const assistantMessageID = (yield* service.publish(SessionEvent.Step.Started, {
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* service.publish(SessionEvent.Step.Started, {
         sessionID,
+        assistantMessageID,
         timestamp,
         agent: "build",
         model,
-      })).id
+      })
       const readAssistant = Effect.gen(function* () {
         const row = yield* db
           .select()

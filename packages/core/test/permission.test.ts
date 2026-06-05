@@ -165,6 +165,28 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("denies omitted-agent permissions when no primary default agent exists", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ agent: null })
+        .where(eq(SessionTable.id, SessionV2.ID.make("ses_test")))
+        .run()
+        .pipe(Effect.orDie)
+      const agents = yield* AgentV2.Service
+      yield* agents.update((editor) => {
+        editor.remove(AgentV2.ID.make("test"))
+        editor.remove(AgentV2.ID.make("build"))
+      })
+
+      const service = yield* PermissionV2.Service
+      expect(yield* service.ask(assertion())).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "deny" })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("evaluates bash with the normal configured-rule semantics", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "*", resource: "*", effect: "allow" }])

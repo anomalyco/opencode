@@ -13,6 +13,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
+import { BackgroundJob } from "@/background/job"
 import { Config } from "@/config/config"
 import { Command } from "@/command"
 import * as Observability from "@opencode-ai/core/effect/observability"
@@ -28,6 +29,7 @@ import { Plugin } from "@/plugin"
 import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
+import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { ProviderAuth } from "@/provider/auth"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
@@ -35,6 +37,7 @@ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Question } from "@/question"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
+import { LLM } from "@/session/llm"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
@@ -70,6 +73,7 @@ import { PtyConnectApi } from "./groups/pty"
 import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
+import { controlPlaneHandlers } from "./handlers/control-plane"
 import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
@@ -120,7 +124,7 @@ const ptyConnectHttpApiAuthLayer = ptyConnectAuthorizationLayer.pipe(Layer.provi
 const v2HttpApiAuthLayer = v2AuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const workspaceRoutingLive = workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
-  Layer.provide([controlHandlers, globalHandlers]),
+  Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers]),
   Layer.provide(schemaErrorLayer),
   Layer.provide(httpApiAuthLayer),
 )
@@ -211,10 +215,12 @@ export function createRoutes(
       Account.defaultLayer,
       Agent.defaultLayer,
       Auth.defaultLayer,
+      BackgroundJob.defaultLayer,
       Command.defaultLayer,
       Config.defaultLayer,
       Format.defaultLayer,
       LSP.defaultLayer,
+      LLM.defaultLayer,
       Installation.defaultLayer,
       MCP.defaultLayer,
       ModelsDev.defaultLayer,
@@ -223,6 +229,7 @@ export function createRoutes(
       Project.defaultLayer,
       ProjectV2.defaultLayer,
       ProjectCopy.defaultLayer,
+      MoveSession.defaultLayer,
       ProviderAuth.defaultLayer,
       Provider.defaultLayer,
       PtyTicket.defaultLayer,

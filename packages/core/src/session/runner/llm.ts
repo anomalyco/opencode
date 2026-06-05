@@ -1,4 +1,4 @@
-import { LLM, LLMClient, LLMError, LLMEvent } from "@opencode-ai/llm"
+import { LLM, LLMClient, LLMError, LLMEvent, SystemPart } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Semaphore, Stream } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
@@ -9,11 +9,14 @@ import { SessionStore } from "../store"
 import { Service, StepLimitExceededError } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
-import { ToolRegistry } from "../../tool-registry"
+import { ToolRegistry } from "../../tool/registry"
 import { SessionRunnerModel } from "./model"
 import { Database } from "../../database/database"
 import { SessionInput } from "../input"
 import { QuestionV2 } from "../../question"
+import { SystemContextRegistry } from "../../system-context-registry"
+import { SessionContextEpoch } from "../context-epoch"
+import { AgentV2 } from "../../agent"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -34,8 +37,8 @@ import { QuestionV2 } from "../../question"
  *   - [x] Resolve the selected model through the location-scoped runner environment.
  *   - [ ] Load the selected agent and effective permissions.
  *   - [ ] Build provider/model-specific base instructions and environment facts.
- *   - [ ] Load configured project instructions such as `AGENTS.md`, remote instructions, and
- *     nearby nested instructions discovered while files are read.
+ *   - [x] Load global and upward project `AGENTS.md` instructions.
+ *   - [ ] Load configured and remote instructions plus nearby nested instructions discovered while files are read.
  *   - [ ] List available skills in the system prompt and expose a tool for loading skill bodies.
  *   - [ ] Resolve referenced files, directories, agents, repositories, MCP resources, and media.
  *   - [ ] Apply steering reminders, plugin transforms, and structured-output policy.
@@ -82,9 +85,11 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const llm = yield* LLMClient.Service
+    const agents = yield* AgentV2.Service
     const tools = yield* ToolRegistry.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
+    const systemContext = yield* SystemContextRegistry.Service
     const db = (yield* Database.Service).db
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
@@ -95,7 +100,6 @@ export const layer = Layer.effect(
     const getContext = Effect.fn("SessionRunner.getContext")(function* (sessionID: SessionSchema.ID) {
       return yield* store.context(sessionID)
     })
-
     const failInterruptedTools = Effect.fn("SessionRunner.failInterruptedTools")(function* (
       sessionID: SessionSchema.ID,
     ) {
@@ -126,23 +130,37 @@ export const layer = Layer.effect(
       cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
 
     const runTurn = Effect.fn("SessionRunner.runTurn")(function* (
-      session: SessionSchema.Info,
+      sessionID: SessionSchema.ID,
       promotion: "steer" | "queue" | undefined,
     ) {
+      const session = yield* getSession(sessionID)
+      const initialized = yield* SessionContextEpoch.initialize(db, systemContext, session.id, session.location)
       const model = yield* models.resolve(session)
+      const agent = yield* agents.resolve(session.agent)
       const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
-      if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id)
-      if (promotion === "queue") {
-        yield* SessionInput.promoteNextQueued(db, events, session.id)
-        yield* SessionInput.promoteSteers(db, events, session.id)
+      if (promotion) {
+        const cutoff = yield* SessionInput.latestSeq(db, session.id)
+        if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        if (promotion === "queue") {
+          yield* SessionInput.promoteNextQueued(db, events, session.id)
+          yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        }
       }
-      yield* failInterruptedTools(session.id)
-      const context = yield* getContext(session.id)
-      const request = LLM.request({ model, messages: toLLMMessages(context, model), tools: yield* tools.definitions() })
+      const system =
+        initialized ?? (yield* SessionContextEpoch.prepare(db, events, systemContext, session.id, session.location))
+      const context = yield* store.runnerContext(session.id, system.baselineSeq)
+      const request = LLM.request({
+        model,
+        system: [agent?.system, system.baseline]
+          .filter((part): part is string => part !== undefined && part.length > 0)
+          .map(SystemPart.make),
+        messages: toLLMMessages(context, model),
+        tools: yield* tools.definitions(),
+      })
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
-        agent: session.agent ?? "build",
+        agent: agent?.id ?? "build",
         model: {
           id: ModelV2.ID.make(model.id),
           providerID: ProviderV2.ID.make(model.provider),
@@ -232,23 +250,23 @@ export const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force?: boolean
     }) {
-      const session = yield* getSession(input.sessionID)
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
-      const hasQueue = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+      const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (input.force !== true && !hasSteer && !hasQueue) return
+      yield* failInterruptedTools(input.sessionID)
       let promotion: "steer" | "queue" | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
       while (openActivity) {
         let needsContinuation = true
         for (let step = 0; step < MAX_STEPS; step++) {
-          needsContinuation = yield* runTurn(session, promotion)
+          needsContinuation = yield* runTurn(input.sessionID, promotion)
           promotion = "steer"
-          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
+          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break
         }
         if (needsContinuation)
           return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
-        openActivity = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+        openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }
     })

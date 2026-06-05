@@ -36,7 +36,7 @@ import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
 import { RunFooterView } from "./footer.view"
 import { RunScrollbackStream } from "./scrollback.surface"
-import type { RunTheme } from "./theme"
+import { RUN_THEME_FALLBACK, resolveRunTheme, type RunTheme } from "./theme"
 import type {
   FooterApi,
   FooterEvent,
@@ -84,6 +84,7 @@ type RunFooterOptions = {
   theme: RunTheme
   keymap: Keymap<Renderable, KeyEvent>
   tuiConfig: RunTuiConfig
+  backgroundSubagents: boolean
   diffStyle: RunDiffStyle
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onQuestionReply: (input: QuestionReply) => void | Promise<void>
@@ -92,6 +93,7 @@ type RunFooterOptions = {
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
+  onBackground?: () => void
   onExit?: () => void
   onSubagentSelect?: (sessionID: string | undefined) => void
   treeSitterClient?: TreeSitterClient
@@ -104,6 +106,7 @@ const SUBAGENT_ROWS = RUN_SUBAGENT_PANEL_ROWS
 const MODEL_ROWS = RUN_COMMAND_PANEL_ROWS
 const VARIANT_ROWS = RUN_COMMAND_PANEL_ROWS
 const AUTOCOMPLETE_COMPACT_ROWS = 2
+const THEME_REFRESH_DELAYS = [1000, 1000] as const
 
 function createEmptySubagentState(): FooterSubagentState {
   return {
@@ -189,6 +192,8 @@ export class RunFooter implements FooterApi {
   private setVariants: Setter<string[]>
   private currentVariant: Accessor<string | undefined>
   private setCurrentVariant: Setter<string | undefined>
+  private theme: Accessor<RunTheme>
+  private setTheme: Setter<RunTheme>
   private state: Accessor<FooterState>
   private setState: Setter<FooterState>
   private view: Accessor<FooterView>
@@ -204,13 +209,23 @@ export class RunFooter implements FooterApi {
   private exitTimeout: NodeJS.Timeout | undefined
   private requestExitHandler: (() => boolean) | undefined
   private scrollback: RunScrollbackStream
+  private themes: RunTheme[]
+  private paletteRefreshRunning = false
+  private paletteRefreshQueued = false
+  private themeRefreshTimeouts: NodeJS.Timeout[] = []
 
   private createScrollback(wrote: boolean): RunScrollbackStream {
-    return new RunScrollbackStream(this.renderer, this.options.theme, {
+    return new RunScrollbackStream(this.renderer, this.theme(), {
       diffStyle: this.options.diffStyle,
       wrote,
       sessionID: this.options.sessionID,
       treeSitterClient: this.options.treeSitterClient,
+      onThemeRelease: (theme) => {
+        void this.renderer
+          .idle()
+          .catch(() => {})
+          .finally(() => this.destroyTheme(theme))
+      },
     })
   }
 
@@ -255,6 +270,10 @@ export class RunFooter implements FooterApi {
     const [currentVariant, setCurrentVariant] = createSignal(options.variant)
     this.currentVariant = currentVariant
     this.setCurrentVariant = setCurrentVariant
+    const [theme, setTheme] = createSignal(options.theme)
+    this.theme = theme
+    this.setTheme = setTheme
+    this.themes = [options.theme]
     const [subagent, setSubagent] = createStore<FooterSubagentState>(createEmptySubagentState())
     this.subagent = () => subagent
     this.setSubagent = (next) => {
@@ -270,6 +289,10 @@ export class RunFooter implements FooterApi {
     this.scrollback = this.createScrollback(options.wrote ?? false)
 
     this.renderer.on(CliRenderEvents.DESTROY, this.handleDestroy)
+    this.renderer.on(CliRenderEvents.PALETTE, this.handlePalette)
+    this.renderer.on(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
+    this.renderer.prependInputHandler(this.handleThemeNotification)
+    process.on("SIGUSR2", this.handleThemeSignal)
 
     const footer = this
     void render(
@@ -291,9 +314,10 @@ export class RunFooter implements FooterApi {
               currentModel: footer.currentModel,
               variants: footer.variants,
               currentVariant: footer.currentVariant,
-              theme: options.theme,
+              theme: footer.theme,
               diffStyle: options.diffStyle,
               tuiConfig: options.tuiConfig,
+              backgroundSubagents: options.backgroundSubagents,
               history: options.history,
               agent: options.agentLabel,
               onSubmit: footer.handlePrompt,
@@ -302,6 +326,7 @@ export class RunFooter implements FooterApi {
               onQuestionReject: footer.handleQuestionReject,
               onCycle: footer.handleCycle,
               onInterrupt: footer.handleInterrupt,
+              onBackground: options.onBackground,
               onInputClear: footer.handleInputClear,
               onExitRequest: footer.handleExit,
               onRequestExit: footer.setRequestExitHandler,
@@ -555,6 +580,21 @@ export class RunFooter implements FooterApi {
 
     this.scrollback.destroy()
     this.scrollback = this.createScrollback(wrote)
+  }
+
+  public currentTheme(): RunTheme {
+    return this.theme()
+  }
+
+  private destroyTheme(theme: RunTheme): void {
+    const index = this.themes.indexOf(theme)
+    if (index === -1) {
+      return
+    }
+
+    this.themes.splice(index, 1)
+    theme.block.syntax?.destroy()
+    theme.block.subtleSyntax?.destroy()
   }
 
   public close(): void {
@@ -918,6 +958,82 @@ export class RunFooter implements FooterApi {
     return true
   }
 
+  private handlePalette = (): void => {
+    void resolveRunTheme(this.renderer).then((theme) => {
+      if (this.isGone) {
+        theme.block.syntax?.destroy()
+        theme.block.subtleSyntax?.destroy()
+        return
+      }
+
+      // Keep the last known good theme when a runtime OSC probe times out.
+      if (theme === RUN_THEME_FALLBACK) {
+        return
+      }
+
+      this.themes.push(theme)
+      this.setTheme(theme)
+      this.renderer.setBackgroundColor(theme.background)
+      this.flushing = this.flushing
+        .then(() => this.scrollback.setTheme(theme))
+        .catch((error) => {
+          this.flushError = error
+        })
+    })
+  }
+
+  private handleThemeNotification = (sequence: string): boolean => {
+    if (sequence !== "\x1b[?997;1n" && sequence !== "\x1b[?997;2n") {
+      return false
+    }
+
+    // OpenTUI clears its palette cache only when dark/light mode changes.
+    // Refresh for same-mode terminal theme swaps too.
+    queueMicrotask(this.handleThemeRefresh)
+    return false
+  }
+
+  private handleThemeRefresh = (): void => {
+    if (this.isGone) {
+      return
+    }
+
+    if (this.paletteRefreshRunning) {
+      this.paletteRefreshQueued = true
+      return
+    }
+
+    this.paletteRefreshRunning = true
+    const retry = this.renderer.paletteDetectionStatus === "detecting"
+    this.renderer.clearPaletteCache()
+    void this.renderer
+      .getPalette({ size: 256 })
+      .catch(() => {})
+      .finally(() => {
+        this.paletteRefreshRunning = false
+        if (!retry && !this.paletteRefreshQueued) {
+          return
+        }
+
+        this.paletteRefreshQueued = false
+        this.handleThemeRefresh()
+      })
+  }
+
+  public refreshTheme(): void {
+    this.handleThemeRefresh()
+  }
+
+  private handleThemeSignal = (): void => {
+    // Omarchy signals immediately after requesting a terminal config reload.
+    for (const timeout of this.themeRefreshTimeouts) clearTimeout(timeout)
+    this.themeRefreshTimeouts = THEME_REFRESH_DELAYS.map((delay) =>
+      setTimeout(() => {
+        this.handleThemeRefresh()
+      }, delay),
+    )
+  }
+
   private handleDestroy = (): void => {
     if (this.destroyed) {
       return
@@ -929,10 +1045,17 @@ export class RunFooter implements FooterApi {
     this.clearInterruptTimer()
     this.clearExitTimer()
     this.renderer.off(CliRenderEvents.DESTROY, this.handleDestroy)
+    this.renderer.off(CliRenderEvents.PALETTE, this.handlePalette)
+    this.renderer.off(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
+    this.renderer.removeInputHandler(this.handleThemeNotification)
+    process.off("SIGUSR2", this.handleThemeSignal)
+    for (const timeout of this.themeRefreshTimeouts) clearTimeout(timeout)
+    this.themeRefreshTimeouts.length = 0
     this.prompts.clear()
     this.queuedRemoves.clear()
     this.closes.clear()
     this.scrollback.destroy()
+    for (const theme of [...this.themes]) this.destroyTheme(theme)
   }
 
   // Drains the commit queue to scrollback. The surface manager owns grouping,

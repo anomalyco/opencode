@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Message, Model } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
-import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -12,7 +11,7 @@ import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
-const id = (value: string) => EventV2.ID.make(`evt_${value}`)
+const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
 
 describe("toLLMMessages", () => {
@@ -31,6 +30,12 @@ describe("toLLMMessages", () => {
           id: id("model"),
           type: "model-switched",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          time: { created },
+        }),
+        new SessionMessage.System({
+          id: id("system"),
+          type: "system",
+          text: "Updated context\n\nOther context",
           time: { created },
         }),
         new SessionMessage.User({
@@ -68,8 +73,9 @@ describe("toLLMMessages", () => {
       model,
     )
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "user", "user", "user"])
-    expect(messages[0]).toEqual(
+    expect(messages.map((message) => message.role)).toEqual(["system", "user", "user", "user", "user"])
+    expect(messages[0]).toEqual(Message.system("Updated context\n\nOther context"))
+    expect(messages[1]).toEqual(
       Message.make({
         id: id("user"),
         role: "user",
@@ -80,7 +86,7 @@ describe("toLLMMessages", () => {
         metadata: { agents: [{ name: "build" }], references: [reference] },
       }),
     )
-    expect(messages.slice(1).map((message) => message.content)).toEqual([
+    expect(messages.slice(2).map((message) => message.content)).toEqual([
       [{ type: "text", text: "Synthetic context" }],
       [{ type: "text", text: "Shell command: pwd\n\n/project" }],
       [{ type: "text", text: "Summary of earlier conversation:\nEarlier work" }],

@@ -8,11 +8,11 @@ import {
   getSessionPrefetchPromise,
   setSessionPrefetch,
 } from "./global-sync/session-prefetch"
-import { createServerSyncContext } from "./server-sync"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
-import { useServerSDK } from "./server-sdk"
+import { createServerSdkContext, useServerSDK } from "./server-sdk"
+import { type createServerSyncContextInner } from "./server-sync"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -171,8 +171,11 @@ function setOptimisticRemove(setStore: (...args: unknown[]) => void, input: Opti
   })
 }
 
-export const createDirSyncContext = (directory: string, serverSync: ReturnType<typeof createServerSyncContext>) => {
-  const serverSDK = useServerSDK()
+export const createDirSyncContext = (
+  directory: string,
+  serverSync: ReturnType<typeof createServerSyncContextInner>,
+  serverSDK: ReturnType<typeof createServerSdkContext> = useServerSDK(),
+) => {
   const client = serverSDK.createClient({ directory, throwOnError: true })
 
   type Child = ReturnType<(typeof serverSync)["child"]>
@@ -273,7 +276,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
 
   const evict = (directory: string, setStore: Setter, sessionIDs: string[]) => {
     if (sessionIDs.length === 0) return
-    clearSessionPrefetch(directory, sessionIDs)
+    clearSessionPrefetch(serverSDK.scope, directory, sessionIDs)
     for (const sessionID of sessionIDs) {
       serverSync.todo.set(sessionID, undefined)
     }
@@ -345,6 +348,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           setMeta("cursor", key, next.cursor)
           setMeta("complete", key, next.complete)
           setSessionPrefetch({
+            scope: serverSDK.scope,
             directory: input.directory,
             sessionID: input.sessionID,
             limit: message.length,
@@ -435,7 +439,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
 
         touch(directory, setStore, sessionID)
 
-        const seeded = getSessionPrefetch(directory, sessionID)
+        const seeded = getSessionPrefetch(serverSDK.scope, directory, sessionID)
         if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
           batch(() => {
             setMeta("limit", key, seeded.limit)
@@ -446,10 +450,10 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         }
 
         return runInflight(inflight, key, async () => {
-          const pending = getSessionPrefetchPromise(directory, sessionID)
+          const pending = getSessionPrefetchPromise(serverSDK.scope, directory, sessionID)
           if (pending) {
             await pending
-            const seeded = getSessionPrefetch(directory, sessionID)
+            const seeded = getSessionPrefetch(serverSDK.scope, directory, sessionID)
             if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
               batch(() => {
                 setMeta("limit", key, seeded.limit)
