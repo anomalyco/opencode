@@ -1161,7 +1161,7 @@ export function smallOptions(model: Provider.Model) {
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
     if (model.providerID === "openrouter" && small.reasoning?.effort === "low") {
-      return { reasoning: { enabled: false } }
+      return { reasoning: { effort: "none" } }
     }
     if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }

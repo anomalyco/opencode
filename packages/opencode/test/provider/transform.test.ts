@@ -3792,7 +3792,7 @@ test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weak
         high: { reasoning: { effort: "high" } },
       },
     } as any),
-  ).toEqual({ reasoning: { enabled: false } })
+  ).toEqual({ reasoning: { effort: "none" } })
 })
 
 describe("ProviderTransform.smallOptions - google thinking controls", () => {
