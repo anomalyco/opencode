@@ -1021,6 +1021,40 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("blocks a cross-agent provider turn while replacement context is unavailable", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      skillBaselines.set(AgentV2.defaultID, "Build skills")
+      skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+      yield* events.publish(SessionEvent.AgentSwitched, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: DateTime.makeUnsafe(1),
+        agent: AgentV2.ID.make("reviewer"),
+      })
+      systemUnavailable = true
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+
+      requests.length = 0
+      const blocked = yield* session.resume(sessionID).pipe(Effect.exit)
+      expect(Exit.isFailure(blocked)).toBe(true)
+      if (Exit.isFailure(blocked))
+        expect(Cause.squash(blocked.cause)).toBeInstanceOf(SessionContextEpoch.AgentReplacementBlocked)
+      expect(requests).toHaveLength(0)
+
+      systemUnavailable = false
+      yield* session.resume(sessionID)
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
+        ["Initial context\n\nReviewer skills"],
+      ])
+    }),
+  )
+
   it.effect("admits removed context as a chronological System message", () =>
     Effect.gen(function* () {
       yield* setup

@@ -51,8 +51,11 @@ export const layer = Layer.effect(
       load: Effect.fn("SkillGuidance.load")(function* (agentID) {
         yield* boot.wait()
         const agent = yield* agents.get(agentID)
-        if (!agent || PermissionV2.disabled("skill", agent.permissions)) return SystemContext.empty
-        const available = SkillV2.available(yield* skills.list(), agent)
+        if (!agent) return SystemContext.empty
+        const permitted = SkillV2.available(yield* skills.list(), agent)
+        if (permitted.length === 0 && PermissionV2.evaluate("skill", "*", agent.permissions).effect === "deny")
+          return SystemContext.empty
+        const available = permitted
           .flatMap((skill) =>
             skill.description === undefined
               ? []

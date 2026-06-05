@@ -67,6 +67,9 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_context_epoch'`),
         ).toEqual({ name: "session_context_epoch" })
+        expect(
+          yield* db.get(sql`SELECT name FROM pragma_table_info('session_context_epoch') WHERE name = 'agent'`),
+        ).toEqual({ name: "agent" })
         expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: migrations.length })
         expect(
           yield* db.all(

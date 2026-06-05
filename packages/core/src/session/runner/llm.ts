@@ -133,16 +133,8 @@ export const layer = Layer.effect(
         defect instanceof SessionContextEpoch.AgentMismatch ? Effect.die(new RetryTurn(promotion)) : Effect.die(defect),
       )
 
-    const loadSystemContext = (sessionID: SessionSchema.ID) =>
-      getSession(sessionID).pipe(
-        Effect.flatMap((session) =>
-          Effect.all([systemContext.load(), agents.resolve(session.agent)], { concurrency: "unbounded" }),
-        ),
-        Effect.flatMap(([context, agent]) =>
-          Effect.all([Effect.succeed(context), skillGuidance.load(agent?.id ?? AgentV2.defaultID)], {
-            concurrency: "unbounded",
-          }),
-        ),
+    const loadSystemContext = (agent: AgentV2.ID) =>
+      Effect.all([systemContext.load(), skillGuidance.load(agent)], { concurrency: "unbounded" }).pipe(
         Effect.map(SystemContext.combine),
       )
 
@@ -155,7 +147,7 @@ export const layer = Layer.effect(
       const agentID = agent?.id ?? AgentV2.defaultID
       const initialized = yield* SessionContextEpoch.initialize(
         db,
-        loadSystemContext(sessionID),
+        loadSystemContext(agentID),
         session.id,
         session.location,
         agentID,
@@ -175,7 +167,7 @@ export const layer = Layer.effect(
         (yield* SessionContextEpoch.prepare(
           db,
           events,
-          loadSystemContext(sessionID),
+          loadSystemContext(agentID),
           session.id,
           session.location,
           agentID,

@@ -140,7 +140,7 @@ describe("SkillTool", () => {
                 sessionID,
                 call: { type: "tool-call", id: "call-missing-skill", name: "skill", input: { name: "missing" } },
               }),
-            ).toEqual({ type: "error", value: 'Skill "missing" not found' })
+            ).toEqual({ type: "error", value: "Unable to load skill missing" })
           }).pipe(Effect.provide(layer))
         }),
       ),

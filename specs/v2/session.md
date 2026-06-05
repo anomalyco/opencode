@@ -39,7 +39,7 @@ Projected hosted tools preserve call-side and settlement-side provider metadata 
 
 ## Context Epochs
 
-V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch owns one immutable baseline plus a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.
+V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch owns one effective agent, one immutable baseline, and a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.
 
 The first complete observation initializes the epoch before any pending prompt becomes model-visible. If initial context is temporarily unavailable, execution stops while the prompt remains pending and retryable. On later provider turns, the runner promotes eligible input first, then reconciles current sources at the safe boundary. Changed context becomes one durable chronological System message, and its event commit advances the epoch snapshot atomically.
 
@@ -65,7 +65,7 @@ Client            Runner                         System Context Registry       C
    │                 ├─ Baseline + chronological history ─────────────────────────────────────────────────────────────────────────▶
 ```
 
-Agent switches, model switches, and completed compactions request lazy baseline replacement. A switch admitted after the current safe provider-turn boundary applies to the next provider turn while leaving the already-prepared baseline durable. A Session move clears the epoch so the destination Location must initialize a complete baseline before another provider turn. Epoch creation is fenced against the authoritative Session Location and effective agent, preventing an old runner from recreating stale privileged context after a concurrent change.
+Agent switches, model switches, and completed compactions request lazy baseline replacement. A switch admitted after the current safe provider-turn boundary applies to the next provider turn while leaving the already-prepared baseline durable. Before another cross-agent provider turn, the replacement must complete; unavailable admitted context blocks instead of exposing the prior agent's privileged baseline. A Session move clears the epoch so the destination Location must initialize a complete baseline before another provider turn. Epoch creation and replacement are fenced against the authoritative Session Location/effective agent and the epoch revision, preventing stale or ABA-observed context from becoming durable.
 
 ```text
 Session                            Epoch
@@ -109,7 +109,7 @@ Status: `complete` is usable in the native V2 path, `partial` covers only part o
 | Durable Context Source     | Global and upward project instructions                                   | partial  | Decide whether V2 also discovers legacy `CLAUDE.md` and deprecated `CONTEXT.md`.                                                      |
 | Durable Context Source     | Configured local/glob and remote URL instructions                        | missing  | Add independent sources with explicit precedence, unavailable, and removal semantics.                                                 |
 | Durable Context Source     | Nearby nested instructions discovered after successful reads             | missing  | Persist discoveries and admit them at the next safe provider-turn boundary.                                                           |
-| Durable Context Source     | Selected-agent available skill guidance and skill-body loading           | complete | None.                                                                                                                                 |
+| Durable Context Source     | Selected-agent available skill guidance and skill-body loading           | partial  | Guidance and body loading are permission-filtered; remove globally denied skill definitions during request-time tool materialization. |
 | Per-turn request assembly  | Placement, selected model, chronological history, and canonical lowering | complete | None.                                                                                                                                 |
 | Per-turn request assembly  | Selected agent, agent prompt, and effective permissions                  | partial  | V2 uses selected-agent permissions for skill guidance and tool authorization; still apply the agent system prompt and request policy. |
 | Per-turn request assembly  | Provider/model-specific base instructions                                | missing  | Select the provider-family baseline unless the effective agent overrides it.                                                          |

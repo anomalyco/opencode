@@ -129,4 +129,22 @@ describe("SkillGuidance", () => {
       )
     }).pipe(Effect.provide(layer(agent, () => [effect])))
   })
+
+  it.effect("omits guidance when a specifically allowed skill is denied again", () => {
+    const agent = new AgentV2.Info({
+      ...AgentV2.Info.empty(build),
+      permissions: [
+        { action: "skill", resource: "*", effect: "deny" },
+        { action: "skill", resource: "effect", effect: "allow" },
+        { action: "skill", resource: "effect", effect: "deny" },
+      ],
+    })
+    return Effect.gen(function* () {
+      const guidance = yield* SkillGuidance.Service
+      expect(yield* guidance.load(build).pipe(Effect.flatMap(SystemContext.initialize))).toEqual({
+        baseline: "",
+        snapshot: {},
+      })
+    }).pipe(Effect.provide(layer(agent, () => [effect])))
+  })
 })

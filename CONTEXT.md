@@ -24,7 +24,7 @@ A durable chronological instruction that tells the model the newly effective sta
 _Avoid_: System update, system notification, raw text diff
 
 **Context Epoch**:
-The span during which one initially rendered **System Context** remains immutable, ending at compaction or another baseline-replacing transition.
+The span during which one effective agent's initially rendered **System Context** remains immutable, ending at compaction or another baseline-replacing transition.
 
 **Baseline System Context**:
 The full **System Context** rendered at the start of a **Context Epoch**.
@@ -72,11 +72,13 @@ The point immediately before a provider call, after durable input promotion and 
 - Built-in and instruction context producers register through the **System Context Registry** with stable contribution keys. Plugin-defined context registration and hot-reload lifecycle remain a follow-up built on the same scoped registry seam.
 - Selected-agent available-skill guidance is a **Context Source** composed with Location-wide registry sources immediately before Context Epoch admission. It lists only described skills permitted for that agent; skill bodies remain intentionally loaded through the permission-checked `skill` tool.
 - Switching the selected agent requests **Context Epoch** replacement. A switch admitted after the current **Safe Provider-Turn Boundary** applies to the next provider turn while leaving the already-prepared baseline durable. Epoch creation is fenced against the authoritative effective agent, and retries re-observe the current agent.
+- A cross-agent replacement must complete before another provider turn; unavailable admitted context blocks that replacement instead of exposing the previous agent's privileged baseline.
 - Context source changes never wake idle sessions; the next naturally scheduled **Safe Provider-Turn Boundary** loads and compares current values lazily.
 - Once admitted, a **Mid-Conversation System Message** remains durable even if the following provider attempt fails and is replayed unchanged on retry.
 - **Mid-Conversation System Messages** remain durable Session-message history; normal user-facing transcript surfaces may hide them.
 - The date **Context Source** initially preserves host-local calendar-date behavior; a configured user timezone may replace that default later.
 - A **Context Epoch** begins with one immutable **Baseline System Context**.
+- A **Context Epoch** durably records the effective agent that owns its **Baseline System Context**.
 - A **Baseline System Context** is stored durably and reused verbatim across process restarts within its **Context Epoch**.
 - A **Baseline System Context** durably preserves the exact joined text used for the active provider-cache prefix.
 - Compaction or a model/provider switch starts a new **Context Epoch** because the baseline can be replaced without preserving the prior provider cache.

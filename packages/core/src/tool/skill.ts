@@ -52,7 +52,7 @@ export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>)
   ].join("\n")
 }
 
-const notFound = (name: string) => new ToolFailure({ message: `Skill "${name}" not found` })
+const notFound = (name: string) => new ToolFailure({ message: `Unable to load skill ${name}` })
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {

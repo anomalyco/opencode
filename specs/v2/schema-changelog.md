@@ -773,7 +773,8 @@ Compatibility:
 
 Affected schema:
 
-- No database, synchronized event, public HTTP API, or generated SDK schema changes.
+- Add `session_context_epoch.agent` so each durable baseline records its owning effective agent.
+- No synchronized event, public HTTP API, or generated SDK schema changes.
 
 Change:
 
@@ -781,9 +782,10 @@ Change:
 - Keep skill bodies behind the existing permission-checked `skill` tool and remove the unfiltered skill list from its Location-wide definition.
 - Stop missing-skill errors from enumerating the unfiltered Location-wide skill catalog.
 - Request Context Epoch replacement after an agent switch, dynamically re-observe the effective agent during retries, and fence first-epoch creation against the authoritative effective agent.
+- Fence existing-epoch replacement against the authoritative effective agent and block cross-agent provider turns while replacement context is unavailable.
 - Group the System Context algebra, registry, and built-ins under `system-context/`; keep source producers and Context Epoch persistence with their owning Skill, instruction, and Session modules; rename projected conversation selection to Session History.
 - Add the canonical V1-to-V2 runtime-context parity checklist to `specs/v2/session.md`.
 
 Compatibility:
 
-- Existing experimental V2 Context Epochs reconcile the new source at the next safe provider-turn boundary.
+- Existing Context Epoch rows backfill the default `build` agent and reconcile to another selected agent at the next safe provider-turn boundary.

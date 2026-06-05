@@ -6,6 +6,7 @@ import { SessionSchema } from "../schema"
 import type { ContextSnapshotDecodeError, MessageDecodeError } from "../error"
 import { SessionRunnerModel } from "./model"
 import type { SystemContext } from "../../system-context/index"
+import type { SessionContextEpoch } from "../context-epoch"
 
 export class StepLimitExceededError extends Schema.TaggedErrorClass<StepLimitExceededError>()(
   "SessionRunner.StepLimitExceededError",
@@ -22,6 +23,7 @@ export type RunError =
   | ContextSnapshotDecodeError
   | StepLimitExceededError
   | SystemContext.InitializationBlocked
+  | SessionContextEpoch.AgentReplacementBlocked
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {

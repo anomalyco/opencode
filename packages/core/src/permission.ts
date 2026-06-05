@@ -115,13 +115,6 @@ export function merge(...rulesets: Ruleset[]): Ruleset {
   return rulesets.flat()
 }
 
-export function disabled(action: string, ruleset: Ruleset) {
-  return (
-    ruleset.findLast((rule) => Wildcard.match(action, rule.action) && (rule.resource === "*" || rule.effect !== "deny"))
-      ?.effect === "deny"
-  )
-}
-
 export interface Interface {
   readonly ask: (input: AssertInput) => EffectRuntime.Effect<AskResult, SessionV2.NotFoundError>
   readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error | SessionV2.NotFoundError>
