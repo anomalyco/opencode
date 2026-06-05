@@ -70,7 +70,7 @@ type TabHandoff = {
   at: number
 }
 
-export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean; displayName?: string }
 
 export type ReviewDiffStyle = "unified" | "split"
 
@@ -388,7 +388,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return available[Math.floor(Math.random() * available.length)]
     }
 
-    function enrich(project: { worktree: string; expanded: boolean }) {
+    function enrich(project: { worktree: string; expanded: boolean; displayName?: string }) {
       const [childStore] = serverSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID

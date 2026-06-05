@@ -3,6 +3,7 @@ import type { Project, UiProjectView } from "@opencode-ai/sdk/v2/client"
 import {
   projectViewDirectoryKey,
   projectViewEntryForDirectory,
+  projectViewProjectDisplayName,
   projectViewResolvedEntryFromOpenResult,
   pruneProjectViewDirectoryAliases,
   shouldOpenProjectViewDirectory,
@@ -58,6 +59,14 @@ describe("project-view helpers", () => {
     expect(shouldTouchProjectViewDirectory({ view, directory: "/mnt/data/repo", inFlight, aliases })).toBe(
       false,
     )
+  })
+
+  test("derives a non-empty display name for canonical root aliases", () => {
+    const aliases = new Map([[projectViewDirectoryKey("/mnt/data/repo"), projectViewDirectoryKey("/")]])
+
+    expect(projectViewProjectDisplayName(project("/"), aliases)).toBe("repo")
+    expect(projectViewProjectDisplayName(project("/"))).toBe("/")
+    expect(projectViewProjectDisplayName({ ...project("/"), name: "Workspace" }, aliases)).toBe("Workspace")
   })
 
   test("prunes directory aliases whose canonical target is no longer visible", () => {

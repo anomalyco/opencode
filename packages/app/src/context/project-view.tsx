@@ -6,6 +6,7 @@ import { useServerSDK } from "./server-sdk"
 import {
   projectViewDirectoryKey,
   projectViewEntryForDirectory,
+  projectViewProjectDisplayName,
   projectViewResolvedEntryFromOpenResult,
   pruneProjectViewDirectoryAliases,
   shouldOpenProjectViewDirectory,
@@ -14,7 +15,7 @@ import {
 
 const EMPTY_VIEW: UiProjectView = { projects: [] }
 
-export type ProjectViewProject = Partial<Project> & { worktree: string; expanded: boolean }
+export type ProjectViewProject = Partial<Project> & { worktree: string; expanded: boolean; displayName?: string }
 
 type OpenProjectInput = { directory: string; expanded?: boolean; position?: number; preView: UiProjectView }
 
@@ -147,7 +148,11 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
       (query.data?.projects ?? [])
         .slice()
         .sort((a, b) => a.position - b.position)
-        .map((entry) => ({ ...entry.project, expanded: entry.expanded })),
+        .map((entry) => ({
+          ...entry.project,
+          expanded: entry.expanded,
+          displayName: projectViewProjectDisplayName(entry.project, directoryAliases),
+        })),
     )
 
     const entryForDirectory = (directory: string) =>

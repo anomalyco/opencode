@@ -295,6 +295,8 @@ describe("layout workspace helpers", () => {
   test("formats fallback project display name", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")
+    expect(displayName({ worktree: "/", displayName: "repo" })).toBe("repo")
+    expect(displayName({ worktree: "/" })).toBe("/")
   })
 
   test("extracts api error message and fallback", () => {

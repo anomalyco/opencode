@@ -52,8 +52,8 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
   }
 }
 
-export const displayName = (project: { name?: string; worktree: string }) =>
-  project.name || getFilename(project.worktree)
+export const displayName = (project: { name?: string; worktree: string; displayName?: string }) =>
+  project.name?.trim() || project.displayName || getFilename(project.worktree) || project.worktree
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 

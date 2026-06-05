@@ -1,4 +1,5 @@
 import type { UiProjectView } from "@opencode-ai/sdk/v2/client"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { pathKey } from "@/utils/path-key"
 
 export type ProjectViewDirectoryAliases = ReadonlyMap<string, string>
@@ -80,6 +81,23 @@ export function projectViewResolvedEntryFromOpenResult(input: {
   return undefined
 }
 
+export function projectViewProjectDisplayName(
+  project: { name?: string; worktree: string },
+  aliases?: ProjectViewDirectoryAliases,
+) {
+  const name = project.name?.trim()
+  if (name) return name
+
+  const worktreeName = getFilename(project.worktree)
+  if (worktreeName) return worktreeName
+
+  const aliasName = projectViewAliasDisplayName(projectViewDirectoryKey(project.worktree), aliases)
+  if (aliasName) return aliasName
+
+  if (project.worktree) return project.worktree
+  return undefined
+}
+
 function projectViewEntryForKey(view: UiProjectView | undefined, key: string) {
   return (view?.projects ?? []).find((entry) => projectViewDirectoryKey(entry.project.worktree) === key)
 }
@@ -107,4 +125,15 @@ function projectViewAvailableDirectoryKeys(view: UiProjectView | undefined) {
   }
   if (view?.lastProject) keys.add(projectViewDirectoryKey(view.lastProject.worktree))
   return keys
+}
+
+function projectViewAliasDisplayName(targetKey: string, aliases?: ProjectViewDirectoryAliases) {
+  if (!aliases) return undefined
+  for (const [requestedKey, aliasTargetKey] of aliases) {
+    if (aliasTargetKey !== targetKey) continue
+    const requestedName = getFilename(requestedKey)
+    if (requestedName) return requestedName
+    if (requestedKey) return requestedKey
+  }
+  return undefined
 }
