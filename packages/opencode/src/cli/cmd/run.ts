@@ -1,4 +1,4 @@
-import type { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 // CLI entry point for `opencode run`.
 //
 // Handles three modes:
@@ -215,8 +215,8 @@ export const RunCommand = effectCmd({
       })
       .option("replay", {
         type: "boolean",
-        default: false,
-        describe: "replay interactive session history on resume and after resize",
+        default: true,
+        describe: "replay interactive session history on resume and after resize (use --no-replay to disable)",
       })
       .option("replay-limit", {
         type: "number",
@@ -275,10 +275,6 @@ export const RunCommand = effectCmd({
 
       if (args.interactive && args.format === "json") {
         die("--interactive cannot be used with --format json")
-      }
-
-      if (args.replay && !args.interactive) {
-        die("--replay requires --interactive")
       }
 
       if (args["replay-limit"] !== undefined && !args.interactive) {
@@ -366,7 +362,7 @@ export const RunCommand = effectCmd({
         process.exit(1)
       }
 
-      const rules: PermissionLegacy.Ruleset = args.interactive
+      const rules: PermissionV1.Ruleset = args.interactive
         ? []
         : [
             {
@@ -820,6 +816,7 @@ export const RunCommand = effectCmd({
             initialInput,
             createSession: createFreshSession,
             thinking,
+            backgroundSubagents: flags.experimentalBackgroundSubagents,
             demo: args.demo,
           })
         } catch (error) {
@@ -853,6 +850,7 @@ export const RunCommand = effectCmd({
             files,
             initialInput,
             thinking,
+            backgroundSubagents: flags.experimentalBackgroundSubagents,
             demo: args.demo,
           })
         } catch (error) {

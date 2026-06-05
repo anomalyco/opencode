@@ -25,15 +25,15 @@ describe("ZenmuxPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("zenmux", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://zenmux.ai/api/v1" },
+          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://zenmux.ai/api/v1" },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
+          draft.api = item.api
         })
       })
       const result = yield* catalog.provider.get(ProviderV2.ID.make("zenmux"))
-      expect(result.options.headers).toEqual({ "HTTP-Referer": "https://opencode.ai/", "X-Title": "opencode" })
-      expect(Object.keys(result.options.headers).sort()).toEqual(["HTTP-Referer", "X-Title"])
+      expect(result.request.headers).toEqual({ "HTTP-Referer": "https://opencode.ai/", "X-Title": "opencode" })
+      expect(Object.keys(result.request.headers).sort()).toEqual(["HTTP-Referer", "X-Title"])
     }),
   )
 
@@ -45,16 +45,16 @@ describe("ZenmuxPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("zenmux", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://zenmux.ai/api/v1" },
-          options: { headers: { Existing: "value" }, body: {}, aisdk: { provider: {}, request: {} } },
+          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://zenmux.ai/api/v1" },
+          request: { headers: { Existing: "value" }, body: {} },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
-          draft.options = item.options
+          draft.api = item.api
+          draft.request = item.request
         })
       })
 
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("zenmux"))).options.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("zenmux"))).request.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
@@ -70,20 +70,19 @@ describe("ZenmuxPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("zenmux", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://zenmux.ai/api/v1" },
-          options: {
+          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://zenmux.ai/api/v1" },
+          request: {
             headers: { "HTTP-Referer": "https://example.com/", "X-Title": "custom-title" },
             body: {},
-            aisdk: { provider: {}, request: {} },
           },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
-          draft.options = item.options
+          draft.api = item.api
+          draft.request = item.request
         })
       })
 
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("zenmux"))).options.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("zenmux"))).request.headers).toEqual({
         "HTTP-Referer": "https://example.com/",
         "X-Title": "custom-title",
       })
@@ -98,18 +97,17 @@ describe("ZenmuxPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("openrouter", {
-          options: {
+          request: {
             headers: { "HTTP-Referer": "https://example.com/", "X-Title": "custom-title" },
             body: {},
-            aisdk: { provider: {}, request: {} },
           },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.options = item.options
+          draft.request = item.request
         })
       })
 
-      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter)).options.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter)).request.headers).toEqual({
         "HTTP-Referer": "https://example.com/",
         "X-Title": "custom-title",
       })

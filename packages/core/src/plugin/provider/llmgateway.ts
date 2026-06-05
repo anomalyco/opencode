@@ -8,13 +8,13 @@ export const LLMGatewayPlugin = PluginV2.define({
       "catalog.transform": Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.enabled === false) continue
-          if (item.provider.endpoint.type !== "aisdk") continue
-          if (item.provider.endpoint.package !== "@ai-sdk/openai-compatible") continue
-          if (item.provider.endpoint.url !== "https://api.llmgateway.io/v1") continue
+          if (item.provider.api.type !== "aisdk") continue
+          if (item.provider.api.package !== "@ai-sdk/openai-compatible") continue
+          if (item.provider.api.url !== "https://api.llmgateway.io/v1") continue
           evt.provider.update(item.provider.id, (provider) => {
-            provider.options.headers["HTTP-Referer"] = "https://opencode.ai/"
-            provider.options.headers["X-Title"] = "opencode"
-            provider.options.headers["X-Source"] = "opencode"
+            provider.request.headers["HTTP-Referer"] = "https://opencode.ai/"
+            provider.request.headers["X-Title"] = "opencode"
+            provider.request.headers["X-Source"] = "opencode"
           })
         }
       }),
