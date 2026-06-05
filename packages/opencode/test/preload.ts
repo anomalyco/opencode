@@ -79,6 +79,9 @@ delete process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
 delete process.env["OTEL_EXPORTER_OTLP_HEADERS"]
 delete process.env["OTEL_RESOURCE_ATTRIBUTES"]
 
+// Prevent ANR mode from activating during tests (would trigger OIDC browser auth)
+delete process.env["OPENCODE_FLAVOR"]
+
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"
 

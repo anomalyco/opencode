@@ -349,8 +349,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         providerOptions.baseURL = endpoint
       }
 
-      // Set explicit Bedrock runtime endpoint to prevent SDK from using incorrect URLs
-      if (!providerOptions.baseURL) {
+      // In ANR mode, set explicit Bedrock runtime endpoint to prevent SDK from using incorrect URLs
+      if (isANR && !providerOptions.baseURL) {
         providerOptions.baseURL = `https://bedrock-runtime.${defaultRegion}.amazonaws.com`
       }
 
