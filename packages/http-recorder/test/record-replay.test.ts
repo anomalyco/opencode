@@ -444,6 +444,51 @@ describe("http-recorder", () => {
     }
   })
 
+  test("records concurrent requests in request-start order", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-order-"))
+    const first = Promise.withResolvers<void>()
+    const completed: string[] = []
+    using server = Bun.serve({
+      port: 0,
+      fetch: async (request) => {
+        const name = new URL(request.url).pathname.slice(1)
+        if (name === "first") {
+          await first.promise
+          completed.push(name)
+          return new Response(name)
+        }
+        completed.push(name)
+        first.resolve()
+        return new Response(name)
+      },
+    })
+    const previous = process.env.CI
+    delete process.env.CI
+    try {
+      const request = (name: string) =>
+        Effect.gen(function* () {
+          const http = yield* HttpClient.HttpClient
+          const response = yield* http.execute(HttpClientRequest.get(`http://127.0.0.1:${server.port}/${name}`))
+          return yield* response.text
+        })
+      const responses = await Effect.runPromise(
+        Effect.all([request("first"), request("second")], { concurrency: "unbounded" }).pipe(
+          Effect.provide(HttpRecorder.layerFetch("concurrent-order", { directory })),
+        ),
+      )
+      const cassette = JSON.parse(fs.readFileSync(path.join(directory, "concurrent-order.json"), "utf8"))
+
+      expect(completed).toEqual(["second", "first"])
+      expect(responses).toEqual(["first", "second"])
+      expect(cassette.interactions.map((interaction: Interaction) => interaction.request.url)).toEqual([
+        `http://127.0.0.1:${server.port}/first`,
+        `http://127.0.0.1:${server.port}/second`,
+      ])
+    } finally {
+      if (previous !== undefined) process.env.CI = previous
+    }
+  })
+
   test("returns the live response while persisting its redacted snapshot", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-live-response-"))
     using server = Bun.serve({

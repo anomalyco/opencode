@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Effect, Layer, Option } from "effect"
+import { Deferred, Effect, Layer, Option, Ref } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -117,30 +117,41 @@ export const recordingLayer = (
 
       if (mode === "passthrough") return upstream
 
-      if (mode === "record")
+      if (mode === "record") {
+        const initial = yield* Deferred.make<void>()
+        yield* Deferred.succeed(initial, undefined)
+        const tail = yield* Ref.make(initial)
         return HttpClient.make((request) =>
           Effect.gen(function* () {
-            const incoming = yield* snapshotRequest(request)
-            const response = yield* upstream.execute(request)
-            const captured = yield* captureResponseBody(response, response.headers["content-type"])
-            const responseSnapshot: ResponseSnapshot = {
-              status: response.status,
-              headers: response.headers as Record<string, string>,
-              ...captured,
-            }
-            const interaction: HttpInteraction = {
-              transport: "http",
-              request: incoming,
-              response: redactor.response(responseSnapshot),
-            }
-            yield* cassetteService
-              .append(name, interaction, options.metadata)
-              .pipe(
-                Effect.catchTag("UnsafeCassetteError", (error) => Effect.fail(transportError(request, error.message))),
-              )
-            return responseFromSnapshot(request, responseSnapshot)
+            const completed = yield* Deferred.make<void>()
+            const previous = yield* Ref.modify(tail, (current) => [current, completed])
+            return yield* Effect.gen(function* () {
+              const incoming = yield* snapshotRequest(request)
+              const response = yield* upstream.execute(request)
+              const captured = yield* captureResponseBody(response, response.headers["content-type"])
+              const responseSnapshot: ResponseSnapshot = {
+                status: response.status,
+                headers: response.headers as Record<string, string>,
+                ...captured,
+              }
+              const interaction: HttpInteraction = {
+                transport: "http",
+                request: incoming,
+                response: redactor.response(responseSnapshot),
+              }
+              yield* Deferred.await(previous)
+              yield* cassetteService
+                .append(name, interaction, options.metadata)
+                .pipe(
+                  Effect.catchTag("UnsafeCassetteError", (error) =>
+                    Effect.fail(transportError(request, error.message)),
+                  ),
+                )
+              return responseFromSnapshot(request, responseSnapshot)
+            }).pipe(Effect.ensuring(Deferred.succeed(completed, undefined)))
           }),
         )
+      }
 
       const replay = yield* makeReplayState(cassetteService, name, httpInteractions)
       return HttpClient.make((request) =>

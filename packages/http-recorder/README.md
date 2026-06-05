@@ -1,154 +1,175 @@
 # @opencode-ai/http-recorder
 
-Record and replay HTTP traffic for Effect's `HttpClient`. Tests exercise real
-request shapes against deterministic, version-controlled cassettes — no manual
-mocks, no flakes from upstream drift.
+Record real Effect HTTP requests once, then replay them from deterministic JSON cassettes.
+
+Use it for provider integrations, retries, polling, multi-step flows, and any test where hand-written HTTP mocks hide too much of the real request shape.
+
+> Public beta. The API depends on Effect 4 beta and may change with Effect's unstable HTTP modules.
 
 ## Install
 
-This package targets Node.js and Bun. It uses Node filesystem storage and is
-not currently supported in browsers, workers, or Deno.
-
-Requirements:
-
-- Node.js 22 or newer, or Bun
-- `effect@4.0.0-beta.74`
-- TypeScript consumers must currently enable `skipLibCheck` because the
-  published Effect 4 beta declarations contain an upstream internal Schema
-  declaration error
-
 ```sh
-bun add -d @opencode-ai/http-recorder
+bun add -d @opencode-ai/http-recorder@beta effect@4.0.0-beta.74
 ```
 
-## Quickstart
+The package supports Node.js 22+ and Bun. It is not intended for browsers, workers, or Deno.
 
-`layer` wraps your existing `HttpClient`. It records on the first local run and
-replays on subsequent runs. `CI=true` forces strict replay, so CI never records
-a missing cassette.
+Effect 4 beta currently ships an upstream declaration error. TypeScript consumers need:
+
+```json
+{
+  "compilerOptions": {
+    "skipLibCheck": true
+  }
+}
+```
+
+## Quick Start
 
 ```ts
 import { Effect } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { Layer } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 
-const program = Effect.gen(function* () {
+const getUser = Effect.gen(function* () {
   const http = yield* HttpClient.HttpClient
   const response = yield* http.execute(HttpClientRequest.get("https://api.example.com/users/1"))
   return yield* response.json
 })
 
-const recorderLayer = HttpRecorder.layer("users/get-one").pipe(Layer.provide(FetchHttpClient.layer))
-
-Effect.runPromise(program.pipe(Effect.provide(recorderLayer)))
+const result = await Effect.runPromise(getUser.pipe(Effect.provide(HttpRecorder.layerFetch("users/get-one"))))
 ```
 
-For the common fetch-backed case, `layerFetch` provides the upstream client too:
+The first local run records:
+
+```text
+test/fixtures/recordings/users/get-one.json
+```
+
+Later runs replay that cassette without contacting the upstream server. When `CI=true`, missing cassettes fail instead of recording.
+
+## Use Your Existing Client
+
+`layer` wraps an upstream `HttpClient`, preserving custom transports, middleware, proxies, and tracing:
 
 ```ts
-const recorderLayer = HttpRecorder.layerFetch("users/get-one")
+import { Layer } from "effect"
+import { HttpRecorder } from "@opencode-ai/http-recorder"
+
+const recordedClient = HttpRecorder.layer("users/get-one").pipe(Layer.provide(applicationHttpClientLayer))
 ```
 
-To refresh recordings, delete the selected cassette files and rerun their
-tests. This works for one cassette or any chosen set without granting a test
-run permission to overwrite unrelated fixtures.
+Use `layerFetch` when the standard Effect fetch client is sufficient.
+
+## Refresh A Cassette
+
+Delete exactly the recordings you want to replace, then rerun their tests:
 
 ```sh
 rm test/fixtures/recordings/users/get-one.json
 bun run test users.test.ts
 ```
 
-## Cassette format
+There is intentionally no public overwrite mode. Deletion makes the set of recordings being refreshed visible and reviewable.
 
-A cassette is JSON at `test/fixtures/recordings/<name>.json`:
+## Redaction
 
-```json
-{
-  "version": 1,
-  "metadata": { "name": "users/get-one", "recordedAt": "2026-05-09T..." },
-  "interactions": [
-    {
-      "transport": "http",
-      "request":  { "method": "GET", "url": "...", "headers": {...}, "body": "" },
-      "response": { "status": 200, "headers": {...}, "body": "..." }
-    }
-  ]
-}
-```
-
-Cassettes are normal source files — review them, diff them, commit them.
-
-## Request matching
-
-Replay walks the cassette in record order via an internal cursor: the Nth
-request executed at runtime is served by the Nth recorded interaction, and
-each one is validated as the cursor advances. Request equality is computed
-on canonicalized method, URL, headers, and JSON body (object keys sorted).
-
-This is deliberately strict — content-based dispatch was removed because
-it silently returns the first recorded response for repeated identical
-requests, masking state changes that retry/polling/cache-hit tests need to
-observe. If you reorder requests in a test, re-record the cassette.
-
-Supply your own matcher via `match: (incoming, recorded) => boolean` for
-custom equivalence (e.g. ignoring a timestamp field in the body).
-
-## Redaction & secret safety
-
-Cassettes get checked in, so the recorder applies secure defaults and lets you
-declaratively extend them at layer construction:
+Secure defaults remove most headers and redact common credentials in headers, URLs, and JSON bodies. Extend those defaults at layer construction:
 
 ```ts
-import { HttpRecorder } from "@opencode-ai/http-recorder"
-
-HttpRecorder.layer("anthropic/messages", {
+HttpRecorder.layerFetch("anthropic/messages", {
   redact: {
     headers: ["x-project-token"],
     allowRequestHeaders: ["anthropic-version"],
     queryParameters: ["session-id"],
     jsonFields: ["user_id"],
     url: (url) => url.replace(/\/accounts\/[^/]+/, "/accounts/{account}"),
+    body: (body) => body.replaceAll(/usr_[a-z0-9]+/g, "usr_redacted"),
   },
 })
 ```
 
-What each option does:
+| Option                 | Purpose                                                              |
+| ---------------------- | -------------------------------------------------------------------- |
+| `headers`              | Add sensitive header names. They are retained as `[REDACTED]`.       |
+| `allowRequestHeaders`  | Preserve additional non-sensitive request headers for matching.      |
+| `allowResponseHeaders` | Preserve additional non-sensitive response headers for replay.       |
+| `queryParameters`      | Add sensitive URL query parameter names.                             |
+| `jsonFields`           | Recursively redact matching JSON keys in requests and responses.     |
+| `url`                  | Stabilize a URL after built-in redaction.                            |
+| `body`                 | Stabilize request and response bodies after built-in JSON redaction. |
 
-- **`headers`** adds sensitive header names. Request and response headers are
-  stripped to small allow-lists before these values are replaced.
-- **`allowRequestHeaders` / `allowResponseHeaders`** add non-sensitive headers
-  that affect matching or replay behavior.
-- **`queryParameters`** adds sensitive query parameter names.
-- **`jsonFields`** recursively redacts matching request and response JSON keys.
-- **`url`** and **`body`** apply narrow custom stabilization after built-in redaction.
+Before writing, the recorder scans the complete cassette for common credential formats and values from credential-like environment variables. Unsafe cassettes fail without replacing an existing recording.
 
-Configured names extend the defaults. They never disable built-in protection
-for authorization, cookies, common API-key headers, signed query parameters,
-or credential-like JSON fields.
+Redaction is defense in depth, not a substitute for review. Inspect cassette diffs before committing them.
 
-After assembling the cassette, the recorder scans every string for known
-secret patterns (Bearer tokens, `sk-…`, `sk-ant-…`, Google `AIza…` keys,
-AWS access keys, GitHub tokens, PEM blocks) and for values matching any
-environment variable named like a credential. If anything is found, the
-cassette is **not written** and the request fails with `UnsafeCassetteError`
-listing what was detected.
+## Matching And Ordering
 
-## Options reference
+A cassette contains an ordered sequence of interactions. The first runtime request is checked against the first recorded request, the second against the second, and so on.
+
+This strict ordering correctly models repeated identical requests whose responses change, including retries, polling, and cache tests. JSON object keys are canonicalized before matching.
+
+Concurrent requests are recorded in request-start order even when their responses complete out of order.
+
+Supply a custom equivalence rule when a request contains intentionally volatile data:
 
 ```ts
-type RecorderOptions = {
-  directory?: string // default: <cwd>/test/fixtures/recordings
-  metadata?: Record<string, unknown> // merged into cassette.metadata
-  redact?: {
-    headers?: ReadonlyArray<string>
-    allowRequestHeaders?: ReadonlyArray<string>
-    allowResponseHeaders?: ReadonlyArray<string>
-    queryParameters?: ReadonlyArray<string>
-    jsonFields?: ReadonlyArray<string>
-    url?: (url: string) => string
-    body?: (body: string) => string
-  }
-  match?: (incoming, recorded) => boolean // custom matcher
+HttpRecorder.layerFetch("events/create", {
+  match: (incoming, recorded) =>
+    incoming.method === recorded.method && new URL(incoming.url).pathname === new URL(recorded.url).pathname,
+})
+```
+
+## Configuration
+
+```ts
+interface RecorderOptions {
+  readonly directory?: string
+  readonly metadata?: Record<string, unknown>
+  readonly redact?: RedactOptions
+  readonly match?: RequestMatcher
 }
 ```
+
+`directory` defaults to `<cwd>/test/fixtures/recordings`.
+
+## Cassette Format
+
+```json
+{
+  "version": 1,
+  "metadata": {
+    "name": "users/get-one",
+    "recordedAt": "2026-06-05T12:00:00.000Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.example.com/users/1",
+        "headers": { "accept": "application/json" },
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": "{\"id\":1}"
+      }
+    }
+  ]
+}
+```
+
+Known text media types remain readable. Other response bodies are stored losslessly as base64.
+
+## Current Limits
+
+- The public API records HTTP only. WebSocket support remains internal while its chronology and lifecycle model are redesigned.
+- Responses are buffered while recording and replaying, so this beta is not suitable for tests that assert streaming timing, cancellation, or backpressure.
+- The package currently requires the exact Effect beta listed above.
+- Cassette format version `1` has no migration tooling yet.
+
+## License
+
+MIT

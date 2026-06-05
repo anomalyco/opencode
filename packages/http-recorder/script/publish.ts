@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
 import { fileURLToPath } from "node:url"
 import { pack } from "./pack.js"
+import { verifyPackage } from "./verify-package.js"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -18,7 +18,8 @@ if (await published(pkg.name, pkg.version)) {
 } else {
   const archive = await pack()
   try {
-    await $`npm publish ${archive} --tag ${Script.channel} --access public`
+    await verifyPackage(archive)
+    await $`npm publish ${archive} --tag beta --access public --provenance`
   } finally {
     await Bun.file(archive).delete()
   }
