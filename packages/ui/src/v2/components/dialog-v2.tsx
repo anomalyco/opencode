@@ -18,7 +18,17 @@ export function DialogFooter(props: ParentProps) {
 }
 
 export function Dialog(props: DialogProps) {
-  const [local] = splitProps(props, ["title", "description", "action", "size", "variant", "class", "classList", "fit", "children"])
+  const [local] = splitProps(props, [
+    "title",
+    "description",
+    "action",
+    "size",
+    "variant",
+    "class",
+    "classList",
+    "fit",
+    "children",
+  ])
   const title = children(() => local.title)
   const description = children(() => local.description)
   const action = children(() => local.action)

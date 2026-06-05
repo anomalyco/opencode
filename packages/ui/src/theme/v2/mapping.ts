@@ -143,8 +143,6 @@ export function mapV2Semantics(isDark: boolean): Record<string, V2ColorValue> {
   return isDark ? dark : light
 }
 
-export function mergeV2Tokens(
-  ...layers: Record<string, V2ColorValue>[]
-): Record<string, V2ColorValue> {
+export function mergeV2Tokens(...layers: Record<string, V2ColorValue>[]): Record<string, V2ColorValue> {
   return Object.assign({}, ...layers)
 }

@@ -13,12 +13,8 @@ export function mapV2Foreground(
   })
 
   return {
-    "v2-text-text-base": isDark
-      ? blend("#ffffff", body, 0.9)
-      : shift(body, { l: -0.07, c: 1.04 }),
-    "v2-text-text-muted":
-      overrides["text-weak"] ??
-      shift(body, { l: isDark ? -0.11 : 0.11, c: 0.9 }),
+    "v2-text-text-base": isDark ? blend("#ffffff", body, 0.9) : shift(body, { l: -0.07, c: 1.04 }),
+    "v2-text-text-muted": overrides["text-weak"] ?? shift(body, { l: isDark ? -0.11 : 0.11, c: 0.9 }),
     "v2-text-text-faint": shift(body, { l: isDark ? -0.2 : 0.21, c: isDark ? 0.78 : 0.72 }),
   }
 }
