@@ -721,17 +721,103 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ---
 
-### Firmware
+### DigitalOcean
 
-1. Head over to the [Firmware dashboard](https://app.firmware.ai/signup), create an account, and generate an API key.
+DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
 
-2. Run the `/connect` command and search for **Firmware**.
+OpenCode supports two authentication methods:
+
+- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode uses your DigitalOcean API token directly for inference and discovers your Inference Routers.
+- **Model Access Key** — Paste an existing key from the DigitalOcean console.
+
+#### OAuth (Recommended)
+
+1. Run the `/connect` command and search for **DigitalOcean**.
 
    ```txt
    /connect
    ```
 
-3. Enter your Firmware API key.
+2. Select **Login with DigitalOcean**.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Login with DigitalOcean
+   │ Paste Model Access Key
+   └
+   ```
+
+3. Your browser opens to authorize OpenCode. Sign in and approve.
+
+   :::note
+   OpenCode requests `genai:read` and `inference:query` OAuth scopes. Your DigitalOcean API token is used directly for inference — no separate Model Access Key is created.
+   :::
+
+   :::note
+   Inference Routers only appear in the model picker after OAuth. Pasting a Model Access Key manually does not discover routers.
+   :::
+
+4. Run the `/models` command. Your Inference Routers appear as the format `router:` in the model selection.
+
+   ```txt
+   /models
+   ```
+
+5. To pick up newly created Inference Routers, re-run `/connect` and select **DigitalOcean** again.
+
+#### Using a Model Access Key
+
+If you'd rather paste a key directly:
+
+1. Head over to the **Manage** page in the Inference section of the [DigitalOcean console](https://cloud.digitalocean.com/) and create a new key.
+
+2. Run the `/connect` command and select **DigitalOcean**, then **Paste Model Access Key**.
+
+   ```txt
+   ┌ Enter your DigitalOcean Model Access Key
+   │
+   │
+   └ enter
+   ```
+
+   :::note
+   Inference Routers are not auto-discovered with this method. To surface them in the model picker, sign in via OAuth instead.
+   :::
+
+3. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+#### Environment Variable
+
+Alternatively, set your Model Access Key as an environment variable.
+
+```bash frame="none"
+export DIGITALOCEAN_ACCESS_TOKEN=your-model-access-key
+```
+
+#### Inference Routers
+
+Inference Routers let you define a routing policy across multiple models — picking the cheapest, fastest, or most appropriate model per request based on the task. After OAuth, OpenCode surfaces each router as `router:<router-name>` in the model picker.
+
+Selecting a router model is a drop-in replacement for any other model — OpenCode forwards your request and DigitalOcean picks the underlying model based on your router's policy. Learn more about [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/)
+
+---
+
+### FrogBot
+
+1. Head over to the [FrogBot dashboard](https://app.frogbot.ai/signup), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **FrogBot**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your FrogBot API key.
 
    ```txt
    ┌ API key
@@ -1966,6 +2052,46 @@ Some useful routing options:
 
 ### xAI
 
+Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same SuperGrok subscription via a headless device-code flow (for VPS / SSH / Docker), or a pay-as-you-go API key from the xAI console.
+
+#### Option A — SuperGrok OAuth (browser login)
+
+1. Run the `/connect` command and search for **xAI**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **xAI Grok OAuth (SuperGrok Subscription)**. OpenCode opens xAI's consent screen in your browser and waits for the callback on `http://127.0.0.1:56121/callback`.
+
+3. Run the `/models` command to select a Grok model.
+
+   ```txt
+   /models
+   ```
+
+OpenCode refreshes the OAuth access token automatically. Any Grok or X Premium plan that includes Grok API access works; you do not need a separate `XAI_API_KEY`.
+
+#### Option B — SuperGrok device-code (headless / remote server / VPS)
+
+Use this when OpenCode is running somewhere a browser can't reach the loopback redirect: a VPS, a remote dev box over SSH, inside Docker, in CI, etc. No callback port is opened on the host running OpenCode — instead xAI hands the CLI a short code that you type into a browser on any other device (laptop, phone, …).
+
+1. Run the `/connect` command on the remote host and search for **xAI**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **xAI Grok OAuth (Headless / Remote / VPS)**. OpenCode prints a verification URL and a short user code.
+
+   ```txt
+   Open https://x.ai/device on any device and enter code: ABCD-1234
+   ```
+
+3. Open the URL on a device that has a browser (your laptop or phone), enter the code, and approve the consent screen. OpenCode polls xAI's token endpoint and stores the resulting OAuth tokens once you approve. Token refresh works the same as Option A.
+
+#### Option C — API key
+
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
 
 2. Run the `/connect` command and search for **xAI**.
@@ -1974,7 +2100,7 @@ Some useful routing options:
    /connect
    ```
 
-3. Enter your xAI API key.
+3. Select **Manually enter API Key** and paste your xAI API key.
 
    ```txt
    ┌ API key

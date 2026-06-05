@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "gemini/streams-text",
+    "recordedAt": "2026-04-28T21:18:47.483Z",
+    "tags": ["prefix:gemini", "provider:google", "protocol:gemini"]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Reply with exactly: Hello!\"}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"You are concise.\"}]},\"generationConfig\":{\"maxOutputTokens\":80,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Hello!\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 11,\"candidatesTokenCount\": 2,\"totalTokenCount\": 29,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 11}],\"thoughtsTokenCount\": 16},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"NyTxaczMAZ-b_uMP6u--iQg\"}\r\n\r\n"
+      }
+    }
+  ]
+}

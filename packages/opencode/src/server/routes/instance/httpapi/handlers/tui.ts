@@ -1,13 +1,12 @@
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/cli/cmd/tui/event"
-import { SessionTable } from "@/session/session.sql"
-import * as Database from "@/storage/db"
-import { eq } from "drizzle-orm"
+import { Session } from "@/session/session"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
-import { nextTuiRequest, submitTuiResponse } from "../../tui"
+import { nextTuiRequest, submitTuiResponse } from "@/server/shared/tui-control"
 import { InstanceHttpApi } from "../api"
 import { CommandPayload, TuiPublishPayload } from "../groups/tui"
+import * as SessionError from "./session-errors"
 
 const commandAliases = {
   session_new: "session.new",
@@ -27,14 +26,15 @@ const commandAliases = {
 
 export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handlers) =>
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    const publishCommand = (command: typeof TuiEvent.CommandExecute.properties.Type.command | undefined) =>
-      bus.publish(TuiEvent.CommandExecute, { command } as typeof TuiEvent.CommandExecute.properties.Type)
+    const events = yield* EventV2Bridge.Service
+    const session = yield* Session.Service
+    const publishCommand = (command: typeof TuiEvent.CommandExecute.data.Type.command | undefined) =>
+      events.publish(TuiEvent.CommandExecute, { command } as typeof TuiEvent.CommandExecute.data.Type)
 
     const appendPrompt = Effect.fn("TuiHttpApi.appendPrompt")(function* (ctx: {
-      payload: typeof TuiEvent.PromptAppend.properties.Type
+      payload: typeof TuiEvent.PromptAppend.data.Type
     }) {
-      yield* bus.publish(TuiEvent.PromptAppend, ctx.payload)
+      yield* events.publish(TuiEvent.PromptAppend, ctx.payload)
       return true
     })
 
@@ -77,34 +77,30 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
     })
 
     const showToast = Effect.fn("TuiHttpApi.showToast")(function* (ctx: {
-      payload: typeof TuiEvent.ToastShow.properties.Type
+      payload: typeof TuiEvent.ToastShow.data.Type
     }) {
-      yield* bus.publish(TuiEvent.ToastShow, ctx.payload)
+      yield* events.publish(TuiEvent.ToastShow, ctx.payload)
       return true
     })
 
     const publish = Effect.fn("TuiHttpApi.publish")(function* (ctx: { payload: typeof TuiPublishPayload.Type }) {
       if (ctx.payload.type === TuiEvent.PromptAppend.type)
-        yield* bus.publish(TuiEvent.PromptAppend, ctx.payload.properties)
+        yield* events.publish(TuiEvent.PromptAppend, ctx.payload.properties)
       if (ctx.payload.type === TuiEvent.CommandExecute.type)
-        yield* bus.publish(TuiEvent.CommandExecute, ctx.payload.properties)
-      if (ctx.payload.type === TuiEvent.ToastShow.type) yield* bus.publish(TuiEvent.ToastShow, ctx.payload.properties)
+        yield* events.publish(TuiEvent.CommandExecute, ctx.payload.properties)
+      if (ctx.payload.type === TuiEvent.ToastShow.type)
+        yield* events.publish(TuiEvent.ToastShow, ctx.payload.properties)
       if (ctx.payload.type === TuiEvent.SessionSelect.type)
-        yield* bus.publish(TuiEvent.SessionSelect, ctx.payload.properties)
+        yield* events.publish(TuiEvent.SessionSelect, ctx.payload.properties)
       return true
     })
 
     const selectSession = Effect.fn("TuiHttpApi.selectSession")(function* (ctx: {
-      payload: typeof TuiEvent.SessionSelect.properties.Type
+      payload: typeof TuiEvent.SessionSelect.data.Type
     }) {
       if (!ctx.payload.sessionID.startsWith("ses")) return yield* new HttpApiError.BadRequest({})
-      const row = yield* Effect.sync(() =>
-        Database.use((db) =>
-          db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, ctx.payload.sessionID)).get(),
-        ),
-      )
-      if (!row) return yield* new HttpApiError.NotFound({})
-      yield* bus.publish(TuiEvent.SessionSelect, ctx.payload)
+      yield* SessionError.mapStorageNotFound(session.get(ctx.payload.sessionID))
+      yield* events.publish(TuiEvent.SessionSelect, ctx.payload)
       return true
     })
 

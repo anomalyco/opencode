@@ -1,64 +1,64 @@
-import { Context, Effect, FiberMap, Layer, Schema, Stream } from "effect"
+import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { asc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { Project } from "@/project/project"
-import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
-import { SyncEvent } from "@/sync"
-import { EventSequenceTable, EventTable } from "@/sync/event.sql"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Log from "@opencode-ai/core/util/log"
-import { Filesystem } from "@/util/filesystem"
-import { ProjectID } from "@/project/schema"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Slug } from "@opencode-ai/core/util/slug"
-import { WorkspaceTable } from "./workspace.sql"
-import { getAdapter } from "./adapters"
-import { type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
-import { WorkspaceID } from "./schema"
+import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
+import { getAdapter, registeredAdapters } from "./adapters"
+import { type Target, type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Session } from "@/session/session"
-import { SessionTable } from "@/session/session.sql"
+import { SessionPrompt } from "@/session/prompt"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionID } from "@/session/schema"
+import { NotFoundError } from "@/storage/storage"
 import { errorData } from "@/util/error"
 import { waitEvent } from "./util"
-import { WorkspaceContext } from "./workspace-context"
-import { NonNegativeInt, withStatics } from "@/util/schema"
-import { zod as effectZod, zodObject } from "@/util/effect-zod"
+import { WorkspaceRef } from "@/effect/instance-ref"
+import { Vcs } from "@/project/vcs"
+import { InstanceStore } from "@/project/instance-store"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
 
-export const Info = WorkspaceInfoSchema
-export type Info = WorkspaceInfo
+export const Info = Schema.Struct({
+  ...WorkspaceInfoSchema.fields,
+  timeUsed: Schema.Number,
+}).annotate({ identifier: "Workspace" })
+export type Info = WorkspaceInfo & { timeUsed: number }
 
 export const ConnectionStatus = Schema.Struct({
-  workspaceID: WorkspaceID,
+  workspaceID: WorkspaceV2.ID,
   status: Schema.Literals(["connected", "connecting", "disconnected", "error"]),
 })
 export type ConnectionStatus = Schema.Schema.Type<typeof ConnectionStatus>
 
-const Restore = Schema.Struct({
-  workspaceID: WorkspaceID,
-  sessionID: SessionID,
-  total: NonNegativeInt,
-  step: NonNegativeInt,
-})
-
 export const Event = {
-  Ready: BusEvent.define(
-    "workspace.ready",
-    Schema.Struct({
+  Ready: EventV2.define({
+    type: "workspace.ready",
+    schema: {
       name: Schema.String,
-    }),
-  ),
-  Failed: BusEvent.define(
-    "workspace.failed",
-    Schema.Struct({
+    },
+  }),
+  Failed: EventV2.define({
+    type: "workspace.failed",
+    schema: {
       message: Schema.String,
-    }),
-  ),
-  Restore: BusEvent.define("workspace.restore", Restore),
-  Status: BusEvent.define("workspace.status", ConnectionStatus),
+    },
+  }),
+  Status: EventV2.define({ type: "workspace.status", schema: ConnectionStatus.fields }),
 }
 
 function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
@@ -70,28 +70,27 @@ function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     directory: row.directory,
     extra: row.extra,
     projectID: row.project_id,
+    timeUsed: row.time_used,
   }
 }
-
-const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
-  Effect.sync(() => Database.use(fn))
 
 const log = Log.create({ service: "workspace-sync" })
 
 export const CreateInput = Schema.Struct({
-  id: Schema.optional(WorkspaceID),
+  id: Schema.optional(WorkspaceV2.ID),
   type: Info.fields.type,
   branch: Info.fields.branch,
-  projectID: ProjectID,
-  extra: Info.fields.extra,
-}).pipe(withStatics((s) => ({ zod: effectZod(s), zodObject: zodObject(s) })))
+  projectID: ProjectV2.ID,
+  extra: Schema.optional(Info.fields.extra),
+})
 export type CreateInput = Schema.Schema.Type<typeof CreateInput>
 
-export const SessionRestoreInput = Schema.Struct({
-  workspaceID: WorkspaceID,
+export const SessionWarpInput = Schema.Struct({
+  workspaceID: Schema.NullOr(WorkspaceV2.ID),
   sessionID: SessionID,
-}).pipe(withStatics((s) => ({ zod: effectZod(s), zodObject: zodObject(s) })))
-export type SessionRestoreInput = Schema.Schema.Type<typeof SessionRestoreInput>
+  copyChanges: Schema.optional(Schema.Boolean),
+})
+export type SessionWarpInput = Schema.Schema.Type<typeof SessionWarpInput>
 
 export class SyncHttpError extends Schema.TaggedErrorClass<SyncHttpError>()("WorkspaceSyncHttpError", {
   message: Schema.String,
@@ -103,7 +102,7 @@ export class WorkspaceNotFoundError extends Schema.TaggedErrorClass<WorkspaceNot
   "WorkspaceNotFoundError",
   {
     message: Schema.String,
-    workspaceID: WorkspaceID,
+    workspaceID: WorkspaceV2.ID,
   },
 ) {}
 
@@ -115,11 +114,11 @@ export class SessionEventsNotFoundError extends Schema.TaggedErrorClass<SessionE
   },
 ) {}
 
-export class SessionRestoreHttpError extends Schema.TaggedErrorClass<SessionRestoreHttpError>()(
-  "WorkspaceSessionRestoreHttpError",
+export class SessionWarpHttpError extends Schema.TaggedErrorClass<SessionWarpHttpError>()(
+  "WorkspaceSessionWarpHttpError",
   {
     message: Schema.String,
-    workspaceID: WorkspaceID,
+    workspaceID: WorkspaceV2.ID,
     sessionID: SessionID,
     status: Schema.Number,
     body: Schema.String,
@@ -137,43 +136,53 @@ export class SyncAbortedError extends Schema.TaggedErrorClass<SyncAbortedError>(
 }) {}
 
 type CreateError = Auth.AuthError
-type SessionRestoreError =
+type SessionWarpError =
   | WorkspaceNotFoundError
   | SessionEventsNotFoundError
-  | SessionRestoreHttpError
+  | SessionWarpHttpError
+  | Vcs.PatchApplyError
   | HttpClientError.HttpClientError
 type WaitForSyncError = SyncTimeoutError | SyncAbortedError
 type SyncLoopError = SyncHttpError | HttpClientError.HttpClientError
 
 export interface Interface {
   readonly create: (input: CreateInput) => Effect.Effect<Info, CreateError>
-  readonly sessionRestore: (input: SessionRestoreInput) => Effect.Effect<{ total: number }, SessionRestoreError>
+  readonly sessionWarp: (input: SessionWarpInput) => Effect.Effect<void, SessionWarpError>
   readonly list: (project: Project.Info) => Effect.Effect<Info[]>
-  readonly get: (id: WorkspaceID) => Effect.Effect<Info | undefined>
-  readonly remove: (id: WorkspaceID) => Effect.Effect<Info | undefined>
+  readonly syncList: (project: Project.Info) => Effect.Effect<void>
+  readonly get: (id: WorkspaceV2.ID) => Effect.Effect<Info | undefined>
+  readonly remove: (id: WorkspaceV2.ID) => Effect.Effect<Info | undefined>
   readonly status: () => Effect.Effect<ConnectionStatus[]>
-  readonly isSyncing: (workspaceID: WorkspaceID) => Effect.Effect<boolean>
+  readonly isSyncing: (workspaceID: WorkspaceV2.ID) => Effect.Effect<boolean>
   readonly waitForSync: (
-    workspaceID: WorkspaceID,
+    workspaceID: WorkspaceV2.ID,
     state: Record<string, number>,
     signal?: AbortSignal,
+    timeout?: number,
   ) => Effect.Effect<void, WaitForSyncError>
-  readonly startWorkspaceSyncing: (projectID: ProjectID) => Effect.Effect<void>
+  readonly startWorkspaceSyncing: (projectID: ProjectV2.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workspace") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const auth = yield* Auth.Service
     const session = yield* Session.Service
+    const prompt = yield* SessionPrompt.Service
     const http = yield* HttpClient.HttpClient
-    const sync = yield* SyncEvent.Service
-    const connections = new Map<WorkspaceID, ConnectionStatus>()
-    const syncFibers = yield* FiberMap.make<WorkspaceID, void, SyncLoopError>()
+    const events = yield* EventV2Bridge.Service
+    const vcs = yield* Vcs.Service
+    const flags = yield* RuntimeFlags.Service
+    const fs = yield* FSUtil.Service
+    const { db } = yield* Database.Service
+    const connections = new Map<WorkspaceV2.ID, ConnectionStatus>()
+    const syncFibers = yield* FiberMap.make<WorkspaceV2.ID, void, SyncLoopError>()
 
-    const setStatus = (id: WorkspaceID, status: ConnectionStatus["status"]) => {
+    const setStatus = (id: WorkspaceV2.ID, status: ConnectionStatus["status"]) => {
       const prev = connections.get(id)
       if (prev?.status === status) return
       const next = { workspaceID: id, status }
@@ -258,24 +267,84 @@ export const layer = Layer.effect(
       )
     })
 
+    const runInWorkspace = <A, E, R>(input: {
+      workspaceID?: WorkspaceV2.ID
+      local: () => Effect.Effect<A, E, R>
+      remote: (input: {
+        workspace: Info
+        target: Extract<Target, { type: "remote" }>
+      }) => HttpClientRequest.HttpClientRequest
+      fallback: A
+      response?: "json" | "text"
+    }) =>
+      Effect.gen(function* () {
+        if (!input.workspaceID) return yield* input.local()
+
+        const workspace = yield* get(input.workspaceID)
+        if (!workspace) return input.fallback
+
+        const target = yield* WorkspaceAdapterRuntime.target(workspace)
+
+        if (target.type === "local") {
+          const store = yield* InstanceStore.Service
+          return yield* store.provide({ directory: target.directory }, input.local())
+        }
+
+        const response = yield* http.execute(input.remote({ workspace, target })).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              log.warn("workspace target request failed", {
+                workspaceID: workspace.id,
+                error: errorData(error),
+              })
+            }),
+          ),
+        )
+        if (!response) return input.fallback
+        if (response.status < 200 || response.status >= 300) {
+          const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
+          log.warn("workspace target request failed", {
+            workspaceID: workspace.id,
+            status: response.status,
+            body,
+          })
+          return input.fallback
+        }
+
+        const body = input.response === "text" ? response.text : response.json
+        return yield* body.pipe(
+          Effect.map((result) => result as A),
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              log.warn("workspace target response decode failed", {
+                workspaceID: workspace.id,
+                error: errorData(error),
+              })
+              return input.fallback
+            }),
+          ),
+        )
+      })
+
     const syncHistory = Effect.fn("Workspace.syncHistory")(function* (
       space: Info,
       url: URL | string,
       headers: HeadersInit | undefined,
     ) {
-      const sessionIDs = yield* db((db) =>
-        db
-          .select({ id: SessionTable.id })
-          .from(SessionTable)
-          .where(eq(SessionTable.workspace_id, space.id))
-          .all()
-          .map((row) => row.id),
-      )
+      const sessionIDs = (yield* db
+        .select({ id: SessionTable.id })
+        .from(SessionTable)
+        .where(eq(SessionTable.workspace_id, space.id))
+        .all()
+        .pipe(Effect.orDie)).map((row) => row.id)
       const state = sessionIDs.length
         ? Object.fromEntries(
-            (yield* db((db) =>
-              db.select().from(EventSequenceTable).where(inArray(EventSequenceTable.aggregate_id, sessionIDs)).all(),
-            )).map((row) => [row.aggregate_id, row.seq]),
+            (yield* db
+              .select()
+              .from(EventSequenceTable)
+              .where(inArray(EventSequenceTable.aggregate_id, sessionIDs))
+              .all()
+              .pipe(Effect.orDie)).map((row) => [row.aggregate_id, row.seq]),
           )
         : {}
 
@@ -301,42 +370,34 @@ export const layer = Layer.effect(
         })
       }
 
-      const events = (yield* response.json) as HistoryEvent[]
+      const history = (yield* response.json) as HistoryEvent[]
 
       log.info("workspace history synced", {
         workspaceID: space.id,
-        events: events.length,
+        events: history.length,
       })
 
-      yield* Effect.promise(async () => {
-        await WorkspaceContext.provide({
-          workspaceID: space.id,
-          async fn() {
-            await Effect.runPromise(
-              Effect.forEach(
-                events,
-                (event) =>
-                  sync.replay(
-                    {
-                      id: event.id,
-                      aggregateID: event.aggregate_id,
-                      seq: event.seq,
-                      type: event.type,
-                      data: event.data,
-                    },
-                    { publish: true },
-                  ),
-                { discard: true },
-              ),
+      yield* Effect.forEach(
+        history,
+        (event) =>
+          events
+            .replay(
+              {
+                id: EventV2.ID.make(event.id),
+                aggregateID: event.aggregate_id,
+                seq: event.seq,
+                type: event.type,
+                data: event.data,
+              },
+              { publish: true, ownerID: space.id },
             )
-          },
-        })
-      })
+            .pipe(Effect.provideService(WorkspaceRef, space.id)),
+        { discard: true },
+      )
     })
 
     const syncWorkspaceLoop = Effect.fn("Workspace.syncWorkspaceLoop")(function* (space: Info) {
-      const adapter = getAdapter(space.projectID, space.type)
-      const target = yield* Effect.promise(() => Promise.resolve(adapter.target(space)))
+      const target = yield* WorkspaceAdapterRuntime.target(space)
 
       if (target.type === "local") return
 
@@ -369,11 +430,11 @@ export const layer = Layer.effect(
           yield* parseSSE(stream, (evt) =>
             Effect.gen(function* () {
               if (!evt || typeof evt !== "object" || !("payload" in evt)) return
-              const payload = evt.payload as { type?: string; syncEvent?: SyncEvent.SerializedEvent }
+              const payload = evt.payload as { type?: string; syncEvent?: EventV2.SerializedEvent }
               if (payload.type === "server.heartbeat") return
 
               if (payload.type === "sync" && payload.syncEvent) {
-                const failed = yield* sync.replay(payload.syncEvent).pipe(
+                const failed = yield* events.replay(payload.syncEvent, { publish: true, ownerID: space.id }).pipe(
                   Effect.as(false),
                   Effect.catchCause((error) =>
                     Effect.sync(() => {
@@ -417,13 +478,24 @@ export const layer = Layer.effect(
     })
 
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
-      if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) return
+      if (!flags.experimentalWorkspaces) return
 
-      const adapter = getAdapter(space.projectID, space.type)
-      const target = yield* Effect.promise(() => Promise.resolve(adapter.target(space)))
+      const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            setStatus(space.id, "error")
+            log.warn("workspace target failed", {
+              workspaceID: space.id,
+              error: errorData(error),
+            })
+            return null
+          }),
+        ),
+      )
+      if (!target) return
 
       if (target.type === "local") {
-        setStatus(space.id, (yield* Effect.promise(() => Filesystem.exists(target.directory))) ? "connected" : "error")
+        setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
         return
       }
 
@@ -451,17 +523,21 @@ export const layer = Layer.effect(
       )
     })
 
-    const stopSync = Effect.fn("Workspace.stopSync")(function* (id: WorkspaceID) {
+    const stopSync = Effect.fn("Workspace.stopSync")(function* (id: WorkspaceV2.ID) {
       yield* FiberMap.remove(syncFibers, id)
       connections.delete(id)
     })
 
     const create = Effect.fn("Workspace.create")(function* (input: CreateInput) {
-      const id = WorkspaceID.ascending(input.id)
+      const id = WorkspaceV2.ID.ascending(input.id)
       const adapter = getAdapter(input.projectID, input.type)
-      const config = yield* Effect.promise(() =>
-        Promise.resolve(adapter.configure({ ...input, id, name: Slug.create(), directory: null })),
-      )
+      const config = yield* WorkspaceAdapterRuntime.configure(adapter, {
+        ...input,
+        id,
+        name: Slug.create(),
+        directory: null,
+        extra: input.extra ?? null,
+      })
 
       const info: Info = {
         id,
@@ -471,21 +547,23 @@ export const layer = Layer.effect(
         directory: config.directory ?? null,
         extra: config.extra ?? null,
         projectID: input.projectID,
+        timeUsed: Date.now(),
       }
 
-      yield* db((db) => {
-        db.insert(WorkspaceTable)
-          .values({
-            id: info.id,
-            type: info.type,
-            branch: info.branch,
-            name: info.name,
-            directory: info.directory,
-            extra: info.extra,
-            project_id: info.projectID,
-          })
-          .run()
-      })
+      yield* db
+        .insert(WorkspaceTable)
+        .values({
+          id: info.id,
+          type: info.type,
+          branch: info.branch,
+          name: info.name,
+          directory: info.directory,
+          extra: info.extra,
+          project_id: info.projectID,
+          time_used: info.timeUsed,
+        })
+        .run()
+        .pipe(Effect.orDie)
 
       const env = {
         OPENCODE_AUTH_CONTENT: JSON.stringify(yield* auth.all()),
@@ -496,7 +574,7 @@ export const layer = Layer.effect(
         OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
       }
 
-      yield* Effect.promise(() => adapter.create(config, env))
+      yield* WorkspaceAdapterRuntime.create(adapter, config, env)
       yield* Effect.all(
         [
           waitEvent({
@@ -517,174 +595,219 @@ export const layer = Layer.effect(
       return info
     })
 
-    const sessionRestore = Effect.fn("Workspace.sessionRestore")(function* (input: SessionRestoreInput) {
+    const sessionWarp = Effect.fn("Workspace.sessionWarp")(function* (input: SessionWarpInput) {
       return yield* Effect.gen(function* () {
-        log.info("session restore requested", {
+        log.info("session warp requested", {
           workspaceID: input.workspaceID,
           sessionID: input.sessionID,
         })
 
-        const space = yield* get(input.workspaceID)
+        const current = yield* db
+          .select({ workspaceID: SessionTable.workspace_id })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+
+        if (current?.workspaceID) {
+          const previous = yield* get(current.workspaceID)
+          if (previous) {
+            const target = yield* WorkspaceAdapterRuntime.target(previous)
+
+            if (target.type === "remote") {
+              yield* syncHistory(previous, target.url, target.headers).pipe(
+                Effect.catch((error) =>
+                  Effect.sync(() => {
+                    log.warn("session warp final source sync failed", {
+                      workspaceID: previous.id,
+                      sessionID: input.sessionID,
+                      error: errorData(error),
+                    })
+                  }),
+                ),
+              )
+            } else {
+              yield* prompt.cancel(input.sessionID)
+            }
+
+            // "claim" this session so any future events coming from
+            // the old workspace are ignored
+            yield* events.claim(input.sessionID, input.workspaceID ?? previous.projectID)
+          }
+        }
+
+        const sourcePatch =
+          input.copyChanges && current?.workspaceID
+            ? yield* runInWorkspace({
+                workspaceID: current?.workspaceID ?? undefined,
+                local: () => vcs.diffRaw(),
+                remote: ({ target }) =>
+                  HttpClientRequest.get(route(target.url, "/vcs/diff/raw"), {
+                    headers: new Headers(target.headers),
+                  }),
+                fallback: "",
+                response: "text",
+              }).pipe(Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))))
+            : ""
+
+        if (sourcePatch) {
+          // Attempt to apply the file changes to the new workspace.
+          // We intentionally do first so if it fails we don't warp
+          // the session.
+          yield* runInWorkspace({
+            workspaceID: input.workspaceID ?? undefined,
+            local: () => vcs.apply({ patch: sourcePatch }),
+            remote: ({ target }) =>
+              HttpClientRequest.post(route(target.url, "/vcs/apply"), {
+                headers: new Headers(target.headers),
+                body: HttpBody.jsonUnsafe({ patch: sourcePatch }),
+              }),
+            fallback: { applied: false },
+          }).pipe(Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))))
+        }
+
+        if (input.workspaceID === null) {
+          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: undefined })
+
+          log.info("session warp complete", {
+            workspaceID: input.workspaceID,
+            sessionID: input.sessionID,
+            target: "local",
+          })
+          return
+        }
+
+        const workspaceID = input.workspaceID
+        const space = yield* get(workspaceID)
         if (!space)
           return yield* new WorkspaceNotFoundError({
-            message: `Workspace not found: ${input.workspaceID}`,
-            workspaceID: input.workspaceID,
+            message: `Workspace not found: ${workspaceID}`,
+            workspaceID,
           })
 
-        const adapter = getAdapter(space.projectID, space.type)
-        const target = yield* Effect.promise(() => Promise.resolve(adapter.target(space)))
+        const target = yield* WorkspaceAdapterRuntime.target(space)
 
-        yield* sync.run(Session.Event.Updated, {
-          sessionID: input.sessionID,
-          info: {
+        if (target.type === "local") {
+          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
+
+          log.info("session warp complete", {
             workspaceID: input.workspaceID,
-          },
-        })
+            sessionID: input.sessionID,
+            target: target.directory,
+          })
+          return
+        }
 
-        const rows = yield* db((db) =>
-          db
-            .select({
-              id: EventTable.id,
-              aggregateID: EventTable.aggregate_id,
-              seq: EventTable.seq,
-              type: EventTable.type,
-              data: EventTable.data,
-            })
-            .from(EventTable)
-            .where(eq(EventTable.aggregate_id, input.sessionID))
-            .orderBy(asc(EventTable.seq))
-            .all(),
-        )
+        const rows = yield* db
+          .select({
+            id: EventTable.id,
+            aggregateID: EventTable.aggregate_id,
+            seq: EventTable.seq,
+            type: EventTable.type,
+            data: EventTable.data,
+          })
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, input.sessionID))
+          .orderBy(asc(EventTable.seq))
+          .all()
+          .pipe(Effect.orDie)
         if (rows.length === 0)
           return yield* new SessionEventsNotFoundError({
             message: `No events found for session: ${input.sessionID}`,
             sessionID: input.sessionID,
           })
 
-        const size = 10
-        // TODO: look into using effect APIs to process this in chunks
-        const sets = Array.from({ length: Math.ceil(rows.length / size) }, (_, i) =>
-          rows.slice(i * size, (i + 1) * size),
-        )
-        const total = sets.length
+        const batches = Iterable.chunksOf(rows, 10)
+        const total = Iterable.size(batches)
 
-        log.info("session restore prepared", {
+        log.info("session warp prepared", {
           workspaceID: input.workspaceID,
           sessionID: input.sessionID,
-          workspaceType: space.type,
-          directory: space.directory,
-          target: target.type === "remote" ? String(route(target.url, "/sync/replay")) : target.directory,
+          target: String(route(target.url, "/sync/replay")),
           events: rows.length,
           batches: total,
           first: rows[0]?.seq,
           last: rows.at(-1)?.seq,
         })
 
-        yield* Effect.sync(() =>
-          GlobalBus.emit("event", {
-            directory: "global",
-            workspace: input.workspaceID,
-            payload: {
-              type: Event.Restore.type,
-              properties: {
-                workspaceID: input.workspaceID,
-                sessionID: input.sessionID,
-                total,
-                step: 0,
-              },
-            },
-          }),
-        )
-
-        for (const [i, events] of sets.entries()) {
-          log.info("session restore batch starting", {
-            workspaceID: input.workspaceID,
-            sessionID: input.sessionID,
-            step: i + 1,
-            total,
-            events: events.length,
-            first: events[0]?.seq,
-            last: events.at(-1)?.seq,
-            target: target.type === "remote" ? String(route(target.url, "/sync/replay")) : target.directory,
-          })
-
-          if (target.type === "local") {
-            yield* sync.replayAll(events)
-            log.info("session restore batch replayed locally", {
-              workspaceID: input.workspaceID,
-              sessionID: input.sessionID,
-              step: i + 1,
-              total,
-              events: events.length,
-            })
-          } else {
-            const url = route(target.url, "/sync/replay")
-            const res = yield* http.execute(
-              HttpClientRequest.post(url, {
-                headers: new Headers(target.headers),
-                body: HttpBody.jsonUnsafe({
-                  directory: space.directory ?? "",
-                  events,
+        yield* Effect.forEach(
+          batches,
+          (events, i) =>
+            Effect.gen(function* () {
+              const response = yield* http.execute(
+                HttpClientRequest.post(route(target.url, "/sync/replay"), {
+                  headers: new Headers(target.headers),
+                  body: HttpBody.jsonUnsafe({
+                    directory: space.directory ?? "",
+                    events,
+                  }),
                 }),
-              }),
-            )
+              )
 
-            if (res.status < 200 || res.status >= 300) {
-              const body = yield* res.text
-              log.error("session restore batch failed", {
+              if (response.status < 200 || response.status >= 300) {
+                const body = yield* response.text
+                log.error("session warp batch failed", {
+                  workspaceID: input.workspaceID,
+                  sessionID: input.sessionID,
+                  step: i + 1,
+                  total,
+                  status: response.status,
+                  body,
+                })
+                return yield* new SessionWarpHttpError({
+                  message: `Failed to warp session ${input.sessionID} into workspace ${workspaceID}: HTTP ${response.status} ${body}`,
+                  workspaceID,
+                  sessionID: input.sessionID,
+                  status: response.status,
+                  body,
+                })
+              }
+
+              log.info("session warp batch posted", {
                 workspaceID: input.workspaceID,
                 sessionID: input.sessionID,
                 step: i + 1,
                 total,
-                status: res.status,
-                body,
+                status: response.status,
               })
-              return yield* new SessionRestoreHttpError({
-                message: `Failed to replay session ${input.sessionID} into workspace ${input.workspaceID}: HTTP ${res.status} ${body}`,
-                workspaceID: input.workspaceID,
-                sessionID: input.sessionID,
-                status: res.status,
-                body,
-              })
-            }
-
-            log.info("session restore batch posted", {
-              workspaceID: input.workspaceID,
-              sessionID: input.sessionID,
-              step: i + 1,
-              total,
-              status: res.status,
-            })
-          }
-
-          yield* Effect.sync(() =>
-            GlobalBus.emit("event", {
-              directory: "global",
-              workspace: input.workspaceID,
-              payload: {
-                type: Event.Restore.type,
-                properties: {
-                  workspaceID: input.workspaceID,
-                  sessionID: input.sessionID,
-                  total,
-                  step: i + 1,
-                },
-              },
             }),
-          )
+          { discard: true },
+        )
+
+        const response = yield* http.execute(
+          HttpClientRequest.post(route(target.url, "/sync/steal"), {
+            headers: new Headers(target.headers),
+            body: HttpBody.jsonUnsafe({ sessionID: input.sessionID }),
+          }),
+        )
+        if (response.status < 200 || response.status >= 300) {
+          const body = yield* response.text
+          log.error("session warp steal failed", {
+            workspaceID: input.workspaceID,
+            sessionID: input.sessionID,
+            status: response.status,
+            body,
+          })
+          return yield* new SessionWarpHttpError({
+            message: `Failed to steal session ${input.sessionID} into workspace ${workspaceID}: HTTP ${response.status} ${body}`,
+            workspaceID,
+            sessionID: input.sessionID,
+            status: response.status,
+            body,
+          })
         }
 
-        log.info("session restore complete", {
+        yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
+
+        log.info("session warp complete", {
           workspaceID: input.workspaceID,
           sessionID: input.sessionID,
           batches: total,
         })
-
-        return { total }
       }).pipe(
         Effect.tapError((err) =>
           Effect.sync(() =>
-            log.error("session restore failed", {
+            log.error("session warp failed", {
               workspaceID: input.workspaceID,
               sessionID: input.sessionID,
               error: errorData(err),
@@ -695,39 +818,101 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Workspace.list")(function* (project: Project.Info) {
-      return yield* db((db) =>
-        db
-          .select()
-          .from(WorkspaceTable)
-          .where(eq(WorkspaceTable.project_id, project.id))
-          .all()
-          .map(fromRow)
-          .sort((a, b) => a.id.localeCompare(b.id)),
+      return (yield* db
+        .select()
+        .from(WorkspaceTable)
+        .where(eq(WorkspaceTable.project_id, project.id))
+        .all()
+        .pipe(Effect.orDie))
+        .map(fromRow)
+        .sort((a, b) => a.id.localeCompare(b.id))
+    })
+
+    const syncList = Effect.fn("Workspace.syncList")(function* (project: Project.Info) {
+      const names = new Set((yield* list(project)).map((workspace) => workspace.name))
+      const discovered = yield* Effect.forEach(
+        registeredAdapters(project.id),
+        ([type, adapter]) =>
+          WorkspaceAdapterRuntime.list(adapter).pipe(
+            Effect.catchCause((error) =>
+              Effect.sync(() => {
+                log.warn("workspace adapter list failed", { type, error })
+                return []
+              }),
+            ),
+          ),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map((items) => items.flat()))
+
+      yield* Effect.forEach(
+        discovered,
+        (item) =>
+          Effect.gen(function* () {
+            if (names.has(item.name)) return
+            names.add(item.name)
+
+            const info: Info = {
+              id: WorkspaceV2.ID.ascending(),
+              type: item.type,
+              branch: item.branch,
+              name: item.name,
+              directory: item.directory,
+              extra: item.extra,
+              projectID: item.projectID,
+              timeUsed: Date.now(),
+            }
+
+            yield* db
+              .insert(WorkspaceTable)
+              .values({
+                id: info.id,
+                type: info.type,
+                branch: info.branch,
+                name: info.name,
+                directory: info.directory,
+                extra: info.extra,
+                project_id: info.projectID,
+                time_used: info.timeUsed,
+              })
+              .run()
+              .pipe(Effect.orDie)
+
+            yield* startSync(info)
+          }),
+        { concurrency: 1 },
       )
     })
 
-    const get = Effect.fn("Workspace.get")(function* (id: WorkspaceID) {
-      const row = yield* db((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
+    const get = Effect.fn("Workspace.get")(function* (id: WorkspaceV2.ID) {
+      const row = yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return
       return fromRow(row)
     })
 
-    const remove = Effect.fn("Workspace.remove")(function* (id: WorkspaceID) {
-      const sessions = yield* db((db) =>
-        db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, id)).all(),
+    const remove = Effect.fn("Workspace.remove")(function* (id: WorkspaceV2.ID) {
+      const sessions = yield* db
+        .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.workspace_id, id))
+        .all()
+        .pipe(Effect.orDie)
+      const sessionIDs = new Set(sessions.map((sessionInfo) => sessionInfo.id))
+      yield* Effect.forEach(
+        sessions.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
+        (sessionInfo) =>
+          session.remove(sessionInfo.id).pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.void)),
+        { discard: true },
       )
-      yield* Effect.forEach(sessions, (sessionInfo) => session.remove(sessionInfo.id), { discard: true })
 
-      const row = yield* db((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
+      const row = yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return
 
       yield* stopSync(id)
 
       const info = fromRow(row)
-      yield* Effect.catch(
+      yield* Effect.catchCause(
         Effect.gen(function* () {
-          const adapter = getAdapter(info.projectID, row.type)
-          yield* Effect.tryPromise(() => Promise.resolve(adapter.remove(info)))
+          yield* WorkspaceAdapterRuntime.remove(info)
         }),
         () =>
           Effect.sync(() => {
@@ -735,7 +920,7 @@ export const layer = Layer.effect(
           }),
       )
 
-      yield* db((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
+      yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run().pipe(Effect.orDie)
       return info
     })
 
@@ -743,29 +928,21 @@ export const layer = Layer.effect(
       return [...connections.values()]
     })
 
-    const isSyncing = Effect.fn("Workspace.isSyncing")(function* (workspaceID: WorkspaceID) {
+    const isSyncing = Effect.fn("Workspace.isSyncing")(function* (workspaceID: WorkspaceV2.ID) {
       const exists = yield* FiberMap.has(syncFibers, workspaceID)
       return exists && connections.get(workspaceID)?.status !== "error"
     })
 
     const waitForSync = Effect.fn("Workspace.waitForSync")(function* (
-      workspaceID: WorkspaceID,
+      workspaceID: WorkspaceV2.ID,
       state: Record<string, number>,
       signal?: AbortSignal,
+      timeout = TIMEOUT,
     ) {
-      if (synced(state)) return
+      if (yield* synced(db, state)) return
 
       yield* Effect.catch(
-        waitEvent({
-          timeout: TIMEOUT,
-          signal,
-          fn(event) {
-            if (event.workspace !== workspaceID && event.payload.type !== "sync") {
-              return false
-            }
-            return synced(state)
-          },
-        }),
+        waitUntilSynced({ db, workspaceID, state, signal, timeout }),
         (): Effect.Effect<never, WaitForSyncError> =>
           signal?.aborted
             ? Effect.fail(
@@ -783,17 +960,13 @@ export const layer = Layer.effect(
       )
     })
 
-    const startWorkspaceSyncing = Effect.fn("Workspace.startWorkspaceSyncing")(function* (projectID: ProjectID) {
-      // This session table join makes this query only return
-      // workspaces that have sessions
-      const rows = yield* db((db) =>
-        db
-          .selectDistinct({ workspace: WorkspaceTable })
-          .from(WorkspaceTable)
-          .innerJoin(SessionTable, eq(SessionTable.workspace_id, WorkspaceTable.id))
-          .where(eq(WorkspaceTable.project_id, projectID))
-          .all(),
-      )
+    const startWorkspaceSyncing = Effect.fn("Workspace.startWorkspaceSyncing")(function* (projectID: ProjectV2.ID) {
+      const rows = yield* db
+        .selectDistinct({ workspace: WorkspaceTable })
+        .from(WorkspaceTable)
+        .where(eq(WorkspaceTable.project_id, projectID))
+        .all()
+        .pipe(Effect.orDie)
 
       for (const { workspace } of rows) {
         yield* startSync(fromRow(workspace)).pipe(
@@ -813,8 +986,9 @@ export const layer = Layer.effect(
 
     return Service.of({
       create,
-      sessionRestore,
+      sessionWarp,
       list,
+      syncList,
       get,
       remove,
       status,
@@ -828,8 +1002,14 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Session.defaultLayer),
-  Layer.provide(SyncEvent.defaultLayer),
+  Layer.provide(SessionPrompt.defaultLayer),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(Vcs.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 const TIMEOUT = 5000
@@ -842,26 +1022,46 @@ type HistoryEvent = {
   data: Record<string, unknown>
 }
 
-function synced(state: Record<string, number>) {
+function waitUntilSynced(input: {
+  db: Database.Interface["db"]
+  workspaceID: WorkspaceV2.ID
+  state: Record<string, number>
+  signal?: AbortSignal
+  timeout: number
+}): Effect.Effect<void, unknown> {
+  return Effect.suspend(() =>
+    waitEvent({
+      timeout: input.timeout,
+      signal: input.signal,
+      fn(event) {
+        return event.workspace === input.workspaceID || event.payload.type === "sync"
+      },
+    }).pipe(
+      Effect.andThen(synced(input.db, input.state)),
+      Effect.flatMap((done): Effect.Effect<void, unknown> => (done ? Effect.void : waitUntilSynced(input))),
+    ),
+  )
+}
+
+function synced(db: Database.Interface["db"], state: Record<string, number>): Effect.Effect<boolean> {
   const ids = Object.keys(state)
-  if (ids.length === 0) return true
+  if (ids.length === 0) return Effect.succeed(true)
 
-  const done = Object.fromEntries(
-    Database.use((db) =>
-      db
-        .select({
-          id: EventSequenceTable.aggregate_id,
-          seq: EventSequenceTable.seq,
-        })
-        .from(EventSequenceTable)
-        .where(inArray(EventSequenceTable.aggregate_id, ids))
-        .all(),
-    ).map((row) => [row.id, row.seq]),
-  ) as Record<string, number>
-
-  return ids.every((id) => {
-    return (done[id] ?? -1) >= state[id]
-  })
+  return db
+    .select({
+      id: EventSequenceTable.aggregate_id,
+      seq: EventSequenceTable.seq,
+    })
+    .from(EventSequenceTable)
+    .where(inArray(EventSequenceTable.aggregate_id, ids))
+    .all()
+    .pipe(
+      Effect.orDie,
+      Effect.map((rows) => {
+        const done = Object.fromEntries(rows.map((row) => [row.id, row.seq])) as Record<string, number>
+        return ids.every((id) => (done[id] ?? -1) >= state[id])
+      }),
+    )
 }
 
 function route(url: string | URL, path: string) {

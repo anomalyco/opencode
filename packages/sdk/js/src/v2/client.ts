@@ -1,8 +1,14 @@
 export * from "./gen/types.gen.js"
+export type {
+  FileSystemBinaryContent as LocationFileSystemBinaryContent,
+  FileSystemEntry as LocationFileSystemEntry,
+  FileSystemTextContent as LocationFileSystemTextContent,
+} from "./gen/types.gen.js"
 
 import { createClient } from "./gen/client/client.gen.js"
 import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
+import { wrapClientError } from "../error-interceptor.js"
 export { type Config as OpencodeClientConfig, OpencodeClient }
 
 function pick(value: string | null, fallback?: string, encode?: (value: string) => string) {
@@ -29,8 +35,10 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
       key === "directory" ? encodeURIComponent : undefined,
     )
     if (!value) continue
-    if (!url.searchParams.has(key)) {
-      url.searchParams.set(key, value)
+    for (const query of url.pathname.startsWith("/api/") ? [key, `location[${key}]`] : [key]) {
+      if (!url.searchParams.has(query)) {
+        url.searchParams.set(query, value)
+      }
     }
     changed = true
   }
@@ -84,5 +92,6 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
 
     return response
   })
+  client.interceptors.error.use(wrapClientError)
   return new OpencodeClient({ client })
 }

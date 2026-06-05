@@ -1,20 +1,18 @@
 export * as ConfigPaths from "./paths"
 
 import path from "path"
-import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { unique } from "remeda"
-import { JsonError } from "./error"
 import * as Effect from "effect/Effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   name: string,
   directory: string,
   worktree?: string,
 ) {
-  const afs = yield* AppFileSystem.Service
+  const afs = yield* FSUtil.Service
   return (yield* afs.up({
     targets: [`${name}.jsonc`, `${name}.json`],
     start: directory,
@@ -23,7 +21,7 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
 })
 
 export const directories = Effect.fn("ConfigPaths.directories")(function* (directory: string, worktree?: string) {
-  const afs = yield* AppFileSystem.Service
+  const afs = yield* FSUtil.Service
   return unique([
     Global.Path.config,
     ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
@@ -44,12 +42,4 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
 
 export function fileInDirectory(dir: string, name: string) {
   return [path.join(dir, `${name}.json`), path.join(dir, `${name}.jsonc`)]
-}
-
-/** Read a config file, returning undefined for missing files and throwing JsonError for other failures. */
-export async function readFile(filepath: string) {
-  return Filesystem.readText(filepath).catch((err: NodeJS.ErrnoException) => {
-    if (err.code === "ENOENT") return
-    throw new JsonError({ path: filepath }, { cause: err })
-  })
 }

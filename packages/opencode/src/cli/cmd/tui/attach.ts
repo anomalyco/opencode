@@ -1,10 +1,9 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
-import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
 import { validateSession } from "./validate-session"
+import { ServerAuth } from "@/server/auth"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -38,8 +37,14 @@ export const AttachCommand = cmd({
         alias: ["p"],
         type: "string",
         describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
+      })
+      .option("username", {
+        alias: ["u"],
+        type: "string",
+        describe: "basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')",
       }),
   handler: async (args) => {
+    const { TuiConfig } = await import("@/cli/cmd/tui/config/tui")
     const unguard = win32InstallCtrlCGuard()
     try {
       win32DisableProcessedInput()
@@ -60,12 +65,7 @@ export const AttachCommand = cmd({
           return args.dir
         }
       })()
-      const headers = (() => {
-        const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
-        if (!password) return undefined
-        const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
-        return { Authorization: auth }
-      })()
+      const headers = ServerAuth.headers({ password: args.password, username: args.username })
       const config = await TuiConfig.get()
 
       try {
@@ -81,9 +81,12 @@ export const AttachCommand = cmd({
         return
       }
 
-      await tui({
+      const { createTuiRenderer, tui } = await import("./app")
+      const renderer = await createTuiRenderer(config)
+      const handle = tui({
         url: args.url,
         config,
+        renderer,
         args: {
           continue: args.continue,
           sessionID: args.session,
@@ -92,6 +95,7 @@ export const AttachCommand = cmd({
         directory,
         headers,
       })
+      await handle.done
     } finally {
       unguard?.()
     }

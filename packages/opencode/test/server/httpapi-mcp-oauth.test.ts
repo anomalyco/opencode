@@ -33,10 +33,7 @@ const testMcpHandlers = HttpApiBuilder.group(TestHttpApi, "mcp", (handlers) =>
 
 const passthroughAuthorization = Layer.succeed(
   Authorization,
-  Authorization.of({
-    basic: (effect) => effect,
-    authToken: (effect) => effect,
-  }),
+  Authorization.of((effect) => effect),
 )
 
 const passthroughInstanceContext = Layer.succeed(

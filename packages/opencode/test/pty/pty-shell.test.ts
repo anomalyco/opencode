@@ -1,38 +1,47 @@
-import { describe, expect, test } from "bun:test"
-import { AppRuntime } from "../../src/effect/app-runtime"
-import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
-import { Pty } from "../../src/pty"
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { Config } from "../../src/config/config"
+import { Plugin } from "../../src/plugin"
+import { PtyPreparation } from "../../src/pty-preparation"
+import { Pty } from "@opencode-ai/core/pty"
 import { Shell } from "../../src/shell/shell"
-import { tmpdir } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 Shell.preferred.reset()
+
+const it = testEffect(Layer.mergeAll(Config.defaultLayer, Plugin.defaultLayer))
+const preparationIt = testEffect(
+  Layer.mergeAll(
+    Layer.mock(Config.Service)({ get: () => Effect.succeed({}) }),
+    Layer.mock(Plugin.Service)({
+      trigger: <Name extends string, Input, Output>(_name: Name, _input: Input, output: Output) =>
+        Effect.sync(() => {
+          const result = output as { env: Record<string, string> }
+          result.env.INPUT = "plugin"
+          result.env.FROM_PLUGIN = "plugin"
+          result.env.TERM = "plugin"
+          return output
+        }),
+      list: () => Effect.succeed([]),
+      init: () => Effect.void,
+    }),
+  ),
+)
+
+const preparePty = (input: Pty.CreateInput) => PtyPreparation.prepareCreate(input)
 
 describe("pty shell args", () => {
   if (process.platform !== "win32") return
 
   const ps = Bun.which("pwsh") || Bun.which("powershell")
   if (ps) {
-    test(
+    it.instance(
       "does not add login args to pwsh",
-      async () => {
-        await using dir = await tmpdir()
-        await Instance.provide({
-          directory: dir.path,
-          fn: () =>
-            AppRuntime.runPromise(
-              Effect.gen(function* () {
-                const pty = yield* Pty.Service
-                const info = yield* pty.create({ command: ps, title: "pwsh" })
-                try {
-                  expect(info.args).toEqual([])
-                } finally {
-                  yield* pty.remove(info.id)
-                }
-              }),
-            ),
-        })
-      },
+      () =>
+        Effect.gen(function* () {
+          const info = yield* preparePty({ command: ps, title: "pwsh" })
+          expect(info.args).toEqual([])
+        }),
       { timeout: 30000 },
     )
   }
@@ -43,62 +52,51 @@ describe("pty shell args", () => {
     return Shell.gitbash()
   })()
   if (bash) {
-    test(
+    it.instance(
       "adds login args to bash",
-      async () => {
-        await using dir = await tmpdir()
-        await Instance.provide({
-          directory: dir.path,
-          fn: () =>
-            AppRuntime.runPromise(
-              Effect.gen(function* () {
-                const pty = yield* Pty.Service
-                const info = yield* pty.create({ command: bash, title: "bash" })
-                try {
-                  expect(info.args).toEqual(["-l"])
-                } finally {
-                  yield* pty.remove(info.id)
-                }
-              }),
-            ),
-        })
-      },
+      () =>
+        Effect.gen(function* () {
+          const info = yield* preparePty({ command: bash, title: "bash" })
+          expect(info.args).toEqual(["-l"])
+        }),
       { timeout: 30000 },
     )
   }
 })
 
 describe("pty configured shell", () => {
-  test(
-    "uses configured shell for default PTY command",
-    async () => {
-      const configured = process.platform === "win32" ? Bun.which("pwsh") || Bun.which("powershell") : Bun.which("bash")
-      if (!configured) return
+  const configured = process.platform === "win32" ? Bun.which("pwsh") || Bun.which("powershell") : Bun.which("bash")
 
-      await using dir = await tmpdir({
-        config: { shell: Shell.name(configured) },
-      })
-      await Instance.provide({
-        directory: dir.path,
-        fn: () =>
-          AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const pty = yield* Pty.Service
-              const info = yield* pty.create({ title: "configured" })
-              try {
-                if (process.platform === "win32") {
-                  expect(info.command.toLowerCase()).toBe(configured.toLowerCase())
-                } else {
-                  expect(info.command).toBe(configured)
-                }
-                expect(info.args).toEqual(process.platform === "win32" ? [] : ["-l"])
-              } finally {
-                yield* pty.remove(info.id)
-              }
-            }),
-          ),
-      })
-    },
+  it.instance(
+    "uses configured shell for default PTY command",
+    () =>
+      Effect.gen(function* () {
+        if (!configured) return
+
+        const info = yield* preparePty({ title: "configured" })
+        if (process.platform === "win32") {
+          expect(info.command.toLowerCase()).toBe(configured.toLowerCase())
+        } else {
+          expect(info.command).toBe(configured)
+        }
+        expect(info.args).toEqual(process.platform === "win32" ? [] : ["-l"])
+      }),
+    configured ? { config: { shell: Shell.name(configured) } } : undefined,
     { timeout: 30000 },
+  )
+})
+
+describe("pty environment preparation", () => {
+  preparationIt.instance("merges plugin environment before forced PTY values", () =>
+    Effect.gen(function* () {
+      const input = { command: "/bin/sh", args: [] as string[], env: { INPUT: "caller" } }
+      const prepared = yield* preparePty(input)
+
+      expect(input.args).toEqual([])
+      expect(prepared.env.INPUT).toBe("plugin")
+      expect(prepared.env.FROM_PLUGIN).toBe("plugin")
+      expect(prepared.env.TERM).toBe("xterm-256color")
+      expect(prepared.env.OPENCODE_TERMINAL).toBe("1")
+    }),
   )
 })

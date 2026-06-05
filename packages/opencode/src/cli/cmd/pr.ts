@@ -1,11 +1,11 @@
+import { Effect } from "effect"
 import { UI } from "../ui"
-import { cmd } from "./cmd"
-import { AppRuntime } from "@/effect/app-runtime"
+import { effectCmd, fail } from "../effect-cmd"
 import { Git } from "@/git"
-import { Instance } from "@/project/instance"
+import { InstanceRef } from "@/effect/instance-ref"
 import { Process } from "@/util/process"
 
-export const PrCommand = cmd({
+export const PrCommand = effectCmd({
   command: "pr <number>",
   describe: "fetch and checkout a GitHub PR branch, then run opencode",
   builder: (yargs) =>
@@ -14,125 +14,102 @@ export const PrCommand = cmd({
       describe: "PR number to checkout",
       demandOption: true,
     }),
-  async handler(args) {
-    await Instance.provide({
-      directory: process.cwd(),
-      async fn() {
-        const project = Instance.project
-        if (project.vcs !== "git") {
-          UI.error("Could not find git repository. Please run this command from a git repository.")
-          process.exit(1)
+  handler: Effect.fn("Cli.pr")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return yield* fail("Could not load instance context")
+    if (ctx.project.vcs !== "git") {
+      return yield* fail("Could not find git repository. Please run this command from a git repository.")
+    }
+
+    const git = yield* Git.Service
+    const worktree = ctx.worktree
+
+    const prNumber = args.number
+    const localBranchName = `pr/${prNumber}`
+    UI.println(`Fetching and checking out PR #${prNumber}...`)
+
+    const checkout = yield* Effect.promise(() =>
+      Process.run(["gh", "pr", "checkout", `${prNumber}`, "--branch", localBranchName, "--force"], { nothrow: true }),
+    )
+    if (checkout.code !== 0) {
+      return yield* fail(`Failed to checkout PR #${prNumber}. Make sure you have gh CLI installed and authenticated.`)
+    }
+
+    const prInfoResult = yield* Effect.promise(() =>
+      Process.text(
+        [
+          "gh",
+          "pr",
+          "view",
+          `${prNumber}`,
+          "--json",
+          "headRepository,headRepositoryOwner,isCrossRepository,headRefName,body",
+        ],
+        { nothrow: true },
+      ),
+    )
+
+    let sessionId: string | undefined
+
+    if (prInfoResult.code === 0 && prInfoResult.text.trim()) {
+      const prInfo = JSON.parse(prInfoResult.text)
+
+      if (prInfo?.isCrossRepository && prInfo.headRepository && prInfo.headRepositoryOwner) {
+        const forkOwner = prInfo.headRepositoryOwner.login
+        const forkName = prInfo.headRepository.name
+        const remoteName = forkOwner
+
+        const remotes = (yield* git.run(["remote"], { cwd: worktree })).text().trim()
+        if (!remotes.split("\n").includes(remoteName)) {
+          yield* git.run(["remote", "add", remoteName, `https://github.com/${forkOwner}/${forkName}.git`], {
+            cwd: worktree,
+          })
+          UI.println(`Added fork remote: ${remoteName}`)
         }
 
-        const prNumber = args.number
-        const localBranchName = `pr/${prNumber}`
-        UI.println(`Fetching and checking out PR #${prNumber}...`)
+        yield* git.run(["branch", `--set-upstream-to=${remoteName}/${prInfo.headRefName}`, localBranchName], {
+          cwd: worktree,
+        })
+      }
 
-        // Use gh pr checkout with custom branch name
-        const result = await Process.run(
-          ["gh", "pr", "checkout", `${prNumber}`, "--branch", localBranchName, "--force"],
-          {
-            nothrow: true,
-          },
-        )
+      if (prInfo?.body) {
+        const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
+        if (sessionMatch) {
+          const sessionUrl = sessionMatch[0]
+          UI.println(`Found opencode session: ${sessionUrl}`)
+          UI.println(`Importing session...`)
 
-        if (result.code !== 0) {
-          UI.error(`Failed to checkout PR #${prNumber}. Make sure you have gh CLI installed and authenticated.`)
-          process.exit(1)
-        }
-
-        // Fetch PR info for fork handling and session link detection
-        const prInfoResult = await Process.text(
-          [
-            "gh",
-            "pr",
-            "view",
-            `${prNumber}`,
-            "--json",
-            "headRepository,headRepositoryOwner,isCrossRepository,headRefName,body",
-          ],
-          { nothrow: true },
-        )
-
-        let sessionId: string | undefined
-
-        if (prInfoResult.code === 0) {
-          const prInfoText = prInfoResult.text
-          if (prInfoText.trim()) {
-            const prInfo = JSON.parse(prInfoText)
-
-            // Handle fork PRs
-            if (prInfo && prInfo.isCrossRepository && prInfo.headRepository && prInfo.headRepositoryOwner) {
-              const forkOwner = prInfo.headRepositoryOwner.login
-              const forkName = prInfo.headRepository.name
-              const remoteName = forkOwner
-
-              // Check if remote already exists
-              const remotes = await AppRuntime.runPromise(
-                Git.Service.use((git) => git.run(["remote"], { cwd: Instance.worktree })),
-              ).then((x) => x.text().trim())
-              if (!remotes.split("\n").includes(remoteName)) {
-                await AppRuntime.runPromise(
-                  Git.Service.use((git) =>
-                    git.run(["remote", "add", remoteName, `https://github.com/${forkOwner}/${forkName}.git`], {
-                      cwd: Instance.worktree,
-                    }),
-                  ),
-                )
-                UI.println(`Added fork remote: ${remoteName}`)
-              }
-
-              // Set upstream to the fork so pushes go there
-              const headRefName = prInfo.headRefName
-              await AppRuntime.runPromise(
-                Git.Service.use((git) =>
-                  git.run(["branch", `--set-upstream-to=${remoteName}/${headRefName}`, localBranchName], {
-                    cwd: Instance.worktree,
-                  }),
-                ),
-              )
-            }
-
-            // Check for opencode session link in PR body
-            if (prInfo && prInfo.body) {
-              const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
-              if (sessionMatch) {
-                const sessionUrl = sessionMatch[0]
-                UI.println(`Found opencode session: ${sessionUrl}`)
-                UI.println(`Importing session...`)
-
-                const importResult = await Process.text(["opencode", "import", sessionUrl], {
-                  nothrow: true,
-                })
-                if (importResult.code === 0) {
-                  const importOutput = importResult.text.trim()
-                  // Extract session ID from the output (format: "Imported session: <session-id>")
-                  const sessionIdMatch = importOutput.match(/Imported session: ([a-zA-Z0-9_-]+)/)
-                  if (sessionIdMatch) {
-                    sessionId = sessionIdMatch[1]
-                    UI.println(`Session imported: ${sessionId}`)
-                  }
-                }
-              }
+          const importResult = yield* Effect.promise(() =>
+            Process.text(["opencode", "import", sessionUrl], { nothrow: true }),
+          )
+          if (importResult.code === 0) {
+            const sessionIdMatch = importResult.text.trim().match(/Imported session: ([a-zA-Z0-9_-]+)/)
+            if (sessionIdMatch) {
+              sessionId = sessionIdMatch[1]
+              UI.println(`Session imported: ${sessionId}`)
             }
           }
         }
+      }
+    }
 
-        UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
-        UI.println()
-        UI.println("Starting opencode...")
-        UI.println()
+    UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
+    UI.println()
+    UI.println("Starting opencode...")
+    UI.println()
 
-        const opencodeArgs = sessionId ? ["-s", sessionId] : []
-        const opencodeProcess = Process.spawn(["opencode", ...opencodeArgs], {
+    const opencodeArgs = sessionId ? ["-s", sessionId] : []
+    const code = yield* Effect.promise(
+      () =>
+        Process.spawn(["opencode", ...opencodeArgs], {
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",
           cwd: process.cwd(),
-        })
-        const code = await opencodeProcess.exited
-        if (code !== 0) throw new Error(`opencode exited with code ${code}`)
-      },
-    })
-  },
+        }).exited,
+    )
+    // Match legacy throw semantics — propagate as a defect so the top-level
+    // index.ts catch handles it identically (exit 1, "Unexpected error" banner).
+    if (code !== 0) return yield* Effect.die(new Error(`opencode exited with code ${code}`))
+  }),
 })
