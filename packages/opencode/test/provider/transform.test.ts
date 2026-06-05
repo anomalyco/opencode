@@ -3778,6 +3778,23 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
   }
 })
 
+test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weakest effort is low", () => {
+  expect(
+    ProviderTransform.smallOptions({
+      providerID: "openrouter",
+      api: {
+        id: "anthropic/claude-sonnet-4.6",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+      variants: {
+        low: { reasoning: { effort: "low" } },
+        medium: { reasoning: { effort: "medium" } },
+        high: { reasoning: { effort: "high" } },
+      },
+    } as any),
+  ).toEqual({ reasoning: { enabled: false } })
+})
+
 describe("ProviderTransform.smallOptions - google thinking controls", () => {
   const createGoogleModel = (apiId: string) => {
     const model = {

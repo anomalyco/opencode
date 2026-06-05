@@ -1160,6 +1160,9 @@ export function smallOptions(model: Provider.Model) {
     return mergeDeep(base, small)
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
+    if (model.providerID === "openrouter" && small.reasoning?.effort === "low") {
+      return { reasoning: { enabled: false } }
+    }
     if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }
