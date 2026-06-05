@@ -89,7 +89,7 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
   })
 }
 
-function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
+function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model; variant?: string }) {
   return (
     input.cfg.compaction?.preserve_recent_tokens ??
     Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
@@ -143,6 +143,7 @@ export interface Interface {
   readonly isOverflow: (input: {
     tokens: SessionV1.Assistant["tokens"]
     model: Provider.Model
+    variant?: string
   }) => Effect.Effect<boolean>
   readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly process: (input: {
@@ -180,12 +181,14 @@ export const layer = Layer.effect(
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionV1.Assistant["tokens"]
       model: Provider.Model
+      variant?: string
     }) {
       return overflow({
         cfg: yield* config.get(),
         tokens: input.tokens,
         model: input.model,
         outputTokenMax: flags.outputTokenMax,
+        variant: input.variant,
       })
     })
 
@@ -201,10 +204,11 @@ export const layer = Layer.effect(
       messages: SessionV1.WithParts[]
       cfg: ConfigV1.Info
       model: Provider.Model
+      variant?: string
     }) {
       const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
       if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
-      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
+      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model, variant: input.variant })
       const all = turns(input.messages)
       if (!all.length) return { head: input.messages, tail_start_id: undefined }
       const recent = all.slice(-limit)
@@ -348,6 +352,7 @@ export const layer = Layer.effect(
         messages: history.filter((_, index) => !hidden.has(index)),
         cfg,
         model,
+        variant: userMessage.model.variant,
       })
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(

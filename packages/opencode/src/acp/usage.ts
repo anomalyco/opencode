@@ -14,7 +14,7 @@ export type AssistantTokenCost = Pick<OpenCodeAssistantMessage, "cost" | "tokens
 
 export type AssistantMessage = AssistantTokenCost &
   Pick<OpenCodeAssistantMessage, "role"> &
-  Partial<Pick<OpenCodeAssistantMessage, "providerID" | "modelID">>
+  Partial<Pick<OpenCodeAssistantMessage, "providerID" | "modelID" | "variant">>
 
 export type SessionMessage = {
   readonly info: { readonly role: Message["role"] } | AssistantMessage
@@ -52,6 +52,7 @@ export interface Interface {
     readonly directory: string
     readonly providerID: ProviderV2.ID
     readonly modelID: ModelV2.ID
+    readonly variant?: string
   }) => Effect.Effect<number | undefined>
   readonly sendUpdate: (input: {
     readonly connection: UsageConnection
@@ -114,8 +115,15 @@ export function findContextLimit(
   providers: Record<ProviderV2.ID, Provider.Info>,
   providerID: ProviderV2.ID,
   modelID: ModelV2.ID,
+  variant?: string,
 ): number | undefined {
-  return providers[providerID]?.models[modelID]?.limit.context
+  const model = providers[providerID]?.models[modelID]
+  if (!model) return undefined
+  if (variant) {
+    const v = model.variants?.[variant]
+    if (v?.limit?.context) return v.limit.context
+  }
+  return model.limit.context
 }
 
 export const contextLimitLoaderLayer = Layer.effect(
@@ -146,16 +154,17 @@ export const layer = Layer.effect(
       readonly directory: string
       readonly providerID: ProviderV2.ID
       readonly modelID: ModelV2.ID
+      readonly variant?: string
     }) {
       return yield* SynchronizedRef.modifyEffect(
         limits,
         Effect.fnUntraced(function* (items) {
-          const key = `${input.directory}\u0000${input.providerID}\u0000${input.modelID}`
+          const key = `${input.directory}\u0000${input.providerID}\u0000${input.modelID}\u0000${input.variant ?? ""}`
           const current = items.get(key)
           if (current) return [current, items] as const
           const next = yield* Effect.cached(
             contextLimitLoader.providers(input.directory).pipe(
-              Effect.map((providers) => findContextLimit(providers, input.providerID, input.modelID)),
+              Effect.map((providers) => findContextLimit(providers, input.providerID, input.modelID, input.variant)),
               Effect.catch((error) =>
                 Effect.sync(() => {
                   log.error("failed to get providers for usage context limit", { error })
@@ -173,6 +182,7 @@ export const layer = Layer.effect(
       readonly directory: string
       readonly providerID: ProviderV2.ID
       readonly modelID: ModelV2.ID
+      readonly variant?: string
     }) {
       return yield* yield* cachedLimit(input)
     })
@@ -200,6 +210,7 @@ export const layer = Layer.effect(
         directory: input.directory,
         providerID: ProviderV2.ID.make(message.providerID),
         modelID: ModelV2.ID.make(message.modelID),
+        variant: message.variant,
       })
       if (!size) return
 

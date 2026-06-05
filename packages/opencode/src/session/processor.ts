@@ -60,6 +60,7 @@ type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  variant?: string
 }
 
 export interface Interface {
@@ -752,7 +753,7 @@ export const layer = Layer.effect(
               .pipe(Effect.ignore, Effect.forkIn(scope))
             if (
               !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
+              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model, variant: ctx.assistantMessage.variant })
             ) {
               ctx.needsCompaction = true
             }

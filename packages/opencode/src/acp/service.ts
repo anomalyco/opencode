@@ -598,7 +598,7 @@ function makeUsageService(sdk: OpencodeClient) {
   const limits = new Map<string, Promise<number | undefined>>()
   const contextLimit: UsageService.Interface["contextLimit"] = Effect.fn("ACP.promptUsage.contextLimit")(
     function* (params) {
-      const key = `${params.directory}\u0000${params.providerID}\u0000${params.modelID}`
+      const key = `${params.directory}\u0000${params.providerID}\u0000${params.modelID}\u0000${params.variant ?? ""}`
       const current = limits.get(key)
       if (current) return yield* Effect.promise(() => current)
 
@@ -608,7 +608,7 @@ function makeUsageService(sdk: OpencodeClient) {
           const providers = Object.fromEntries(
             (response.data?.providers ?? []).map((provider) => [provider.id, provider]),
           ) as Record<ProviderV2.ID, Provider.Info>
-          return UsageService.findContextLimit(providers, params.providerID, params.modelID)
+          return UsageService.findContextLimit(providers, params.providerID, params.modelID, params.variant)
         })
         .catch((error: unknown) => {
           log.error("failed to get providers for usage context limit", { error })
@@ -648,6 +648,7 @@ function makeUsageService(sdk: OpencodeClient) {
       directory: params.directory,
       providerID: ProviderV2.ID.make(message.providerID),
       modelID: ModelV2.ID.make(message.modelID),
+      variant: message.variant,
     })
     if (!size) return
 

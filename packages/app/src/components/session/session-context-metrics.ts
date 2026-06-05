@@ -11,6 +11,7 @@ type Model = {
   limit: {
     context: number
   }
+  variants?: Record<string, { limit?: { context?: number } }>
 }
 
 type Context = {
@@ -54,7 +55,7 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Metrics =>
 
   const provider = providers.find((item) => item.id === message.providerID)
   const model = provider?.models[message.modelID]
-  const limit = model?.limit.context
+  const limit = (message.variant && model?.variants?.[message.variant]?.limit?.context) || model?.limit.context
   const total = tokenTotal(message)
 
   return {
