@@ -630,7 +630,10 @@
     "@blocksuite/blocks@0.0.0-canary-20250316001624": "patches/@blocksuite%2Fblocks@0.0.0-canary-20250316001624.patch",
   },
   "overrides": {
+    "@blocksuite/global": "0.0.0-canary-20250316001624",
     "@blocksuite/icons": "2.1.75",
+    "@blocksuite/store": "0.0.0-canary-20250316001624",
+    "@blocksuite/sync": "0.0.0-canary-20250316001624",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#4af877d52b523754f113b87084b69835b752fb2c",

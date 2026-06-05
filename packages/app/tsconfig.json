@@ -18,7 +18,8 @@
     "outDir": "node_modules/.ts-dist",
     "isolatedModules": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@blocksuite/store": ["./node_modules/@blocksuite/store/dist/index.d.ts"]
     }
   },
   "include": ["src", "package.json"],

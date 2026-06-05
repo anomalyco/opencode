@@ -5,6 +5,7 @@ import { createPage, type DocActor, type DocMountInput } from "@/components/bloc
 import type { FileNodeType } from "@/components/blocksuite/file-reference-block"
 import type { LineRefInput } from "@/components/blocksuite/line-reference-url"
 import type { DocSyncOpts } from "@/components/blocksuite/opencode-doc-source"
+import { label } from "@/components/blocksuite/actor"
 import { clearActor, loadActor, saveActor } from "./doc-actor"
 
 type DocHandle = Awaited<ReturnType<typeof createPage>>
@@ -15,14 +16,17 @@ type PromptDocInput = {
   directory: () => string
   client: OpencodeClient
   submit: () => void
+  user?: () => { id: string; name: string } | undefined
 }
 
 async function register(input: PromptDocInput, sessionID: string) {
   const stored = loadActor(sessionID)
+  const user = input.user?.()
   const res = await input.client.session.actor.upsert({
     sessionID,
     directory: input.directory(),
     ...(stored ? { actorID: stored } : {}),
+    ...(user ? { userID: user.id, name: user.name } : {}),
   })
   const actor = res.data as SessionActor | undefined
   if (!actor) throw new Error("actor registration failed")
@@ -100,7 +104,7 @@ export function createPromptDoc(input: PromptDocInput) {
       directory: input.directory(),
       client: input.client,
       actorID: actor.actorID,
-      name: actor.name,
+      name: label(actor.actorID, actor.name),
       color: actor.color,
     }
     setActiveSync(sync)
@@ -286,7 +290,7 @@ export function createPromptDoc(input: PromptDocInput) {
     const own = actor()
     if (!own) return list
     if (list.some((item) => item.actorID === own.actorID)) return list
-    return [...list, { actorID: own.actorID, name: own.name }]
+    return [...list, { actorID: own.actorID, name: label(own.actorID, own.name) }]
   }
 
   const advance = async (id?: string) => {

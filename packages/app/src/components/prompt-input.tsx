@@ -43,6 +43,7 @@ import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useClientEnv } from "@/context/client-env"
+import { useParentParams } from "@/context/parent-params"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createOpenDiffTab, createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
@@ -416,12 +417,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const drawing = createPromptDrawing({
     t: (key) => language.t(key as Parameters<typeof language.t>[0]),
   })
+  const parentParams = useParentParams()
   const doc = createPromptDoc({
     sessionID: () => params.id,
     url: () => sdk.url,
     directory: () => sdk.directory,
     client: sdk.client,
     submit: () => void submit(),
+    user: () => parentParams.user[0],
   })
 
   const bridge = usePromptDocBridge()
@@ -1969,6 +1972,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           removeLabel={language.t("prompt.attachment.remove")}
         />
         <div
+          data-component="prompt-body"
           classList={{
             relative: true,
             "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),

@@ -30,8 +30,6 @@ export const { use: useParentParams, provider: ParentParamsProvider } = createSi
       return { user, team }
     })
 
-    console.log(parentParams)
-
     return parentParams
   },
 })

@@ -1,7 +1,6 @@
 import { AffineSchemas } from "@blocksuite/blocks/schemas"
-import type { BlockModel, Doc, Query } from "@blocksuite/store"
+import { DocCollection, Schema, type BlockModel, type Doc, type Query } from "@blocksuite/store"
 import { getFilename } from "@opencode-ai/util/path"
-import { DocCollection, Schema } from "@blocksuite/store"
 import "@/components/blocksuite/blocksuite-doc.css"
 import { watchCursorLabels } from "./cursor-labels"
 import { baseline, docMarkdown, docPlain, ensureEditable } from "./doc-content"
@@ -15,6 +14,9 @@ import { scheme } from "./theme"
 import { FileReferenceBlockSpec, withFileReferenceSchema, type FileNodeType } from "./file-reference-block"
 import { LineReferenceBlockSpec, withLineReferenceSchema } from "./line-reference-block"
 import { lineReferenceUrl, normLineRef, type LineRefInput } from "./line-reference-url"
+import { actor, label, type DocActor } from "./actor"
+
+export type { DocActor } from "./actor"
 
 export type DocMountInput = {
   theme: () => "light" | "dark"
@@ -24,11 +26,6 @@ export type DocMountInput = {
   readonly?: boolean
   submit?: () => void
   onDraftChange?: () => void
-}
-
-export type DocActor = {
-  actorID: string
-  name: string
 }
 
 type TextProp = {
@@ -66,16 +63,6 @@ const desynced = (doc: Doc) =>
     if (!text(block.text) || !text(next)) return false
     return block.text.toString?.() !== next.toString?.()
   })
-
-const actor = (value: unknown): DocActor | undefined => {
-  if (!value || typeof value !== "object") return
-  const user = (value as { user?: unknown }).user
-  if (!user || typeof user !== "object") return
-  const actorID = (user as { actorID?: unknown }).actorID
-  const name = (user as { name?: unknown }).name
-  if (typeof actorID !== "string" || typeof name !== "string") return
-  return { actorID, name }
-}
 
 const kind = (file: File) => {
   const type = file.type.split(";", 1)[0]?.trim().toLowerCase()
@@ -116,7 +103,7 @@ export async function createPage(input: DocMountInput) {
     if (awareness) {
       collection.awarenessStore.awareness.setLocalStateField("user", {
         actorID: input.sync.actorID,
-        name: input.sync.name,
+        name: label(input.sync.actorID, input.sync.name),
       })
       collection.awarenessStore.awareness.setLocalStateField("color", input.sync.color)
     }
@@ -519,7 +506,7 @@ export async function createPage(input: DocMountInput) {
   }
 
   const actors = () => {
-    const own = input.sync ? [{ actorID: input.sync.actorID, name: input.sync.name }] : []
+    const own = input.sync ? [{ actorID: input.sync.actorID, name: label(input.sync.actorID, input.sync.name) }] : []
     const states = Array.from(collection.awarenessStore.awareness.getStates().values())
     return Array.from(
       [...own, ...states.map(actor).filter((item): item is DocActor => !!item)]

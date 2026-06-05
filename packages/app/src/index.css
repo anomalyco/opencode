@@ -25,8 +25,8 @@
     --app-user-bubble: var(--surface-base);
     --app-user-bubble-hover: var(--surface-base-hover);
     --app-user-bubble-text: var(--text-strong);
-    --app-user-paper: #f6eed9;
-    --app-user-paper-hover: #faf4e4;
+    --app-user-paper: var(--c-helmet-wash, #fbf6df);
+    --app-user-paper-hover: color-mix(in srgb, var(--c-helmet-wash, #fbf6df) 90%, #ffffff 10%);
     --app-user-paper-shadow: rgba(45, 35, 20, 0.14);
     --app-user-paper-shadow-soft: rgba(45, 35, 20, 0.07);
     --app-user-paper-shadow-lift: 3px 7px 16px rgba(45, 35, 20, 0.13);
@@ -298,11 +298,11 @@
     clip-path: var(--paper-edge);
     pointer-events: none;
     background:
-      linear-gradient(104deg, transparent 17%, rgba(70, 55, 30, 0.09) 18%, transparent 21%),
-      linear-gradient(31deg, transparent 42%, rgba(255, 255, 255, 0.38) 43%, transparent 46%),
-      linear-gradient(154deg, transparent 62%, rgba(80, 60, 35, 0.08) 63%, transparent 66%);
+      linear-gradient(104deg, transparent 17%, rgba(70, 55, 30, 0.04) 18%, transparent 21%),
+      linear-gradient(31deg, transparent 42%, rgba(255, 255, 255, 0.2) 43%, transparent 46%),
+      linear-gradient(154deg, transparent 62%, rgba(80, 60, 35, 0.035) 63%, transparent 66%);
     mix-blend-mode: multiply;
-    opacity: 0.75;
+    opacity: 0.48;
   }
 
   [data-component="codle-session"] [data-slot="user-message-text"] {
@@ -342,7 +342,7 @@
   }
 
   [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"]::before {
-    opacity: 0.82;
+    opacity: 0.56;
   }
 
   :root[data-color-scheme="dark"] [data-component="codle-session"] [data-slot="user-message-body"] {
@@ -359,9 +359,10 @@
 
   :root[data-color-scheme="dark"] [data-component="codle-session"] [data-slot="user-message-body"]::before {
     background:
-      linear-gradient(104deg, transparent 17%, rgba(0, 0, 0, 0.14) 18%, transparent 21%),
-      linear-gradient(31deg, transparent 42%, rgba(255, 255, 255, 0.08) 43%, transparent 46%),
-      linear-gradient(154deg, transparent 62%, rgba(0, 0, 0, 0.12) 63%, transparent 66%);
+      linear-gradient(104deg, transparent 17%, rgba(0, 0, 0, 0.07) 18%, transparent 21%),
+      linear-gradient(31deg, transparent 42%, rgba(255, 255, 255, 0.05) 43%, transparent 46%),
+      linear-gradient(154deg, transparent 62%, rgba(0, 0, 0, 0.06) 63%, transparent 66%);
+    opacity: 0.42;
   }
 
   [data-component="codle-session"] [data-slot="user-message-text"] [data-highlight="file"],
@@ -417,8 +418,22 @@
     min-height: 86px;
   }
 
+  [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"] [data-component="prompt-body"],
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-body"] {
+    border-radius: inherit;
+    overflow: hidden;
+  }
+
+  [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"] [data-component="prompt-doc-shell"],
+  [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"] [data-component="prompt-draw-shell"],
   [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-doc-shell"],
   [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-draw-shell"] {
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+  }
+
+  [data-component="prompt-doc-shell"] > div,
+  [data-component="prompt-draw-shell"] > div {
     border-radius: inherit;
     overflow: hidden;
   }

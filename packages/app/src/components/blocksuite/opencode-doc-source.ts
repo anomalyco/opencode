@@ -9,7 +9,7 @@ export type DocSyncOpts = {
   directory: string
   client: OpencodeClient
   actorID: string
-  name: string
+  name?: string
   color: string
 }
 

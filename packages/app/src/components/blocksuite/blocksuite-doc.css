@@ -7,7 +7,7 @@
   min-width: 0;
   height: 100%;
   min-height: 0;
-  border-radius: inherit;
+  border-radius: var(--radius-xs);
   overflow: hidden;
   --affine-editor-width: 100%;
   --affine-editor-side-padding: 14px;
@@ -30,6 +30,8 @@
   font-family: var(--affine-font-family);
   background: var(--affine-background-primary-color);
   color: var(--affine-text-primary-color);
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 [data-component="prompt-doc"] .affine-page-viewport {
