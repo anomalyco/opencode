@@ -68,6 +68,16 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("omits unsupported semantic service tiers", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "unsupported" } } }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("service_tier")
+    }),
+  )
+
   it.effect("flattens top-level object unions in function schemas", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(

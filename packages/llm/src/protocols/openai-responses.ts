@@ -126,7 +126,7 @@ const OpenAIResponsesCoreFields = {
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
-  service_tier: Schema.optional(Schema.String),
+  service_tier: Schema.optional(OpenAIOptions.OpenAIServiceTier),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(OpenAIOptions.OpenAIResponseIncludable),
   reasoning: Schema.optional(

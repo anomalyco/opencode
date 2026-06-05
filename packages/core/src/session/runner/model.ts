@@ -9,6 +9,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect"
 import { produce } from "immer"
 import { Catalog } from "../../catalog"
 import { ModelV2 } from "../../model"
+import { ModelRequest } from "../../model-request"
 import { PluginBoot } from "../../plugin/boot"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
@@ -50,25 +51,20 @@ const apiKey = (model: ModelV2.Info, provider?: ProviderV2.Info) => {
   return provider?.enabled !== false && provider?.enabled.via === "env" ? Auth.config(provider.enabled.name) : undefined
 }
 
-const requestDefaults = (model: ModelV2.Info) => {
-  const namespace = model.api.type === "aisdk" && model.api.package === "@ai-sdk/anthropic" ? "anthropic" : "openai"
-  const options = model.request.options ?? {}
-  return {
-    generation: model.request.generation,
-    providerOptions: Object.keys(options).length === 0 ? undefined : { [namespace]: options },
-    body: Object.fromEntries(Object.entries(model.request.body).filter(([key]) => key !== "apiKey")),
-  }
-}
-
 const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
-  const defaults = requestDefaults(model)
+  const options = model.request.options ?? {}
+  const namespace = model.api.type === "aisdk" ? ModelRequest.namespace(model.api.package) : undefined
+  const body = model.request.body
+  const httpBody = Object.hasOwn(body, "apiKey")
+    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "apiKey"))
+    : body
   return route.with({
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
-    generation: defaults.generation,
-    providerOptions: defaults.providerOptions,
-    http: { body: defaults.body },
+    generation: model.request.generation,
+    providerOptions: namespace && Object.keys(options).length > 0 ? { [namespace]: options } : undefined,
+    http: { body: httpBody },
     limits: { context: model.limit.context, output: model.limit.output },
   })
 }
@@ -78,10 +74,7 @@ const withVariant = (model: ModelV2.Info, variantID: ModelV2.VariantID | undefin
   const variant = model.variants.find((item) => item.id === id)
   if (!variant) return model
   return produce(model, (draft) => {
-    Object.assign(draft.request.headers, variant.headers)
-    Object.assign(draft.request.body, variant.body)
-    Object.assign((draft.request.generation ??= {}), variant.generation ?? {})
-    Object.assign((draft.request.options ??= {}), variant.options ?? {})
+    ModelRequest.assign(draft.request, variant)
   })
 }
 

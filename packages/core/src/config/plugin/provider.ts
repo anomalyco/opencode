@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { Catalog } from "../../catalog"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
+import { ModelRequest } from "../../model-request"
 import { PluginV2 } from "../../plugin"
 import { ProviderV2 } from "../../provider"
 
@@ -31,10 +32,7 @@ export const Plugin = PluginV2.define({
             provider.enabled = { via: "custom", data: {} }
             if (item.api !== undefined) provider.api = { ...item.api }
             if (item.request !== undefined) {
-              Object.assign(provider.request.headers, item.request.headers ?? {})
-              Object.assign(provider.request.body, item.request.body ?? {})
-              Object.assign((provider.request.generation ??= {}), item.request.generation ?? {})
-              Object.assign((provider.request.options ??= {}), item.request.options ?? {})
+              ModelRequest.assign(provider.request, item.request)
             }
           })
 
@@ -51,10 +49,7 @@ export const Plugin = PluginV2.define({
                 }
               }
               if (config.request !== undefined) {
-                Object.assign(model.request.headers, config.request.headers ?? {})
-                Object.assign(model.request.body, config.request.body ?? {})
-                Object.assign((model.request.generation ??= {}), config.request.generation ?? {})
-                Object.assign((model.request.options ??= {}), config.request.options ?? {})
+                ModelRequest.assign(model.request, config.request)
                 if (config.request.variant !== undefined) model.request.variant = config.request.variant
               }
               if (config.variants !== undefined) {
@@ -70,10 +65,7 @@ export const Plugin = PluginV2.define({
                     }
                     model.variants.push(existing)
                   }
-                  Object.assign(existing.headers, variant.headers ?? {})
-                  Object.assign(existing.body, variant.body ?? {})
-                  Object.assign((existing.generation ??= {}), variant.generation ?? {})
-                  Object.assign((existing.options ??= {}), variant.options ?? {})
+                  ModelRequest.assign(existing, variant)
                 }
               }
               if (config.cost !== undefined) {
