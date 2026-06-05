@@ -439,7 +439,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   ref={tabScrollRef}
                 >
                   <div class="flex min-w-0 flex-row items-center gap-1.5">
-                    <For each={[...tabsStore, ...tabsStore, ...tabsStore]}>
+                    <For each={tabsStore}>
                       {(tab, i) => {
                         let ref!: HTMLDivElement
 
@@ -760,7 +760,6 @@ function TabNavItem(props: {
   const [session] = createResource(
     () => {
       const ctx = dirSyncCtx()
-      console.log({ ctx, sessionId: props.sessionId })
       if (!ctx || !props.sessionId) return
       return [props.sessionId, ctx] as const
     },
