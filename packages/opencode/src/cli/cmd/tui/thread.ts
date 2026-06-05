@@ -13,7 +13,6 @@ import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { writeHeapSnapshot } from "v8"
-import { TuiConfig } from "./config/tui"
 import {
   OPENCODE_PROCESS_ROLE,
   OPENCODE_RUN_ID,
@@ -113,6 +112,7 @@ export const TuiThreadCommand = cmd({
         describe: "agent to use",
       }),
   handler: async (args) => {
+    const { TuiConfig } = await import("./config/tui")
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
@@ -228,9 +228,11 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
-        const { tui } = await import("./app")
-        await tui({
+        const { createTuiRenderer, tui } = await import("./app")
+        const renderer = await createTuiRenderer(config)
+        const handle = tui({
           url: transport.url,
+          renderer,
           async onSnapshot() {
             const tui = writeHeapSnapshot("tui.heapsnapshot")
             const server = await client.call("snapshot", undefined)
@@ -249,6 +251,7 @@ export const TuiThreadCommand = cmd({
             fork: args.fork,
           },
         })
+        await handle.done
       } finally {
         await stop()
       }
