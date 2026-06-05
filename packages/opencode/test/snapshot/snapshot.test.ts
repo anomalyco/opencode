@@ -1119,3 +1119,81 @@ it.instance(
   }),
   { git: true },
 )
+
+// --- Tests for source-HEAD sync fast path ---
+
+it.instance(
+  "captures content of files committed in the source repo so they can be reverted",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    // Commit a file in the source before the snapshot exists. Initial
+    // track must capture its content for revert to work.
+    yield* write(`${tmp.path}/committed.txt`, "committed-original")
+    yield* exec(tmp.path, ["git", "add", "committed.txt"])
+    yield* exec(tmp.path, ["git", "commit", "-m", "add committed.txt"])
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+
+    yield* rm(`${tmp.path}/committed.txt`)
+    const patch = yield* snapshot.patch(before!)
+    expect(patch.files).toContain(fwd(tmp.path, "committed.txt"))
+
+    yield* snapshot.revert([patch])
+    expect(yield* exists(`${tmp.path}/committed.txt`)).toBe(true)
+    expect(yield* readText(`${tmp.path}/committed.txt`)).toBe("committed-original")
+  }),
+  { git: true },
+)
+
+it.instance(
+  "re-syncs when the source HEAD changes between tracks",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    // First commit, first track. Snapshot is synced to commit A.
+    yield* write(`${tmp.path}/staged.txt`, "v1")
+    yield* exec(tmp.path, ["git", "add", "staged.txt"])
+    yield* exec(tmp.path, ["git", "commit", "-m", "v1"])
+    const first = yield* snapshot.track()
+    expect(first).toBeTruthy()
+
+    // New commit B introduces a new file. Snapshot must re-sync so the
+    // new file is captured for revert.
+    yield* write(`${tmp.path}/staged-v2.txt`, "v2")
+    yield* exec(tmp.path, ["git", "add", "staged-v2.txt"])
+    yield* exec(tmp.path, ["git", "commit", "-m", "v2"])
+    const second = yield* snapshot.track()
+    expect(second).toBeTruthy()
+
+    // Delete the v2 file and verify the new snapshot can restore it.
+    yield* rm(`${tmp.path}/staged-v2.txt`)
+    const patch = yield* snapshot.patch(second!)
+    expect(patch.files).toContain(fwd(tmp.path, "staged-v2.txt"))
+    yield* snapshot.revert([patch])
+    expect(yield* readText(`${tmp.path}/staged-v2.txt`)).toBe("v2")
+  }),
+  { git: true },
+)
+
+it.instance(
+  "falls back gracefully when source repo has no HEAD",
+  Effect.gen(function* () {
+    const tmp = yield* TestInstance
+    const snapshot = yield* Snapshot.Service
+    // Remove the root commit so source HEAD doesn't resolve. Snapshot
+    // must fall back to the bulk-add path.
+    yield* Effect.promise(() => fs.rm(path.join(tmp.directory, ".git", "refs", "heads", "main"), { force: true }))
+    yield* Effect.promise(() => fs.rm(path.join(tmp.directory, ".git", "refs", "heads", "master"), { force: true }))
+    yield* Effect.promise(() =>
+      fs.writeFile(path.join(tmp.directory, ".git", "HEAD"), "ref: refs/heads/main\n"),
+    )
+    yield* write(`${tmp.directory}/lonely.txt`, "still snapshots")
+    const result = yield* snapshot.track()
+    expect(result).toBeTruthy()
+    yield* rm(`${tmp.directory}/lonely.txt`)
+    const patch = yield* snapshot.patch(result!)
+    expect(patch.files).toContain(fwd(tmp.directory, "lonely.txt"))
+  }),
+  { git: true },
+)

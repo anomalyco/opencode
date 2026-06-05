@@ -420,6 +420,17 @@ export type ReasoningPart = {
   }
 }
 
+export type IndexingPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "indexing"
+  time: {
+    start: number
+    end?: number
+  }
+}
+
 export type FilePartSourceText = {
   value: string
   start: number
@@ -626,6 +637,7 @@ export type Part =
   | TextPart
   | SubtaskPart
   | ReasoningPart
+  | IndexingPart
   | FilePart
   | ToolPart
   | StepStartPart

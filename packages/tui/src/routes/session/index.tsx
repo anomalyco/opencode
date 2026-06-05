@@ -35,6 +35,7 @@ import type {
   UserMessage,
   TextPart,
   ReasoningPart,
+  IndexingPart,
   SessionStatus,
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "../../context/local"
@@ -1574,6 +1575,7 @@ const PART_MAPPING = {
   text: TextPart,
   tool: ToolPart,
   reasoning: ReasoningPart,
+  indexing: IndexingPart,
 }
 
 const INLINE_TOOL_ICON_WIDTH = 2
@@ -1682,6 +1684,35 @@ function ReasoningHeader(props: {
         </text>
       </Match>
     </Switch>
+  )
+}
+
+function IndexingPart(props: { last: boolean; part: IndexingPart; message: AssistantMessage }) {
+  const { theme } = useTheme()
+  // time.end is undefined while track() runs, set when it returns.
+  const isDone = createMemo(() => props.part.time.end !== undefined)
+  const duration = createMemo(() => {
+    const end = props.part.time.end
+    return end === undefined ? 0 : Math.max(0, end - props.part.time.start)
+  })
+  // Muted style matching ReasoningHeader: warning hue with thinkingOpacity.
+  const fg = () => RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
+
+  return (
+    <box id={"indexing-" + props.part.id} paddingLeft={3} marginTop={1} flexDirection="column" flexShrink={0}>
+      <Switch>
+        <Match when={!isDone()}>
+          <box flexDirection="row">
+            <Spinner color={fg()}>Preparing snapshots for first-time repo setup</Spinner>
+          </box>
+        </Match>
+        <Match when={true}>
+          <text fg={fg()} wrapMode="none">
+            <span>Prepared snapshots for first-time repo setup · {Locale.duration(duration())}</span>
+          </text>
+        </Match>
+      </Switch>
+    </box>
   )
 }
 

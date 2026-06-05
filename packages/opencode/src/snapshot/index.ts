@@ -41,10 +41,19 @@ interface GitResult {
 
 type State = Omit<Interface, "init">
 
+// Fired immediately before a fresh source-HEAD sync. The session processor
+// uses this to add an Indexing part to the chat. Not invoked when the
+// index is already in sync.
+export type IndexingStartHook = () => Effect.Effect<void>
+
+export interface TrackOptions {
+  readonly onIndexingStart?: IndexingStartHook
+}
+
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly cleanup: () => Effect.Effect<void>
-  readonly track: () => Effect.Effect<string | undefined>
+  readonly track: (options?: TrackOptions) => Effect.Effect<string | undefined>
   readonly patch: (hash: string) => Effect.Effect<Patch>
   readonly restore: (snapshot: string) => Effect.Effect<void>
   readonly revert: (patches: Patch[]) => Effect.Effect<void>
@@ -163,9 +172,106 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
         const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
         const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
 
+        // In-memory cache of the source HEAD we last synced to. Lets repeat
+        // track() calls in the same session skip the sync work.
+        let syncedHead: string | undefined = undefined
+
         const enabled = Effect.fnUntraced(function* () {
           if (state.vcs !== "git") return false
           return (yield* config.get()).snapshot !== false
+        })
+
+        // Run git against the source repo, not the snapshot. Used to read
+        // HEAD and resolve git paths for alternates setup.
+        const sourceGit = Effect.fnUntraced(function* (cmd: string[]) {
+          return yield* git(cmd, { cwd: state.worktree })
+        })
+
+        const sourceHead = Effect.fnUntraced(function* () {
+          const result = yield* sourceGit(["rev-parse", "--verify", "HEAD"])
+          if (result.code !== 0) return undefined
+          const hash = result.text.trim()
+          return hash || undefined
+        })
+
+        // `--git-path objects` resolves through linked-worktree pointer
+        // files to the actual shared object store.
+        const sourceObjectsPath = Effect.fnUntraced(function* () {
+          const result = yield* sourceGit(["rev-parse", "--path-format=absolute", "--git-path", "objects"])
+          if (result.code !== 0) return undefined
+          const dir = result.text.trim()
+          if (!dir) return undefined
+          if (!(yield* exists(dir))) return undefined
+          return dir
+        })
+
+        // Point the snapshot at the source's object store so read-tree
+        // resolves blobs without re-hashing the worktree. Idempotent.
+        const setupAlternates = Effect.fnUntraced(function* () {
+          const objects = yield* sourceObjectsPath()
+          if (!objects) return false
+          const target = path.join(state.gitdir, "objects", "info", "alternates")
+          yield* fs.ensureDir(path.dirname(target)).pipe(Effect.orDie)
+          const desired = objects + "\n"
+          const current = yield* read(target)
+          if (current === desired) return true
+          yield* fs.writeFileString(target, desired).pipe(Effect.orDie)
+          return true
+        })
+
+        const syncedHeadPath = path.join(state.gitdir, "info", "synced-head")
+        const readSyncedHead = Effect.fnUntraced(function* () {
+          const text = (yield* read(syncedHeadPath)).trim()
+          return text || undefined
+        })
+        const writeSyncedHead = (hash: string) =>
+          Effect.gen(function* () {
+            yield* fs.ensureDir(path.dirname(syncedHeadPath)).pipe(Effect.orDie)
+            yield* fs.writeFileString(syncedHeadPath, hash + "\n").pipe(Effect.orDie)
+          })
+
+        // Import the source HEAD tree into the snapshot index. Cheap because
+        // alternates makes every blob already resolvable.
+        const importHead = Effect.fnUntraced(function* (head: string) {
+          const read = yield* git([...core, ...args(["read-tree", head])], { cwd: state.worktree })
+          if (read.code !== 0) {
+            log.warn("failed to read-tree source HEAD", { head, exitCode: read.code, stderr: read.stderr })
+            return false
+          }
+          // Without --refresh, diff-files reports every entry as potentially
+          // modified and the next git add re-hashes everything. Use -q, not
+          // --quiet: the latter is not a valid flag for update-index and
+          // silently disables the refresh.
+          yield* git([...core, ...args(["update-index", "--refresh", "-q"])], { cwd: state.directory })
+          return true
+        })
+
+        // Make sure the snapshot index is in sync with source HEAD before
+        // add() runs. Idempotent: a no-op when the in-memory cache or the
+        // persisted info/synced-head file already matches.
+        const ensureHeadSynced = Effect.fnUntraced(function* (options?: TrackOptions) {
+          const head = yield* sourceHead()
+          if (!head) return // couldn't sync: source has no HEAD
+          if (syncedHead === head) return // already synced
+          const stored = yield* readSyncedHead()
+          if (stored === head) {
+            syncedHead = head
+            return // synced (matched persisted state)
+          }
+          // Index isn't synced. About to run read-tree + update-index
+          // --refresh. Fire the indexing hook unconditionally so the
+          // caller can show a spinner; even on small repos the wait is
+          // short, but the user always sees what's happening.
+          if (options?.onIndexingStart) {
+            yield* options.onIndexingStart().pipe(Effect.catch(() => Effect.void))
+          }
+          const alternates = yield* setupAlternates()
+          if (!alternates) return // couldn't sync: alternates setup failed
+          const ok = yield* importHead(head)
+          if (!ok) return // couldn't sync: read-tree failed
+          yield* writeSyncedHead(head)
+          syncedHead = head
+          // synced
         })
 
         const excludes = Effect.fnUntraced(function* () {
@@ -314,7 +420,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           )
         })
 
-        const track = Effect.fnUntraced(function* () {
+        const track = Effect.fnUntraced(function* (options?: TrackOptions) {
           return yield* locked(
             Effect.gen(function* () {
               if (!(yield* enabled())) return
@@ -336,6 +442,12 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 yield* seed()
                 yield* Effect.logInfo("initialized")
               }
+              // Sync the snapshot index to source HEAD when available. On
+              // large repos this is the difference between a sub-second
+              // track() and a +10min git add storm. When sync can't happen
+              // (e.g. fresh git init with no commits), add() falls through
+              // to the bulk-add path; such repos are small.
+              yield* ensureHeadSynced(options)
               yield* add()
               const result = yield* git(args(["write-tree"]), { cwd: state.directory })
               const hash = result.text.trim()
@@ -775,8 +887,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
       cleanup: Effect.fn("Snapshot.cleanup")(function* () {
         return yield* InstanceState.useEffect(state, (s) => s.cleanup())
       }),
-      track: Effect.fn("Snapshot.track")(function* () {
-        return yield* InstanceState.useEffect(state, (s) => s.track())
+      track: Effect.fn("Snapshot.track")(function* (options?: TrackOptions) {
+        return yield* InstanceState.useEffect(state, (s) => s.track(options))
       }),
       patch: Effect.fn("Snapshot.patch")(function* (hash: string) {
         return yield* InstanceState.useEffect(state, (s) => s.patch(hash))
