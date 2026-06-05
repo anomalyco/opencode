@@ -42,6 +42,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context-registry"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
@@ -180,6 +181,7 @@ const systemContext = Layer.effectDiscard(
     ),
   ),
 ).pipe(Layer.provideMerge(SystemContextRegistry.layer))
+const location = Location.layer({ directory: AbsolutePath.make("/project") }).pipe(Layer.provide(Project.defaultLayer))
 const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -188,12 +190,15 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(registry),
   Layer.provide(models),
   Layer.provide(systemContext),
+  Layer.provide(location),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
   SessionExecution.Service,
   SessionRunCoordinator.Service.pipe(
-    Effect.map((coordinator) => SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake })),
+    Effect.map((coordinator) =>
+      SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake, interrupt: coordinator.interrupt }),
+    ),
   ),
 ).pipe(Layer.provide(coordinator))
 const sessions = SessionV2.layer.pipe(
@@ -217,6 +222,7 @@ const it = testEffect(
     echo,
     models,
     systemContext,
+    location,
     runner,
     coordinator,
     execution,
@@ -596,7 +602,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("requires a complete new baseline after a Session moves", () =>
+  it.effect("interrupts a source Location runner after a Session moves", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -620,12 +626,10 @@ describe("SessionRunnerLLM", () => {
           .get(),
       ).toBeUndefined()
 
-      systemUnavailable = true
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
       const exit = yield* session.resume(sessionID).pipe(Effect.exit)
 
-      expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(SystemContext.InitializationBlocked)
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
       expect(requests).toHaveLength(1)
       expect(yield* SessionInput.hasPending(db, sessionID, "steer")).toBe(true)
     }),
@@ -1558,6 +1562,48 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("preserves durable queued input for a later wake after interruption", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const coordinator = yield* SessionRunCoordinator.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt current work" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Run after interrupt" }),
+        delivery: "queue",
+      })
+      yield* session.interrupt(sessionID)
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      expect(requests).toHaveLength(1)
+      yield* coordinator.wake(sessionID)
+      while (requests.length < 2) yield* Effect.yieldNow
+      yield* Deferred.succeed(streamGate, undefined)
+      yield* coordinator.awaitIdle(sessionID)
+      streamGate = undefined
+      streamStarted = undefined
+
+      expect(requests).toHaveLength(2)
+      expect(userTexts(requests[0]!)).toEqual(["Interrupt current work"])
+      expect(userTexts(requests[1]!)).toEqual(["Interrupt current work", "Run after interrupt"])
+    }),
+  )
+
   it.effect("runs queued active inputs as separate FIFO activities", () =>
     Effect.gen(function* () {
       yield* setup
@@ -2269,13 +2315,13 @@ describe("SessionRunnerLLM", () => {
         Stream.never,
       )
 
-      const runner = yield* SessionRunner.Service
-      const run = yield* runner.run({ sessionID, force: true }).pipe(Effect.forkChild)
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       while (executions.length === 0) yield* Effect.yieldNow
-      yield* Fiber.interrupt(run)
+      yield* session.interrupt(sessionID)
       toolExecutionGate = undefined
 
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      yield* session.interrupt(sessionID)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Interrupt blocked tool" },
         {
@@ -2301,6 +2347,29 @@ describe("SessionRunnerLLM", () => {
       response = []
       yield* session.resume(sessionID)
       expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+    }),
+  )
+
+  it.effect("interrupts a blocked provider turn without local tool activity", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt provider" }), resume: false })
+      requests.length = 0
+      response = []
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+      yield* session.interrupt(sessionID)
+      const exit = yield* Fiber.await(run)
+      streamGate = undefined
+      streamStarted = undefined
+
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
+      expect(requests).toHaveLength(1)
+      yield* session.interrupt(sessionID)
     }),
   )
 

@@ -39,7 +39,6 @@ import { LLMClient } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
-import { SessionRunCoordinator } from "./session/run-coordinator"
 import { SystemContextBuiltIns } from "./system-context-builtins"
 import { FetchHttpClient } from "effect/unstable/http"
 
@@ -81,7 +80,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     )
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.defaultLayer.pipe(Layer.provide(services), Layer.provide(model))
-    const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
     return Layer.mergeAll(
       services,
       commits,
@@ -91,7 +89,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       questions,
       model,
       runner,
-      coordinator,
       builtInTools,
     ).pipe(Layer.fresh)
   },

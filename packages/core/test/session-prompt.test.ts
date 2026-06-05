@@ -23,6 +23,7 @@ const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
 const executionCalls: SessionV2.ID[] = []
+const interruptCalls: SessionV2.ID[] = []
 const wakeCalls: SessionV2.ID[] = []
 const execution = Layer.succeed(
   SessionExecution.Service,
@@ -30,6 +31,10 @@ const execution = Layer.succeed(
     resume: (sessionID) =>
       Effect.sync(() => {
         executionCalls.push(sessionID)
+      }),
+    interrupt: (sessionID) =>
+      Effect.sync(() => {
+        interruptCalls.push(sessionID)
       }),
     wake: (sessionID) =>
       Effect.sync(() => {
@@ -105,6 +110,27 @@ describe("SessionV2.prompt", () => {
       yield* session.resume(sessionID)
       expect(executionCalls).toEqual([sessionID])
       expect(wakeCalls).toEqual([])
+    }),
+  )
+
+  it.effect("delegates interruption through SessionExecution", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      interruptCalls.length = 0
+
+      yield* session.interrupt(sessionID)
+      expect(interruptCalls).toEqual([sessionID])
+    }),
+  )
+
+  it.effect("delegates interruption without requiring a recorded Session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      interruptCalls.length = 0
+
+      yield* session.interrupt(SessionV2.ID.make("ses_missing"))
+      expect(interruptCalls).toEqual([SessionV2.ID.make("ses_missing")])
     }),
   )
 

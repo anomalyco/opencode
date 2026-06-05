@@ -16,6 +16,7 @@ import { SessionInput } from "../input"
 import { QuestionV2 } from "../../question"
 import { SystemContextRegistry } from "../../system-context-registry"
 import { SessionContextEpoch } from "../context-epoch"
+import { Location } from "../../location"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -87,6 +88,7 @@ export const layer = Layer.effect(
     const tools = yield* ToolRegistry.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
+    const location = yield* Location.Service
     const systemContext = yield* SystemContextRegistry.Service
     const db = (yield* Database.Service).db
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -132,6 +134,8 @@ export const layer = Layer.effect(
       promotion: "steer" | "queue" | undefined,
     ) {
       const session = yield* getSession(sessionID)
+      if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
+        return yield* Effect.interrupt
       const initialized = yield* SessionContextEpoch.initialize(db, systemContext, session.id, session.location)
       const model = yield* models.resolve(session)
       const toolFibers = yield* FiberSet.make<void, never>()
