@@ -1131,7 +1131,7 @@ itMinimaxLeak.live("session.processor strips MiniMax trailing tool_call leak suf
             messages: [{ role: "user", content: "minimax leak" }],
             tools: {},
           }),
-        ).toBe("stop")
+        ).toBe("continue")
 
         const parts = yield* MessageV2.parts(msg.id)
         const text = parts.find((part): part is SessionV1.TextPart => part.type === "text")
