@@ -18,7 +18,7 @@
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
 import { test, type TestOptions } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Deferred, Duration, Effect, Layer, Queue, Scope, Stream } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
@@ -182,7 +182,7 @@ export function withCliFixture<A, E>(
 ): Effect.Effect<A, E | unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const appProc = yield* AppProcess.Service
 
     // FileSystem.makeTempDirectoryScoped handles both creation and scope-tied
@@ -408,7 +408,7 @@ export function withCliFixture<A, E>(
     // and hit endpoints on `opencode.serve()` without rolling their own fetch.
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(TestLLMServer.layer, FetchHttpClient.layer, AppFileSystem.defaultLayer, AppProcess.defaultLayer),
+      Layer.mergeAll(TestLLMServer.layer, FetchHttpClient.layer, FSUtil.defaultLayer, AppProcess.defaultLayer),
     ),
   )
 }

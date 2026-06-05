@@ -1,7 +1,7 @@
 import type { Event, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { bootstrapSessionData, createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { messagePrompt, type SessionMessages } from "./session.shared"
-import type { FooterPatch, StreamCommit } from "./types"
+import type { FooterPatch, LocalReplayRow, StreamCommit } from "./types"
 
 type ReplayInput = {
   messages: SessionMessages
@@ -185,4 +185,117 @@ export function replaySession(input: ReplayInput): SessionReplay {
     commits,
     patch: replayPatch(data, patch),
   }
+}
+
+export function replayLocalRows(
+  messages: SessionMessages,
+  commits: StreamCommit[],
+  rows: LocalReplayRow[],
+): StreamCommit[] {
+  const persisted = new Set(messages.map((message) => message.info.id))
+  return rows.reduce((out, local) => {
+    const row = local.commit
+    if (row.kind === "user" && row.messageID && persisted.has(row.messageID)) {
+      return out
+    }
+
+    if (!row.messageID) {
+      return [...out, row]
+    }
+
+    const exact = local.after
+      ? out.findIndex(
+          (commit) =>
+            commit.kind === local.after?.kind &&
+            commit.text === local.after.text &&
+            commit.phase === local.after.phase &&
+            commit.toolState === local.after.toolState &&
+            (local.after.partID ? commit.partID === local.after.partID : commit.messageID === local.after.messageID),
+        )
+      : -1
+    const anchored =
+      exact !== -1
+        ? exact
+        : local.after
+          ? out.findLastIndex((commit) =>
+              local.after?.partID
+                ? commit.partID === local.after.partID
+                : commit.kind === local.after?.kind && commit.messageID === local.after.messageID,
+            )
+          : -1
+    if (anchored !== -1) {
+      const commit = out[anchored]
+      const visible = local.after?.visible
+      if (commit && visible && commit.text.startsWith(visible) && commit.text.length > visible.length) {
+        return [
+          ...out.slice(0, anchored),
+          { ...commit, text: visible },
+          row,
+          { ...commit, text: commit.text.slice(visible.length) },
+          ...out.slice(anchored + 1),
+        ]
+      }
+
+      return [...out.slice(0, anchored + 1), row, ...out.slice(anchored + 1)]
+    }
+
+    const after = out.findIndex((commit) => commit.kind === "user" && commit.messageID === row.messageID)
+    if (after !== -1) {
+      return [...out.slice(0, after + 1), row, ...out.slice(after + 1)]
+    }
+
+    const before = out.findIndex((commit) => commit.messageID && row.messageID! < commit.messageID)
+    if (before === -1) {
+      return [...out, row]
+    }
+
+    return [...out.slice(0, before), row, ...out.slice(before)]
+  }, commits)
+}
+
+export function replayActiveText(data: SessionData, current: SessionData): StreamCommit[] {
+  return [...current.part.entries()].flatMap(([partID, kind]) => {
+    if (kind === "user" || current.end.has(partID) || data.ids.has(partID)) {
+      return []
+    }
+
+    const text = current.text.get(partID) ?? ""
+    const existing = data.text.get(partID) ?? ""
+    const sent = current.sent.get(partID) ?? 0
+    const existingSent = data.sent.get(partID) ?? 0
+    const visible = current.visible.get(partID) ?? ""
+    const existingVisible = data.visible.get(partID) ?? ""
+    if (!text.startsWith(existing) || existingSent > sent || !visible.startsWith(existingVisible)) {
+      return []
+    }
+
+    data.part.set(partID, kind)
+    data.text.set(partID, text)
+    data.sent.set(partID, sent)
+    data.visible.set(partID, visible)
+    const messageID = current.msg.get(partID)
+    if (messageID) {
+      data.msg.set(partID, messageID)
+      const role = current.role.get(messageID)
+      if (role) {
+        data.role.set(messageID, role)
+      }
+    }
+
+    const chunk = visible.slice(existingVisible.length)
+    if (!chunk) {
+      return []
+    }
+
+    return [
+      {
+        kind,
+        text: chunk,
+        phase: "progress",
+        source: kind,
+        ...(messageID ? { messageID } : {}),
+        partID,
+      },
+    ] satisfies StreamCommit[]
+  })
 }
