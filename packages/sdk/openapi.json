@@ -15546,6 +15546,12 @@
                           ]
                         }
                       },
+                      "outputPaths": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "result": {},
                       "provider": {
                         "type": "object",
@@ -23463,6 +23469,12 @@
                       ]
                     }
                   },
+                  "outputPaths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "result": {},
                   "provider": {
                     "type": "object",
@@ -24387,6 +24399,12 @@
                   "$ref": "#/components/schemas/ToolFileContent"
                 }
               ]
+            }
+          },
+          "outputPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
           "structured": {
@@ -26921,6 +26939,12 @@
                       "$ref": "#/components/schemas/ToolFileContent"
                     }
                   ]
+                }
+              },
+              "outputPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
                 }
               },
               "result": {},
