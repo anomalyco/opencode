@@ -29,6 +29,10 @@ Versioning note: automated upstream mirrors are published as
   dependency compatibility, without treating arbitrary upstream prereleases as
   stable versions.
 
+### Fixed
+- Web (v2 UI): hid desktop titlebar session tabs on mobile/tablet widths while
+  keeping desktop tabs and titlebar controls aligned.
+
 ## v1.15.13-c0dn.8 - 2026-06-05
 
 ### Fixed
