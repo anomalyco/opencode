@@ -46,6 +46,7 @@ import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
+import { ThemeState } from "@/local/theme-state"
 
 type Theme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
@@ -334,6 +335,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     createEffect(() => {
       const theme = config.theme
       if (theme) setStore("active", theme)
+    })
+
+    createEffect(() => {
+      ThemeState.set(store.active)
     })
 
     function init() {

@@ -5,7 +5,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useToast } from "@tui/ui/toast"
 import { DialogSelect } from "@tui/ui/dialog-select"
 
-const PRESETS = [8192, 16384, 32768, 65536, 131072, 262144]
+const PRESETS = [4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576]
 
 function fmtCtxK(n: number): string {
   if (n >= 1024 && n % 1024 === 0) return `${n / 1024}k`
@@ -32,12 +32,12 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
 
   const options = createMemo(() => {
     const cur = current()
-    const sizes = cur > 0 && !PRESETS.includes(cur) ? [...PRESETS, cur].sort((a, b) => a - b) : PRESETS
+    const sizes = [...new Set([...PRESETS, ...(cur > 0 ? [cur] : [])])].sort((a, b) => a - b)
     return sizes.map((n) => ({
       value: n,
       title: fmtCtxK(n),
-      description: n === cur ? "current" : undefined,
-      onSelect() {},
+      description: n === cur ? "current" : n > cur ? `+${fmtCtxK(n - cur)}` : undefined,
+      highlight: n === cur,
     }))
   })
 
@@ -46,7 +46,12 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
     setBusy(true)
     try {
       const res = await sdk.client.local.model.setCtxSize(
-        { providerID: props.providerID, modelID: props.modelID, localCtxSizePayload: { ctx_size } },
+        {
+          providerID: props.providerID,
+          modelID: props.modelID,
+          directory: sdk.directory,
+          localCtxSizePayload: { ctx_size },
+        },
         { throwOnError: true },
       )
       if (res.data === false) {
@@ -71,7 +76,7 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
       flat={true}
       skipFilter={true}
       current={current()}
-      onSelect={(opt) => void apply(opt.value)}
+      onSelect={(opt) => apply(opt.value)}
     />
   )
 }

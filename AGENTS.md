@@ -24,8 +24,8 @@ skein supervisor → opencode (this repo) → llama-skein (inference proxy)
 
 ### llama-skein client (TypeScript)
 
-- The llama-skein API is design-first: `~/dev/llama-swap/contracts/llama-skein.openapi.json` is the source of truth.
-- Read `~/dev/llama-swap/docs/openapi-contract.md` before changing `src/local/llama-skein/`.
+- The llama-skein API is design-first: `~/dev/llama-skein/contracts/llama-skein.openapi.json` is the source of truth.
+- Read `~/dev/llama-skein/docs/openapi-contract.md` before changing `src/local/llama-skein/`.
 - Generated types live in `packages/opencode/src/local/llama-skein/gen/` — never edit these by hand.
 - To regenerate: `bun run build:llama-skein-client` from `packages/opencode`
 - If the OpenAPI spec changed in llama-skein, regenerate before writing callers.

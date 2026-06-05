@@ -2,6 +2,7 @@ import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { createMemo, Show } from "solid-js"
+import { DialogModelCtx } from "../../component/dialog-model-ctx"
 
 const id = "internal:sidebar-context"
 
@@ -36,28 +37,46 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const sessionModel = session()?.model
     const providerID = sessionModel?.providerID ?? last?.providerID
     const modelID = sessionModel?.id ?? last?.modelID
-    const model = providerID && modelID
-      ? props.api.state.provider.find((item) => item.id === providerID)?.models[modelID]
-      : undefined
+    const provider = providerID ? props.api.state.provider.find((item) => item.id === providerID) : undefined
+    const model = provider && modelID ? provider.models[modelID] : undefined
     const ctx = model?.limit.context ?? 0
     const seconds = last?.time.completed ? Math.max(0, (last.time.completed - last.time.created) / 1000) : 0
     const tokensPerSecond = last && seconds > 0 && last.tokens.output > 0 ? last.tokens.output / seconds : null
+    const isLocal = Boolean(provider?.options?.["baseURL"])
     return {
       tokens,
       percent: ctx > 0 && tokens > 0 ? Math.round((tokens / ctx) * 100) : null,
       ctxWindow: ctx > 0 ? fmtCtxK(ctx) : null,
       tokensPerSecond,
+      isLocal,
+      providerID: providerID ?? null,
+      modelID: modelID ?? null,
     }
   })
+
+  function openCtxDialog() {
+    const { providerID, modelID } = state()
+    if (!providerID || !modelID) return
+    props.api.ui.dialog.replace(() => <DialogModelCtx providerID={providerID} modelID={modelID} />)
+  }
 
   return (
     <box>
       <text fg={theme().text}>
         <b>Context</b>
       </text>
-      <text fg={theme().textMuted}>
+      <text
+        fg={theme().textMuted}
+        onMouseUp={state().isLocal && state().ctxWindow ? openCtxDialog : undefined}
+      >
         {state().tokens.toLocaleString()}
-        {state().ctxWindow ? ` / ${state().ctxWindow}` : ""} tokens
+        <Show when={state().ctxWindow}>
+          {" / "}
+          <span style={{ fg: state().isLocal ? theme().accent : theme().textMuted }}>
+            {state().ctxWindow}
+          </span>
+        </Show>
+        {" tokens"}
       </text>
       <Show when={state().percent !== null}>
         <text fg={theme().textMuted}>{state().percent}% used</text>
@@ -65,7 +84,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <Show when={state().tokensPerSecond !== null}>
         <text fg={theme().textMuted}>{fmtTokensPerSecond(state().tokensPerSecond!)} tokens/s</text>
       </Show>
-      <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      <Show when={!state().isLocal}>
+        <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      </Show>
     </box>
   )
 }

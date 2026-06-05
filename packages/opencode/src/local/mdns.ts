@@ -238,11 +238,13 @@ export async function scanLlamaSwap(
 
   const mdnsScan = new Promise<void>((resolve) => {
     let bonjour: InstanceType<typeof Bonjour> | undefined
+    let closed = false
     try {
       bonjour = new Bonjour()
       const browsers = LLAMA_SWAP_SERVICE_TYPES.map((type) => bonjour!.find({ type, protocol: "tcp" }))
       for (const browser of browsers) {
         browser.on("up", (svc) => {
+          if (closed) return
           const refererAddress = /^\d+\.\d+\.\d+\.\d+$/.test(svc.referer?.address ?? "")
             ? svc.referer?.address
             : undefined
@@ -254,14 +256,20 @@ export async function scanLlamaSwap(
           raw.push({ name, host, port: svc.port, baseURL })
         })
       }
+      // Yield to I/O before closing: any "up" packets that arrived just as the
+      // timer fires are still in the callback queue. The setImmediate runs after
+      // I/O callbacks, so they get a chance to push into raw before we close.
       setTimeout(() => {
-        try {
-          for (const browser of browsers) browser.stop()
-          bonjour?.destroy()
-        } catch {
-          // ignore cleanup errors
-        }
-        resolve()
+        setImmediate(() => {
+          closed = true
+          try {
+            for (const browser of browsers) browser.stop()
+            bonjour?.destroy()
+          } catch {
+            // ignore cleanup errors
+          }
+          resolve()
+        })
       }, timeoutMs)
     } catch {
       // mDNS not available (socket permissions, sandbox, etc.) — skip silently

@@ -14,6 +14,11 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
+import { ThemeState } from "@/local/theme-state"
+
+// Tracks baseURL::modelId combos that have already had a loading-theme header sent.
+// The header is only useful on the first request (model cold-start); skip it after.
+const _loadingThemeSent = new Set<string>()
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -1746,6 +1751,30 @@ export const layer = Layer.effect(
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
+
+          // Inject X-Loading-Theme on the first request per model (cold-start only).
+          // Parse the model ID from the request body to key per baseURL::modelId.
+          if (
+            model.api.npm === "@ai-sdk/openai-compatible" &&
+            typeof options["baseURL"] === "string" &&
+            opts.method === "POST" &&
+            opts.body
+          ) {
+            const loadingTheme = ThemeState.get()
+            if (loadingTheme) {
+              try {
+                const body = JSON.parse(opts.body as string)
+                const modelKey = `${options["baseURL"]}::${body.model}`
+                if (!_loadingThemeSent.has(modelKey)) {
+                  opts.headers = { ...opts.headers, "X-Loading-Theme": loadingTheme }
+                  _loadingThemeSent.add(modelKey)
+                }
+              } catch {
+                // malformed body — skip header silently
+              }
+            }
+          }
+
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
