@@ -30,6 +30,7 @@ export class WorktreeError extends Schema.TaggedErrorClass<WorktreeError>()("Git
   operation: Schema.Literals(["create", "remove", "list"]),
   message: Schema.String,
   directory: Schema.optional(AbsolutePath),
+  forceRequired: Schema.optional(Schema.Boolean),
   cause: Schema.optional(Schema.Defect),
 }) {}
 
@@ -64,7 +65,11 @@ export interface Interface {
   readonly resetChanges: (directory: AbsolutePath) => Effect.Effect<void, PatchError>
   readonly softResetChanges: (directory: AbsolutePath) => Effect.Effect<void, PatchError>
   readonly worktreeCreate: (input: { repo: Repo; directory: AbsolutePath }) => Effect.Effect<void, WorktreeError>
-  readonly worktreeRemove: (input: { repo: Repo; directory: AbsolutePath }) => Effect.Effect<void, WorktreeError>
+  readonly worktreeRemove: (input: {
+    repo: Repo
+    directory: AbsolutePath
+    force: boolean
+  }) => Effect.Effect<void, WorktreeError>
   readonly worktreeList: (repo: Repo) => Effect.Effect<AbsolutePath[], WorktreeError>
 }
 
@@ -335,10 +340,12 @@ export const layer = Layer.effect(
           ),
         )
       if (result.exitCode === 0) return result.stdout.toString("utf8")
+      const message = result.stderr.toString("utf8").trim() || result.stdout.toString("utf8").trim() || "Git failed"
       return yield* new WorktreeError({
         operation,
         directory: worktreeDirectory,
-        message: result.stderr.toString("utf8").trim() || result.stdout.toString("utf8").trim() || "Git failed",
+        message,
+        forceRequired: operation === "remove" && /contains modified or untracked files|is dirty/i.test(message),
       })
     })
 
@@ -346,11 +353,15 @@ export const layer = Layer.effect(
       yield* worktree("create", input.repo, ["worktree", "add", "--detach", input.directory, "HEAD"], input.directory)
     })
 
-    const worktreeRemove = Effect.fn("Git.worktreeRemove")(function* (input: { repo: Repo; directory: AbsolutePath }) {
+    const worktreeRemove = Effect.fn("Git.worktreeRemove")(function* (input: {
+      repo: Repo
+      directory: AbsolutePath
+      force: boolean
+    }) {
       yield* worktree(
         "remove",
         input.repo,
-        ["worktree", "remove", "--force", input.directory],
+        ["worktree", "remove", ...(input.force ? ["--force"] : []), input.directory],
         input.directory,
         input.repo.store,
       )

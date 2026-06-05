@@ -12,7 +12,7 @@ import {
 import { described } from "./metadata"
 
 const root = "/experimental/project/:projectID/copy"
-const CreateQuery = Schema.Struct({
+const CopyQuery = Schema.Struct({
   workspace: WorkspaceRoutingQueryFields.workspace,
 })
 
@@ -24,6 +24,7 @@ export const CreatePayload = Schema.Struct({
 })
 export const RemovePayload = Schema.Struct({
   directory: ProjectCopy.RemoveInput.fields.directory,
+  force: ProjectCopy.RemoveInput.fields.force,
 })
 
 export class ApiProjectCopyError extends Schema.ErrorClass<ApiProjectCopyError>("ProjectCopyError")(
@@ -31,6 +32,7 @@ export class ApiProjectCopyError extends Schema.ErrorClass<ApiProjectCopyError>(
     name: Schema.Literal("ProjectCopyError"),
     data: Schema.Struct({
       message: Schema.String,
+      forceRequired: Schema.optional(Schema.Boolean),
     }),
   },
   { httpApiStatus: 400 },
@@ -41,7 +43,7 @@ export const ProjectCopyApi = HttpApi.make("projectCopy").add(
     .add(
       HttpApiEndpoint.post("create", root, {
         params: { projectID: ProjectV2.ID },
-        query: CreateQuery,
+        query: CopyQuery,
         payload: CreatePayload,
         success: described(ProjectCopy.Copy, "Project copy created"),
         error: ApiProjectCopyError,
@@ -54,7 +56,7 @@ export const ProjectCopyApi = HttpApi.make("projectCopy").add(
       ),
       HttpApiEndpoint.delete("remove", root, {
         params: { projectID: ProjectV2.ID },
-        query: WorkspaceRoutingQuery,
+        query: CopyQuery,
         payload: RemovePayload,
         success: described(HttpApiSchema.NoContent, "Project copy removed"),
         error: ApiProjectCopyError,

@@ -65,12 +65,24 @@ describe("project directories and copies endpoints", () => {
         const listed = yield* request(test.directory, `${base}/directories`)
         expect(yield* json<string[]>(listed)).toContain(created.directory)
 
+        yield* Effect.promise(() => Bun.write(path.join(created.directory, "dirty.txt"), "dirty"))
+
         const remove = yield* request(test.directory, copies, {
           method: "DELETE",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ directory: created.directory }),
+          body: JSON.stringify({ directory: created.directory, force: false }),
         })
-        expect(remove.status).toBe(204)
+        expect(remove.status).toBe(400)
+        expect(yield* json<{ data: { forceRequired?: boolean } }>(remove)).toMatchObject({
+          data: { forceRequired: true },
+        })
+
+        const forced = yield* request(test.directory, copies, {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ directory: created.directory, force: true }),
+        })
+        expect(forced.status).toBe(204)
 
         const externalDirectory = path.join(test.directory, "..", path.basename(test.directory) + "-http-refresh")
         yield* Effect.addFinalizer(() =>

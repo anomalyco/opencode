@@ -2484,6 +2484,7 @@ export type ProjectCopyError = {
   name: "ProjectCopyError"
   data: {
     message: string
+    forceRequired?: boolean
   }
 }
 
@@ -6971,12 +6972,12 @@ export type ProjectDirectoriesResponse = ProjectDirectoriesResponses[keyof Proje
 export type ExperimentalProjectCopyRemoveData = {
   body?: {
     directory: string
+    force: boolean
   }
   path: {
     projectID: string
   }
   query?: {
-    directory?: string
     workspace?: string
   }
   url: "/experimental/project/{projectID}/copy"

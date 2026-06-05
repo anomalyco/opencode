@@ -1,4 +1,5 @@
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
+import { Git } from "@opencode-ai/core/git"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceState } from "@/effect/instance-state"
@@ -28,7 +29,10 @@ function badRequest<A, R>(effect: Effect.Effect<A, ProjectCopy.Error, R>) {
       (error) =>
         new ApiProjectCopyError({
           name: "ProjectCopyError",
-          data: { message: message(error) },
+          data: {
+            message: message(error),
+            forceRequired: error instanceof Git.WorktreeError ? error.forceRequired : undefined,
+          },
         }),
     ),
   )
