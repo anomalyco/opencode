@@ -104,6 +104,9 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
                   <Match when={message.type === "synthetic"}>
                     <></>
                   </Match>
+                  <Match when={message.type === "system"}>
+                    <></>
+                  </Match>
                   <Match when={message.type === "shell"}>
                     <ShellMessage message={message as SessionMessageShell} />
                   </Match>

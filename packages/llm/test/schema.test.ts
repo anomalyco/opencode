@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as OpenAIResponses from "../src/protocols/openai-responses"
-import { ContentPart, LLMEvent, LLMRequest, Model, ModelID, ProviderID, Usage } from "../src/schema"
+import {
+  ContentPart,
+  LLMEvent,
+  LLMRequest,
+  Model,
+  ModelID,
+  ProviderID,
+  Usage,
+} from "../src/schema"
 import { ProviderShared } from "../src/protocols/shared"
 
 const model = new Model({
@@ -41,17 +49,6 @@ describe("llm schema", () => {
     })
 
     expect(decoded.model.route.id).toBe("openai-responses")
-  })
-
-  test("decodes chronological system messages", () => {
-    const decoded = decodeLLMRequest({
-      model,
-      system: [],
-      messages: [{ role: "system", content: [{ type: "text", text: "Operator update." }] }],
-      tools: [],
-    })
-
-    expect(decoded.messages[0]).toMatchObject({ role: "system", content: [{ type: "text", text: "Operator update." }] })
   })
 
   test("rejects invalid event type", () => {

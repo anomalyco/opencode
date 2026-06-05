@@ -119,6 +119,17 @@ export namespace PromptLifecycle {
   export type Promoted = typeof Promoted.Type
 }
 
+export const ContextUpdated = EventV2.define({
+  type: "session.next.context.updated",
+  ...options,
+  schema: {
+    ...Base,
+    messageID: SessionMessageID.ID,
+    text: Schema.String,
+  },
+})
+export type ContextUpdated = typeof ContextUpdated.Type
+
 export const Synthetic = EventV2.define({
   type: "session.next.synthetic",
   ...options,
@@ -444,6 +455,7 @@ const DurableDefinitions = [
   Prompted,
   PromptLifecycle.Admitted,
   PromptLifecycle.Promoted,
+  ContextUpdated,
   Synthetic,
   Shell.Started,
   Shell.Ended,

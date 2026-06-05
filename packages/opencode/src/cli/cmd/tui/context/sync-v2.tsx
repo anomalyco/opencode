@@ -175,6 +175,16 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
             })
           })
           break
+        case "session.next.context.updated":
+          update(event.properties.sessionID, (draft) => {
+            prepend(draft, {
+              id: event.properties.messageID,
+              type: "system",
+              text: event.properties.text,
+              time: { created: event.properties.timestamp },
+            })
+          })
+          break
         case "session.next.synthetic":
           update(event.properties.sessionID, (draft) => {
             prepend(draft, {

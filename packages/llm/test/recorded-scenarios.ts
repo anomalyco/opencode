@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import {
   LLM,
   LLMEvent,

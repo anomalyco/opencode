@@ -37,6 +37,66 @@ The local runner issues one explicit `llm.stream(request)` per provider turn, pr
 
 Projected hosted tools preserve call-side and settlement-side provider metadata separately so settlement and interruption recovery cannot erase continuation identifiers. Provider-native reasoning and provider metadata replay only while the historical assistant model matches the selected continuation model; after a model switch, visible reasoning text remains ordinary assistant text and provider-native metadata is omitted.
 
+## Context Epochs
+
+V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch owns one immutable baseline plus a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, and ambient global/upward-project `AGENTS.md` files are the initial registered sources.
+
+The first complete observation initializes the epoch before any pending prompt becomes model-visible. If initial context is temporarily unavailable, execution stops while the prompt remains pending and retryable. On later provider turns, the runner promotes eligible input first, then reconciles current sources at the safe boundary. Changed context becomes one durable chronological System message, and its event commit advances the epoch snapshot atomically.
+
+```text
+Client            Runner                         System Context Registry       Context Epoch Store       Session History         LLM
+   │                 │                                      │                           │                       │                 │
+   ├─ Admit prompt ─────────────────────────────────────────────────────────────────────────────────────────────▶                 │
+   │                 │                                      │                           │                       │                 │
+   │                 ├─ Observe initial context ────────────▶                           │                       │                 │
+   │                 │                                      │                           │                       │                 │
+   │                 ◀─ Complete baseline or unavailable ───┤                           │                       │                 │
+   │                 │                                      │                           │                       │                 │
+   │                 ├─ Initialize missing epoch ───────────────────────────────────────▶                       │                 │
+   │                 │                                      │                           │                       │                 │
+   │                 ├─ Promote eligible input ─────────────────────────────────────────────────────────────────▶                 │
+   │                 │                                      │                           │                       │                 │
+   │                 ├─ Reconcile at safe boundary ─────────▶                           │                       │                 │
+   │                 │                                      │                           │                       │                 │
+   │                 ◀─ Unchanged or chronological update ──┤                           │                       │                 │
+   │                 │                                      │                           │                       │                 │
+   │                 ├─ Advance snapshot atomically with update ────────────────────────▶                       │                 │
+   │                 │                                      │                           │                       │                 │
+   │                 ├─ Baseline + chronological history ─────────────────────────────────────────────────────────────────────────▶
+```
+
+Model switches and completed compactions request lazy baseline replacement. A Session move clears the epoch so the destination Location must initialize a complete baseline before promoting more input. Epoch creation is fenced against the authoritative Session Location, preventing an old-Location runner from recreating stale privileged context after a concurrent move.
+
+```text
+Session                            Epoch
+   │                                 │
+   ├─ initialize complete baseline ──▶
+   │                                 │
+   │                                 ├─────────────────────────────────╮
+   │                                 │ reconcile chronological update  │
+   │                                 ◀─────────────────────────────────╯
+   │                                 │
+   ├─ request replacement ───────────▶
+   │                                 │
+   │                                 ├─────────────────────────────────────╮
+   │                                 │ replace after complete observation  │
+   │                                 ◀─────────────────────────────────────╯
+   │                                 │
+   ├─ clear after Location move ─────▶
+```
+
+Ambient project discovery canonicalizes and contains traversal within the project root and honors `OPENCODE_DISABLE_PROJECT_CONFIG`. An unavailable observation preserves the previously admitted value. A confirmed partial instruction removal emits the complete remaining aggregate with explicit supersession text; removing the final instruction emits a revocation message.
+
+Current Context Epoch follow-ups:
+
+- Add configured, remote, and nested instruction sources with explicit precedence and removal semantics.
+- Add durable post-crash activity recovery for promoted or provider-dispatched work.
+- Integrate actual automatic/context-pressure compaction with epoch replacement.
+- Add operational metrics for observation latency, unavailable sources, contention, baseline size, and chronological-update growth.
+- Consider watcher-backed per-file caching only if measurements show direct safe-boundary observation is too expensive.
+- Expose plugin-defined Context Sources only after plugin reload and scoped cleanup semantics are designed.
+- Add clustered Session execution ownership and stale-runtime fencing.
+
 Provider timeout, retry, and watchdog policy is intentionally deferred. The runner does not impose a universal provider-stream inactivity or absolute timeout. A future slice should design configurable policy around provider behavior, durable failure reporting, and local drain-chain release rather than hardcoding one default for every provider.
 
 Inbox delivery is explicit:

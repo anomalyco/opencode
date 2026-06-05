@@ -686,3 +686,85 @@ Compatibility:
 
 - Foreground V2 bash execution is unchanged.
 - Reintroduce background bash only with durable status observation, completion delivery, and explicit cancellation semantics.
+
+## 2026-06-04: Add Durable Session Context Snapshots
+
+Affected schema:
+
+- Add `session_context_epoch` for one active immutable baseline string, structured JSON snapshot, and baseline sequence per Session.
+
+Change:
+
+- Lazily initialize one durable Context Epoch snapshot at the first safe provider-turn boundary.
+- Lower its exact baseline string through `LLMRequest.system` for every provider turn in the epoch.
+- Reuse the stored baseline verbatim after restart or producer changes instead of resampling privileged initial context.
+- Compare later observations against an overwriteable codec-encoded structured snapshot rather than rendered-text hashes.
+- Expose admitted chronological context as first-class `system` Session messages while keeping the active baseline in bounded context state.
+
+Compatibility:
+
+- The unpublished Context Epoch schema is consolidated into one database migration; baseline and structured snapshots are operational state rather than synchronized event history.
+- Existing experimental V2 Session databases remain disposable across incompatible pre-launch event-schema changes.
+- Chronological context updates, replacement epochs after compaction or model switches, project instructions, skills guidance, and plugin transforms remain follow-up slices.
+
+## 2026-06-04: Admit Chronological Session Context Updates
+
+Affected schema:
+
+- Add synchronized `session.next.context.updated.1` Session events containing a durable System-message ID and only exact combined model-visible text.
+- Add `session_context_epoch.revision` for transactional structured-snapshot advancement.
+- Add the first-class `system` Session message projection for chronological context updates.
+
+Change:
+
+- Reconcile Location-scoped Context Sources at each safe provider-turn boundary using one coherent observation.
+- Keep the stored baseline immutable while admitting changed source renderings as chronological `Message.system(...)` history.
+- Advance the overwriteable structured snapshot atomically with the rendered System-message event.
+- Emit the previously stored model-meaningful removal rendering when a source is removed.
+- Reject chronological system updates that would split a local tool call from its result across provider protocols; use wrapped user fallback when Anthropic native system-update placement is unsupported.
+
+Compatibility:
+
+- The synchronized event log retains only text actually shown to the model, not internal structured snapshots.
+- Existing experimental V2 Session databases remain disposable across incompatible pre-launch event-schema changes.
+- Replacement epochs after compaction or model switches, skills guidance, and plugin-defined context remain follow-up slices.
+
+## 2026-06-04: Replace Session Context Epochs Lazily
+
+Affected schema:
+
+- Add nullable `session_context_epoch.replacement_seq` for idempotent lazy replacement requests.
+
+Change:
+
+- Mark the active Context Epoch for replacement after a model switch or completed compaction projection.
+- Persist the triggering aggregate sequence so same-target replay cannot reopen an already-settled replacement.
+- Render and overwrite the fresh immutable baseline and structured snapshot lazily at the next safe provider-turn boundary.
+- Exclude chronological System messages from earlier epochs when assembling active provider history.
+
+Compatibility:
+
+- Baseline replacement is bounded operational state and does not add permanent synchronized events.
+- Existing experimental V2 Session databases remain disposable across incompatible pre-launch event-schema changes.
+- Compaction execution, skills guidance, and plugin-defined context remain follow-up slices.
+
+## 2026-06-05: Register Ambient System Context Producers
+
+Affected schema:
+
+- No database schema changes.
+
+Change:
+
+- Replace the Session-specific context loader with a Location-scoped registry of stable-keyed scoped context producers.
+- Register environment/date and ambient instruction producers independently, then evaluate producers concurrently in stable contribution-key order.
+- Directly discover and read global plus upward project `AGENTS.md` files at each safe provider-turn boundary.
+- Preserve admitted instructions across transient scan/read failures and block first-epoch initialization while any context source is unavailable.
+- Retry Context Epoch preparation until stable after optimistic revision mismatches.
+- Clear the active Context Epoch when a Session moves so the destination initializes a complete baseline before promoting more input.
+- Fence Context Epoch initialization against the authoritative Session Location so a concurrent old-Location runner cannot recreate stale privileged context after a move.
+- Canonicalize ambient instruction traversal boundaries, honor `OPENCODE_DISABLE_PROJECT_CONFIG`, and make non-empty aggregate updates explicitly supersede previously loaded instructions.
+
+Compatibility:
+
+- Watcher-backed per-file `Refreshable` instruction observations, configured sources, nested discovery, and plugin-defined context remain follow-up slices.

@@ -12027,6 +12027,9 @@
             "$ref": "#/components/schemas/EventSessionNextPromptPromoted"
           },
           {
+            "$ref": "#/components/schemas/EventSessionNextContextUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionNextSynthetic"
           },
           {
@@ -14630,6 +14633,42 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["session.next.context.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "messageID", "text"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["session.next.synthetic"]
                   },
                   "properties": {
@@ -17141,6 +17180,9 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextPromptPromoted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextContextUpdated"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextSynthetic"
@@ -21870,6 +21912,63 @@
         "required": ["type", "id", "syncEvent"],
         "additionalProperties": false
       },
+      "SyncEventSessionNextContextUpdated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.context.updated.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "messageID", "text"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
       "SyncEventSessionNextSynthetic": {
         "type": "object",
         "properties": {
@@ -23634,6 +23733,37 @@
         "required": ["id", "time", "sessionID", "text", "type"],
         "additionalProperties": false
       },
+      "SessionMessageSystem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["system"]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "time", "type", "text"],
+        "additionalProperties": false
+      },
       "SessionMessageShell": {
         "type": "object",
         "properties": {
@@ -24070,6 +24200,9 @@
           },
           {
             "$ref": "#/components/schemas/SessionMessageSynthetic"
+          },
+          {
+            "$ref": "#/components/schemas/SessionMessageSystem"
           },
           {
             "$ref": "#/components/schemas/SessionMessageShell"
@@ -25168,6 +25301,42 @@
               }
             },
             "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextContextUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.context.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "text"],
             "additionalProperties": false
           }
         },

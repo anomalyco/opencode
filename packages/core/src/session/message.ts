@@ -51,6 +51,12 @@ export class Synthetic extends Schema.Class<Synthetic>("Session.Message.Syntheti
   type: Schema.Literal("synthetic"),
 }) {}
 
+export class System extends Schema.Class<System>("Session.Message.System")({
+  ...Base,
+  type: Schema.Literal("system"),
+  text: SessionEvent.ContextUpdated.data.fields.text,
+}) {}
+
 export class Shell extends Schema.Class<Shell>("Session.Message.Shell")({
   ...Base,
   type: Schema.Literal("shell"),
@@ -170,7 +176,16 @@ export class Compaction extends Schema.Class<Compaction>("Session.Message.Compac
   ...Base,
 }) {}
 
-export const Message = Schema.Union([AgentSwitched, ModelSwitched, User, Synthetic, Shell, Assistant, Compaction])
+export const Message = Schema.Union([
+  AgentSwitched,
+  ModelSwitched,
+  User,
+  Synthetic,
+  System,
+  Shell,
+  Assistant,
+  Compaction,
+])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Session.Message" })
 
