@@ -3,15 +3,16 @@ export * as Config from "./config"
 import path from "path"
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { Location } from "./location"
-import { PermissionV2 } from "./permission"
+import { PermissionSchema } from "./permission/schema"
 import { Policy } from "./policy"
 import { AbsolutePath } from "./schema"
 import { ConfigAgent } from "./config/agent"
 import { ConfigAttachments } from "./config/attachments"
 import { ConfigCompaction } from "./config/compaction"
+import { ConfigCommand } from "./config/command"
 import { ConfigExperimental } from "./config/experimental"
 import { ConfigFormatter } from "./config/formatter"
 import { ConfigLSP } from "./config/lsp"
@@ -21,6 +22,8 @@ import { ConfigProvider } from "./config/provider"
 import { ConfigReference } from "./config/reference"
 import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
+import { ConfigV1 } from "./v1/config/config"
+import { ConfigMigrateV1 } from "./v1/config/migrate"
 
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: Schema.optional(Schema.String).annotate({
@@ -50,7 +53,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   username: Schema.String.pipe(Schema.optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
   }),
-  permissions: PermissionV2.Ruleset.pipe(Schema.optional).annotate({
+  permissions: PermissionSchema.Ruleset.pipe(Schema.optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
   }),
   agents: Schema.Record(Schema.String, ConfigAgent.Info).pipe(Schema.optional).annotate({
@@ -83,6 +86,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   skills: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
     description: "Additional paths or URLs to discover skills from",
   }),
+  commands: Schema.Record(Schema.String, ConfigCommand.Info).pipe(Schema.optional).annotate({
+    description: "Named slash command definitions",
+  }),
   instructions: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
     description: "Additional paths or URLs supplying ambient instructions",
   }),
@@ -96,30 +102,22 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
 }) {}
 
-export const FileSource = Schema.Struct({
-  type: Schema.Literal("file"),
-  path: Schema.String,
-}).annotate({ identifier: "Config.FileSource" })
-export type FileSource = typeof FileSource.Type
-
-export const MemorySource = Schema.Struct({
-  type: Schema.Literal("memory"),
-}).annotate({ identifier: "Config.MemorySource" })
-export type MemorySource = typeof MemorySource.Type
-
-export const Source = Schema.Union([FileSource, MemorySource]).pipe(Schema.toTaggedUnion("type"))
-export type Source = typeof Source.Type
-
-export class Loaded extends Schema.Class<Loaded>("Config.Loaded")({
-  source: Source,
+export class Document extends Schema.Class<Document>("Config.Document")({
+  type: Schema.Literal("document"),
+  path: Schema.String.pipe(Schema.optional),
   info: Info,
 }) {}
 
+export class Directory extends Schema.Class<Directory>("Config.Directory")({
+  type: Schema.Literal("directory"),
+  path: AbsolutePath,
+}) {}
+
+export type Entry = Document | Directory
+
 export interface Interface {
-  /** Returns supplemental config directories from lowest to highest priority. */
-  readonly directories: () => Effect.Effect<AbsolutePath[]>
-  /** Loads location config files from lowest to highest priority. */
-  readonly get: () => Effect.Effect<Loaded[]>
+  /** Returns location config documents and supplemental directories from lowest to highest priority. */
+  readonly entries: () => Effect.Effect<Entry[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Config") {}
@@ -127,7 +125,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
@@ -141,45 +139,61 @@ export const layer = Layer.effect(
       const input: unknown = parse(text, errors, { allowTrailingComma: true })
       if (errors.length) return
 
-      // Accept legacy fields while v2 is migrated incrementally; recognized
-      // fields still have to satisfy the v2 schema.
+      const decoded = ConfigMigrateV1.isV1(input)
+        ? Option.map(
+            Schema.decodeUnknownOption(ConfigV1.Info)(input, {
+              errors: "all",
+              onExcessProperty: "ignore",
+              propertyOrder: "original",
+            }),
+            ConfigMigrateV1.migrate,
+          )
+        : Option.some(input)
       const info = Option.getOrUndefined(
-        Schema.decodeUnknownOption(Info)(input, { errors: "all", onExcessProperty: "ignore" }),
+        Option.flatMap(
+          decoded,
+          Schema.decodeUnknownOption(Info, { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" }),
+        ),
       )
       if (!info) return
-      return new Loaded({ source: { type: "file", path: filepath }, info })
+      return new Document({ type: "document", path: filepath, info })
     })
 
     const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
-      return yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
-        Effect.map((configs) => configs.filter((config): config is Loaded => config !== undefined)),
-      )
+      return [
+        ...(yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
+          Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
+        )),
+        new Directory({ type: "directory", path: directory }),
+      ]
     })
 
     const globalDirectory = AbsolutePath.make(global.config)
     const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
     // Read configuration once when this location opens. Later calls reuse these
     // values until the location is reopened.
-    const directories = locationIsGlobal
-      ? [globalDirectory]
-      : [
-          globalDirectory,
-          ...(yield* fs
-            .up({ targets: [".opencode"], start: location.directory, stop: location.project.directory })
-            .pipe(Effect.orDie))
-            .toReversed()
-            .map((directory) => AbsolutePath.make(directory)),
-        ]
+    const discovered = locationIsGlobal
+      ? []
+      : yield* fs
+          .up({
+            targets: [".opencode", ...names.toReversed()],
+            start: location.directory,
+            stop: location.project.directory,
+          })
+          .pipe(Effect.orDie)
+    const directories = [
+      globalDirectory,
+      ...discovered
+        .filter((item) => path.basename(item) === ".opencode")
+        .toReversed()
+        .map((directory) => AbsolutePath.make(directory)),
+    ]
     // A config closer to the opened directory should win over one higher up.
     // Search starts nearby, so reverse the results before applying them.
-    const directPaths = locationIsGlobal
-      ? []
-      : (yield* fs
-          .up({ targets: names.toReversed(), start: location.directory, stop: location.project.directory })
-          .pipe(Effect.orDie)).toReversed()
+    const directPaths = discovered.filter((item) => path.basename(item) !== ".opencode").toReversed()
     const direct = yield* Effect.forEach(directPaths, loadFile).pipe(
       Effect.orDie,
-      Effect.map((configs) => configs.filter((config): config is Loaded => config !== undefined)),
+      Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
     )
     const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
@@ -187,13 +201,15 @@ export const layer = Layer.effect(
     const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
-    yield* policy.load(configs.toReversed().flatMap((config) => config.info.experimental?.policies ?? []))
+    yield* policy.load(
+      configs
+        .filter((config): config is Document => config.type === "document")
+        .toReversed()
+        .flatMap((config) => config.info.experimental?.policies ?? []),
+    )
 
     return Service.of({
-      directories: Effect.fn("Config.directories")(function* () {
-        return directories
-      }),
-      get: Effect.fn("Config.get")(function* () {
+      entries: Effect.fn("Config.entries")(function* () {
         return configs
       }),
     })
