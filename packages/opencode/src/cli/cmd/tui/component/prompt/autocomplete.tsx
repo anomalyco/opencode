@@ -291,7 +291,8 @@ export function Autocomplete(props: {
     Reference.resolveAll({
       references: ConfigReference.normalize(sync.data.config.reference ?? {}),
       directory: sync.path.directory || process.cwd(),
-      worktree: sync.path.worktree || sync.path.directory || process.cwd(),
+      worktree:
+        (sync.path.worktree === "/" ? undefined : sync.path.worktree) || sync.path.directory || process.cwd(),
     }),
   )
 
