@@ -12,6 +12,7 @@ import { ProviderError } from "../../src/provider/error"
 import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { testEffect } from "../lib/effect"
+import { provideTmpdirInstance } from "../fixture/fixture"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const providerID = ProviderV2.ID.make("test")
@@ -344,6 +345,63 @@ describe("session.retry.retryable", () => {
       "Usage limit reached. It will reset in 15 minutes. To continue using this model now, enable usage from your available balance",
     )
   })
+
+  test("retries EmptyOther stream truncation failures", () => {
+    const error = new SessionV1.APIError({
+      message: "Provider stream ended without a stop reason",
+      isRetryable: true,
+      metadata: { code: "EmptyOther" },
+    }).toObject() as SessionV1.APIError
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "Provider stream ended without a stop reason",
+    })
+  })
+
+  it.live("policy stops retrying EmptyOther after 3 attempts", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessionID = SessionID.make("session-empty-other-test")
+        // retry-after-ms=0 keeps the test fast; the cap is driven by metadata.code.
+        const error = new SessionV1.APIError({
+          message: "Provider stream ended without a stop reason",
+          isRetryable: true,
+          metadata: { code: "EmptyOther" },
+          responseHeaders: { "retry-after-ms": "0" },
+        }).toObject() as SessionV1.APIError
+        const status = yield* SessionStatus.Service
+
+        const step = yield* Schedule.toStepWithMetadata(
+          SessionRetry.policy({
+            provider: retryProvider,
+            parse: (err) => err as SessionV1.APIError,
+            set: (info) =>
+              status.set(sessionID, {
+                type: "retry",
+                attempt: info.attempt,
+                message: info.message,
+                next: info.next,
+              }),
+          }),
+        )
+        // attempt=1 and attempt=2 run normally and update status.
+        yield* step(error)
+        yield* step(error)
+        // attempt=3 hits the EmptyOther cap and signals Cause.done.
+        // Effect.exit captures the schedule termination so it doesn't
+        // leak as an unhandled failure.
+        const thirdExit = yield* Effect.exit(step(error))
+
+        expect(thirdExit._tag).toBe("Failure")
+
+        expect(yield* status.get(sessionID)).toMatchObject({
+          type: "retry",
+          attempt: 2,
+          message: "Provider stream ended without a stop reason",
+        })
+      }),
+    ),
+  )
 })
 
 describe("session.message-v2.fromError", () => {
@@ -396,6 +454,25 @@ describe("session.message-v2.fromError", () => {
     const retryable = SessionRetry.retryable(error, retryProvider)
     expect(retryable).toBeDefined()
     expect(retryable).toEqual({ message: "Connection reset by server" })
+  })
+
+  test("converts APIError class instances to wire form for storage", () => {
+    // The processor throws via `yield* new SessionV1.APIError(...)`; fromError
+    // must convert the class instance to its wire form so the TUI renders the
+    // structured message and metadata rather than a JSON-stringified
+    // UnknownError wrapper.
+    const thrown = new SessionV1.APIError({
+      message: "Provider stream ended without a stop reason",
+      isRetryable: true,
+      metadata: { code: "EmptyOther" },
+    })
+
+    const result = MessageV2.fromError(thrown, { providerID })
+
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    expect((result as SessionV1.APIError).data.message).toBe("Provider stream ended without a stop reason")
+    expect((result as SessionV1.APIError).data.metadata?.code).toBe("EmptyOther")
+    expect((result as { name: string }).name).toBe("APIError")
   })
 
   test("marks OpenAI 404 status codes as retryable", () => {

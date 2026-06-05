@@ -51,6 +51,8 @@ type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  // When true, an unknown/empty stream finish is a benign end-of-turn, not a truncation to retry.
+  priorOutput?: boolean
 }
 
 export interface Interface {
@@ -72,6 +74,8 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  // Parts with an id greater than this were produced by the current attempt and discarded on truncation retry.
+  partFloor: PartID
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +115,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        partFloor: PartID.ascending(),
       }
       let aborted = false
 
@@ -213,6 +218,17 @@ const layer = Layer.effect(
         delete ctx.reasoningMap[reasoningID]
       })
 
+      // True when this attempt persisted real content (reasoning/text/tool) past the
+      // part floor, distinguishing a mid-response truncation from an empty end-of-turn.
+      const attemptProducedContent = Effect.fnUntraced(function* () {
+        const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
+          Effect.provideService(Database.Service, database),
+        )
+        return parts.some(
+          (part) => part.id > ctx.partFloor && part.type !== "step-start" && part.type !== "step-finish",
+        )
+      })
+
       const ensureToolCall = Effect.fn("SessionProcessor.ensureToolCall")(function* (input: {
         id: string
         name: string
@@ -288,7 +304,7 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
-            yield* session.updatePart(ctx.reasoningMap[value.id])
+             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
           case "reasoning-delta":
@@ -440,6 +456,27 @@ const layer = Layer.effect(
               usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
+            // An "unknown" finish with zero output tokens means the stream ended without a
+            // stop_reason. Retry as transient before any output, or when cut mid-response
+            // (pending tool call, or partial content this step) — a completed turn finishes
+            // "stop"/"tool-calls", never "unknown". Otherwise it's a benign end-of-turn.
+            if (value.reason === "unknown" && usage.tokens.output === 0) {
+              const pendingToolCall = Object.keys(ctx.toolcalls).length > 0
+              const midResponse = pendingToolCall || (input.priorOutput && (yield* attemptProducedContent()))
+              if (!input.priorOutput || midResponse) {
+                return yield* Effect.fail(
+                  new SessionV1.APIError({
+                    message: pendingToolCall
+                      ? "Provider stream ended mid tool call without a stop reason"
+                      : midResponse
+                        ? "Provider stream ended mid response without a stop reason"
+                        : "Provider stream ended without a stop reason",
+                    isRetryable: true,
+                    metadata: { code: "EmptyOther" },
+                  }),
+                )
+              }
+            }
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
@@ -536,6 +573,25 @@ const layer = Layer.effect(
         }
       })
 
+      // Drop every part this attempt persisted (past partFloor) so a retry replaces
+      // rather than appends to the truncated content.
+      const discardAttempt = Effect.fn("SessionProcessor.discardAttempt")(function* () {
+        const existing = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
+          Effect.provideService(Database.Service, database),
+        )
+        for (const part of existing) {
+          if (part.id <= ctx.partFloor) continue
+          yield* session.removePart({
+            sessionID: ctx.sessionID,
+            messageID: ctx.assistantMessage.id,
+            partID: part.id,
+          })
+        }
+        ctx.currentText = undefined
+        ctx.reasoningMap = {}
+        ctx.toolcalls = {}
+      })
+
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
         if (ctx.snapshot) {
           const patch = yield* snapshot.patch(ctx.snapshot)
@@ -616,6 +672,12 @@ const layer = Layer.effect(
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
+        // Retries exhausted: drop the truncated attempt's parts and mark it errored so the
+        // run loop treats it as a hard stop, not a benign "unknown" end-of-turn.
+        if (SessionV1.APIError.isInstance(error) && error.data.metadata?.code === "EmptyOther") {
+          yield* discardAttempt()
+          ctx.assistantMessage.finish = "error"
+        }
         ctx.assistantMessage.error = error
         yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
@@ -631,6 +693,8 @@ const layer = Layer.effect(
         })
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        // High-water mark before any attempt persists parts, so a retry discards exactly this call's output.
+        ctx.partFloor = PartID.ascending()
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
@@ -662,13 +726,21 @@ const layer = Layer.effect(
                 provider: input.model.providerID,
                 parse,
                 set: (info) => {
-                  return status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    action: info.action,
-                    next: info.next,
-                  })
+                  // Only stream truncations leave partial parts worth discarding;
+                  // other retryable errors (rate limits, 5xx) retry untouched.
+                  const truncated =
+                    SessionV1.APIError.isInstance(info.error) && info.error.data.metadata?.code === "EmptyOther"
+                  return (truncated ? discardAttempt() : Effect.void).pipe(
+                    Effect.andThen(
+                      status.set(ctx.sessionID, {
+                        type: "retry",
+                        attempt: info.attempt,
+                        message: info.message,
+                        action: info.action,
+                        next: info.next,
+                      }),
+                    ),
+                  )
                 },
               }),
             ),

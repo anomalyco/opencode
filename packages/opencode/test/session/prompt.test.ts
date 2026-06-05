@@ -2400,3 +2400,35 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+it.instance("retry discards in-flight parts from the failed attempt", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Discard test",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    // Attempt 1: emit partial text but never a finish_reason. The AI SDK
+    // flushes with finishReason="other" and usage.outputTokens=0, which the
+    // processor catches as EmptyOther and triggers a retry.
+    yield* llm.push(reply().text("partial first attempt").item())
+    yield* llm.push(reply().text("final answer").stop().item())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+
+    expect(yield* llm.hits).toHaveLength(2)
+    const texts = result.parts.filter((p) => p.type === "text").map((p) => (p as SessionV1.TextPart).text)
+    expect(texts).toEqual(["final answer"])
+    // The discarded attempt's step-start must be removed too, otherwise the
+    // message keeps an orphan step-start per retry.
+    expect(result.parts.filter((p) => p.type === "step-start")).toHaveLength(1)
+  }),
+)
