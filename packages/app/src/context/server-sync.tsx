@@ -63,7 +63,11 @@ export const loadLspQuery = (scope: ServerScope, directory: string, sdk: Opencod
     queryFn: () => sdk.lsp.status().then((r) => r.data ?? []),
   })
 
-function makeQueryOptionsApi(scope: ServerScope, serverSDK: () => OpencodeClient, sdkFor: (dir: PathKey) => OpencodeClient) {
+function makeQueryOptionsApi(
+  scope: ServerScope,
+  serverSDK: () => OpencodeClient,
+  sdkFor: (dir: PathKey) => OpencodeClient,
+) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope, serverSDK()),
     projects: () => loadProjectsQuery(scope, serverSDK()),
@@ -447,7 +451,9 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
       // Invalidate all provider queries so newly configured custom providers
       // appear immediately in the available provider list across all directories.
       queryClient.invalidateQueries({ queryKey: [serverSDK.scope, null, "providers"] })
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === serverSDK.scope && query.queryKey[2] === "providers" })
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === serverSDK.scope && query.queryKey[2] === "providers",
+      })
     },
   }))
 

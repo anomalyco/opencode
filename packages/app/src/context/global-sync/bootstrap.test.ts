@@ -99,6 +99,10 @@ describe("query keys", () => {
 
     expect([...loadPathQuery(ServerScope.local, "/repo", client).queryKey]).toEqual(["local", "/repo", "path"])
     expect([...loadPathQuery(remote, "/repo", client).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
-    expect([...loadProvidersQuery(remote, null, client).queryKey]).toEqual(["https://debian.example", null, "providers"])
+    expect([...loadProvidersQuery(remote, null, client).queryKey]).toEqual([
+      "https://debian.example",
+      null,
+      "providers",
+    ])
   })
 })

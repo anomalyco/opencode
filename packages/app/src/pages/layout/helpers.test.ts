@@ -227,7 +227,9 @@ describe("layout workspace helpers", () => {
   })
 
   test("scopes home project selection by server", () => {
-    expect(toggleHomeProjectSelection(undefined, serverKey("https://debian.example"), "/home/luke/repos/amazon")).toEqual({
+    expect(
+      toggleHomeProjectSelection(undefined, serverKey("https://debian.example"), "/home/luke/repos/amazon"),
+    ).toEqual({
       server: serverKey("https://debian.example"),
       directory: "/home/luke/repos/amazon",
     })
@@ -270,11 +272,19 @@ describe("layout workspace helpers", () => {
   })
 
   test("defers home project navigation until its server is active", () => {
-    expect(homeProjectNavigation(serverKey("sidecar"), serverKey("https://debian.example"), "/YW1hem9u/session")).toEqual({
+    expect(
+      homeProjectNavigation(serverKey("sidecar"), serverKey("https://debian.example"), "/YW1hem9u/session"),
+    ).toEqual({
       server: serverKey("https://debian.example"),
       href: "/YW1hem9u/session",
     })
-    expect(homeProjectNavigation(serverKey("https://debian.example"), serverKey("https://debian.example"), "/YW1hem9u/session")).toEqual({
+    expect(
+      homeProjectNavigation(
+        serverKey("https://debian.example"),
+        serverKey("https://debian.example"),
+        "/YW1hem9u/session",
+      ),
+    ).toEqual({
       href: "/YW1hem9u/session",
     })
   })

@@ -26,7 +26,12 @@ describe("session prefetch", () => {
       at: 123,
     })
 
-    expect(getSessionPrefetch(scope, "/tmp/a", "ses_1")).toEqual({ limit: 200, cursor: "abc", complete: false, at: 123 })
+    expect(getSessionPrefetch(scope, "/tmp/a", "ses_1")).toEqual({
+      limit: 200,
+      cursor: "abc",
+      complete: false,
+      at: 123,
+    })
     expect(getSessionPrefetch(scope, "/tmp/b", "ses_1")).toBeUndefined()
 
     clearSessionPrefetch(scope, "/tmp/a", ["ses_1"])
@@ -57,9 +62,33 @@ describe("session prefetch", () => {
   })
 
   test("clears a whole directory", () => {
-    setSessionPrefetch({ scope, directory: "/tmp/d", sessionID: "ses_1", limit: 10, cursor: "a", complete: true, at: 1 })
-    setSessionPrefetch({ scope, directory: "/tmp/d", sessionID: "ses_2", limit: 20, cursor: "b", complete: false, at: 2 })
-    setSessionPrefetch({ scope, directory: "/tmp/e", sessionID: "ses_1", limit: 30, cursor: "c", complete: true, at: 3 })
+    setSessionPrefetch({
+      scope,
+      directory: "/tmp/d",
+      sessionID: "ses_1",
+      limit: 10,
+      cursor: "a",
+      complete: true,
+      at: 1,
+    })
+    setSessionPrefetch({
+      scope,
+      directory: "/tmp/d",
+      sessionID: "ses_2",
+      limit: 20,
+      cursor: "b",
+      complete: false,
+      at: 2,
+    })
+    setSessionPrefetch({
+      scope,
+      directory: "/tmp/e",
+      sessionID: "ses_1",
+      limit: 30,
+      cursor: "c",
+      complete: true,
+      at: 3,
+    })
 
     clearSessionPrefetchDirectory(scope, "/tmp/d")
 

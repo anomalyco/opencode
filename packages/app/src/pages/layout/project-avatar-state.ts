@@ -4,7 +4,11 @@ import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
 
-export function useSessionTabAvatarState(directory: Accessor<string>, sessionId: Accessor<string>, active: Accessor<boolean> = () => true) {
+export function useSessionTabAvatarState(
+  directory: Accessor<string>,
+  sessionId: Accessor<string>,
+  active: Accessor<boolean> = () => true,
+) {
   const globalSync = useServerSync()
   const notification = useNotification()
   const permission = usePermission()

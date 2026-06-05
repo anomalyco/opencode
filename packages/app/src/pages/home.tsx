@@ -118,14 +118,23 @@ function createHomeSessionStatus(input: {
   const notification = useNotification()
   const permission = usePermission()
   const sessionStore = createMemo(() => input.sync().child(input.record().session.directory, { bootstrap: false })[0])
-  const unseenCount = createMemo(() => (input.activeServer() ? notification.session.unseenCount(input.record().session.id) : 0))
-  const hasError = createMemo(() => input.activeServer() && notification.session.unseenHasError(input.record().session.id))
+  const unseenCount = createMemo(() =>
+    input.activeServer() ? notification.session.unseenCount(input.record().session.id) : 0,
+  )
+  const hasError = createMemo(
+    () => input.activeServer() && notification.session.unseenHasError(input.record().session.id),
+  )
   const hasPermissions = createMemo(
     () =>
       input.activeServer() &&
-      !!sessionPermissionRequest(sessionStore().session, sessionStore().permission, input.record().session.id, (item) => {
-        return !permission.autoResponds(item, input.record().session.directory)
-      }),
+      !!sessionPermissionRequest(
+        sessionStore().session,
+        sessionStore().permission,
+        input.record().session.id,
+        (item) => {
+          return !permission.autoResponds(item, input.record().session.directory)
+        },
+      ),
   )
   const serverStatus = createMemo(() =>
     homeSessionServerStatus(input.activeServer(), () => ({
@@ -278,7 +287,13 @@ function HomeDesign() {
 
   function selectProject(conn: ServerConnection.Any, directory: string) {
     const key = ServerConnection.key(conn)
-    if (!global.createServerCtx(conn).projects.list().some((project) => project.worktree === directory)) return
+    if (
+      !global
+        .createServerCtx(conn)
+        .projects.list()
+        .some((project) => project.worktree === directory)
+    )
+      return
     setSelection(toggleHomeProjectSelection(state.selection, key, directory))
   }
 
@@ -534,11 +549,7 @@ function HomeProjectColumn(props: {
                 </div>
                 <Show when={healthy()}>
                   <div class="mx-3 h-px bg-v2-border-border-base" />
-                  <HomeProjectList
-                    {...props}
-                    server={item}
-                    projects={serverCtx.projects.list()}
-                  />
+                  <HomeProjectList {...props} server={item} projects={serverCtx.projects.list()} />
                 </Show>
               </div>
             )
@@ -586,7 +597,10 @@ function HomeProjectList(props: {
           <HomeProjectRow
             project={project}
             server={props.server}
-            selected={props.selected.server === ServerConnection.key(props.server) && props.selected.directory === project.worktree}
+            selected={
+              props.selected.server === ServerConnection.key(props.server) &&
+              props.selected.directory === project.worktree
+            }
             unseenCount={props.unseenCount(props.server, project)}
             selectProject={props.selectProject}
             openNewSession={props.openNewSession}
@@ -662,7 +676,10 @@ function HomeProjectRow(props: {
               <MenuV2.Item onSelect={() => props.editProject(props.server, props.project)}>
                 {props.language.t("common.edit")}
               </MenuV2.Item>
-              <MenuV2.Item disabled={props.unseenCount === 0} onSelect={() => props.clearNotifications(props.server, props.project)}>
+              <MenuV2.Item
+                disabled={props.unseenCount === 0}
+                onSelect={() => props.clearNotifications(props.server, props.project)}
+              >
                 {props.language.t("sidebar.project.clearNotifications")}
               </MenuV2.Item>
               <MenuV2.Separator />
@@ -902,7 +919,11 @@ function HomeSessionSearchResultRow(props: {
   onHighlight: () => void
   onSelect: (session: Session) => void
 }) {
-  const status = createHomeSessionStatus({ record: () => props.record, sync: () => props.sync, activeServer: () => props.activeServer })
+  const status = createHomeSessionStatus({
+    record: () => props.record,
+    sync: () => props.sync,
+    activeServer: () => props.activeServer,
+  })
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
 
   const key = () => homeSessionSearchKey(props.record)
@@ -993,7 +1014,11 @@ function HomeSessionRow(props: {
   activeServer: boolean
   openSession: (session: Session) => void
 }) {
-  const status = createHomeSessionStatus({ record: () => props.record, sync: () => props.sync, activeServer: () => props.activeServer })
+  const status = createHomeSessionStatus({
+    record: () => props.record,
+    sync: () => props.sync,
+    activeServer: () => props.activeServer,
+  })
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
 
   return (

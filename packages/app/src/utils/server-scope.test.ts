@@ -3,13 +3,15 @@ import { ScopedKey, ServerScope, SessionRouteKey, SessionStateKey, migrateLegacy
 
 describe("ServerScope", () => {
   test("uses a stable local scope for the canonical sidecar", () => {
-    expect(String(ServerScope.fromServerKey("sidecar" as Parameters<typeof ServerScope.fromServerKey>[0]))).toBe("local")
+    expect(String(ServerScope.fromServerKey("sidecar" as Parameters<typeof ServerScope.fromServerKey>[0]))).toBe(
+      "local",
+    )
   })
 
   test("keeps configured loopback servers distinct from the canonical sidecar", () => {
-    expect(String(ServerScope.fromServerKey("http://localhost:4096" as Parameters<typeof ServerScope.fromServerKey>[0]))).toBe(
-      "http://localhost:4096",
-    )
+    expect(
+      String(ServerScope.fromServerKey("http://localhost:4096" as Parameters<typeof ServerScope.fromServerKey>[0])),
+    ).toBe("http://localhost:4096")
   })
 
   test("uses a stable local scope for an explicit canonical web server", () => {
@@ -52,6 +54,8 @@ describe("migrateLegacySessionStateKeys", () => {
   })
 
   test("rejects invalid identity fragments", () => {
-    expect(() => ScopedKey.from(ServerScope.local, "bad\0directory")).toThrow("Scoped key part cannot contain null bytes")
+    expect(() => ScopedKey.from(ServerScope.local, "bad\0directory")).toThrow(
+      "Scoped key part cannot contain null bytes",
+    )
   })
 })

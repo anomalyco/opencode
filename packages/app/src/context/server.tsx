@@ -80,7 +80,11 @@ export function createServerProjects<T extends ServerProjectState>(input: {
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
     },
     close(directory: string) {
-      setStore("projects", input.scope(), current().filter((project) => project.worktree !== directory))
+      setStore(
+        "projects",
+        input.scope(),
+        current().filter((project) => project.worktree !== directory),
+      )
     },
     expand(directory: string) {
       const index = current().findIndex((project) => project.worktree === directory)
