@@ -29,6 +29,7 @@ export const DialogSelectProvider: Component = () => {
   return (
     <Dialog title={language.t("command.provider.connect")} transition>
       <List
+        class="px-3"
         search={{ placeholder: language.t("dialog.provider.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.provider.empty")}
         activeIcon="plus-small"

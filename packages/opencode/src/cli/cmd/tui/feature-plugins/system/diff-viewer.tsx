@@ -11,6 +11,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Match, onC
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "@tui/ui/dialog-select"
+import { getScrollAcceleration } from "@tui/util/scroll"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -88,11 +89,15 @@ function DiffViewer(props: { api: TuiPluginApi }) {
         }
       | undefined
   const mode = () => params()?.mode ?? "git"
-  const diffInput = createMemo(() => ({
-    mode: mode(),
-    sessionID: params()?.sessionID,
-    messageID: params()?.messageID,
-  }))
+  const diffInput = createMemo(() => {
+    const sessionID = params()?.sessionID
+    return {
+      mode: mode(),
+      sessionID,
+      messageID: params()?.messageID,
+      directory: sessionID ? props.api.state.session.get(sessionID)?.directory : undefined,
+    }
+  })
   const [diff] = createResource(diffInput, async (input) => {
     if (input.mode === "last-turn") {
       const sessionID = input.sessionID
@@ -105,7 +110,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     }
 
     const result = await props.api.client.vcs.diff(
-      { mode: "git", context: WORKING_TREE_DIFF_CONTEXT_LINES },
+      { directory: input.directory, mode: "git", context: WORKING_TREE_DIFF_CONTEXT_LINES },
       { throwOnError: true },
     )
     return normalizeDiffs(result.data ?? [])
@@ -133,6 +138,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const [activePatchFileIndex, setActivePatchFileIndex] = createSignal<number | undefined>()
   const [selectedFileIndex, setSelectedFileIndex] = createSignal<number | undefined>()
   const [reviewedFileNames, setReviewedFileNames] = createSignal<ReadonlySet<string>>(new Set())
+  const patchScrollAcceleration = createMemo(() => getScrollAcceleration(props.api.tuiConfig))
   const fileRows = createMemo(() => flattenFileTree(fileTree(), expandedFileNodes()))
   const patchFileIndexes = createMemo(() => orderedPatchFileIndexes(flattenFileTree(fileTree())))
   const focusRunner = (input: Record<DiffViewerFocus, () => void>) => () => input[focus()]()
@@ -713,6 +719,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                     ref={(element: ScrollBoxRenderable) => (scroll = element)}
                     flexGrow={1}
                     minHeight={0}
+                    scrollAcceleration={patchScrollAcceleration()}
                     verticalScrollbarOptions={{ visible: false }}
                     horizontalScrollbarOptions={{ visible: false }}
                   >

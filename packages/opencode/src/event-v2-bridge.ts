@@ -1,27 +1,15 @@
-// Temporary V2 bridge: core events are the publish path, but the rest of
-// opencode and the HTTP event stream still expect legacy bus/sync payloads.
-// This layer goes away once consumers subscribe to core EventV2 directly.
-import { Bus as ProjectBus } from "@/bus"
-import { GlobalBus } from "@/bus/global"
+// Opencode publish boundary for core events. Attach routed instance location
+// so direct EventV2 consumers can isolate directory/workspace streams.
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
-import { InstanceStore } from "@/project/instance-store"
-import { SyncEvent } from "@/sync"
+import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
+import { Project } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import "@opencode-ai/core/account"
 import "@opencode-ai/core/catalog"
-import "@opencode-ai/core/session-event"
-import { Context, Effect, Layer, Option } from "effect"
-
-export function toSyncDefinition<D extends EventV2.Definition>(definition: D) {
-  const result = {
-    type: definition.type,
-    version: definition.version,
-    aggregate: definition.aggregate,
-    schema: definition.data,
-    properties: definition.data,
-  }
-  return result as SyncEvent.Definition<D["type"], D["data"], D["data"]>
-}
+import "@opencode-ai/core/session/event"
+import { Context, Effect, Layer } from "effect"
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}
 
@@ -29,62 +17,60 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
-    const bus = yield* ProjectBus.Service
-    const sync = yield* SyncEvent.Service
 
-    const publishGlobal = (event: EventV2.Payload) =>
-      Effect.sync(() => {
-        GlobalBus.emit("event", {
-          workspace: event.location?.workspaceID,
-          payload: {
-            id: event.id,
-            type: event.type,
-            properties: event.data,
-          },
+    const publish: EventV2.Interface["publish"] = (definition, data, options) =>
+      Effect.gen(function* () {
+        if (options?.location) return yield* events.publish(definition, data, options)
+        const ctx = yield* InstanceRef
+        if (!ctx) return yield* events.publish(definition, data, options)
+        const workspaceID = yield* WorkspaceRef
+        return yield* events.publish(definition, data, {
+          ...options,
+          location: new Location.Info({
+            directory: AbsolutePath.make(ctx.directory),
+            ...(workspaceID ? { workspaceID } : {}),
+            project: { id: Project.ID.make(ctx.project.id), directory: AbsolutePath.make(ctx.worktree) },
+          }),
         })
       })
 
-    const provideEventLocation = <E, R>(event: EventV2.Payload, effect: Effect.Effect<void, E, R>) => {
-      return Effect.gen(function* () {
+    const unsubscribe = yield* events.listen((event) =>
+      Effect.gen(function* () {
         const ctx = yield* InstanceRef
-        if (ctx) return yield* effect
-        const store = Option.getOrUndefined(yield* Effect.serviceOption(InstanceStore.Service))
-        if (!event.location?.directory || !store) return yield* publishGlobal(event)
-        return yield* store.load({ directory: event.location.directory }).pipe(
-          Effect.flatMap((ctx) => {
-            const withInstance = effect.pipe(Effect.provideService(InstanceRef, ctx))
-            if (!event.location?.workspaceID) return withInstance
-            return withInstance.pipe(Effect.provideService(WorkspaceRef, event.location.workspaceID))
-          }),
-        )
-      })
-    }
-
-    const unsubscribe = yield* events.sync((event) => {
-      const definition = EventV2.registry.get(event.type)
-      if (!definition) return Effect.void
-      const aggregateID = definition.aggregate
-        ? (event.data as Record<string, unknown>)[definition.aggregate]
-        : undefined
-
-      if (definition.version !== undefined && typeof aggregateID === "string") {
-        return provideEventLocation(event, sync.run(toSyncDefinition(definition), event.data))
-      }
-
-      return provideEventLocation(
-        event,
-        bus.publish({ type: definition.type, properties: definition.data }, event.data, { id: event.id }),
-      )
-    })
+        const workspaceID = (yield* WorkspaceRef) ?? event.location?.workspaceID
+        GlobalBus.emit("event", {
+          directory: event.location?.directory ?? ctx?.directory,
+          project: ctx?.project.id,
+          workspace: workspaceID,
+          payload: { id: event.id, type: event.type, properties: event.data },
+        })
+        const sync = EventV2.registry.get(event.type)?.sync
+        if (sync === undefined || event.seq === undefined || event.version === undefined) return
+        const aggregateID = (event.data as Record<string, unknown>)[sync.aggregate]
+        if (typeof aggregateID !== "string") return
+        GlobalBus.emit("event", {
+          directory: event.location?.directory ?? ctx?.directory,
+          project: ctx?.project.id,
+          workspace: workspaceID,
+          payload: {
+            type: "sync",
+            syncEvent: {
+              id: event.id,
+              type: EventV2.versionedType(event.type, event.version),
+              seq: event.seq,
+              aggregateID,
+              data: event.data,
+            },
+          },
+        })
+      }),
+    )
     yield* Effect.addFinalizer(() => unsubscribe)
-    return Service.of(events)
+
+    return Service.of({ ...events, publish })
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(SyncEvent.defaultLayer),
-  Layer.provide(ProjectBus.defaultLayer),
-)
+export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
 
 export * as EventV2Bridge from "./event-v2-bridge"

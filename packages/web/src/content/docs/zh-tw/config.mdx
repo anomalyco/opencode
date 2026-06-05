@@ -491,14 +491,14 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - 當上下文已滿時自動壓縮工作階段（預設值：`true`）。
-- `prune` - 刪除舊的工具輸出以節省 Token（預設值：`true`）。
+- `prune` - 刪除舊的工具輸出以節省 Token（預設值：`false`）。
 - `reserved` - 壓縮時的 Token 緩衝區。保留足夠的窗口以避免壓縮過程中溢出。
 
 ---

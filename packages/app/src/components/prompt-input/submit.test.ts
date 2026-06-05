@@ -127,6 +127,7 @@ beforeAll(async () => {
   mock.module("@/context/sdk", () => ({
     useSDK: () => {
       const sdk = {
+        scope: "local",
         directory: "/repo/main",
         client: rootClient,
         url: "http://localhost:4096",
@@ -162,8 +163,8 @@ beforeAll(async () => {
     }),
   }))
 
-  mock.module("@/context/global-sync", () => ({
-    useGlobalSync: () => ({
+  mock.module("@/context/server-sync", () => ({
+    useServerSync: () => ({
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
