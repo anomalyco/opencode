@@ -325,7 +325,7 @@ function readCompactionPart(sessionID: SessionID) {
     )
 }
 
-function compactionMarkers(messages: SessionLegacy.WithParts[]) {
+function compactionMarkers(messages: SessionV1.WithParts[]) {
   return messages.filter(
     (message) => message.info.role === "user" && message.parts.some((part) => part.type === "compaction"),
   )
@@ -689,7 +689,7 @@ describe("session.compaction.create", () => {
     Effect.gen(function* () {
       const writeStarted = yield* Deferred.make<void>()
       const releaseWrite = yield* Deferred.make<void>()
-      const parts: SessionLegacy.Part[] = []
+      const parts: SessionV1.Part[] = []
       const gatedSession = Layer.mock(SessionNs.Service)({
         messages: () => Effect.succeed([]),
         updateMessage: (message) => Effect.succeed(message),

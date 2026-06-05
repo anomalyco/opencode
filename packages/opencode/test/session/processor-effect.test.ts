@@ -496,7 +496,7 @@ it.live("session.processor effect tests compact empty unknown responses near con
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),

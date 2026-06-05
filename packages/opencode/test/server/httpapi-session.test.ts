@@ -130,7 +130,7 @@ function summarizeRequest(sessionID: SessionIDType, headers: Record<string, stri
   })
 }
 
-const compactionMarkers = (messages: SessionLegacy.WithParts[]) =>
+const compactionMarkers = (messages: SessionV1.WithParts[]) =>
   messages.filter((message) => message.info.role === "user" && message.parts.some((part) => part.type === "compaction"))
 
 function createCompactionMarker(sessionID: SessionIDType) {
@@ -141,7 +141,7 @@ function createCompactionMarker(sessionID: SessionIDType) {
       role: "user",
       sessionID,
       agent: "build",
-      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test-model") },
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
       time: { created: Date.now() },
     })
     yield* svc.updatePart({
@@ -562,7 +562,7 @@ describe("session HttpApi", () => {
       const headers = { "x-opencode-directory": directory }
       const session = yield* createSession({ title: "summarize preempt" }).pipe(provideInstanceEffect(directory))
       const scope = yield* Scope.Scope
-      const promptFiber = yield* requestJson<SessionLegacy.WithParts>(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
+      const promptFiber = yield* requestJson<SessionV1.WithParts>(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
         method: "POST",
         headers: { ...headers, "content-type": "application/json" },
         body: JSON.stringify({
