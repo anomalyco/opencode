@@ -15,6 +15,7 @@ import { FileReferenceBlockSpec, withFileReferenceSchema, type FileNodeType } fr
 import { LineReferenceBlockSpec, withLineReferenceSchema } from "./line-reference-block"
 import { lineReferenceUrl, normLineRef, type LineRefInput } from "./line-reference-url"
 import { actor, label, type DocActor } from "./actor"
+import { patchSlashMenu } from "./slash-menu-patch"
 
 export type { DocActor } from "./actor"
 
@@ -77,8 +78,12 @@ const image = (file: File) => kind(file).startsWith("image/")
 
 export async function createPage(input: DocMountInput) {
   await ensureEffects()
-  const [{ PageEditor }, { DocModeExtension, PageEditorBlockSpecs, PreviewEditorBlockSpecs, ThemeProvider }] =
-    await Promise.all([import("@blocksuite/presets"), import("@blocksuite/blocks")])
+  const [
+    { PageEditor },
+    { AffineSlashMenuWidget, DocModeExtension, PageEditorBlockSpecs, PreviewEditorBlockSpecs, ThemeProvider },
+  ] = await Promise.all([import("@blocksuite/presets"), import("@blocksuite/blocks")])
+
+  patchSlashMenu(AffineSlashMenuWidget)
 
   const schema = new Schema().register(withLineReferenceSchema(withFileReferenceSchema(AffineSchemas)))
   const page = "page"
