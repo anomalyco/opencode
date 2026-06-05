@@ -39,6 +39,7 @@ HttpRecorder.layerWebSocket("consumer/websocket", "wss://example.test") satisfie
           moduleResolution: "NodeNext",
           strict: true,
           noEmit: true,
+          // Required by effect@4.0.0-beta.74: its schema.d.ts references an undeclared SchemaErrorTypeId.
           skipLibCheck: true,
           lib: ["ES2022", "DOM", "ESNext.Disposable"],
         },
@@ -52,7 +53,7 @@ HttpRecorder.layerWebSocket("consumer/websocket", "wss://example.test") satisfie
         "node",
         "--input-type=module",
         "-e",
-        'import("@opencode-ai/http-recorder").then((module) => console.log(Object.keys(module.HttpRecorder).sort()))',
+        'import("@opencode-ai/http-recorder").then((module) => { const actual = Object.keys(module.HttpRecorder).sort(); const expected = ["defaultMatcher", "layer", "layerFetch", "layerSocket", "layerWebSocket"]; if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Unexpected public exports: ${actual}`) })',
       ],
       directory,
     )

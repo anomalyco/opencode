@@ -4,7 +4,7 @@ Record real Effect HTTP and WebSocket traffic once, then replay it from determin
 
 Use it for provider integrations, retries, polling, multi-step flows, and any test where hand-written HTTP mocks hide too much of the real request shape.
 
-> Public beta. The API depends on Effect 4 beta and may change with Effect's unstable HTTP modules.
+> Public beta. The API depends on Effect 4 beta and may change with Effect's unstable transport modules.
 
 ## Install
 
@@ -15,7 +15,7 @@ bun add -d @opencode-ai/http-recorder@beta @effect/vitest vitest
 
 The package supports Node.js 22+ and Bun. It is not intended for browsers, workers, or Deno.
 
-Effect 4 beta currently ships an upstream declaration error. TypeScript consumers need:
+Effect `4.0.0-beta.74` has a known declaration error (`SchemaErrorTypeId` is missing). Until that upstream declaration is fixed, TypeScript consumers need:
 
 ```json
 {
@@ -69,39 +69,24 @@ test/fixtures/recordings/users/get-one.json
 Later runs replay that cassette without contacting the upstream server. When `CI=true`, missing cassettes fail instead of recording.
 
 ```mermaid
-flowchart LR
-  Test[Test effect] --> Recorder{Cassette exists?}
-  Recorder -->|Yes| Replay[Replay response]
-  Recorder -->|No, local| API[Call real service]
-  API --> Save[(Write cassette)]
-  Save --> Test
-  Recorder -->|No, CI| Fail[Fail test]
-  Replay --> Test
+flowchart TD
+  Run[Run test] --> Recorded{Cassette recorded?}
+  Recorded -->|Yes| Replay[Replay cassette]
+  Recorded -->|No, local| Record[Call service and record cassette]
+  Recorded -->|No, CI| Fail[Fail: cassette missing]
 ```
 
-The recorder is an `HttpClient` layer, so application code remains unaware of whether a response is live or replayed:
+The recorder is an `HttpClient` layer, so application code does not need to know whether a response is live or replayed.
 
-```mermaid
-sequenceDiagram
-  participant Test
-  participant App as Application code
-  participant Recorder
-  participant Cassette
-  participant API as Real API
+## API
 
-  Test->>App: Run effect with recorder layer
-  App->>Recorder: HTTP request
-  Recorder->>Cassette: Match next interaction
-  alt Recorded interaction exists
-    Cassette-->>Recorder: Recorded response
-  else Missing locally
-    Recorder->>API: HTTP request
-    API-->>Recorder: Live response
-    Recorder->>Cassette: Append redacted interaction
-  end
-  Recorder-->>App: HTTP response
-  App-->>Test: Decoded result
-```
+| API                          | Use it when                                      |
+| ---------------------------- | ------------------------------------------------ |
+| `layerFetch(name, options)`  | Effect's standard fetch client is sufficient.    |
+| `layer(name, options)`       | You already provide a custom `HttpClient`.       |
+| `layerWebSocket(name, url)`  | Effect's standard Node WebSocket is sufficient.  |
+| `layerSocket(name, request)` | You already provide a custom `Socket.Socket`.    |
+| `defaultMatcher`             | You need the recorder's default request matcher. |
 
 ## Use Your Existing Client
 
@@ -143,30 +128,6 @@ const echo = Effect.gen(function* () {
 it.effect("exchanges WebSocket frames", () =>
   echo.pipe(Effect.provide(HttpRecorder.layerWebSocket("echo/hello", "wss://ws.postman-echo.com/raw"))),
 )
-```
-
-```mermaid
-sequenceDiagram
-  participant App
-  participant Recorder
-  participant Cassette
-  participant WebSocket
-
-  App->>Recorder: Open socket run
-  alt Cassette exists
-    Cassette-->>Recorder: Ordered frame transcript
-    Recorder-->>App: Server frame
-    App->>Recorder: Client frame
-    Recorder->>Recorder: Validate next event
-    Recorder-->>App: Next server frame
-  else First local run
-    Recorder->>WebSocket: Open live connection
-    App->>Recorder: Client frame
-    Recorder->>WebSocket: Client frame
-    WebSocket-->>Recorder: Server frame
-    Recorder-->>App: Server frame
-    Recorder->>Cassette: Save redacted transcript
-  end
 ```
 
 `layerWebSocket` supplies Effect's standard Node WebSocket transport. Use `layerSocket(name, request, options)` to wrap an existing `Socket.Socket` when the application needs a custom transport, authorization headers, proxying, or tracing. The `request` URL and headers are used for redacted cassette matching; the recorder does not modify the upstream handshake.
@@ -245,49 +206,9 @@ interface RecorderOptions {
 
 `directory` defaults to `<cwd>/test/fixtures/recordings`.
 
-## Cassette Format
+## Cassettes
 
-```json
-{
-  "version": 1,
-  "metadata": {
-    "name": "users/get-one",
-    "recordedAt": "2026-06-05T12:00:00.000Z"
-  },
-  "interactions": [
-    {
-      "transport": "http",
-      "request": {
-        "method": "GET",
-        "url": "https://api.example.com/users/1",
-        "headers": { "accept": "application/json" },
-        "body": ""
-      },
-      "response": {
-        "status": 200,
-        "headers": { "content-type": "application/json" },
-        "body": "{\"id\":1}"
-      }
-    }
-  ]
-}
-```
-
-Known text media types remain readable. Other response bodies are stored losslessly as base64.
-
-WebSocket interactions use an ordered `events` array so client/server interleaving remains causal:
-
-```json
-{
-  "transport": "websocket",
-  "open": { "url": "wss://api.example.com/realtime", "headers": {} },
-  "events": [
-    { "direction": "server", "kind": "text", "body": "{\"type\":\"session.created\"}" },
-    { "direction": "client", "kind": "text", "body": "{\"type\":\"response.create\"}" },
-    { "direction": "server", "kind": "text", "body": "{\"type\":\"response.completed\"}" }
-  ]
-}
-```
+Cassettes are readable JSON files intended to be committed with your tests. HTTP interactions are stored in request order. WebSocket cassettes preserve the observed order of client and server frames. Text stays readable; binary bodies and frames are stored losslessly as base64.
 
 ## Current Limits
 

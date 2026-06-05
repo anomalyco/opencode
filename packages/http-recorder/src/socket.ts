@@ -8,7 +8,7 @@ import { make, type Redactor } from "./redactor.js"
 import { webSocketInteractions } from "./schema.js"
 import type { WebSocketEvent, WebSocketInteraction, WebSocketRecorderOptions, WebSocketRequest } from "./types.js"
 
-export type { WebSocketEvent, WebSocketInteraction, WebSocketRecorderOptions, WebSocketRequest } from "./types.js"
+export type { WebSocketRecorderOptions, WebSocketRequest } from "./types.js"
 
 interface ActiveReplay {
   readonly interaction: WebSocketInteraction
@@ -294,12 +294,20 @@ const recordingLayer = (
     }),
   )
 
+/**
+ * Wraps an existing Effect socket with cassette recording and replay.
+ *
+ * Use this when the application supplies custom authentication, proxying,
+ * tracing, or another socket transport. The request is used only for matching
+ * and redaction; it does not modify the upstream handshake.
+ */
 export const layerSocket = (
   name: string,
   request: WebSocketRequest,
   options: WebSocketRecorderOptions = {},
 ): Layer.Layer<Socket.Socket, never, Socket.Socket> => provideCassette(recordingLayer(name, request, options), options)
 
+/** @internal */
 export const socketLayer = (
   name: string,
   request: WebSocketRequest,
@@ -316,6 +324,12 @@ const provideCassette = (
     Layer.provide(NodeFileSystem.layer),
   )
 
+/**
+ * Provides a recorded WebSocket backed by Effect's standard Node transport.
+ *
+ * Locally, a missing cassette is recorded from the live endpoint. Existing
+ * cassettes are replayed, and `CI=true` makes a missing cassette fail.
+ */
 export const layerWebSocket = (
   name: string,
   url: string,

@@ -9,8 +9,15 @@ import type { RecorderOptions, RequestMatcher } from "./types.js"
 
 export type { RecorderOptions, RequestMatcher } from "./types.js"
 
+/** Matches HTTP requests by method, URL, allowed headers, and canonical JSON body. */
 export const defaultMatcher: RequestMatcher = defaultRequestMatcher
 
+/**
+ * Wraps an existing `HttpClient` with cassette recording and replay.
+ *
+ * Use this form to preserve application middleware, proxies, tracing, or a
+ * custom transport.
+ */
 export const layer = (
   name: string,
   options: RecorderOptions = {},
@@ -24,5 +31,11 @@ export const layer = (
     Layer.provide(NodeFileSystem.layer),
   )
 
+/**
+ * Provides a recorded `HttpClient` backed by Effect's fetch transport.
+ *
+ * Locally, a missing cassette is recorded from the live endpoint. Existing
+ * cassettes are replayed, and `CI=true` makes a missing cassette fail.
+ */
 export const layerFetch = (name: string, options: RecorderOptions = {}): Layer.Layer<HttpClient.HttpClient> =>
   layer(name, options).pipe(Layer.provide(FetchHttpClient.layer))
