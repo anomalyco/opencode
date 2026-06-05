@@ -20,7 +20,7 @@ const writeWithStdin = (cmd: string[], text: string): Promise<void> =>
 
 // Lazy load which and clipboardy to avoid expensive execa/which/isexe chain at startup
 const getWhich = lazy(async () => {
-  const { which } = await import("../../../../util/which")
+  const { which } = await import("@opencode-ai/core/util/which")
   return which
 })
 

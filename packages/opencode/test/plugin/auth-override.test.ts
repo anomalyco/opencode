@@ -2,26 +2,27 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { ProviderAuth } from "@/provider/auth"
-import { ProviderID } from "../../src/provider/schema"
+
 import { Plugin } from "@/plugin"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Auth } from "@/auth"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { TestConfig } from "../fixture/config"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
-const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer))
+const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, FSUtil.defaultLayer))
 
 function layer(directory: string, plugins: string[]) {
   return ProviderAuth.layer.pipe(
     Layer.provide(Auth.defaultLayer),
     Layer.provide(
       Plugin.layer.pipe(
-        Layer.provide(Bus.layer),
+        Layer.provide(EventV2Bridge.defaultLayer),
         Layer.provide(RuntimeFlags.layer()),
         Layer.provide(
           TestConfig.layer({
@@ -48,7 +49,7 @@ describe("plugin.auth-override", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const pluginDir = path.join(tmp.directory, ".opencode", "plugin")
 
         yield* fs.writeWithDirs(
@@ -77,11 +78,11 @@ describe("plugin.auth-override", () => {
           .methods()
           .pipe(Effect.provide(layer(plain, [])), provideInstance(plain))
 
-        const copilot = methods[ProviderID.make("github-copilot")]
+        const copilot = methods[ProviderV2.ID.make("github-copilot")]
         expect(copilot).toBeDefined()
         expect(copilot.length).toBe(1)
         expect(copilot[0].label).toBe("Test Override Auth")
-        expect(plainMethods[ProviderID.make("github-copilot")][0].label).not.toBe("Test Override Auth")
+        expect(plainMethods[ProviderV2.ID.make("github-copilot")][0].label).not.toBe("Test Override Auth")
       }),
     { git: true },
     30000,

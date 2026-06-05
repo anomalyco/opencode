@@ -86,7 +86,7 @@ export const Controlled = {
         />
         <div
           style={{
-            "font-family": "var(--font-family-sans)",
+            "font-family": "var(--v2-font-family-sans)",
             "font-size": "12px",
             color: "var(--text-text-faint)",
           }}

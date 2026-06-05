@@ -1,11 +1,11 @@
 import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
-import { Bus } from "@/bus"
-import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { FileWatcher } from "@/file/watcher"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 
 const log = Log.create({ service: "vcs" })
 const PATCH_CONTEXT_LINES = 2_147_483_647
@@ -239,12 +239,12 @@ export const Mode = Schema.Literals(["git", "branch"])
 export type Mode = Schema.Schema.Type<typeof Mode>
 
 export const Event = {
-  BranchUpdated: BusEvent.define(
-    "vcs.branch.updated",
-    Schema.Struct({
+  BranchUpdated: EventV2.define({
+    type: "vcs.branch.updated",
+    schema: {
       branch: Schema.optional(Schema.String),
-    }),
-  ),
+    },
+  }),
 }
 
 export const Info = Schema.Struct({
@@ -305,11 +305,11 @@ interface State {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
-export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Layer.effect(
+export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const git = yield* Git.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
 
     const state = yield* InstanceState.make<State>(
@@ -327,20 +327,21 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
         const value = { current, root }
         log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
-        yield* (yield* bus.subscribe(FileWatcher.Event.Updated)).pipe(
-          Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
-          Stream.runForEach((_evt) =>
-            Effect.gen(function* () {
-              const next = yield* get()
-              if (next !== value.current) {
-                log.info("branch changed", { from: value.current, to: next })
-                value.current = next
-                yield* bus.publish(Event.BranchUpdated, { branch: next })
-              }
-            }),
-          ),
-          Effect.forkScoped,
-        )
+        const unsubscribe = yield* events.listen((event) => {
+          if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
+            return Effect.void
+          const data = event.data as EventV2.Data<typeof Watcher.Event.Updated>
+          if (!data.file.endsWith("HEAD")) return Effect.void
+          return Effect.gen(function* () {
+            const next = yield* get()
+            if (next !== value.current) {
+              log.info("branch changed", { from: value.current, to: next })
+              value.current = next
+              yield* events.publish(Event.BranchUpdated, { branch: next })
+            }
+          })
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
 
         return value
       }),
@@ -429,6 +430,6 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(Bus.layer))
+export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
 
 export * as Vcs from "./vcs"
