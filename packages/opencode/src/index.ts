@@ -53,8 +53,12 @@ const args = hideBin(process.argv)
 
 function show(out: string) {
   const text = out.trimStart()
-  const body = !text.startsWith("opencode ") ? UI.logo() + EOL + EOL + text : out
-  process.stderr.write(body.endsWith(EOL) ? body : body + EOL)
+  if (!text.startsWith("opencode ")) {
+    process.stderr.write(UI.logo() + EOL + EOL)
+    process.stderr.write(text + EOL)
+    return
+  }
+  process.stderr.write(out)
 }
 
 const cli = yargs(args)
