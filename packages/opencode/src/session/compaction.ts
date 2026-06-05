@@ -561,7 +561,13 @@ export const layer = Layer.effect(
         }
       }
 
-      if (processor.message.error) return "stop"
+      if (processor.message.error) {
+        if (!processor.message.finish) {
+          processor.message.finish = "error"
+          yield* session.updateMessage(processor.message)
+        }
+        return "stop"
+      }
       if (result === "continue") {
         const summary = summaryText(
           (yield* session.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(

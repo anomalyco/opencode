@@ -907,6 +907,56 @@ describe("session.compaction.process", () => {
     }).pipe(withCompaction({ result: "compact" })),
   )
 
+  itCompaction.instance(
+    "sets finish=error when processor reports summary error without terminal finish",
+    () => {
+      const failing = Layer.mock(SessionProcessorModule.SessionProcessor.Service)({
+        create: (input) =>
+          Effect.succeed({
+            get message() {
+              return input.assistantMessage
+            },
+            updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(() => Effect.succeed(undefined)),
+            completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(() => Effect.void),
+            process: Effect.fn("TestSessionProcessor.process")(() =>
+              Effect.sync(() => {
+                input.assistantMessage.error = new SessionV1.APIError({
+                  message: "summary failed",
+                  isRetryable: false,
+                }).toObject()
+                return "continue" as const
+              }),
+            ),
+          }),
+      })
+
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const msg = yield* createUserMessage(session.id, "hello")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+
+        const result = yield* SessionCompaction.use.process({
+          parentID: msg.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+          (item) => item.info.role === "assistant" && item.info.summary,
+        )
+
+        expect(result).toBe("stop")
+        expect(summary?.info.role).toBe("assistant")
+        if (summary?.info.role === "assistant") {
+          expect(summary.info.error).toBeTruthy()
+          expect(summary.info.finish).toBe("error")
+        }
+      }).pipe(withCompaction({ plugin: Plugin.defaultLayer, llm: LLM.defaultLayer }), Effect.provide(failing))
+    },
+  )
+
   it.instance(
     "adds synthetic continue prompt when auto is enabled",
     Effect.gen(function* () {
