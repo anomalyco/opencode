@@ -253,26 +253,47 @@ describe("FileSystem", () => {
   )
 
   it.live("closes validated descriptors after successful and failed reads", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
+    withTmp((directory) => {
+      let active = 0
+      const filesystem = Layer.effect(
+        FSUtil.Service,
+        Effect.gen(function* () {
+          const service = yield* FSUtil.Service
+          return FSUtil.Service.of({
+            ...service,
+            open: (target, options) =>
+              Effect.acquireRelease(
+                service.open(target, options).pipe(Effect.tap(() => Effect.sync(() => active++))),
+                () => Effect.sync(() => active--),
+              ),
+          })
+        }),
+      ).pipe(Layer.provide(FSUtil.defaultLayer))
+      return Effect.gen(function* () {
         const text = path.join(directory, "text.txt")
         const binary = path.join(directory, "binary.pdf")
         yield* Effect.promise(() => fs.writeFile(text, "hello"))
         yield* Effect.promise(() => fs.writeFile(binary, "%PDF-1.7"))
         const service = yield* FileSystem.Service
-        const before = yield* Effect.promise(() => fs.readdir("/dev/fd").then((entries) => entries.length))
+        const before =
+          process.platform === "win32"
+            ? undefined
+            : yield* Effect.promise(() => fs.readdir("/dev/fd").then((entries) => entries.length))
         for (let index = 0; index < 50; index++) {
           yield* service.readToolResolved(yield* service.resolveRead({ path: RelativePath.make("text.txt") }))
           yield* service
             .readToolResolved(yield* service.resolveRead({ path: RelativePath.make("binary.pdf") }))
             .pipe(Effect.exit)
         }
-        const after = yield* Effect.promise(() => fs.readdir("/dev/fd").then((entries) => entries.length))
-        expect(after).toBeLessThanOrEqual(before + 2)
+        expect(active).toBe(0)
+        if (before !== undefined) {
+          const after = yield* Effect.promise(() => fs.readdir("/dev/fd").then((entries) => entries.length))
+          expect(after).toBeLessThanOrEqual(before + 2)
+        }
         yield* Effect.promise(() => fs.rename(text, text + ".moved"))
         yield* Effect.promise(() => fs.rename(binary, binary + ".moved"))
-      }).pipe(provide(directory)),
-    ),
+      }).pipe(provide(directory, inertReferences, filesystem))
+    }),
   )
 
   it.live("lists direct children with relative paths and resolved URIs", () =>
