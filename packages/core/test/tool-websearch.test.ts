@@ -3,7 +3,7 @@ import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebSearchTool } from "@opencode-ai/core/tool/websearch"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
@@ -96,7 +96,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const websearchConfig = Layer.succeed(
   WebSearchTool.ConfigService,
   WebSearchTool.ConfigService.of({

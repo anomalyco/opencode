@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, primaryKey, real } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
 import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
@@ -11,6 +11,7 @@ import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
+import type { SystemContext } from "../system-context"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
@@ -127,7 +128,7 @@ export const SessionMessageTable = sqliteTable(
     data: text({ mode: "json" }).notNull().$type<SessionMessageData>(),
   },
   (table) => [
-    index("session_message_session_seq_idx").on(table.session_id, table.seq),
+    uniqueIndex("session_message_session_seq_idx").on(table.session_id, table.seq),
     index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
     index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
     index("session_message_time_created_idx").on(table.time_created),
@@ -137,14 +138,14 @@ export const SessionMessageTable = sqliteTable(
 export const SessionInputTable = sqliteTable(
   "session_input",
   {
-    seq: integer().primaryKey({ autoIncrement: true }),
-    id: text().$type<SessionMessage.ID>().notNull().unique(),
+    id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     prompt: text({ mode: "json" }).notNull().$type<Prompt>(),
     delivery: text().$type<SessionInput.Delivery>().notNull(),
+    admitted_seq: integer().notNull(),
     promoted_seq: integer(),
     time_created: integer()
       .notNull()
@@ -155,7 +156,21 @@ export const SessionInputTable = sqliteTable(
       table.session_id,
       table.promoted_seq,
       table.delivery,
-      table.seq,
+      table.admitted_seq,
     ),
+    uniqueIndex("session_input_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
+    uniqueIndex("session_input_session_promoted_seq_idx").on(table.session_id, table.promoted_seq),
   ],
 )
+
+export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
+  session_id: text()
+    .$type<SessionSchema.ID>()
+    .primaryKey()
+    .references(() => SessionTable.id, { onDelete: "cascade" }),
+  baseline: text().notNull(),
+  snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
+  baseline_seq: integer().notNull(),
+  replacement_seq: integer(),
+  revision: integer().notNull().default(0),
+})

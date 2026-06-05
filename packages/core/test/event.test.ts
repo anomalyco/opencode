@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
@@ -190,6 +190,56 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("commits local operational state inside a new synchronized event transaction", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<string>()
+      const aggregateID = EventV2.ID.create()
+      yield* events.project(SyncMessage, () => Effect.sync(() => received.push("projector")))
+
+      yield* events.publish(
+        SyncMessage,
+        { id: aggregateID, text: "hello" },
+        { commit: (seq) => Effect.sync(() => received.push(`commit:${seq}`)) },
+      )
+
+      expect(received).toEqual(["projector", "commit:0"])
+    }),
+  )
+
+  it.effect("rolls back the synchronized event and projector when the local commit fails", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_commit_probe (value text NOT NULL)")
+      yield* db.run("DELETE FROM event_commit_probe")
+      yield* events.project(SyncMessage, () =>
+        db.run("INSERT INTO event_commit_probe (value) VALUES ('projected')").pipe(Effect.orDie, Effect.asVoid),
+      )
+
+      const exit = yield* events
+        .publish(SyncMessage, { id: aggregateID, text: "hello" }, { commit: () => Effect.die("commit failed") })
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("commit failed")
+      expect(yield* db.all("SELECT value FROM event_commit_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+    }),
+  )
+
+  it.effect("rejects local commit hooks on live-only events", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const exit = yield* events.publish(Message, { text: "hello" }, { commit: () => Effect.void }).pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Local commit hooks require a synchronized event")
+    }),
+  )
+
   it.effect("runs projectors before publishing to streams", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -236,6 +286,56 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("isolates observer defects after durable events commit", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<string>()
+      yield* events.sync(() => Effect.die("sync defect"))
+      yield* events.listen(() => {
+        throw new Error("listener defect")
+      })
+      yield* events.listen((event) =>
+        Effect.sync(() => {
+          received.push(event.type)
+        }),
+      )
+
+      const event = yield* events.publish(SyncMessage, { id: "one", text: "hello" })
+
+      expect(received).toEqual([SyncMessage.type])
+      expect(event.seq).toBeNumber()
+    }),
+  )
+
+  it.effect("preserves observer interruption", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      yield* events.listen(() => Effect.interrupt)
+
+      const exit = yield* events.publish(SyncMessage, { id: "interrupted", text: "hello" }).pipe(Effect.exit)
+      const committed = yield* db
+        .select({ id: EventTable.id })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, "interrupted"))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBeTrue()
+      expect(committed).toBeDefined()
+    }),
+  )
+
+  it.effect("keeps live-only listener defects fail-fast", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const defect = new Error("listener defect")
+      yield* events.listen(() => Effect.die(defect))
+
+      expect(yield* events.publish(Message, { text: "hello" }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
+    }),
+  )
+
   it.effect("does not synchronize live-only events", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -251,6 +351,30 @@ describe("EventV2", () => {
       yield* events.publish(SyncMessage, { id: "one", text: "durable" })
 
       expect(synchronized).toEqual([SyncMessage.type])
+    }),
+  )
+
+  it.effect("synchronizes only after the durable event commits", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const synchronized = new Array<boolean>()
+      yield* events.sync((event) =>
+        db
+          .select({ id: EventTable.id })
+          .from(EventTable)
+          .where(eq(EventTable.id, event.id))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => synchronized.push(row !== undefined)),
+            Effect.asVoid,
+          ),
+      )
+
+      yield* events.publish(SyncMessage, { id: EventV2.ID.create(), text: "durable" })
+
+      expect(synchronized).toEqual([true])
     }),
   )
 
@@ -690,6 +814,59 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("strict owner fences exact replay", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const id = EventV2.ID.create()
+      const replayed = {
+        id,
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "owned" },
+      }
+      yield* events.replay(replayed, { ownerID: "owner-a" })
+
+      const exit = yield* events.replay(replayed, { ownerID: "owner-b", strictOwner: true }).pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay owner mismatch")
+    }),
+  )
+
+  it.effect("exact replay claims an unowned aggregate", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      const published = yield* events.publish(SyncMessage, { id: aggregateID, text: "owned" })
+      const replayed = {
+        id: published.id,
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: published.seq!,
+        aggregateID,
+        data: published.data,
+      }
+
+      yield* events.replay(replayed, { ownerID: "owner-a", strictOwner: true })
+      const row = yield* db
+        .select({ ownerID: EventSequenceTable.owner_id })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(row?.ownerID).toBe("owner-a")
+      const exit = yield* events
+        .replay(
+          { ...replayed, id: EventV2.ID.create(), seq: 1, data: { id: aggregateID, text: "conflict" } },
+          { ownerID: "owner-b", strictOwner: true },
+        )
+        .pipe(Effect.exit)
+      expect(String(exit)).toContain("Replay owner mismatch")
+    }),
+  )
+
   it.effect("replay with owner claims an unowned sequence", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -812,6 +989,57 @@ describe("EventV2", () => {
       yield* events.replay(replayed, { publish: true })
 
       expect(received).toMatchObject([{ id: replayed.id, seq: 0, data: replayed.data }])
+    }),
+  )
+
+  it.effect("rejects divergent stale replay without publishing it", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<EventV2.Payload>()
+      const aggregateID = EventV2.ID.create()
+      const replayed = {
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "original" },
+      }
+      yield* events.listen((event) => Effect.sync(() => received.push(event)))
+      yield* events.replay(replayed, { publish: true })
+
+      const exit = yield* events
+        .replay({ ...replayed, data: { id: aggregateID, text: "divergent" } }, { publish: true })
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay diverged")
+      expect(received).toHaveLength(1)
+    }),
+  )
+
+  it.effect("rejects an event ID reused at another aggregate position", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const id = EventV2.ID.create()
+      yield* events.replay({
+        id,
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "first" },
+      })
+
+      const exit = yield* events
+        .replay({
+          id,
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 1,
+          aggregateID,
+          data: { id: aggregateID, text: "second" },
+        })
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain(`Event ${id} already exists`)
     }),
   )
 

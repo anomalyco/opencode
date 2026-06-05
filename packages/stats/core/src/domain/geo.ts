@@ -37,7 +37,10 @@ export type GeoStatMetric = {
 
 export declare namespace GeoStatRepo {
   export interface Service {
-    readonly listDaily: () => Effect.Effect<GeoStatMetric[], DatabaseError>
+    readonly listDaily: (opts?: {
+      readonly provider?: string
+      readonly model?: string
+    }) => Effect.Effect<GeoStatMetric[], DatabaseError>
     readonly listByPeriod: (opts: {
       readonly grain: string
       readonly periodKey: string
@@ -59,7 +62,16 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
     Effect.gen(function* () {
       const db = yield* DrizzleClient
 
-      const listDaily = Effect.fn("GeoStatRepo.listDaily")(function* () {
+      const listDaily = Effect.fn("GeoStatRepo.listDaily")(function* (opts?: {
+        readonly provider?: string
+        readonly model?: string
+      }) {
+        const scope =
+          opts?.model && opts.provider
+            ? and(eq(geoStat.provider, opts.provider), eq(geoStat.model, opts.model))
+            : opts?.model
+              ? eq(geoStat.model, opts.model)
+              : and(eq(geoStat.provider, "all"), eq(geoStat.model, "all"))
         return yield* Effect.tryPromise({
           try: () =>
             db
@@ -74,15 +86,7 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
                 totalTokens: geoStat.total_tokens,
               })
               .from(geoStat)
-              .where(
-                and(
-                  eq(geoStat.grain, "day"),
-                  eq(geoStat.client, "all"),
-                  eq(geoStat.source, "all"),
-                  eq(geoStat.provider, "all"),
-                  eq(geoStat.model, "all"),
-                ),
-              )
+              .where(and(eq(geoStat.grain, "day"), eq(geoStat.client, "all"), eq(geoStat.source, "all"), scope))
               .orderBy(asc(geoStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })

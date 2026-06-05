@@ -633,6 +633,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         suggested: true,
         category: "Agent",
         slashName: "models",
+        // Bias /mo toward /models over /move without changing global fuzzy scoring.
+        slashAliases: ["mo"],
         run: () => {
           dialog.replace(() => <DialogModel />)
         },

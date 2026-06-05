@@ -1,11 +1,15 @@
 @import "@opencode-ai/ui/v2/text-input-v2.css";
 @import "@opencode-ai/ui/v2/button-v2.css";
 
-[data-component="settings-v2"] {
+[data-component="tabs-v2"][data-variant="settings"] {
   height: 100%;
 }
 
-[data-component="settings-v2-dialog"] [data-slot="dialog-body"] {
+[data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-container"] {
+  background: var(--v2-background-bg-base);
+}
+
+[data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-body"] {
   padding: 0;
   overflow: hidden;
 }
@@ -81,10 +85,6 @@
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
-[data-slot="dialog-container"]:has(.settings-v2-dialog) {
-  box-shadow: var(--v2-elevation-overlay);
-}
-
 [data-component="settings-v2-row"] {
   display: flex;
   flex-wrap: wrap;
@@ -153,12 +153,12 @@
   width: 100%;
 }
 
-[data-component="settings-v2-dialog"] [data-component="select-v2-root"] {
+[data-component="dialog-v2"][data-variant="settings"] [data-component="select-v2-root"] {
   width: fit-content;
   max-width: 100%;
 }
 
-[data-component="settings-v2-dialog"] [data-component="button-v2"] {
+[data-component="dialog-v2"][data-variant="settings"] [data-component="button-v2"] {
   width: fit-content;
   max-width: 100%;
 }
