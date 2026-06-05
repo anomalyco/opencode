@@ -1,5 +1,6 @@
 import { useEvent } from "@tui/context/event"
 import type {
+  Event,
   SessionMessage,
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
@@ -54,6 +55,11 @@ function latestReasoning(assistant: SessionMessageAssistant | undefined, reasoni
   )
 }
 
+function prepend(messages: SessionMessage[], message: SessionMessage) {
+  if (messages.some((item) => item.id === message.id)) return
+  messages.unshift(message)
+}
+
 export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext({
   name: "SyncV2",
   init: () => {
@@ -67,6 +73,18 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
 
     const event = useEvent()
     const sdk = useSDK()
+    const applied = new Set<string>()
+    const buffering = new Map<string, Event[]>()
+    const syncing = new Map<string, Promise<void>>()
+
+    function duplicate(id: string) {
+      if (applied.has(id)) return true
+      applied.add(id)
+      if (applied.size <= 1000) return false
+      const oldest = applied.values().next()
+      if (!oldest.done) applied.delete(oldest.value)
+      return false
+    }
 
     function update(sessionID: string, fn: (messages: SessionMessage[]) => void) {
       setStore(
@@ -77,12 +95,41 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       )
     }
 
-    event.subscribe((event) => {
+    async function hydrate(sessionID: string) {
+      const pending: Event[] = []
+      const before = JSON.parse(JSON.stringify(store.messages[sessionID] ?? [])) as SessionMessage[]
+      buffering.set(sessionID, pending)
+      try {
+        const response = await sdk.client.v2.session.messages({ sessionID })
+        const messages = response.data?.data ?? []
+        const snapshotIDs = new Set(messages.map((message) => message.id))
+        setStore(
+          "messages",
+          sessionID,
+          reconcile([...messages, ...before.filter((message) => !snapshotIDs.has(message.id))]),
+        )
+        buffering.delete(sessionID)
+        for (const event of pending) apply(event)
+      } catch (error) {
+        buffering.delete(sessionID)
+        throw error
+      }
+    }
+
+    function sync(sessionID: string) {
+      const existing = syncing.get(sessionID)
+      if (existing) return existing
+      const result = hydrate(sessionID).finally(() => syncing.delete(sessionID))
+      syncing.set(sessionID, result)
+      return result
+    }
+
+    function apply(event: Event) {
       switch (event.type) {
         case "session.next.agent.switched":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
-              id: event.id,
+            prepend(draft, {
+              id: event.properties.messageID,
               type: "agent-switched",
               agent: event.properties.agent,
               time: { created: event.properties.timestamp },
@@ -91,8 +138,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.model.switched":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
-              id: event.id,
+            prepend(draft, {
+              id: event.properties.messageID,
               type: "model-switched",
               model: event.properties.model,
               time: { created: event.properties.timestamp },
@@ -101,8 +148,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.prompted": {
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
-              id: event.id,
+            prepend(draft, {
+              id: event.properties.messageID,
               type: "user",
               text: event.properties.prompt.text,
               files: event.properties.prompt.files,
@@ -113,10 +160,35 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           })
           break
         }
+        case "session.next.prompt.admitted":
+          break
+        case "session.next.prompt.promoted":
+          update(event.properties.sessionID, (draft) => {
+            prepend(draft, {
+              id: event.properties.messageID,
+              type: "user",
+              text: event.properties.prompt.text,
+              files: event.properties.prompt.files,
+              agents: event.properties.prompt.agents,
+              references: event.properties.prompt.references,
+              time: { created: event.properties.timeCreated },
+            })
+          })
+          break
+        case "session.next.context.updated":
+          update(event.properties.sessionID, (draft) => {
+            prepend(draft, {
+              id: event.properties.messageID,
+              type: "system",
+              text: event.properties.text,
+              time: { created: event.properties.timestamp },
+            })
+          })
+          break
         case "session.next.synthetic":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
-              id: event.id,
+            prepend(draft, {
+              id: event.properties.messageID,
               type: "synthetic",
               sessionID: event.properties.sessionID,
               text: event.properties.text,
@@ -126,8 +198,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.shell.started":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
-              id: event.id,
+            prepend(draft, {
+              id: event.properties.messageID,
               type: "shell",
               callID: event.properties.callID,
               command: event.properties.command,
@@ -146,10 +218,11 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.step.started":
           update(event.properties.sessionID, (draft) => {
+            if (draft.some((message) => message.id === event.properties.assistantMessageID)) return
             const currentAssistant = activeAssistant(draft)
             if (currentAssistant) currentAssistant.time.completed = event.properties.timestamp
-            draft.unshift({
-              id: event.id,
+            prepend(draft, {
+              id: event.properties.assistantMessageID,
               type: "assistant",
               agent: event.properties.agent,
               model: event.properties.model,
@@ -182,18 +255,28 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.text.started":
           update(event.properties.sessionID, (draft) => {
-            activeAssistant(draft)?.content.push({ type: "text", id: event.properties.textID, text: "" })
+            ownedAssistant(draft, event.properties.assistantMessageID)?.content.push({
+              type: "text",
+              id: event.properties.textID,
+              text: "",
+            })
           })
           break
         case "session.next.text.delta":
           update(event.properties.sessionID, (draft) => {
-            const match = latestText(activeAssistant(draft), event.properties.textID)
+            const match = latestText(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.textID,
+            )
             if (match) match.text += event.properties.delta
           })
           break
         case "session.next.text.ended":
           update(event.properties.sessionID, (draft) => {
-            const match = latestText(activeAssistant(draft), event.properties.textID)
+            const match = latestText(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.textID,
+            )
             if (match) match.text = event.properties.text
           })
           break
@@ -263,7 +346,11 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               content: [...event.properties.content],
               result: event.properties.result,
             }
-            match.provider = event.properties.provider
+            match.provider = {
+              executed: event.properties.provider.executed || match.provider?.executed === true,
+              metadata: match.provider?.metadata,
+              resultMetadata: event.properties.provider.metadata,
+            }
             match.time.completed = event.properties.timestamp
           })
           break
@@ -282,13 +369,17 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               content: match.state.status === "running" ? match.state.content : [],
               result: event.properties.result,
             }
-            match.provider = event.properties.provider
+            match.provider = {
+              executed: event.properties.provider.executed || match.provider?.executed === true,
+              metadata: match.provider?.metadata,
+              resultMetadata: event.properties.provider.metadata,
+            }
             match.time.completed = event.properties.timestamp
           })
           break
         case "session.next.reasoning.started":
           update(event.properties.sessionID, (draft) => {
-            activeAssistant(draft)?.content.push({
+            ownedAssistant(draft, event.properties.assistantMessageID)?.content.push({
               type: "reasoning",
               id: event.properties.reasoningID,
               text: "",
@@ -298,13 +389,19 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.reasoning.delta":
           update(event.properties.sessionID, (draft) => {
-            const match = latestReasoning(activeAssistant(draft), event.properties.reasoningID)
+            const match = latestReasoning(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.reasoningID,
+            )
             if (match) match.text += event.properties.delta
           })
           break
         case "session.next.reasoning.ended":
           update(event.properties.sessionID, (draft) => {
-            const match = latestReasoning(activeAssistant(draft), event.properties.reasoningID)
+            const match = latestReasoning(
+              ownedAssistant(draft, event.properties.assistantMessageID),
+              event.properties.reasoningID,
+            )
             if (match) {
               match.text = event.properties.text
               if (event.properties.providerMetadata !== undefined)
@@ -316,8 +413,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.compaction.started":
           update(event.properties.sessionID, (draft) => {
-            draft.unshift({
-              id: event.id,
+            prepend(draft, {
+              id: event.properties.messageID,
               type: "compaction",
               reason: event.properties.reason,
               summary: "",
@@ -340,16 +437,20 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           })
           break
       }
+    }
+
+    event.subscribe((event) => {
+      if (duplicate(event.id)) return
+      if ("sessionID" in event.properties && typeof event.properties.sessionID === "string")
+        buffering.get(event.properties.sessionID)?.push(event)
+      apply(event)
     })
 
     const result = {
       data: store,
       session: {
         message: {
-          async sync(sessionID: string) {
-            const response = await sdk.client.v2.session.messages({ sessionID })
-            setStore("messages", sessionID, reconcile(response.data?.data ?? []))
-          },
+          sync,
           fromSession(sessionID: string) {
             const messages = store.messages[sessionID]
             if (!messages) return []

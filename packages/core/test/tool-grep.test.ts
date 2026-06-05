@@ -14,7 +14,7 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { GrepTool } from "@opencode-ai/core/tool/grep"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it as runtimeIt } from "./lib/effect"
@@ -86,7 +86,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const grep = GrepTool.layer.pipe(
   Layer.provide(registry),
   Layer.provide(filesystem),
@@ -140,7 +140,7 @@ function provideLive(directory: string, projectReferences = references({})) {
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(dependencies),
   )
-  const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+  const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const grep = GrepTool.layer.pipe(
     Layer.provide(registry),
     Layer.provide(filesystem),

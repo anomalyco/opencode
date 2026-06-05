@@ -1,7 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
+import { Tool } from "@opencode-ai/core/public"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
@@ -18,19 +19,24 @@ import { Npm } from "../src/npm"
 import { Project } from "../src/project"
 import { ProjectReference } from "../src/project-reference"
 import { LocationSearch } from "../src/location-search"
-import { ToolRegistry } from "../src/tool-registry"
+import { ToolRegistry } from "../src/tool/registry"
+import { ApplicationTools } from "../src/tool/application-tools"
 
+const applicationTools = ApplicationTools.layer
 const it = testEffect(
-  LocationServiceMap.layer.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        Project.defaultLayer,
-        EventV2.defaultLayer,
-        Auth.defaultLayer,
-        Npm.defaultLayer,
-        ModelsDev.defaultLayer,
-        FSUtil.defaultLayer,
-        Global.defaultLayer,
+  Layer.merge(
+    applicationTools,
+    LocationServiceMap.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          Project.defaultLayer,
+          EventV2.defaultLayer,
+          Auth.defaultLayer,
+          Npm.defaultLayer,
+          ModelsDev.defaultLayer,
+          FSUtil.defaultLayer,
+          Global.defaultLayer,
+        ),
       ),
     ),
   ),
@@ -44,6 +50,14 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap(([blocked, allowed]) =>
         Effect.gen(function* () {
+          yield* (yield* ApplicationTools.Service).attach({
+            application_context: Tool.make({
+              description: "Read application context",
+              parameters: Schema.Struct({}),
+              success: Schema.Struct({ ok: Schema.Boolean }),
+              execute: () => Effect.succeed({ ok: true }),
+            }),
+          })
           yield* Effect.promise(() =>
             fs.writeFile(
               path.join(blocked.path, "opencode.json"),
@@ -70,6 +84,7 @@ describe("LocationServiceMap", () => {
           const blockedState = yield* update(blocked.path)
           expect(blockedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(false)
           expect(blockedState.tools.map((tool) => tool.name).sort()).toEqual([
+            "application_context",
             "apply_patch",
             "bash",
             "edit",
@@ -86,6 +101,7 @@ describe("LocationServiceMap", () => {
           const allowedState = yield* update(allowed.path)
           expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(true)
           expect(allowedState.tools.map((tool) => tool.name).sort()).toEqual([
+            "application_context",
             "apply_patch",
             "bash",
             "edit",
