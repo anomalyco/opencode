@@ -34,6 +34,8 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { Config } from "@opencode-ai/core/config"
+import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
 import { NativeTool } from "@opencode-ai/core/tool/native"
 import {
   SessionContextEpochTable,
@@ -96,6 +98,11 @@ const client = Layer.succeed(
 )
 const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
 const replacementModel = Model.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
+const compactModel = Model.make({
+  id: "compact",
+  provider: "fake",
+  route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
+})
 const authorizations: ToolRegistry.AuthorizeInput[] = []
 const executions: string[] = []
 const permission = Layer.succeed(
@@ -150,8 +157,9 @@ const echo = Layer.effectDiscard(
   ),
 ).pipe(Layer.provide(registry))
 let modelResolveHook = Effect.void
+let currentModel = model
 const models = SessionRunnerModel.layerWith((session) =>
-  modelResolveHook.pipe(Effect.as(session.model?.id === "replacement" ? replacementModel : model)),
+  modelResolveHook.pipe(Effect.as(session.model?.id === "replacement" ? replacementModel : currentModel)),
 )
 const systemContextKey = SystemContext.Key.make("test/context")
 let systemBaseline = "Initial context"
@@ -204,6 +212,23 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, {
         : SystemContext.empty,
     ),
 })
+const config = Layer.succeed(
+  Config.Service,
+  Config.Service.of({
+    entries: () =>
+      Effect.succeed([
+        new Config.Document({
+          type: "document",
+          info: new Config.Info({
+            compaction: new ConfigCompaction.Info({
+              buffer: 3_000,
+              keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
+            }),
+          }),
+        }),
+      ]),
+  }),
+)
 const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -215,6 +240,7 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(location),
   Layer.provide(agents),
   Layer.provide(skillGuidance),
+  Layer.provide(config),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -253,6 +279,7 @@ const it = testEffect(
     systemContext,
     location,
     skillGuidance,
+    config,
     runner,
     coordinator,
     execution,
@@ -288,6 +315,7 @@ const setup = Effect.gen(function* () {
   systemUnavailable = false
   systemLoadHook = Effect.void
   modelResolveHook = Effect.void
+  currentModel = model
   skillBaselines.clear()
   responses = undefined
   streamFailure = undefined
@@ -1337,16 +1365,20 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       response = []
       yield* session.resume(sessionID)
+      const compactionID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
-        messageID: SessionMessage.ID.create(),
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(1),
         reason: "manual",
       })
       yield* events.publish(SessionEvent.Compaction.Ended, {
         sessionID,
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(2),
+        reason: "manual",
         text: "summary",
+        recent: "",
       })
       systemBaseline = "Replacement context"
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
@@ -1359,6 +1391,68 @@ describe("SessionRunnerLLM", () => {
       yield* replaySessionProjection(sessionID)
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Third" }), resume: false })
       yield* session.resume(sessionID)
+    }),
+  )
+
+  it.effect("automatically compacts into a completed summary and retained recent turn", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      response = fragmentFixture("text", "text-first", ["Earlier answer"]).completeEvents
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Earlier question ".repeat(180) }),
+        resume: false,
+      })
+      yield* session.resume(sessionID)
+
+      currentModel = compactModel
+      requests.length = 0
+      responses = [
+        fragmentFixture("text", "text-summary", ["## Goal\n- Preserve the task"]).completeEvents,
+        fragmentFixture("text", "text-final", ["Continued"]).completeEvents,
+      ]
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Recent exact request ".repeat(180) }),
+        resume: false,
+      })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(userTexts(requests[0])[0]).toContain("## Goal")
+      expect(userTexts(requests[1])).toHaveLength(1)
+      expect(userTexts(requests[1])[0]).toContain("<summary>\n## Goal\n- Preserve the task\n</summary>")
+      expect(userTexts(requests[1])[0]).toContain(`[User]: ${"Recent exact request ".repeat(180)}`)
+
+      const context = yield* (yield* SessionStore.Service).context(sessionID)
+      expect(context.map((message) => message.type)).toEqual(["compaction", "assistant"])
+      expect(context[0]).toMatchObject({
+        type: "compaction",
+        summary: "## Goal\n- Preserve the task",
+      })
+
+      requests.length = 0
+      responses = [
+        fragmentFixture("text", "text-summary-2", ["## Goal\n- Preserve the updated task"]).completeEvents,
+        fragmentFixture("text", "text-final-2", ["Continued again"]).completeEvents,
+      ]
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Newest exact request ".repeat(180) }),
+        resume: false,
+      })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(userTexts(requests[0])[0]).toContain(
+        "<previous-summary>\n## Goal\n- Preserve the task\n</previous-summary>",
+      )
+      expect(userTexts(requests[0])[0]).toContain("Recent exact request")
+      expect((yield* (yield* SessionStore.Service).context(sessionID))[0]).toMatchObject({
+        type: "compaction",
+        summary: "## Goal\n- Preserve the updated task",
+      })
     }),
   )
 
@@ -1375,16 +1469,20 @@ describe("SessionRunnerLLM", () => {
       systemBaseline = "Changed context"
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
       yield* session.resume(sessionID)
+      const compactionID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
-        messageID: SessionMessage.ID.create(),
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(1),
         reason: "manual",
       })
       yield* events.publish(SessionEvent.Compaction.Ended, {
         sessionID,
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(2),
+        reason: "manual",
         text: "summary",
+        recent: "",
       })
       systemUnavailable = true
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Third" }), resume: false })

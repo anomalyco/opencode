@@ -1177,6 +1177,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
           text: string
         }
       }
@@ -1186,8 +1187,10 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          messageID: string
+          reason: "auto" | "manual"
           text: string
-          include?: string
+          recent: string
         }
       }
     | {
@@ -1655,7 +1658,6 @@ export type GlobalEvent = {
     | SyncEventSessionNextToolFailed
     | SyncEventSessionNextRetried
     | SyncEventSessionNextCompactionStarted
-    | SyncEventSessionNextCompactionDelta
     | SyncEventSessionNextCompactionEnded
 }
 
@@ -3690,35 +3692,21 @@ export type SyncEventSessionNextCompactionStarted = {
   }
 }
 
-export type SyncEventSessionNextCompactionDelta = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.compaction.delta.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
-      text: string
-    }
-  }
-}
-
 export type SyncEventSessionNextCompactionEnded = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.next.compaction.ended.1"
+    type: "session.next.compaction.ended.2"
     id: string
     seq: number
     aggregateID: string
     data: {
       timestamp: number
       sessionID: string
+      messageID: string
+      reason: "auto" | "manual"
       text: string
-      include?: string
+      recent: string
     }
   }
 }
@@ -4031,7 +4019,7 @@ export type SessionMessageCompaction = {
   type: "compaction"
   reason: "auto" | "manual"
   summary: string
-  include?: string
+  recent: string
   id: string
   metadata?: {
     [key: string]: unknown
@@ -4737,6 +4725,7 @@ export type EventSessionNextCompactionDelta = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
     text: string
   }
 }
@@ -4747,8 +4736,10 @@ export type EventSessionNextCompactionEnded = {
   properties: {
     timestamp: number
     sessionID: string
+    messageID: string
+    reason: "auto" | "manual"
     text: string
-    include?: string
+    recent: string
   }
 }
 

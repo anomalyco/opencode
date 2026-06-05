@@ -1,5 +1,16 @@
 # V2 Schema Changelog
 
+## 2026-06-05: Execute Automatic Session Compaction
+
+- Trigger automatic compaction before provider turns using the complete estimated request and absolute model-aware headroom.
+- Preserve the existing structured summary contract and update prior summaries with newly compacted history.
+- Store token-bounded recent history as plain serialized text inside the checkpoint instead of replaying provider-native messages.
+- Keep compaction starts durable and progress deltas live-only; activate history cutover only from a durable completed summary.
+- Version the completed event as `session.next.compaction.ended.2` rather than changing the existing synchronized v1 payload in place.
+- Reload the replacement Context Epoch and continue the original pending turn after compaction.
+- Preserve full durable history; compaction changes only the active model representation.
+- Defer provider-overflow recovery, explicit manual compaction, and deterministic old tool-result pruning.
+
 Record V2 database, durable-event, projected-message, HTTP, and generated SDK schema changes here. Each entry states why the contract changed and whether consumers or stored data need compatibility handling. Commit messages for schema-affecting changes should include the same summary.
 
 This document covers meaningful contract changes introduced on the `feat/opencode-embedded-api` branch since its divergence from `origin/dev`. Mechanical file moves and internal refactors are omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.

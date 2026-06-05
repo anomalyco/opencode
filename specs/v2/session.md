@@ -98,11 +98,21 @@ Current Context Epoch follow-ups:
 
 - Add configured, remote, and nested instruction sources with explicit precedence and removal semantics.
 - Add durable post-crash activity recovery for promoted or provider-dispatched work.
-- Integrate actual automatic/context-pressure compaction with epoch replacement.
+- Add provider-overflow recovery and explicit manual compaction on top of automatic request-budget compaction.
 - Add operational metrics for observation latency, unavailable sources, contention, baseline size, and chronological-update growth.
 - Consider watcher-backed per-file caching only if measurements show direct safe-boundary observation is too expensive.
 - Expose plugin-defined Context Sources only after plugin reload and scoped cleanup semantics are designed.
 - Add clustered Session execution ownership and stale-runtime fencing.
+
+## Automatic Compaction
+
+Before each provider turn, the runner estimates the complete model-visible request and compares it with the selected model's context window minus absolute reserved headroom. The reserve is the greater of the requested/model output allowance and configured `compaction.buffer`. When the request exceeds that budget and older complete turns are available, the runner compacts before executing the pending turn.
+
+Compaction keeps the full transcript durable while replacing its active model representation with one hidden checkpoint containing a structured rolling summary and token-bounded serialized recent context. Provider-native assistant, reasoning, and tool messages never survive across the boundary, avoiding signature and encrypted-reasoning failures when the earlier prefix changes.
+
+`session.next.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.next.compaction.ended.2` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message and requests Context Epoch replacement. A failed or interrupted attempt therefore leaves the previous history boundary active.
+
+Repeated compactions update the previous structured summary with newly compacted messages. The runner then reloads projected history and executes the original pending turn. Provider overflow recovery and deterministic old tool-result pruning remain separate follow-ups.
 
 ## V1 Runtime Context Parity
 

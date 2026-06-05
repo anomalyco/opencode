@@ -23,13 +23,6 @@ function ownedAssistant(messages: SessionMessage[], messageID: string) {
   return message?.type === "assistant" ? message : undefined
 }
 
-function activeCompaction(messages: SessionMessage[]) {
-  const index = messages.findIndex((message) => message.type === "compaction")
-  if (index < 0) return
-  const compaction = messages[index]
-  return compaction?.type === "compaction" ? compaction : undefined
-}
-
 function activeShell(messages: SessionMessage[], callID: string) {
   const index = messages.findIndex((message) => message.type === "shell" && message.callID === callID)
   if (index < 0) return
@@ -410,30 +403,19 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           })
           break
         case "session.next.retried":
-          break
         case "session.next.compaction.started":
+        case "session.next.compaction.delta":
+          break
+        case "session.next.compaction.ended":
           update(event.properties.sessionID, (draft) => {
             prepend(draft, {
               id: event.properties.messageID,
               type: "compaction",
               reason: event.properties.reason,
-              summary: "",
+              summary: event.properties.text,
+              recent: event.properties.recent,
               time: { created: event.properties.timestamp },
             })
-          })
-          break
-        case "session.next.compaction.delta":
-          update(event.properties.sessionID, (draft) => {
-            const match = activeCompaction(draft)
-            if (match) match.summary += event.properties.text
-          })
-          break
-        case "session.next.compaction.ended":
-          update(event.properties.sessionID, (draft) => {
-            const match = activeCompaction(draft)
-            if (!match) return
-            match.summary = event.properties.text
-            match.include = event.properties.include
           })
           break
       }

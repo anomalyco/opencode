@@ -168,23 +168,6 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
           return message.type === "assistant" ? message : undefined
         })
       },
-      getCurrentCompaction() {
-        return Effect.gen(function* () {
-          const row = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(
-              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "compaction")),
-            )
-            .orderBy(desc(SessionMessageTable.seq))
-            .limit(1)
-            .get()
-            .pipe(Effect.orDie)
-          if (!row) return
-          const message = decodeRow(row)
-          return message.type === "compaction" ? message : undefined
-        })
-      },
       getCurrentShell(callID) {
         return Effect.gen(function* () {
           const rows = yield* db
@@ -200,7 +183,6 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
         })
       },
       updateAssistant: updateMessage,
-      updateCompaction: updateMessage,
       updateShell: updateMessage,
       appendMessage,
     }
@@ -452,13 +434,14 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Delta, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Ended, (event) => {
-      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
-      return run(db, event).pipe(
-        Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)),
-      )
+      if (event.version === 1) return Effect.void
+      const seq = event.seq
+      if (seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+      return Effect.gen(function* () {
+        yield* run(db, event)
+        yield* SessionContextEpoch.requestReplacement(db, event.data.sessionID, seq)
+      })
     })
   }),
 )

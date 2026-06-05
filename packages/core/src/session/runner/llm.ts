@@ -1,6 +1,7 @@
 import { LLM, LLMClient, LLMError, LLMEvent, SystemPart } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Schema, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
+import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
@@ -12,7 +13,9 @@ import { SystemContextRegistry } from "../../system-context/registry"
 import { SkillGuidance } from "../../skill/guidance"
 import { ToolRegistry } from "../../tool/registry"
 import { SessionContextEpoch } from "../context-epoch"
+import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
+import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
@@ -86,7 +89,9 @@ export const layer = Layer.effect(
     const location = yield* Location.Service
     const systemContext = yield* SystemContextRegistry.Service
     const skillGuidance = yield* SkillGuidance.Service
+    const config = yield* Config.Service
     const db = (yield* Database.Service).db
+    const compact = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -180,7 +185,8 @@ export const layer = Layer.effect(
       if ((yield* agents.select(current.agent)).id !== agent.id || !sameModel(current.model, session.model))
         return yield* Effect.die(new RetryTurn(undefined))
       const model = yield* models.resolve(session)
-      const context = yield* store.runnerContext(session.id, system.baselineSeq)
+      const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
+      const context = entries.map((entry) => entry.message)
       const request = LLM.request({
         model,
         system: [agent.info?.system, system.baseline]
@@ -189,6 +195,8 @@ export const layer = Layer.effect(
         messages: toLLMMessages(context, model),
         tools: yield* tools.definitions(),
       })
+      if (yield* compact({ sessionID: session.id, entries, model, request }))
+        return yield* Effect.die(new RetryTurn(undefined))
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,

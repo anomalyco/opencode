@@ -15728,11 +15728,15 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
                       "text": {
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "text"],
+                    "required": ["timestamp", "sessionID", "messageID", "text"],
                     "additionalProperties": false
                   }
                 },
@@ -15760,14 +15764,22 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "enum": ["auto", "manual"]
+                      },
                       "text": {
                         "type": "string"
                       },
-                      "include": {
+                      "recent": {
                         "type": "string"
                       }
                     },
-                    "required": ["timestamp", "sessionID", "text"],
+                    "required": ["timestamp", "sessionID", "messageID", "reason", "text", "recent"],
                     "additionalProperties": false
                   }
                 },
@@ -17343,9 +17355,6 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextCompactionStarted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextCompactionDelta"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextCompactionEnded"
@@ -23330,59 +23339,6 @@
         "required": ["type", "id", "syncEvent"],
         "additionalProperties": false
       },
-      "SyncEventSessionNextCompactionDelta": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["sync"]
-          },
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "syncEvent": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["session.next.compaction.delta.1"]
-              },
-              "id": {
-                "type": "string",
-                "pattern": "^evt_"
-              },
-              "seq": {
-                "type": "number"
-              },
-              "aggregateID": {
-                "type": "string"
-              },
-              "data": {
-                "type": "object",
-                "properties": {
-                  "timestamp": {
-                    "type": "number"
-                  },
-                  "sessionID": {
-                    "type": "string",
-                    "pattern": "^ses"
-                  },
-                  "text": {
-                    "type": "string"
-                  }
-                },
-                "required": ["timestamp", "sessionID", "text"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["type", "id", "seq", "aggregateID", "data"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["type", "id", "syncEvent"],
-        "additionalProperties": false
-      },
       "SyncEventSessionNextCompactionEnded": {
         "type": "object",
         "properties": {
@@ -23399,7 +23355,7 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["session.next.compaction.ended.1"]
+                "enum": ["session.next.compaction.ended.2"]
               },
               "id": {
                 "type": "string",
@@ -23421,14 +23377,22 @@
                     "type": "string",
                     "pattern": "^ses"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": ["auto", "manual"]
+                  },
                   "text": {
                     "type": "string"
                   },
-                  "include": {
+                  "recent": {
                     "type": "string"
                   }
                 },
-                "required": ["timestamp", "sessionID", "text"],
+                "required": ["timestamp", "sessionID", "messageID", "reason", "text", "recent"],
                 "additionalProperties": false
               }
             },
@@ -24319,7 +24283,7 @@
           "summary": {
             "type": "string"
           },
-          "include": {
+          "recent": {
             "type": "string"
           },
           "id": {
@@ -24340,7 +24304,7 @@
             "additionalProperties": false
           }
         },
-        "required": ["type", "reason", "summary", "id", "time"],
+        "required": ["type", "reason", "summary", "recent", "id", "time"],
         "additionalProperties": false
       },
       "SessionMessage": {
@@ -26485,11 +26449,15 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
               "text": {
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "text"],
+            "required": ["timestamp", "sessionID", "messageID", "text"],
             "additionalProperties": false
           }
         },
@@ -26517,14 +26485,22 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["auto", "manual"]
+              },
               "text": {
                 "type": "string"
               },
-              "include": {
+              "recent": {
                 "type": "string"
               }
             },
-            "required": ["timestamp", "sessionID", "text"],
+            "required": ["timestamp", "sessionID", "messageID", "reason", "text", "recent"],
             "additionalProperties": false
           }
         },
