@@ -121,8 +121,7 @@ describe("SkillV2", () => {
           expect((yield* skill.list()).map((item) => item.name)).toEqual(["deploy"])
           expect((yield* skill.list()).map((item) => item.name)).toEqual(["deploy"])
           expect(pulls).toBe(1)
-          expect(yield* skill.forAgent(AgentV2.ID.make("reviewer"))).toEqual([])
-          expect(yield* skill.forAgent(AgentV2.ID.make("missing"))).toEqual([])
+          expect(SkillV2.available(yield* skill.list(), (yield* agents.get(AgentV2.ID.make("reviewer")))!)).toEqual([])
         }),
       ),
     ),

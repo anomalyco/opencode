@@ -18,6 +18,7 @@ import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
 import { useSettings } from "@/context/settings"
+import { useTabs } from "@/context/tabs"
 
 const DEFAULT_USERNAME = "opencode"
 
@@ -191,6 +192,7 @@ export function DialogSelectServer() {
 export function useServerManagementController(options: { onSelect?: () => void } = {}) {
   const navigate = useNavigate()
   const server = useServer()
+  const tabs = useTabs()
   const global = useGlobal()
   const platform = usePlatform()
   const language = useLanguage()
@@ -311,12 +313,14 @@ export function useServerManagementController(options: { onSelect?: () => void }
   }))
 
   const replaceServer = (original: ServerConnection.Http, next: ServerConnection.Http) => {
+    const originalKey = ServerConnection.key(original)
     const active = server.key
+    tabs.removeServer(originalKey)
     const newConn = server.add(next)
     if (!newConn) return
-    const nextActive = active === ServerConnection.key(original) ? ServerConnection.key(newConn) : active
+    const nextActive = active === originalKey ? ServerConnection.key(newConn) : active
     if (nextActive) server.setActive(nextActive)
-    server.remove(ServerConnection.key(original))
+    server.remove(originalKey)
   }
 
   const items = createMemo(() => {
@@ -501,6 +505,7 @@ export function useServerManagementController(options: { onSelect?: () => void }
   })
 
   async function handleRemove(url: ServerConnection.Key) {
+    tabs.removeServer(url)
     server.remove(url)
     if ((await platform.getDefaultServer?.()) === url) {
       void platform.setDefaultServer?.(null)

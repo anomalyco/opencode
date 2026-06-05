@@ -10,7 +10,6 @@ import { Location } from "./location"
 import { SessionMessage } from "./session/message"
 import { Prompt } from "./session/prompt"
 import { EventV2 } from "./event"
-import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
@@ -77,11 +76,6 @@ type CreateInput = {
   location: Location.Ref
 }
 
-type MoveInput = {
-  sessionID: SessionSchema.ID
-  location: Location.Ref
-}
-
 type CompactInput = {
   sessionID: SessionSchema.ID
   prompt?: Prompt
@@ -94,11 +88,11 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
   "Session.OperationUnavailableError",
   {
-    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "switchModel", "compact", "wait"]),
+    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "compact", "wait"]),
   },
 ) {}
 
-export { MessageDecodeError } from "./session/error"
+export { ContextSnapshotDecodeError, MessageDecodeError } from "./session/error"
 
 export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
@@ -110,7 +104,6 @@ export type Error = NotFoundError | MessageDecodeError | OperationUnavailableErr
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
-  readonly move: (input: MoveInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -139,14 +132,14 @@ export interface Interface {
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
-  }) => Effect.Effect<void, OperationUnavailableError>
+  }) => Effect.Effect<void, NotFoundError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     prompt: Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionMessage.User, NotFoundError | PromptConflictError>
+  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -162,6 +155,7 @@ export interface Interface {
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
+  readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
@@ -178,13 +172,13 @@ export const layer = Layer.effect(
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const scope = yield* Effect.scope
 
-    const enqueueWake = (sessionID: SessionSchema.ID) =>
-      execution.wake(sessionID).pipe(
+    const enqueueWake = (admitted: SessionInput.Admitted) =>
+      execution.wake(admitted.sessionID, admitted.admittedSeq).pipe(
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void
             : Effect.logError("Failed to wake Session").pipe(
-                Effect.annotateLogs("sessionID", sessionID),
+                Effect.annotateLogs("sessionID", admitted.sessionID),
                 Effect.annotateLogs("cause", cause),
               ),
         ),
@@ -203,20 +197,6 @@ export const layer = Layer.effect(
             }),
         ),
       )
-
-    const findExistingPrompt = Effect.fnUntraced(function* (input: {
-      sessionID: SessionSchema.ID
-      messageID: SessionMessage.ID
-      prompt: Prompt
-      delivery: SessionInput.Delivery
-    }) {
-      const stored = yield* SessionInput.find(db, input.messageID)
-      if (!stored) return yield* SessionInput.reconcileProjected(db, { id: input.messageID, ...input })
-      if (!SessionInput.equivalent(stored, input)) {
-        return yield* new PromptConflictError({ sessionID: input.sessionID, messageID: input.messageID })
-      }
-      return stored
-    })
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
@@ -372,21 +352,24 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
             const returnPrompt = Effect.fnUntraced(function* (admitted: SessionInput.Admitted) {
-              if (input.resume !== false) yield* enqueueWake(input.sessionID)
-              return SessionInput.toMessage(admitted)
+              if (input.resume !== false) yield* enqueueWake(admitted)
+              return admitted
             }, Effect.uninterruptible)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
-            const existing = yield* findExistingPrompt(expected)
-            if (existing) return yield* returnPrompt(existing)
-            const admitted = yield* SessionInput.admit(db, {
+            const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
               prompt: input.prompt,
               delivery,
-            })
-            if (!admitted) return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
+            }).pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof SessionInput.LifecycleConflict
+                  ? new PromptConflictError({ sessionID: input.sessionID, messageID })
+                  : Effect.die(defect),
+              ),
+            )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             return yield* returnPrompt(admitted)
@@ -402,8 +385,14 @@ export const layer = Layer.effect(
       switchAgent: Effect.fn("V2Session.switchAgent")(function* () {
         return yield* new OperationUnavailableError({ operation: "switchAgent" })
       }),
-      switchModel: Effect.fn("V2Session.switchModel")(function* () {
-        return yield* new OperationUnavailableError({ operation: "switchModel" })
+      switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
+        yield* result.get(input.sessionID)
+        yield* events.publish(SessionEvent.ModelSwitched, {
+          sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
+          timestamp: yield* DateTime.now,
+          model: input.model,
+        })
       }),
       compact: Effect.fn("V2Session.compact")(function* (input) {
         yield* result.get(input.sessionID)
@@ -417,9 +406,21 @@ export const layer = Layer.effect(
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
       }),
-      move: Effect.fn("V2Session.move")(function* () {
-        return yield* new OperationUnavailableError({ operation: "move" })
-      }),
+      interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const session = yield* store.get(sessionID)
+            if (!session) return yield* execution.interrupt(sessionID)
+            const event = yield* events.publish(SessionEvent.InterruptRequested, {
+              sessionID,
+              timestamp: yield* DateTime.now,
+            })
+            if (event.seq === undefined)
+              return yield* Effect.die("Interrupt request event is missing aggregate sequence")
+            yield* execution.interrupt(sessionID, event.seq)
+          }),
+        ),
+      ),
     })
 
     return result

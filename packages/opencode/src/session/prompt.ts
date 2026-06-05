@@ -51,6 +51,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AgentAttachment, FileAttachment, Prompt, ReferenceAttachment, Source } from "@opencode-ai/core/session/prompt"
@@ -144,9 +145,47 @@ export const layer = Layer.effect(
       yield* state.cancel(sessionID)
     })
 
+    const resolveReferenceParts = Effect.fnUntraced(function* (template: string) {
+      const parts: Types.DeepMutable<PromptInput["parts"]> = []
+      const seen = new Set<string>()
+      yield* Effect.forEach(
+        ConfigMarkdown.files(template),
+        Effect.fnUntraced(function* (match) {
+          const name = match[1]
+          if (!name) return
+          const alias = name.split("/")[0]
+          if (!alias || seen.has(alias)) return
+          const reference = yield* references.get(alias)
+          if (!reference) return
+          seen.add(alias)
+
+          const start = match.index ?? 0
+          const source = { value: match[0], start, end: start + match[0].length }
+          if (reference.kind === "invalid") {
+            parts.push(referenceTextPart({ reference, source }))
+            return
+          }
+
+          yield* references.ensure(reference.path)
+          parts.push({
+            type: "file",
+            url: pathToFileURL(reference.path).href,
+            filename: alias,
+            mime: "application/x-directory",
+            source: { type: "file", text: source, path: alias },
+          })
+        }),
+        { concurrency: 1, discard: true },
+      )
+      return parts
+    })
+
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
       const ctx = yield* InstanceState.context
-      const parts: Types.DeepMutable<PromptInput["parts"]> = [{ type: "text", text: template }]
+      const parts: Types.DeepMutable<PromptInput["parts"]> = [
+        { type: "text", text: template },
+        ...(yield* resolveReferenceParts(template)),
+      ]
       const files = ConfigMarkdown.files(template)
       const seen = new Set<string>()
       yield* Effect.forEach(
@@ -159,60 +198,7 @@ export const layer = Layer.effect(
 
           const slash = name.indexOf("/")
           const alias = slash === -1 ? name : name.slice(0, slash)
-          const reference = yield* references.get(alias)
-          if (reference) {
-            const start = match.index ?? 0
-            const source = { value: match[0], start, end: start + match[0].length }
-            if (reference.kind === "invalid") {
-              parts.push(
-                referenceTextPart({ reference, source, target: slash === -1 ? undefined : name.slice(slash + 1) }),
-              )
-              return
-            }
-
-            yield* references.ensure(reference.path)
-            if (slash === -1) {
-              parts.push(referenceTextPart({ reference, source }))
-              return
-            }
-
-            const target = name.slice(slash + 1)
-            const targetPath = path.resolve(reference.path, target)
-            if (!FSUtil.contains(reference.path, targetPath)) {
-              parts.push(
-                referenceTextPart({
-                  reference,
-                  source,
-                  target,
-                  targetPath,
-                  problem: `Path escapes configured reference @${alias}: ${target}`,
-                }),
-              )
-              return
-            }
-
-            const info = yield* fsys.stat(targetPath).pipe(Effect.option)
-            if (Option.isNone(info)) {
-              parts.push(
-                referenceTextPart({
-                  reference,
-                  source,
-                  target,
-                  targetPath,
-                  problem: `Path does not exist inside configured reference @${alias}: ${target}`,
-                }),
-              )
-              return
-            }
-
-            parts.push({
-              type: "file",
-              url: pathToFileURL(targetPath).href,
-              filename: name,
-              mime: info.value.type === "Directory" ? "application/x-directory" : "text/plain",
-            })
-            return
-          }
+          if (yield* references.get(alias)) return
 
           const filepath = name.startsWith("~/")
             ? path.join(os.homedir(), name.slice(2))
@@ -563,6 +549,7 @@ export const layer = Layer.effect(
             if (flags.experimentalEventSystem) {
               yield* events.publish(SessionEvent.Shell.Started, {
                 sessionID: input.sessionID,
+                messageID: SessionMessage.ID.create(),
                 timestamp: DateTime.makeUnsafe(started),
                 callID: part.callID,
                 command: input.command,
@@ -738,6 +725,7 @@ export const layer = Layer.effect(
       if (current?.agent !== info.agent) {
         yield* events.publish(SessionEvent.AgentSwitched, {
           sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
           timestamp: DateTime.makeUnsafe(info.time.created),
           agent: info.agent,
         })
@@ -749,6 +737,7 @@ export const layer = Layer.effect(
       ) {
         yield* events.publish(SessionEvent.ModelSwitched, {
           sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
           timestamp: DateTime.makeUnsafe(info.time.created),
           model: {
             id: ModelV2.ID.make(info.model.modelID),
@@ -764,30 +753,6 @@ export const layer = Layer.effect(
       const assign = (part: Draft<SessionV1.Part>): SessionV1.Part => ({
         ...part,
         id: part.id ? PartID.make(part.id) : PartID.ascending(),
-      })
-
-      const referenceContextFromFilePart = Effect.fnUntraced(function* (
-        part: Extract<PromptInput["parts"][number], { type: "file" }>,
-        filepath: string,
-      ) {
-        const name = part.filename?.replace(/#\d+(?:-\d*)?$/, "")
-        if (!name) return
-        const slash = name.indexOf("/")
-        if (slash === -1) return
-
-        const reference = yield* references.get(name.slice(0, slash))
-        if (!reference || reference.kind === "invalid") return
-        if (!FSUtil.contains(reference.path, filepath)) return
-
-        const target = path.relative(reference.path, filepath).split(path.sep).join("/")
-        if (!target || target.startsWith("../") || target === "..") return
-
-        return referenceTextPart({
-          reference,
-          source: part.source?.text ?? { value: `@${name}`, start: 0, end: name.length + 1 },
-          target,
-          targetPath: filepath,
-        })
       })
 
       const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<SessionV1.Part>[]> = Effect.fn(
@@ -872,7 +837,6 @@ export const layer = Layer.effect(
             case "file:": {
               log.info("file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
-              const referenceContext = yield* referenceContextFromFilePart(part, filepath)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
 
               const { read } = yield* registry.named()
@@ -918,9 +882,6 @@ export const layer = Layer.effect(
                 }
                 const args = { filePath: filepath, offset, limit }
                 const pieces: Draft<SessionV1.Part>[] = [
-                  ...(referenceContext
-                    ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
-                    : []),
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -986,9 +947,6 @@ export const layer = Layer.effect(
                     error: new NamedError.Unknown({ message }).toObject(),
                   })
                   return [
-                    ...(referenceContext
-                      ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
-                      : []),
                     {
                       messageID: info.id,
                       sessionID: input.sessionID,
@@ -999,9 +957,6 @@ export const layer = Layer.effect(
                   ]
                 }
                 return [
-                  ...(referenceContext
-                    ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
-                    : []),
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -1021,7 +976,6 @@ export const layer = Layer.effect(
               }
 
               return [
-                ...(referenceContext ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }] : []),
                 {
                   messageID: info.id,
                   sessionID: input.sessionID,
@@ -1067,7 +1021,22 @@ export const layer = Layer.effect(
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
-      const resolvedParts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
+      const submittedParts: Types.DeepMutable<PromptInput["parts"]> = [...input.parts]
+      const attachedReferences = new Set(
+        input.parts.flatMap((part) =>
+          part.type === "file" && part.mime === "application/x-directory" ? [part.url] : [],
+        ),
+      )
+      for (const part of input.parts) {
+        if (part.type !== "text" || part.synthetic) continue
+        for (const reference of yield* resolveReferenceParts(part.text)) {
+          if (reference.type === "file" && attachedReferences.has(reference.url)) continue
+          if (reference.type === "file") attachedReferences.add(reference.url)
+          submittedParts.push(reference)
+        }
+      }
+
+      const resolvedParts = yield* Effect.forEach(submittedParts, resolvePart, { concurrency: "unbounded" }).pipe(
         Effect.map((x) => x.flat().map(assign)),
       )
 
@@ -1190,6 +1159,7 @@ export const layer = Layer.effect(
       if (flags.experimentalEventSystem) {
         yield* events.publish(SessionEvent.Prompted, {
           sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
           timestamp: DateTime.makeUnsafe(info.time.created),
           delivery: "steer",
           prompt: new Prompt({
@@ -1205,6 +1175,7 @@ export const layer = Layer.effect(
         if (flags.experimentalEventSystem) {
           yield* events.publish(SessionEvent.Synthetic, {
             sessionID: input.sessionID,
+            messageID: SessionMessage.ID.create(),
             timestamp: DateTime.makeUnsafe(info.time.created),
             text,
           })

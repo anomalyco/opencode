@@ -1,5 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { createEffect, createMemo, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
+import { batch, createEffect, createMemo, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
@@ -26,7 +26,18 @@ import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { displayName, getProjectAvatarSource, projectForSession, sortedRootSessions } from "@/pages/layout/helpers"
+import {
+  closeHomeProject,
+  displayName,
+  getProjectAvatarSource,
+  homeProjectDirectories,
+  homeProjectNavigation,
+  homeSessionServerStatus,
+  type HomeProjectSelection,
+  projectForSession,
+  sortedRootSessions,
+  toggleHomeProjectSelection,
+} from "@/pages/layout/helpers"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { messageAgentColor } from "@/utils/agent"
@@ -51,6 +62,8 @@ type HomeSessionRecord = {
   projectName: string
 }
 
+type HomeSessionSync = Pick<ReturnType<typeof useServerSync>, "child">
+
 type HomeSessionGroup = {
   id: "today" | "yesterday" | "older"
   title: string
@@ -65,8 +78,10 @@ const HOME_SEARCH_RESULT_TITLE =
 const HOME_SEARCH_RESULT_META =
   "min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]"
 
+let pendingHomeNavigation: { server: ServerConnection.Key; href: string } | undefined
+
 function buildHomeSessionRecords(input: {
-  sync: ReturnType<typeof useServerSync>
+  sync: Pick<ReturnType<typeof useServerSync>, "child">
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
@@ -93,6 +108,53 @@ function buildHomeSessionRecords(input: {
 
 function matchesHomeSessionSearch(record: HomeSessionRecord, query: string) {
   return `${record.session.title} ${record.projectName}`.toLowerCase().includes(query)
+}
+
+function createHomeSessionStatus(input: {
+  record: () => HomeSessionRecord
+  sync: () => HomeSessionSync
+  activeServer: () => boolean
+}) {
+  const notification = useNotification()
+  const permission = usePermission()
+  const sessionStore = createMemo(() => input.sync().child(input.record().session.directory, { bootstrap: false })[0])
+  const unseenCount = createMemo(() =>
+    input.activeServer() ? notification.session.unseenCount(input.record().session.id) : 0,
+  )
+  const hasError = createMemo(
+    () => input.activeServer() && notification.session.unseenHasError(input.record().session.id),
+  )
+  const hasPermissions = createMemo(
+    () =>
+      input.activeServer() &&
+      !!sessionPermissionRequest(
+        sessionStore().session,
+        sessionStore().permission,
+        input.record().session.id,
+        (item) => {
+          return !permission.autoResponds(item, input.record().session.directory)
+        },
+      ),
+  )
+  const serverStatus = createMemo(() =>
+    homeSessionServerStatus(input.activeServer(), () => ({
+      working: sessionStore().session_working(input.record().session.id),
+      tint: messageAgentColor(sessionStore().message[input.record().session.id], sessionStore().agent),
+    })),
+  )
+  const isWorking = createMemo(() => {
+    if (hasPermissions()) return false
+    return serverStatus().working
+  })
+  const tint = createMemo(() => serverStatus().tint)
+  return {
+    unseenCount,
+    hasError,
+    hasPermissions,
+    isWorking,
+    tint,
+    show: createMemo(() => isWorking() || hasPermissions() || hasError() || unseenCount() > 0),
+  }
 }
 
 function homeSessionSearchKey(record: HomeSessionRecord) {
@@ -122,12 +184,27 @@ function HomeDesign() {
   let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
-    project: undefined as string | undefined,
+    selection: { server: server.key } as HomeProjectSelection,
     searchFocused: false,
   })
 
-  const projects = createMemo(() => layout.projects.list())
-  const selectedProject = createMemo(() => projects().find((project) => project.worktree === state.project))
+  const focusedServer = createMemo(
+    () => global.servers.list().find((conn) => ServerConnection.key(conn) === state.selection.server) ?? server.current,
+  )
+  const focusedServerCtx = createMemo(() => {
+    const conn = focusedServer()
+    if (!conn) return
+    return global.createServerCtx(conn)
+  })
+  const focusedSync = () => focusedServerCtx()?.sync ?? sync
+  const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
+  const selectedProject = createMemo(() => projects().find((project) => project.worktree === state.selection.directory))
+  const newSessionProject = createMemo(
+    () =>
+      selectedProject() ??
+      projects().find((project) => project.worktree === focusedServerCtx()?.projects.last()) ??
+      projects()[0],
+  )
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
   const projectDirectories = createMemo(() => {
     const project = selectedProject()
@@ -136,9 +213,9 @@ function HomeDesign() {
   })
   const search = createMemo(() => state.search.trim())
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", ...projectDirectories()] as const,
+    queryKey: ["home", "sessions", state.selection.server, ...projectDirectories()] as const,
     queryFn: async () => {
-      await Promise.all(projectDirectories().map((directory) => sync.project.loadSessions(directory)))
+      await Promise.all(projectDirectories().map((directory) => focusedSync().project.loadSessions(directory)))
       return null
     },
   }))
@@ -148,7 +225,7 @@ function HomeDesign() {
   )
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
-      sync,
+      sync: focusedSync(),
       projectDirectories,
       projects,
       projectByID,
@@ -162,6 +239,13 @@ function HomeDesign() {
   })
   const searchOpen = createMemo(() => state.searchFocused && search().length > 0)
   const groups = createMemo(() => groupSessions(records(), language))
+
+  function setSelection(next: HomeProjectSelection) {
+    batch(() => {
+      if (state.selection.server !== next.server) setState("selection", "server", next.server)
+      if (state.selection.directory !== next.directory) setState("selection", "directory", next.directory)
+    })
+  }
 
   function closeSearch() {
     setState("search", "")
@@ -183,47 +267,82 @@ function HomeDesign() {
     },
   ])
 
-  function selectProject(directory: string) {
-    if (!projects().some((project) => project.worktree === directory)) return
-    setState("project", state.project === directory ? undefined : directory)
+  createEffect(() => {
+    const list = global.servers.list()
+    if (list.some((conn) => ServerConnection.key(conn) === state.selection.server)) return
+    const conn = list.find((conn) => ServerConnection.key(conn) === server.key) ?? list[0]
+    if (conn) setSelection({ server: ServerConnection.key(conn) })
+  })
+
+  createEffect(() => {
+    const pending = pendingHomeNavigation
+    if (!pending || pending.server !== server.key) return
+    pendingHomeNavigation = undefined
+    navigate(pending.href)
+  })
+
+  function focusServer(conn: ServerConnection.Any) {
+    setSelection({ server: ServerConnection.key(conn) })
   }
 
-  function addProject(conn: ServerConnection.Any, directory: string) {
-    const server = global.createServerCtx(conn)
-    server.projects.open(directory)
-    server.projects.touch(directory)
-    setState("project", directory)
+  function selectProject(conn: ServerConnection.Any, directory: string) {
+    const key = ServerConnection.key(conn)
+    if (
+      !global
+        .createServerCtx(conn)
+        .projects.list()
+        .some((project) => project.worktree === directory)
+    )
+      return
+    setSelection(toggleHomeProjectSelection(state.selection, key, directory))
+  }
+
+  function addProjects(conn: ServerConnection.Any, directories: string[]) {
+    const directory = directories[0]
+    if (!directory) return
+    const ctx = global.createServerCtx(conn)
+    directories.forEach(ctx.projects.open)
+    ctx.projects.touch(directory)
+    setSelection({ server: ServerConnection.key(conn), directory })
   }
 
   function openNewSession() {
-    const project = selectedProject()
-    if (!project) {
-      const conn = server.current
-      if (conn) void chooseProject(conn)
+    const conn = focusedServer()
+    const project = newSessionProject()
+    if (!conn || !project) return
+    openProjectNewSession(conn, project.worktree)
+  }
+
+  function navigateOnServer(conn: ServerConnection.Any, href: string) {
+    const next = homeProjectNavigation(server.key, ServerConnection.key(conn), href)
+    if (!next.server) {
+      navigate(next.href)
       return
     }
-    layout.projects.open(project.worktree)
-    server.projects.touch(project.worktree)
-    navigate(`/${base64Encode(project.worktree)}/session`)
+    pendingHomeNavigation = next
+    server.setActive(next.server)
   }
 
-  function openProjectNewSession(directory: string) {
-    layout.projects.open(directory)
-    server.projects.touch(directory)
-    navigate(`/${base64Encode(directory)}/session`)
+  function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
+    const ctx = global.createServerCtx(conn)
+    ctx.projects.open(directory)
+    ctx.projects.touch(directory)
+    navigateOnServer(conn, `/${base64Encode(directory)}/session`)
   }
 
-  function editProject(project: LocalProject) {
+  function editProject(conn: ServerConnection.Any, project: LocalProject) {
     void import("@/components/dialog-edit-project").then((x) => {
-      dialog.show(() => <x.DialogEditProject project={project} />)
+      dialog.show(() => <x.DialogEditProject server={conn} project={project} />)
     })
   }
 
-  function unseenCount(project: LocalProject) {
+  function unseenCount(conn: ServerConnection.Any, project: LocalProject) {
+    if (ServerConnection.key(conn) !== server.key) return 0
     return directories(project).reduce((total, directory) => total + notification.project.unseenCount(directory), 0)
   }
 
-  function clearNotifications(project: LocalProject) {
+  function clearNotifications(conn: ServerConnection.Any, project: LocalProject) {
+    if (ServerConnection.key(conn) !== server.key) return
     directories(project)
       .filter((directory) => notification.project.unseenCount(directory) > 0)
       .forEach((directory) => notification.project.markViewed(directory))
@@ -231,19 +350,18 @@ function HomeDesign() {
 
   function openSession(session: Session) {
     const project = projectForSession(session, projects(), projectByID())
-    layout.projects.open(project?.worktree ?? session.directory)
-    server.projects.touch(project?.worktree ?? session.directory)
-    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
+    const conn = focusedServer()
+    if (!conn) return
+    const directory = project?.worktree ?? session.directory
+    const ctx = global.createServerCtx(conn)
+    ctx.projects.open(directory)
+    ctx.projects.touch(directory)
+    navigateOnServer(conn, `/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
   async function chooseProject(conn: ServerConnection.Any) {
     function resolve(result: string | string[] | null) {
-      if (Array.isArray(result)) {
-        result.forEach((r) => addProject(conn, r))
-        if (result[0]) setState("project", result[0])
-        return
-      }
-      if (result) addProject(conn, result)
+      addProjects(conn, homeProjectDirectories(result))
     }
 
     const server = global.createServerCtx(conn)
@@ -270,18 +388,24 @@ function HomeDesign() {
   }
 
   return (
-    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 bg-background-base self-stretch flex-1">
+    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 bg-v2-background-bg-base self-stretch flex-1">
       <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
         <HomeProjectColumn
           projects={projects()}
-          selected={selectedProject()?.worktree}
+          selected={state.selection}
+          focusServer={focusServer}
           selectProject={selectProject}
           openNewSession={openProjectNewSession}
           chooseProject={(conn) => void chooseProject(conn)}
           editProject={editProject}
-          closeProject={(directory) => {
-            layout.projects.close(directory)
-            if (state.project === directory) setState("project", undefined)
+          closeProject={(conn, directory) => {
+            const next = closeHomeProject(
+              state.selection,
+              ServerConnection.key(conn),
+              global.createServerCtx(conn).projects,
+              directory,
+            )
+            if (next) setSelection(next)
           }}
           clearNotifications={clearNotifications}
           unseenCount={unseenCount}
@@ -297,6 +421,8 @@ function HomeDesign() {
             open={searchOpen()}
             loading={sessionLoad.isLoading}
             results={searchResults()}
+            sync={focusedSync()}
+            activeServer={state.selection.server === server.key}
             noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
             bindFocus={(focus) => {
               focusSessionSearch = focus
@@ -316,7 +442,10 @@ function HomeDesign() {
                   when={groups().length > 0}
                   fallback={
                     <div class="flex min-w-0 flex-col gap-4">
-                      <HomeSessionGroupHeader title={language.t("home.sessions.empty")} onNewSession={openNewSession} />
+                      <HomeSessionGroupHeader
+                        title={language.t("home.sessions.empty")}
+                        onNewSession={newSessionProject() ? openNewSession : undefined}
+                      />
                     </div>
                   }
                 >
@@ -325,11 +454,18 @@ function HomeDesign() {
                       <div class="flex min-w-0 flex-col gap-4">
                         <HomeSessionGroupHeader
                           title={group.title}
-                          onNewSession={index() === 0 ? openNewSession : undefined}
+                          onNewSession={index() === 0 && newSessionProject() ? openNewSession : undefined}
                         />
                         <div class="flex min-w-0 flex-col gap-px">
                           <For each={group.sessions}>
-                            {(record) => <HomeSessionRow record={record} openSession={openSession} />}
+                            {(record) => (
+                              <HomeSessionRow
+                                record={record}
+                                sync={focusedSync()}
+                                activeServer={state.selection.server === server.key}
+                                openSession={openSession}
+                              />
+                            )}
                           </For>
                         </div>
                       </div>
@@ -347,14 +483,15 @@ function HomeDesign() {
 
 function HomeProjectColumn(props: {
   projects: LocalProject[]
-  selected?: string
-  selectProject: (directory: string) => void
-  openNewSession: (directory: string) => void
+  selected: HomeProjectSelection
+  focusServer: (server: ServerConnection.Any) => void
+  selectProject: (server: ServerConnection.Any, directory: string) => void
+  openNewSession: (server: ServerConnection.Any, directory: string) => void
   chooseProject: (server: ServerConnection.Any) => void
-  editProject: (project: LocalProject) => void
-  closeProject: (directory: string) => void
-  clearNotifications: (project: LocalProject) => void
-  unseenCount: (project: LocalProject) => number
+  editProject: (server: ServerConnection.Any, project: LocalProject) => void
+  closeProject: (server: ServerConnection.Any, directory: string) => void
+  clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
+  unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   openSettings: () => void
   openHelp: () => void
   language: ReturnType<typeof useLanguage>
@@ -378,41 +515,41 @@ function HomeProjectColumn(props: {
       </div>
       <Show
         when={global.servers.list().length > 1}
-        fallback={<HomeProjectList {...props} chooseProject={() => props.chooseProject(global.servers.list()[0]!)} />}
+        fallback={<HomeProjectList {...props} server={global.servers.list()[0]!} />}
       >
         <For each={global.servers.list()}>
           {(item) => {
             const key = ServerConnection.key(item)
             const healthy = () => !!global.servers.health[key]?.healthy
-            const [state, setState] = createStore({ open: true })
             const serverCtx = global.createServerCtx(item)
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <button
-                  type="button"
-                  class={`${HOME_PROJECT_NAV_ROW} disabled:opacity-60`}
-                  disabled={!healthy()}
-                  onClick={() => setState("open", !state.open)}
-                >
-                  <div class="flex size-4 shrink-0 items-center justify-center">
-                    <ServerHealthIndicator health={global.servers.health[key]} />
-                  </div>
-                  <span class={HOME_PROJECT_NAV_LABEL}>{item.displayName ?? new URL(item.http.url).host}</span>
-                  <Show when={healthy()}>
-                    <IconV2
-                      name="outline-chevron-down"
-                      class="shrink-0 text-v2-icon-icon-muted data-[open=false]:-rotate-90"
-                      data-open={state.open}
-                    />
-                  </Show>
-                </button>
-                <Show when={healthy() && state.open}>
-                  <div class="mx-3 h-px bg-v2-border-border-base" />
-                  <HomeProjectList
-                    {...props}
-                    projects={serverCtx.projects.list()}
-                    chooseProject={() => props.chooseProject(item)}
+                <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
+                  <button
+                    type="button"
+                    class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
+                    data-selected={props.selected.server === key && !props.selected.directory ? "" : undefined}
+                    disabled={!healthy()}
+                    onClick={() => props.focusServer(item)}
+                  >
+                    <div class="flex size-4 shrink-0 items-center justify-center">
+                      <ServerHealthIndicator health={global.servers.health[key]} />
+                    </div>
+                    <span class={HOME_PROJECT_NAV_LABEL}>{item.displayName ?? new URL(item.http.url).host}</span>
+                  </button>
+                  <IconButtonV2
+                    data-action="home-add-project"
+                    variant="ghost-muted"
+                    size="small"
+                    class="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/server:opacity-100 focus:opacity-100"
+                    icon={<IconV2 name="folder-add-left" />}
+                    aria-label={props.language.t("home.project.add")}
+                    onClick={() => props.chooseProject(item)}
                   />
+                </div>
+                <Show when={healthy()}>
+                  <div class="mx-3 h-px bg-v2-border-border-base" />
+                  <HomeProjectList {...props} server={item} projects={serverCtx.projects.list()} />
                 </Show>
               </div>
             )
@@ -442,61 +579,52 @@ function HomeProjectColumn(props: {
 }
 
 function HomeProjectList(props: {
+  server: ServerConnection.Any
   projects: LocalProject[]
-  selected?: string
-  selectProject: (directory: string) => void
-  openNewSession: (directory: string) => void
-  chooseProject: () => void
-  editProject: (project: LocalProject) => void
-  closeProject: (directory: string) => void
-  clearNotifications: (project: LocalProject) => void
-  unseenCount: (project: LocalProject) => number
+  selected: HomeProjectSelection
+  selectProject: (server: ServerConnection.Any, directory: string) => void
+  openNewSession: (server: ServerConnection.Any, directory: string) => void
+  editProject: (server: ServerConnection.Any, project: LocalProject) => void
+  closeProject: (server: ServerConnection.Any, directory: string) => void
+  clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
+  unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   language: ReturnType<typeof useLanguage>
 }) {
   return (
-    <Show
-      when={props.projects.length > 0}
-      fallback={
-        <button
-          type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
-          onClick={props.chooseProject}
-        >
-          <IconV2 name="folder-add-left" size="small" />
-          <span>{props.language.t("home.project.add")}</span>
-        </button>
-      }
-    >
-      <div class="flex min-w-0 flex-col gap-1">
-        <For each={props.projects}>
-          {(project) => (
-            <HomeProjectRow
-              project={project}
-              selected={props.selected === project.worktree}
-              unseenCount={props.unseenCount(project)}
-              selectProject={props.selectProject}
-              openNewSession={props.openNewSession}
-              editProject={props.editProject}
-              closeProject={props.closeProject}
-              clearNotifications={props.clearNotifications}
-              language={props.language}
-            />
-          )}
-        </For>
-      </div>
-    </Show>
+    <div class="flex min-w-0 flex-col gap-1">
+      <For each={props.projects}>
+        {(project) => (
+          <HomeProjectRow
+            project={project}
+            server={props.server}
+            selected={
+              props.selected.server === ServerConnection.key(props.server) &&
+              props.selected.directory === project.worktree
+            }
+            unseenCount={props.unseenCount(props.server, project)}
+            selectProject={props.selectProject}
+            openNewSession={props.openNewSession}
+            editProject={props.editProject}
+            closeProject={props.closeProject}
+            clearNotifications={props.clearNotifications}
+            language={props.language}
+          />
+        )}
+      </For>
+    </div>
   )
 }
 
 function HomeProjectRow(props: {
   project: LocalProject
+  server: ServerConnection.Any
   selected: boolean
   unseenCount: number
-  selectProject: (directory: string) => void
-  openNewSession: (directory: string) => void
-  editProject: (project: LocalProject) => void
-  closeProject: (directory: string) => void
-  clearNotifications: (project: LocalProject) => void
+  selectProject: (server: ServerConnection.Any, directory: string) => void
+  openNewSession: (server: ServerConnection.Any, directory: string) => void
+  editProject: (server: ServerConnection.Any, project: LocalProject) => void
+  closeProject: (server: ServerConnection.Any, directory: string) => void
+  clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   language: ReturnType<typeof useLanguage>
 }) {
   const [state, setState] = createStore({ menuOpen: false })
@@ -508,7 +636,7 @@ function HomeProjectRow(props: {
         class={`${HOME_PROJECT_NAV_ROW} pr-16`}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
-        onClick={() => props.selectProject(props.project.worktree)}
+        onClick={() => props.selectProject(props.server, props.project.worktree)}
       >
         <HomeProjectAvatar project={props.project} />
         <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
@@ -523,7 +651,7 @@ function HomeProjectRow(props: {
           size="small"
           icon={<IconV2 name="edit" />}
           aria-label={props.language.t("command.session.new")}
-          onClick={() => props.openNewSession(props.project.worktree)}
+          onClick={() => props.openNewSession(props.server, props.project.worktree)}
         />
         <MenuV2
           gutter={4}
@@ -542,17 +670,20 @@ function HomeProjectRow(props: {
           />
           <MenuV2.Portal>
             <MenuV2.Content>
-              <MenuV2.Item onSelect={() => props.openNewSession(props.project.worktree)}>
+              <MenuV2.Item onSelect={() => props.openNewSession(props.server, props.project.worktree)}>
                 {props.language.t("command.session.new")}
               </MenuV2.Item>
-              <MenuV2.Item onSelect={() => props.editProject(props.project)}>
+              <MenuV2.Item onSelect={() => props.editProject(props.server, props.project)}>
                 {props.language.t("common.edit")}
               </MenuV2.Item>
-              <MenuV2.Item disabled={props.unseenCount === 0} onSelect={() => props.clearNotifications(props.project)}>
+              <MenuV2.Item
+                disabled={props.unseenCount === 0}
+                onSelect={() => props.clearNotifications(props.server, props.project)}
+              >
                 {props.language.t("sidebar.project.clearNotifications")}
               </MenuV2.Item>
               <MenuV2.Separator />
-              <MenuV2.Item onSelect={() => props.closeProject(props.project.worktree)}>
+              <MenuV2.Item onSelect={() => props.closeProject(props.server, props.project.worktree)}>
                 {props.language.t("common.close")}
               </MenuV2.Item>
             </MenuV2.Content>
@@ -580,6 +711,8 @@ function HomeSessionSearch(props: {
   open: boolean
   loading: boolean
   results: HomeSessionRecord[]
+  sync: HomeSessionSync
+  activeServer: boolean
   noResultsLabel: string
   bindFocus: (focus: () => void) => void
   onInput: (value: string) => void
@@ -694,6 +827,8 @@ function HomeSessionSearch(props: {
                           {(record) => (
                             <HomeSessionSearchResultRow
                               record={record}
+                              sync={props.sync}
+                              activeServer={props.activeServer}
                               selected={store.active === homeSessionSearchKey(record)}
                               onHighlight={() => setStore("active", homeSessionSearchKey(record))}
                               onSelect={(session) => props.onSelect(session)}
@@ -778,29 +913,18 @@ function HomeSessionSearch(props: {
 
 function HomeSessionSearchResultRow(props: {
   record: HomeSessionRecord
+  sync: HomeSessionSync
+  activeServer: boolean
   selected: boolean
   onHighlight: () => void
   onSelect: (session: Session) => void
 }) {
-  const globalSync = useServerSync()
-  const notification = useNotification()
-  const permission = usePermission()
-  const [sessionStore] = globalSync.child(props.record.session.directory, { bootstrap: false })
-  const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
-  const unseenCount = createMemo(() => notification.session.unseenCount(props.record.session.id))
-  const hasError = createMemo(() => notification.session.unseenHasError(props.record.session.id))
-  const hasPermissions = createMemo(
-    () =>
-      !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.record.session.id, (item) => {
-        return !permission.autoResponds(item, props.record.session.directory)
-      }),
-  )
-  const isWorking = createMemo(() => {
-    if (hasPermissions()) return false
-    return sessionStore.session_working(props.record.session.id)
+  const status = createHomeSessionStatus({
+    record: () => props.record,
+    sync: () => props.sync,
+    activeServer: () => props.activeServer,
   })
-  const tint = createMemo(() => messageAgentColor(sessionStore.message[props.record.session.id], sessionStore.agent))
-  const showStatus = createMemo(() => isWorking() || hasPermissions() || hasError() || unseenCount() > 0)
+  const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
 
   const key = () => homeSessionSearchKey(props.record)
 
@@ -820,7 +944,7 @@ function HomeSessionSearchResultRow(props: {
       onClick={() => props.onSelect(props.record.session)}
     >
       <Show
-        when={showStatus()}
+        when={status.show()}
         fallback={
           <div class="flex size-4 shrink-0 items-center justify-center">
             <TabStateIndicator />
@@ -829,19 +953,19 @@ function HomeSessionSearchResultRow(props: {
       >
         <div
           class="flex size-4 shrink-0 items-center justify-center"
-          style={{ color: tint() ?? "var(--icon-interactive-base)" }}
+          style={{ color: status.tint() ?? "var(--icon-interactive-base)" }}
         >
           <Switch>
-            <Match when={isWorking()}>
+            <Match when={status.isWorking()}>
               <Spinner class="size-[15px]" />
             </Match>
-            <Match when={hasPermissions()}>
+            <Match when={status.hasPermissions()}>
               <div class="size-1.5 rounded-full bg-surface-warning-strong" />
             </Match>
-            <Match when={hasError()}>
+            <Match when={status.hasError()}>
               <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
             </Match>
-            <Match when={unseenCount() > 0}>
+            <Match when={status.unseenCount() > 0}>
               <div class="size-1.5 rounded-full bg-text-interactive-base" />
             </Match>
           </Switch>
@@ -884,26 +1008,18 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
   )
 }
 
-function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (session: Session) => void }) {
-  const globalSync = useServerSync()
-  const notification = useNotification()
-  const permission = usePermission()
-  const [sessionStore] = globalSync.child(props.record.session.directory, { bootstrap: false })
-  const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
-  const unseenCount = createMemo(() => notification.session.unseenCount(props.record.session.id))
-  const hasError = createMemo(() => notification.session.unseenHasError(props.record.session.id))
-  const hasPermissions = createMemo(
-    () =>
-      !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.record.session.id, (item) => {
-        return !permission.autoResponds(item, props.record.session.directory)
-      }),
-  )
-  const isWorking = createMemo(() => {
-    if (hasPermissions()) return false
-    return sessionStore.session_working(props.record.session.id)
+function HomeSessionRow(props: {
+  record: HomeSessionRecord
+  sync: HomeSessionSync
+  activeServer: boolean
+  openSession: (session: Session) => void
+}) {
+  const status = createHomeSessionStatus({
+    record: () => props.record,
+    sync: () => props.sync,
+    activeServer: () => props.activeServer,
   })
-  const tint = createMemo(() => messageAgentColor(sessionStore.message[props.record.session.id], sessionStore.agent))
-  const showStatus = createMemo(() => isWorking() || hasPermissions() || hasError() || unseenCount() > 0)
+  const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
 
   return (
     <button
@@ -913,7 +1029,7 @@ function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (sessio
       onClick={() => props.openSession(props.record.session)}
     >
       <Show
-        when={showStatus()}
+        when={status.show()}
         fallback={
           <div class="flex size-4 shrink-0 items-center justify-center">
             <TabStateIndicator />
@@ -922,19 +1038,19 @@ function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (sessio
       >
         <div
           class="flex size-4 shrink-0 items-center justify-center"
-          style={{ color: tint() ?? "var(--icon-interactive-base)" }}
+          style={{ color: status.tint() ?? "var(--icon-interactive-base)" }}
         >
           <Switch>
-            <Match when={isWorking()}>
+            <Match when={status.isWorking()}>
               <Spinner class="size-[15px]" />
             </Match>
-            <Match when={hasPermissions()}>
+            <Match when={status.hasPermissions()}>
               <div class="size-1.5 rounded-full bg-surface-warning-strong" />
             </Match>
-            <Match when={hasError()}>
+            <Match when={status.hasError()}>
               <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
             </Match>
-            <Match when={unseenCount() > 0}>
+            <Match when={status.unseenCount() > 0}>
               <div class="size-1.5 rounded-full bg-text-interactive-base" />
             </Match>
           </Switch>

@@ -1,19 +1,28 @@
-import { LLM, LLMClient, LLMError, LLMEvent } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Semaphore, Stream } from "effect"
+import { LLM, LLMClient, LLMError, LLMEvent, SystemPart } from "@opencode-ai/llm"
+import { Cause, DateTime, Effect, FiberSet, Layer, Schema, Semaphore, Stream } from "effect"
+import { AgentV2 } from "../../agent"
+import { Config } from "../../config"
+import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
+import { Location } from "../../location"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
-import { SessionSchema } from "../schema"
+import { QuestionV2 } from "../../question"
+import { SystemContext } from "../../system-context/index"
+import { SystemContextRegistry } from "../../system-context/registry"
+import { SkillGuidance } from "../../skill/guidance"
+import { ToolRegistry } from "../../tool/registry"
+import { SessionContextEpoch } from "../context-epoch"
+import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
+import { SessionHistory } from "../history"
+import { SessionInput } from "../input"
+import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
-import { Service, StepLimitExceededError } from "./index"
+import { type RunError, Service, StepLimitExceededError } from "./index"
+import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
-import { ToolRegistry } from "../../tool-registry"
-import { SessionRunnerModel } from "./model"
-import { Database } from "../../database/database"
-import { SessionInput } from "../input"
-import { QuestionV2 } from "../../question"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -30,16 +39,7 @@ import { QuestionV2 } from "../../question"
  *   - [ ] Bound provider retries and repeated identical tool calls.
  *
  * - Runtime context assembly
- *   - [x] Load Session placement and chronological projected V2 history.
- *   - [x] Resolve the selected model through the location-scoped runner environment.
- *   - [ ] Load the selected agent and effective permissions.
- *   - [ ] Build provider/model-specific base instructions and environment facts.
- *   - [ ] Load configured project instructions such as `AGENTS.md`, remote instructions, and
- *     nearby nested instructions discovered while files are read.
- *   - [ ] List available skills in the system prompt and expose a tool for loading skill bodies.
- *   - [ ] Resolve referenced files, directories, agents, repositories, MCP resources, and media.
- *   - [ ] Apply steering reminders, plugin transforms, and structured-output policy.
- *   - [ ] Compact or summarize history when context pressure requires it.
+ *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
  *
  * - One provider turn
  *   - [x] Translate every projected V2 Session message variant into canonical
@@ -82,10 +82,16 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const llm = yield* LLMClient.Service
+    const agents = yield* AgentV2.Service
     const tools = yield* ToolRegistry.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
+    const location = yield* Location.Service
+    const systemContext = yield* SystemContextRegistry.Service
+    const skillGuidance = yield* SkillGuidance.Service
+    const config = yield* Config.Service
     const db = (yield* Database.Service).db
+    const compact = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -95,7 +101,6 @@ export const layer = Layer.effect(
     const getContext = Effect.fn("SessionRunner.getContext")(function* (sessionID: SessionSchema.ID) {
       return yield* store.context(sessionID)
     })
-
     const failInterruptedTools = Effect.fn("SessionRunner.failInterruptedTools")(function* (
       sessionID: SessionSchema.ID,
     ) {
@@ -125,24 +130,76 @@ export const layer = Layer.effect(
     const isQuestionRejected = (cause: Cause.Cause<unknown>) =>
       cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
 
-    const runTurn = Effect.fn("SessionRunner.runTurn")(function* (
-      session: SessionSchema.Info,
-      promotion: "steer" | "queue" | undefined,
+    class RetryTurn extends Error {
+      constructor(readonly promotion: SessionInput.Delivery | undefined) {
+        super()
+      }
+    }
+    const retryAgentMismatch = (promotion: SessionInput.Delivery | undefined) =>
+      Effect.catchDefect((defect) =>
+        defect instanceof SessionContextEpoch.AgentMismatch ? Effect.die(new RetryTurn(promotion)) : Effect.die(defect),
+      )
+
+    const sameModel = Schema.toEquivalence(Schema.UndefinedOr(ModelV2.Ref))
+    const loadSystemContext = (agent: AgentV2.Selection) =>
+      Effect.all([systemContext.load(), skillGuidance.load(agent)], { concurrency: "unbounded" }).pipe(
+        Effect.map(SystemContext.combine),
+      )
+
+    const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
+      sessionID: SessionSchema.ID,
+      promotion: SessionInput.Delivery | undefined,
     ) {
-      const model = yield* models.resolve(session)
+      const session = yield* getSession(sessionID)
+      if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
+        return yield* Effect.interrupt
+      const agent = yield* agents.select(session.agent)
+      const initialized = yield* SessionContextEpoch.initialize(
+        db,
+        loadSystemContext(agent),
+        session.id,
+        session.location,
+        agent.id,
+      ).pipe(retryAgentMismatch(promotion))
       const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
-      if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id)
-      if (promotion === "queue") {
-        yield* SessionInput.promoteNextQueued(db, events, session.id)
-        yield* SessionInput.promoteSteers(db, events, session.id)
+      if (promotion) {
+        const cutoff = yield* SessionInput.latestSeq(db, session.id)
+        if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        if (promotion === "queue") {
+          yield* SessionInput.promoteNextQueued(db, events, session.id)
+          yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
+        }
       }
-      yield* failInterruptedTools(session.id)
-      const context = yield* getContext(session.id)
-      const request = LLM.request({ model, messages: toLLMMessages(context, model), tools: yield* tools.definitions() })
+      const system =
+        initialized ??
+        (yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          loadSystemContext(agent),
+          session.id,
+          session.location,
+          agent.id,
+        ).pipe(retryAgentMismatch(undefined)))
+      const current = yield* getSession(sessionID)
+      if ((yield* agents.select(current.agent)).id !== agent.id || !sameModel(current.model, session.model))
+        return yield* Effect.die(new RetryTurn(undefined))
+      const model = yield* models.resolve(session)
+      const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
+      const context = entries.map((entry) => entry.message)
+      const request = LLM.request({
+        model,
+        system: [agent.info?.system, system.baseline]
+          .filter((part): part is string => part !== undefined && part.length > 0)
+          .map(SystemPart.make),
+        messages: toLLMMessages(context, model),
+        tools: yield* tools.definitions(),
+      })
+      if (yield* compact({ sessionID: session.id, entries, model, request }))
+        return yield* Effect.die(new RetryTurn(undefined))
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
-        agent: session.agent ?? "build",
+        agent: agent.id,
         model: {
           id: ModelV2.ID.make(model.id),
           providerID: ProviderV2.ID.make(model.provider),
@@ -151,13 +208,15 @@ export const layer = Layer.effect(
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent) => withPublication(publisher.publish(event))
+      if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
+        return yield* Effect.die(new RetryTurn(undefined))
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
-            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
+            yield* tools.settle({ sessionID: session.id, agent: agent.id, call: event }).pipe(
               Effect.catchCause((cause) => {
                 if (isQuestionRejected(cause)) return Effect.failCause(cause)
                 return Effect.succeed({
@@ -227,28 +286,39 @@ export const layer = Layer.effect(
         }),
       )
     }, Effect.scoped)
+    const runTurn: (
+      sessionID: SessionSchema.ID,
+      promotion: SessionInput.Delivery | undefined,
+    ) => Effect.Effect<boolean, RunError> = (sessionID, promotion) =>
+      runTurnAttempt(sessionID, promotion).pipe(
+        Effect.catchDefect((defect) =>
+          defect instanceof RetryTurn
+            ? Effect.yieldNow.pipe(Effect.andThen(runTurn(sessionID, defect.promotion)))
+            : Effect.die(defect),
+        ),
+      )
 
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force?: boolean
     }) {
-      const session = yield* getSession(input.sessionID)
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
-      const hasQueue = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+      const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (input.force !== true && !hasSteer && !hasQueue) return
-      let promotion: "steer" | "queue" | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
+      yield* failInterruptedTools(input.sessionID)
+      let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
       while (openActivity) {
         let needsContinuation = true
         for (let step = 0; step < MAX_STEPS; step++) {
-          needsContinuation = yield* runTurn(session, promotion)
+          needsContinuation = yield* runTurn(input.sessionID, promotion)
           promotion = "steer"
-          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
+          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break
         }
         if (needsContinuation)
           return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
-        openActivity = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+        openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }
     })

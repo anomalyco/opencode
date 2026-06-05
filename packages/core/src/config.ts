@@ -35,6 +35,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   model: Schema.String.pipe(Schema.optional).annotate({
     description: "Default model to use when no session or agent model is selected",
   }),
+  default_agent: Schema.String.pipe(Schema.optional).annotate({
+    description: "Default primary agent to use when no session agent is selected",
+  }),
   autoupdate: Schema.Union([Schema.Boolean, Schema.Literal("notify")])
     .pipe(Schema.optional)
     .annotate({
@@ -115,6 +118,12 @@ export class Directory extends Schema.Class<Directory>("Config.Directory")({
 
 export type Entry = Document | Directory
 
+export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
+  return entries
+    .filter((entry): entry is Document => entry.type === "document")
+    .findLast((entry) => entry.info[key] !== undefined)?.info[key]
+}
+
 export interface Interface {
   /** Returns location config documents and supplemental directories from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
@@ -130,6 +139,9 @@ export const layer = Layer.effect(
     const location = yield* Location.Service
     const policy = yield* Policy.Service
     const names = ["config.json", "opencode.json", "opencode.jsonc"]
+    const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+    const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
+    const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
 
     const loadFile = Effect.fnUntraced(function* (filepath: string) {
       const text = yield* fs.readFileStringSafe(filepath)
@@ -139,21 +151,10 @@ export const layer = Layer.effect(
       const input: unknown = parse(text, errors, { allowTrailingComma: true })
       if (errors.length) return
 
-      const decoded = ConfigMigrateV1.isV1(input)
-        ? Option.map(
-            Schema.decodeUnknownOption(ConfigV1.Info)(input, {
-              errors: "all",
-              onExcessProperty: "ignore",
-              propertyOrder: "original",
-            }),
-            ConfigMigrateV1.migrate,
-          )
-        : Option.some(input)
       const info = Option.getOrUndefined(
-        Option.flatMap(
-          decoded,
-          Schema.decodeUnknownOption(Info, { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" }),
-        ),
+        ConfigMigrateV1.isV1(input)
+          ? decodeV1Info(input).pipe(Option.map(ConfigMigrateV1.migrate), Option.flatMap(decodeInfo))
+          : decodeInfo(input),
       )
       if (!info) return
       return new Document({ type: "document", path: filepath, info })

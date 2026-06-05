@@ -52,6 +52,7 @@ type RunRuntimeInput = {
   files: RunInput["files"]
   initialInput?: string
   thinking: boolean
+  backgroundSubagents: boolean
   replay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
@@ -70,6 +71,7 @@ type RunLocalInput = {
   files: RunInput["files"]
   initialInput?: string
   thinking: boolean
+  backgroundSubagents: boolean
   replay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
@@ -141,7 +143,7 @@ function variantsFor(providers: RunProvider[], model: RunInput["model"]) {
   return Object.keys(providers.find((item) => item.id === model.providerID)?.models?.[model.modelID]?.variants ?? {})
 }
 
-const REPLAY_RESIZE_DELAY = 250
+const RESIZE_DELAY = 250
 const LOCAL_REPLAY_ROW_LIMIT = 100
 
 async function resolveExitTitle(
@@ -253,6 +255,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         model: state.model,
         variant: state.activeVariant,
         tuiConfig,
+        backgroundSubagents: input.backgroundSubagents,
         onPermissionReply: async (next) => {
           if (state.demo?.permission(next)) {
             return
@@ -371,6 +374,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
             .finally(() => {
               state.aborting = false
             })
+        },
+        onBackground: () => {
+          if (!hasSession(input, state)) return
+          void ctx.sdk.experimental.session.background({ sessionID: state.sessionID }).catch(() => {})
         },
         onSubagentSelect: (sessionID) => {
           state.selectSubagent?.(sessionID)
@@ -519,35 +526,38 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         return next
       }
 
-      let replayResizeTimer: ReturnType<typeof setTimeout> | undefined
-      const offResize = input.replay
-        ? shell.onResize(() => {
-            if (replayResizeTimer) {
-              clearTimeout(replayResizeTimer)
-            }
+      let resizeTimer: ReturnType<typeof setTimeout> | undefined
+      const offResize = shell.onResize(() => {
+        if (resizeTimer) {
+          clearTimeout(resizeTimer)
+        }
 
-            replayResizeTimer = setTimeout(() => {
-              replayResizeTimer = undefined
-              if (footer.isClosed || !state.stream) {
-                return
-              }
+        resizeTimer = setTimeout(() => {
+          resizeTimer = undefined
+          if (footer.isClosed) {
+            return
+          }
 
-              void state.stream
-                .then((item) =>
-                  item.handle.replayOnResize({
-                    localRows: () => state.localRows,
-                    reset: () =>
-                      shell.resetForReplay({
-                        sessionTitle: state.sessionTitle,
-                        sessionID: state.sessionID,
-                        history: state.history,
-                      }),
+          shell.refreshTheme()
+          if (!input.replay || !state.stream) {
+            return
+          }
+
+          void state.stream
+            .then((item) =>
+              item.handle.replayOnResize({
+                localRows: () => state.localRows,
+                reset: () =>
+                  shell.resetForReplay({
+                    sessionTitle: state.sessionTitle,
+                    sessionID: state.sessionID,
+                    history: state.history,
                   }),
-                )
-                .catch(() => {})
-            }, REPLAY_RESIZE_DELAY)
-          })
-        : () => {}
+              }),
+            )
+            .catch(() => {})
+        }, RESIZE_DELAY)
+      })
 
       const runQueue = async () => {
         let includeFiles = true
@@ -752,8 +762,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         try {
           await runQueue()
         } finally {
-          if (replayResizeTimer) {
-            clearTimeout(replayResizeTimer)
+          if (resizeTimer) {
+            clearTimeout(resizeTimer)
           }
           offResize()
           await state.stream?.then((item) => item.handle.close()).catch(() => {})
@@ -794,6 +804,7 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
         files: input.files,
         initialInput: input.initialInput,
         thinking: input.thinking,
+        backgroundSubagents: input.backgroundSubagents,
         replay: input.replay,
         replayLimit: input.replayLimit,
         demo: input.demo,
@@ -848,6 +859,7 @@ export async function runInteractiveMode(input: RunInput & { createSession?: Cre
         files: input.files,
         initialInput: input.initialInput,
         thinking: input.thinking,
+        backgroundSubagents: input.backgroundSubagents,
         replay: input.replay,
         replayLimit: input.replayLimit,
         demo: input.demo,
