@@ -8,12 +8,53 @@ import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
 import { ScopedKey } from "@/utils/server-scope"
 
 const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
+
+export function isStaleQuestionResponseFailure(error: unknown, request: QuestionRequest) {
+  const body = unwrapErrorBody(error)
+  const tag = discriminator(body)
+  const requestID = typeof body?.requestID === "string" ? body.requestID : undefined
+  const message = errorMessage(error, body)
+  if (tag === "QuestionNotFoundError") return !requestID || requestID === request.id
+  if (message.includes("Question request not found")) return !requestID || requestID === request.id
+  return false
+}
+
+function discriminator(body: Record<string, unknown> | undefined) {
+  if (typeof body?._tag === "string") return body._tag
+  if (typeof body?.name === "string") return body.name
+}
+
+export function removeQuestionRequest(list: QuestionRequest[] | undefined, request: QuestionRequest) {
+  return (list ?? []).filter((item) => item.id !== request.id)
+}
+
+function unwrapErrorBody(error: unknown): Record<string, unknown> | undefined {
+  if (!(error instanceof Error)) return objectValue(error)
+  if (!error.cause || typeof error.cause !== "object" || !("body" in error.cause)) return objectValue(error)
+  return objectValue((error.cause as Record<string, unknown>).body)
+}
+
+function objectValue(value: unknown) {
+  if (typeof value !== "object" || value === null) return
+  return value as Record<string, unknown>
+}
+
+function errorMessage(error: unknown, body = unwrapErrorBody(error)) {
+  const bodyMessage = typeof body?.message === "string" ? body.message : undefined
+  if (bodyMessage) return bodyMessage
+  const data = objectValue(body?.data)
+  const dataMessage = typeof data?.message === "string" ? data.message : undefined
+  if (dataMessage) return dataMessage
+  if (error instanceof Error) return error.message
+  return String(error)
+}
 
 function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseEvent) => void }) {
   return (
@@ -63,6 +104,7 @@ function Option(props: {
 export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
+  const sync = useSync()
   const language = useLanguage()
   const cacheKey = ScopedKey.from(serverSDK.scope, props.request.id)
 
@@ -204,8 +246,22 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   })
 
   const fail = (err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err)
-    showToast({ title: language.t("common.requestFailed"), description: message })
+    showToast({ title: language.t("common.requestFailed"), description: errorMessage(err) })
+  }
+
+  const cleanupStale = () => {
+    replied = true
+    cache.delete(cacheKey)
+    sync.set("question", props.request.sessionID, (list) => removeQuestionRequest(list, props.request))
+  }
+
+  const onQuestionError = (err: unknown) => {
+    if (isStaleQuestionResponseFailure(err, props.request)) {
+      cleanupStale()
+      return
+    }
+
+    fail(err)
   }
 
   const replyMutation = useMutation(() => ({
@@ -217,7 +273,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       replied = true
       cache.delete(cacheKey)
     },
-    onError: fail,
+    onError: onQuestionError,
   }))
 
   const rejectMutation = useMutation(() => ({
@@ -229,7 +285,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       replied = true
       cache.delete(cacheKey)
     },
-    onError: fail,
+    onError: onQuestionError,
   }))
 
   const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)

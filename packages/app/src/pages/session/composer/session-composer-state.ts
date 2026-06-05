@@ -21,6 +21,50 @@ export const todoState = (input: {
   return "close"
 }
 
+export function isStalePermissionResponseFailure(error: unknown, permission: PermissionRequest) {
+  const body = unwrapErrorBody(error)
+  const tag = discriminator(body)
+  const requestID = typeof body?.requestID === "string" ? body.requestID : undefined
+  const message = errorMessage(error, body)
+  if (tag === "PermissionNotFoundError") return isCurrentPermissionRequest(requestID, permission)
+  if (message.includes("Permission request not found")) return isCurrentPermissionRequest(requestID, permission)
+  return false
+}
+
+function isCurrentPermissionRequest(requestID: string | undefined, permission: PermissionRequest) {
+  return !requestID || requestID === permission.id
+}
+
+function discriminator(body: Record<string, unknown> | undefined) {
+  if (typeof body?._tag === "string") return body._tag
+  if (typeof body?.name === "string") return body.name
+}
+
+export function removePermissionRequest(list: PermissionRequest[] | undefined, permission: PermissionRequest) {
+  return (list ?? []).filter((item) => item.id !== permission.id)
+}
+
+function unwrapErrorBody(error: unknown): Record<string, unknown> | undefined {
+  if (!(error instanceof Error)) return objectValue(error)
+  if (!error.cause || typeof error.cause !== "object" || !("body" in error.cause)) return objectValue(error)
+  return objectValue((error.cause as Record<string, unknown>).body)
+}
+
+function objectValue(value: unknown) {
+  if (typeof value !== "object" || value === null) return
+  return value as Record<string, unknown>
+}
+
+function errorMessage(error: unknown, body = unwrapErrorBody(error)) {
+  const bodyMessage = typeof body?.message === "string" ? body.message : undefined
+  if (bodyMessage) return bodyMessage
+  const data = objectValue(body?.data)
+  const dataMessage = typeof data?.message === "string" ? data.message : undefined
+  if (dataMessage) return dataMessage
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
 const idle = { type: "idle" as const }
 
 export function createSessionComposerState(options?: { closeMs?: number | (() => number) }) {
@@ -79,10 +123,14 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
 
     setStore("responding", perm.id)
     sdk.client.permission
-      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
+      .reply({ requestID: perm.id, reply: response })
       .catch((err: unknown) => {
-        const description = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description })
+        if (isStalePermissionResponseFailure(err, perm)) {
+          sync.set("permission", perm.sessionID, (list) => removePermissionRequest(list, perm))
+          return
+        }
+
+        showToast({ title: language.t("common.requestFailed"), description: errorMessage(err) })
       })
       .finally(() => {
         setStore("responding", (id) => (id === perm.id ? undefined : id))

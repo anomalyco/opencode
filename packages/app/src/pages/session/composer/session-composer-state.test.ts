@@ -1,7 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, mock, test } from "bun:test"
 import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
-import { todoState } from "./session-composer-state"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+
+mock.module("@solidjs/router", () => ({ useParams: () => ({ id: "root" }) }))
+
+const { isStalePermissionResponseFailure, removePermissionRequest, todoState } = await import("./session-composer-state")
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -124,5 +127,115 @@ describe("todoState", () => {
 
   test("clears completed todos when the session is no longer live", () => {
     expect(todoState({ count: 2, done: true, live: false })).toBe("clear")
+  })
+})
+
+describe("permission response stale cleanup", () => {
+  test("treats matching PermissionNotFoundError as stale", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        { _tag: "PermissionNotFoundError", requestID: "perm-1", message: "Permission request not found" },
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(true)
+  })
+
+  test("ignores PermissionNotFoundError for another pending permission", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        { _tag: "PermissionNotFoundError", requestID: "perm-2", message: "Permission request not found" },
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(false)
+  })
+
+  test("treats request-not-found messages as stale", () => {
+    expect(isStalePermissionResponseFailure(new Error("Permission request not found"), permission("perm-1", "session-1"))).toBe(
+      true,
+    )
+  })
+
+  test("treats name-discriminated PermissionNotFoundError with data message as stale", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        { name: "PermissionNotFoundError", data: { message: "Permission request not found" }, requestID: "perm-1" },
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(true)
+  })
+
+  test("ignores name-discriminated PermissionNotFoundError for another pending permission", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        { name: "PermissionNotFoundError", data: { message: "Permission request not found" }, requestID: "perm-2" },
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(false)
+  })
+
+  test("ignores request-not-found messages for another pending permission", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        { requestID: "perm-2", message: "Permission request not found" },
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(false)
+  })
+
+  test("keeps typed session-not-found responses user-visible for direct permission replies", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        { _tag: "NotFoundError", message: "Session not found" },
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(false)
+  })
+
+  test("keeps body-wrapped session-not-found responses user-visible for direct permission replies", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        new Error("Request failed", { cause: { body: { name: "NotFoundError", message: "Session not found" } } }),
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(false)
+  })
+
+  test("keeps name-discriminated session-not-found responses user-visible for direct permission replies", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        { name: "NotFoundError", data: { message: "Session not found" }, requestID: "perm-1" },
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(false)
+  })
+
+  test("keeps body-message session-not-found responses user-visible for direct permission replies", () => {
+    expect(
+      isStalePermissionResponseFailure(
+        { name: "NotFoundError", message: "Session not found", requestID: "perm-1" },
+        permission("perm-1", "session-1"),
+      ),
+    ).toBe(false)
+  })
+
+  test("keeps bare session-not-found errors user-visible", () => {
+    expect(isStalePermissionResponseFailure(new Error("Session not found"), permission("perm-1", "session-1"))).toBe(
+      false,
+    )
+  })
+
+  test("keeps normal failures user-visible", () => {
+    expect(isStalePermissionResponseFailure(new Error("Internal server error"), permission("perm-1", "session-1"))).toBe(
+      false,
+    )
+  })
+
+  test("removes only the stale permission request", () => {
+    expect(
+      removePermissionRequest(
+        [permission("perm-1", "session-1"), permission("perm-2", "session-1")],
+        permission("perm-1", "session-1"),
+      ).map((item) => item.id),
+    ).toEqual(["perm-2"])
   })
 })
