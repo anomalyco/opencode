@@ -1255,6 +1255,7 @@ export const layer = Layer.effect(
         const slog = elog.with({ sessionID })
         let structured: unknown
         let step = 0
+        let modelOverride: Provider.Model | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1309,7 +1310,7 @@ export const layer = Layer.effect(
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-          const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+          const model = modelOverride ?? (yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID))
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
@@ -1348,6 +1349,27 @@ export const layer = Layer.effect(
           }
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
+          const backupModels = agent.backupModel?.length
+            ? yield* Effect.all(
+                agent.backupModel.map((bm) =>
+                  provider.getModel(bm.providerID, bm.modelID).pipe(
+                    Effect.orElseSucceed(() => undefined),
+                    Effect.tap((m) =>
+                      m
+                        ? Effect.void
+                        : Effect.sync(() =>
+                            slog.warn("backup model not found", {
+                              providerID: bm.providerID,
+                              modelID: bm.modelID,
+                            }),
+                          ),
+                    ),
+                  ),
+                ),
+              ).pipe(
+                Effect.map((arr) => arr.filter((m) => m !== undefined)),
+              )
+            : undefined
           msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
             Effect.provideService(RuntimeFlags.Service, flags),
             Effect.provideService(FSUtil.Service, fsys),
@@ -1386,6 +1408,7 @@ export const layer = Layer.effect(
               assistantMessage: msg,
               sessionID,
               model,
+              backupModels,
             })
             .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
 
@@ -1483,12 +1506,29 @@ export const layer = Layer.effect(
               }
             }
 
+            // If a backup model was selected, switch to it for subsequent
+            // loop iterations so the "Switching to backup model" status
+            // only appears once per prompt rather than on every message.
+            if (handle.message.providerID !== model.providerID || handle.message.modelID !== model.id) {
+              modelOverride = yield* getModel(
+                handle.message.providerID as ProviderV2.ID,
+                handle.message.modelID as ModelV2.ID,
+                sessionID,
+              )
+            }
+
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              // When a backup model was used (even if it overflowed),
+              // prefer it for compaction over the primary which may have
+              // exceeded its usage limit.
+              const compactionModel = modelOverride
+                ? { providerID: modelOverride.providerID as ProviderV2.ID, modelID: modelOverride.id as ModelV2.ID }
+                : lastUser.model
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
-                model: lastUser.model,
+                model: compactionModel,
                 auto: true,
                 overflow: !handle.message.finish,
               })

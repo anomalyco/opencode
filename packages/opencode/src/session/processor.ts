@@ -60,6 +60,7 @@ type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  backupModels?: Provider.Model[]
 }
 
 export interface Interface {
@@ -960,13 +961,47 @@ export const layer = Layer.effect(
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
-        return yield* Effect.gen(function* () {
-          yield* Effect.gen(function* () {
+        const retrySet = (info: {
+          attempt: number
+          message: string
+          action?: SessionRetry.Retryable["action"]
+          next: number
+        }) => {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          const event = mirrorAssistant
+            ? events.publish(SessionEvent.Retried, {
+                sessionID: ctx.sessionID,
+                attempt: info.attempt,
+                error: {
+                  message: info.message,
+                  isRetryable: true,
+                },
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            : Effect.void
+          return flushV2Fragments().pipe(
+            Effect.andThen(event),
+            Effect.andThen(
+              status.set(ctx.sessionID, {
+                type: "retry",
+                attempt: info.attempt,
+                message: info.message,
+                action: info.action,
+                next: info.next,
+              }),
+            ),
+          )
+        }
+
+        // Inherits tracing from SessionProcessor.process (inner Effect.fn overhead not needed here).
+        const runStream = (si: LLM.StreamInput, providerID: string, maxRetries?: number) =>
+          Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.currentTextID = undefined
             ctx.reasoningMap = {}
+            ctx.needsCompaction = false
             yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
+            const stream = llm.stream(si)
 
             yield* stream.pipe(
               Stream.tap((event) => handleEvent(event)),
@@ -988,44 +1023,109 @@ export const layer = Layer.effect(
             ),
             Effect.retry(
               SessionRetry.policy({
-                provider: input.model.providerID,
+                provider: providerID,
+                maxRetries,
                 parse,
-                set: (info) => {
-                  // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-                  const event = mirrorAssistant
-                    ? events.publish(SessionEvent.Retried, {
-                        sessionID: ctx.sessionID,
-                        attempt: info.attempt,
-                        error: {
-                          message: info.message,
-                          isRetryable: true,
-                        },
-                        timestamp: DateTime.makeUnsafe(Date.now()),
-                      })
-                    : Effect.void
-                  return flushV2Fragments().pipe(
-                    Effect.andThen(event),
-                    Effect.andThen(
-                      status.set(ctx.sessionID, {
-                        type: "retry",
-                        attempt: info.attempt,
-                        message: info.message,
-                        action: info.action,
-                        next: info.next,
-                      }),
-                    ),
-                  )
-                },
+                set: retrySet,
               }),
             ),
-            Effect.catch(halt),
-            Effect.ensuring(cleanup()),
           )
 
+        // backupModels are already filtered for undefined upstream in prompt.ts
+        const backupModels = input.backupModels ?? []
+
+        return yield* Effect.gen(function* () {
+          if (backupModels.length > 0) {
+            // When backup models are configured, individual model retries are
+            // disabled (maxRetries: 0) in favor of falling through to the next
+            // backup model immediately.
+            const primaryResult = yield* runStream(streamInput, input.model.providerID, 0).pipe(Effect.exit)
+
+            // Track whether ANY model hit overflow so we only compact as a
+            // last resort when no model can handle the full context.
+            let needsCompaction = ctx.needsCompaction
+
+            // Check if the primary model failed due to context overflow before
+            // attempting backup models — propagation through halt() is bypassed
+            // when using Effect.exit, so we handle it explicitly here.
+            if (Exit.isFailure(primaryResult)) {
+              const parsedError = Exit.match(primaryResult, {
+                onSuccess: () => undefined,
+                onFailure: (cause) => parse(Cause.squash(cause)),
+              })
+              if (SessionV1.ContextOverflowError.isInstance(parsedError)) {
+                needsCompaction = true
+                yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error: parsedError })
+              }
+            }
+
+            // Primary model succeeded without overflow.
+            // If it failed or needs compaction, try backup models before compacting.
+            let modelSucceeded = Exit.isSuccess(primaryResult) && !ctx.needsCompaction
+
+            if (!modelSucceeded) {
+              // Track the last model that streamed successfully (even with
+              // overflow) — used to select the right model for compaction
+              // when all backups hit overflow but none failed outright.
+              let effectiveModel: Provider.Model | undefined
+
+              for (const bm of backupModels) {
+                ctx.assistantMessage.error = undefined
+                ctx.assistantMessage.modelID = bm.id
+                ctx.assistantMessage.providerID = bm.providerID
+                yield* session.updateMessage(ctx.assistantMessage)
+                const backupInput = { ...streamInput, model: bm }
+                const result = yield* runStream(backupInput, bm.providerID, 0).pipe(Effect.exit)
+                if (Exit.isSuccess(result)) effectiveModel = bm
+                if (Exit.isSuccess(result) && !ctx.needsCompaction) {
+                  yield* session.updatePart({
+                    id: PartID.ascending(),
+                    messageID: ctx.assistantMessage.id,
+                    sessionID: ctx.assistantMessage.sessionID,
+                    type: "text",
+                    text: `Used backup model: ${bm.providerID}/${bm.id}\n`,
+                    synthetic: true,
+                    metadata: { muted: true },
+                  } satisfies SessionV1.TextPart)
+                  modelSucceeded = true
+                  needsCompaction = false
+                  break
+                }
+                if (ctx.needsCompaction) needsCompaction = true
+                if (Exit.isFailure(result)) {
+                  const parsedError = Exit.match(result, {
+                    onSuccess: () => undefined,
+                    onFailure: (cause) => parse(Cause.squash(cause)),
+                  })
+                  if (SessionV1.ContextOverflowError.isInstance(parsedError)) {
+                    needsCompaction = true
+                  }
+                }
+              }
+
+              // Revert modelID to the effective model so prompt.ts picks
+              // the right model for compaction instead of a failed backup.
+              if (!modelSucceeded && effectiveModel) {
+                ctx.assistantMessage.modelID = effectiveModel.id
+                ctx.assistantMessage.providerID = effectiveModel.providerID
+                yield* session.updateMessage(ctx.assistantMessage)
+              }
+            }
+
+            if (!modelSucceeded) {
+              if (needsCompaction) return "compact" as const
+              yield* halt(new Error("All configured models failed"))
+              return "stop" as const
+            }
+
+            if (ctx.blocked || ctx.assistantMessage.error) return "stop" as const
+            return "continue" as const
+          }
+          yield* runStream(streamInput, input.model.providerID).pipe(Effect.catch(halt))
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
           return "continue"
-        })
+        }).pipe(Effect.ensuring(cleanup()))
       })
 
       return {

@@ -1635,17 +1635,18 @@ function ReasoningHeader(props: {
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const muted = createMemo(() => Boolean(props.part.metadata?.muted))
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <markdown
-          syntaxStyle={syntax()}
+          syntaxStyle={muted() ? generateSubtleSyntax(theme) : syntax()}
           streaming={true}
           internalBlockMode="top-level"
           content={props.part.text.trim()}
           tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
-          fg={theme.markdownText}
+          fg={muted() ? theme.textMuted : theme.markdownText}
           bg={theme.background}
         />
       </box>

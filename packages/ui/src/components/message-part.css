@@ -250,6 +250,24 @@
   }
 }
 
+[data-component="text-part"][data-muted] {
+  color: var(--text-weak);
+  font-size: 13px;
+
+  [data-component="markdown"] {
+    color: var(--text-weak);
+    font-size: 13px;
+  }
+
+  [data-slot="text-part-meta"] {
+    display: none;
+  }
+
+  [data-slot="text-part-copy-wrapper"] {
+    display: none;
+  }
+}
+
 [data-component="compaction-part"] {
   width: 100%;
   display: flex;

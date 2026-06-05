@@ -43,6 +43,14 @@ export const Info = Schema.Struct({
       providerID: ProviderV2.ID,
     }),
   ),
+  backupModel: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        modelID: ModelV2.ID,
+        providerID: ProviderV2.ID,
+      }),
+    ),
+  ),
   variant: Schema.optional(Schema.String),
   prompt: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Unknown),
@@ -263,6 +271,7 @@ export const layer = Layer.effect(
               native: false,
             }
           if (value.model) item.model = Provider.parseModel(value.model)
+          if (value.backupModel) item.backupModel = value.backupModel.map(Provider.parseModel)
           item.variant = value.variant ?? item.variant
           item.prompt = value.prompt ?? item.prompt
           item.description = value.description ?? item.description

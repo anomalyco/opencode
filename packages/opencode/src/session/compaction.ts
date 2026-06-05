@@ -387,6 +387,19 @@ export const layer = Layer.effect(
       const model = agent.model
         ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
+
+      // Resolve backup models from the user's agent so compaction falls back
+      // to a working model when the primary has exceeded usage limits.
+      const userAgent = yield* agents.get(userMessage.agent)
+      const backupModels: Provider.Model[] | undefined = userAgent?.backupModel?.length
+        ? (yield* Effect.all(
+            userAgent.backupModel.map((bm) =>
+              provider.getModel(bm.providerID, bm.modelID).pipe(
+                Effect.orElseSucceed(() => undefined),
+              ),
+            ),
+          )).filter((m: Provider.Model | undefined): m is Provider.Model => m !== undefined)
+        : undefined
       const cfg = yield* config.get()
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
@@ -442,6 +455,7 @@ export const layer = Layer.effect(
         assistantMessage: msg,
         sessionID: input.sessionID,
         model,
+        backupModels: backupModels?.length ? backupModels : undefined,
       })
       const result = yield* processor.process({
         user: userMessage,
