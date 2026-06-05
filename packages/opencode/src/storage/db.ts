@@ -49,11 +49,126 @@ type Client = ReturnType<typeof init>
 
 type Journal = { sql: string; timestamp: number; name: string }[]
 
+type RawSQLiteStatement = {
+  all: (...params: unknown[]) => unknown[]
+}
+
+type RawSQLiteClient = {
+  query?: (sql: string) => RawSQLiteStatement
+  prepare?: (sql: string) => RawSQLiteStatement
+}
+
 // Drizzle's migrate overloads trigger expensive variance checks here; narrow to the journal overload we actually use.
 const migrateFromJournal = migrate as unknown as (db: SQLiteBunDatabase, entries: Journal) => void
 
 function applyMigrations(db: SQLiteBunDatabase, entries: Journal) {
   migrateFromJournal(db, entries)
+}
+
+function rawAll(db: Client, sql: string) {
+  const client = db.$client as unknown as RawSQLiteClient
+  if (client.query) return client.query(sql).all() as Record<string, unknown>[]
+  if (client.prepare) return client.prepare(sql).all() as Record<string, unknown>[]
+  throw new Error("SQLite client does not support raw all queries")
+}
+
+function repairSessionMessageSchema(db: Client) {
+  const columns = rawAll(db, "PRAGMA table_info(session_message)")
+  if (columns.length === 0) return
+  if (!columns.some((column) => column.name === "seq")) return
+
+  log.warn("repairing stale session_message schema", { column: "seq" })
+  db.run("PRAGMA foreign_keys = OFF")
+  try {
+    db.run("BEGIN TRANSACTION")
+    db.run("DROP INDEX IF EXISTS session_message_session_seq_idx")
+    db.run("DROP INDEX IF EXISTS session_message_session_type_seq_idx")
+    db.run("DROP INDEX IF EXISTS session_message_session_time_created_id_idx")
+    db.run("DROP INDEX IF EXISTS session_message_session_idx")
+    db.run("DROP INDEX IF EXISTS session_message_session_type_idx")
+    db.run("DROP INDEX IF EXISTS session_message_time_created_idx")
+    db.run(`
+      CREATE TABLE session_message_next (
+        id text PRIMARY KEY,
+        session_id text NOT NULL,
+        type text NOT NULL,
+        time_created integer NOT NULL,
+        time_updated integer NOT NULL,
+        data text NOT NULL,
+        CONSTRAINT fk_session_message_session_id_session_id_fk
+          FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
+      )
+    `)
+    db.run(`
+      INSERT INTO session_message_next (id, session_id, type, time_created, time_updated, data)
+      SELECT id, session_id, type, time_created, time_updated, data
+      FROM session_message
+    `)
+    db.run("DROP TABLE session_message")
+    db.run("ALTER TABLE session_message_next RENAME TO session_message")
+    db.run("CREATE INDEX session_message_session_idx ON session_message (session_id)")
+    db.run("CREATE INDEX session_message_session_type_idx ON session_message (session_id, type)")
+    db.run("CREATE INDEX session_message_time_created_idx ON session_message (time_created)")
+    db.run("COMMIT")
+    log.info("repaired stale session_message schema")
+  } catch (err) {
+    try {
+      db.run("ROLLBACK")
+    } catch {
+      // Ignore rollback failures so the original schema repair error is preserved.
+    }
+    throw err
+  } finally {
+    db.run("PRAGMA foreign_keys = ON")
+  }
+}
+
+function repairPermissionSchema(db: Client) {
+  const columns = rawAll(db, "PRAGMA table_info(permission)")
+  if (columns.length === 0) return
+  const names = new Set(columns.map((column) => column.name))
+  if (names.has("data")) return
+  if (!names.has("action") || !names.has("resource")) return
+
+  log.warn("repairing stale permission schema", { columns: "action,resource" })
+  db.run("PRAGMA foreign_keys = OFF")
+  try {
+    db.run("BEGIN TRANSACTION")
+    db.run("DROP INDEX IF EXISTS permission_project_action_resource_idx")
+    db.run(`
+      CREATE TABLE permission_next (
+        project_id text PRIMARY KEY,
+        time_created integer NOT NULL,
+        time_updated integer NOT NULL,
+        data text NOT NULL,
+        CONSTRAINT fk_permission_project_id_project_id_fk
+          FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE CASCADE
+      )
+    `)
+    db.run(`
+      INSERT INTO permission_next (project_id, time_created, time_updated, data)
+      SELECT
+        project_id,
+        min(time_created),
+        max(time_updated),
+        json_group_array(json_object('permission', action, 'pattern', resource, 'action', 'allow'))
+      FROM permission
+      GROUP BY project_id
+    `)
+    db.run("DROP TABLE permission")
+    db.run("ALTER TABLE permission_next RENAME TO permission")
+    db.run("COMMIT")
+    log.info("repaired stale permission schema")
+  } catch (err) {
+    try {
+      db.run("ROLLBACK")
+    } catch {
+      // Ignore rollback failures so the original schema repair error is preserved.
+    }
+    throw err
+  } finally {
+    db.run("PRAGMA foreign_keys = ON")
+  }
 }
 
 function time(tag: string) {
@@ -125,6 +240,8 @@ export const Client = Object.assign(
       }
       applyMigrations(db, entries)
     }
+    repairSessionMessageSchema(db)
+    repairPermissionSchema(db)
 
     client = db
     loaded = true
