@@ -813,6 +813,180 @@ describe("session.compaction.prune", () => {
       }),
     ),
   )
+
+  it.live(
+    "continues past an already-pruned part and prunes older prunable tools",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const compact = yield* SessionCompaction.Service
+          const ssn = yield* SessionNs.Service
+          const info = yield* ssn.create({})
+
+          // Layout (oldest → newest):
+          //   u1, a1[UNPRUNED bash, very old]   ← this one MUST get pruned
+          //   u2, a2[ALREADY-PRUNED bash]       ← the "trap"
+          //   u3                                ← pushes a2 into scan zone
+          //   u4                                ← newest user turn (triggers prune)
+          //
+          // The scan walks newest → oldest. u4 and u3 are the "skip 2" zone
+          // (turns < 2). a2 is the first non-user message in the scan zone.
+          // Before the fix, hitting a2's pruned bash fired `break loop` and
+          // the scan never reached a1, leaving the oldest bash un-pruned.
+          // After the fix, `continue` skips a2 and the scan reaches a1.
+
+          // turn 1
+          const u1 = yield* ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: info.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: u1.id,
+            sessionID: info.id,
+            type: "text",
+            text: "first",
+          })
+          const a1: SessionV1.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            sessionID: info.id,
+            mode: "build",
+            agent: "build",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ref.modelID,
+            providerID: ref.providerID,
+            parentID: u1.id,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          }
+          yield* ssn.updateMessage(a1)
+          const a1Bash = yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: a1.id,
+            sessionID: info.id,
+            type: "tool",
+            callID: crypto.randomUUID(),
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: {},
+              output: "x".repeat(200_000),
+              title: "done",
+              metadata: {},
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
+
+          // turn 2
+          const u2 = yield* ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: info.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: u2.id,
+            sessionID: info.id,
+            type: "text",
+            text: "second",
+          })
+          const a2: SessionV1.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            sessionID: info.id,
+            mode: "build",
+            agent: "build",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: ref.modelID,
+            providerID: ref.providerID,
+            parentID: u2.id,
+            time: { created: Date.now() },
+            finish: "end_turn",
+          }
+          yield* ssn.updateMessage(a2)
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: a2.id,
+            sessionID: info.id,
+            type: "tool",
+            callID: crypto.randomUUID(),
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: {},
+              output: "y".repeat(200_000),
+              title: "done",
+              metadata: {},
+              time: { start: Date.now(), end: Date.now(), compacted: Date.now() },
+            },
+          })
+
+          // turns 3 + 4 — the "skip 2 most recent" zone for prune
+          const u3 = yield* ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: info.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: u3.id,
+            sessionID: info.id,
+            type: "text",
+            text: "third",
+          })
+          const u4 = yield* ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: info.id,
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: u4.id,
+            sessionID: info.id,
+            type: "text",
+            text: "fourth",
+          })
+
+          yield* compact.prune({ sessionID: info.id })
+
+          const msgs = yield* ssn.messages({ sessionID: info.id })
+          const a1After = msgs
+            .flatMap((msg) => msg.parts)
+            .find((p) => p.type === "tool" && p.id === a1Bash.id)
+          expect(a1After?.type).toBe("tool")
+          // a1's bash was unpruned; the fix must let the scan reach it and add it
+          // to toPrune. Without the fix, the `break loop` at a2's pruned bash
+          // short-circuits the scan and a1's bash is never touched.
+          if (a1After?.type === "tool" && a1After.state.status === "completed") {
+            expect(typeof a1After.state.time.compacted).toBe("number")
+          }
+        }),
+
+      {
+        config: {
+          compaction: { prune: true },
+        },
+      },
+    ),
+  )
 })
 
 describe("session.compaction.process", () => {

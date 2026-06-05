@@ -17,7 +17,10 @@ function extract(messages: SessionV1.WithParts[]) {
   for (const msg of messages) {
     for (const part of msg.parts) {
       if (part.type === "tool" && part.tool === "read" && part.state.status === "completed") {
-        if (part.state.time.compacted) continue
+        // Read parts are not pruned in their metadata; `state.metadata.loaded` survives
+        // compaction and is still a valid "already loaded" record. Skipping on
+        // `time.compacted` would cause AGENTS.md / CLAUDE.md / CONTEXT.md to be
+        // re-attached on every subsequent read after prune, wasting context.
         const loaded = part.state.metadata?.loaded
         if (!loaded || !Array.isArray(loaded)) continue
         for (const p of loaded) {

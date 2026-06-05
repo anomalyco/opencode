@@ -323,7 +323,7 @@ export const layer = Layer.effect(
           if (part.type !== "tool") continue
           if (part.state.status !== "completed") continue
           if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-          if (part.state.time.compacted) break loop
+          if (part.state.time.compacted) continue
           const estimate = Token.estimate(part.state.output)
           total += estimate
           if (total <= PRUNE_PROTECT) continue

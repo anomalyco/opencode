@@ -198,6 +198,60 @@ describe("Instruction.resolve", () => {
     ),
   )
 
+  it.live(
+    "treats read parts as already-loaded even after their output is pruned (time.compacted set)",
+    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
+      Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const agents = path.join(dir, "subdir", "AGENTS.md")
+        const filepath = path.join(dir, "subdir", "nested", "file.ts")
+        const id = MessageID.make("msg_message-pruned-1")
+
+        // Same as `loaded()` but with `time.compacted` set, simulating a
+        // read part whose output has been pruned by `SessionCompaction.prune`
+        // while `metadata.loaded` survives in place.
+        const sessionID = SessionID.make("session-pruned-1")
+        const messageID = MessageID.make("msg_message-pruned-inner-1")
+        const messages: SessionV1.WithParts[] = [
+          {
+            info: {
+              id: messageID,
+              sessionID,
+              role: "user",
+              time: { created: 0 },
+              agent: "build",
+              model: {
+                providerID: ProviderV2.ID.make("anthropic"),
+                modelID: ModelV2.ID.make("claude-sonnet-4-20250514"),
+              },
+            },
+            parts: [
+              {
+                id: PartID.make("prt_part-pruned-1"),
+                messageID,
+                sessionID,
+                type: "tool",
+                callID: "call-pruned-1",
+                tool: "read",
+                state: {
+                  status: "completed",
+                  input: {},
+                  output: "<pruned>",
+                  title: "Read",
+                  metadata: { loaded: [agents] },
+                  time: { start: 0, end: 1, compacted: 12345 },
+                },
+              },
+            ],
+          },
+        ]
+
+        const results = yield* svc.resolve(messages, filepath, id)
+        expect(results).toEqual([])
+      }),
+    ),
+  )
+
   test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
 })
 
