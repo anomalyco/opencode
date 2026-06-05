@@ -356,12 +356,23 @@ describe("SessionV2.create", () => {
       expect(
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
       ).toMatchObject([{ event: { type: "session.next.model.switched", data: { model } } }])
+    }),
+  )
+
+  it.effect("persists repeated switches as distinct durable Session events", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      const model = ModelV2.Ref.make({ id: ModelV2.ID.make("sonnet"), providerID: ProviderV2.ID.anthropic })
 
       yield* session.switchModel({ sessionID: created.id, model })
+      yield* session.switchModel({ sessionID: created.id, model })
+
       const { db } = yield* Database.Service
       expect(
         yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
-      ).toHaveLength(2)
+      ).toHaveLength(3)
+      expect(yield* session.get(created.id)).toMatchObject({ model })
     }),
   )
 
