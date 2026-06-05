@@ -7,6 +7,7 @@ import { EventV2 } from "../event"
 import { Location } from "../location"
 import { SystemContext } from "../system-context"
 import { SystemContextRegistry } from "../system-context-registry"
+import { ContextSnapshotDecodeError } from "./error"
 import { SessionEvent } from "./event"
 import { SessionInput } from "./input"
 import { SessionMessageID } from "./message-id"
@@ -49,7 +50,7 @@ export function prepare(
   context: SystemContextRegistry.Interface,
   sessionID: SessionSchema.ID,
   location: Location.Ref,
-): Effect.Effect<Prepared, SystemContext.InitializationBlocked> {
+): Effect.Effect<Prepared, SystemContext.InitializationBlocked | ContextSnapshotDecodeError> {
   return retryRevisionMismatch(() => prepareOnce(db, events, context, sessionID, location)).pipe(
     Effect.withSpan("SessionContextEpoch.prepare"),
   )
@@ -69,7 +70,9 @@ const prepareOnce = Effect.fnUntraced(function* (
     return { baseline: generation.baseline, baselineSeq }
   }
 
-  const snapshot = yield* Schema.decodeUnknownEffect(SystemContext.Snapshot)(stored.snapshot).pipe(Effect.orDie)
+  const snapshot = yield* Schema.decodeUnknownEffect(SystemContext.Snapshot)(stored.snapshot).pipe(
+    Effect.mapError((error) => new ContextSnapshotDecodeError({ sessionID, details: String(error) })),
+  )
   const result =
     stored.replacement_seq === null
       ? yield* SystemContext.reconcile(value, snapshot)
