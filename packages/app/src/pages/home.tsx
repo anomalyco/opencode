@@ -595,9 +595,7 @@ function HomeServerRow(props: {
         <div class="flex size-4 shrink-0 items-center justify-center">
           <ServerHealthIndicator health={props.health} />
         </div>
-        <span class={HOME_PROJECT_NAV_LABEL}>
-          {props.server.displayName ?? new URL(props.server.http.url).host}
-        </span>
+        <span class={HOME_PROJECT_NAV_LABEL}>{props.server.displayName ?? new URL(props.server.http.url).host}</span>
       </button>
       <div
         class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"

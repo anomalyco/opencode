@@ -112,9 +112,7 @@ export const SettingsServersV2: Component = () => {
                           <Show when={health()?.version && item.type === "http"}> • </Show>
                           <Show
                             when={item.type === "http" && item.http.username}
-                            fallback={
-                              <Show when={item.type === "http"}>{language.t("server.row.noUsername")}</Show>
-                            }
+                            fallback={<Show when={item.type === "http"}>{language.t("server.row.noUsername")}</Show>}
                           >
                             {item.http.username}
                           </Show>
