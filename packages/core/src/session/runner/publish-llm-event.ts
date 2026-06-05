@@ -218,7 +218,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
+    event: LLMEvent,
+    outputPaths: ReadonlyArray<string> = [],
+  ) {
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -347,6 +350,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
+          outputPaths,
           result: event.result,
           provider,
         })

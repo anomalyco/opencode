@@ -13,9 +13,10 @@ import { ProjectReference } from "./project-reference"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 import { Protected } from "./filesystem/protected"
 import { Ripgrep } from "./filesystem/ripgrep"
+import { ToolOutputStore } from "./tool-output-store"
 
 export const ReadInput = Schema.Struct({
-  path: RelativePath,
+  path: Schema.String,
   reference: Schema.NonEmptyString.pipe(Schema.optional),
 })
 export type ReadInput = typeof ReadInput.Type
@@ -65,7 +66,7 @@ export class ReadTarget extends Schema.Class<ReadTarget>("FileSystem.ReadTarget"
 }) {}
 
 export const ListInput = Schema.Struct({
-  path: RelativePath.pipe(Schema.optional),
+  path: Schema.String.pipe(Schema.optional),
   reference: Schema.NonEmptyString.pipe(Schema.optional),
 })
 export type ListInput = typeof ListInput.Type
@@ -181,6 +182,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
+    const global = yield* Effect.serviceOption(Global.Service)
     const references = yield* ProjectReference.Service
     const ripgrep = yield* Ripgrep.Service
     const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
@@ -201,8 +203,21 @@ export const layer = Layer.effect(
       if (resolved.kind === "git") yield* references.ensurePath(resolved.path).pipe(Effect.orDie)
       return { directory: resolved.path, root: yield* fs.realPath(resolved.path).pipe(Effect.orDie) }
     })
-    const resolve = Effect.fnUntraced(function* (input?: RelativePath, reference?: string) {
-      if (input && path.isAbsolute(input)) return yield* Effect.die(new Error("Path must be relative to the location"))
+    const resolve = Effect.fnUntraced(function* (input?: string, reference?: string) {
+      const managed = path.join(
+        Option.match(global, { onNone: () => Global.Path.data, onSome: (value) => value.data }),
+        ToolOutputStore.MANAGED_DIRECTORY,
+      )
+      if (input && path.isAbsolute(input)) {
+        if (reference) return yield* Effect.die(new Error("Absolute paths cannot use a project reference"))
+        if (path.dirname(input) !== managed || !path.basename(input).startsWith("tool_"))
+          return yield* Effect.die(new Error("Absolute path is not managed tool output"))
+        const real = yield* fs.realPath(input).pipe(Effect.orDie)
+        const managedRoot = yield* fs.realPath(managed).pipe(Effect.orDie)
+        if (path.dirname(real) !== managedRoot || !path.basename(real).startsWith("tool_"))
+          return yield* Effect.die(new Error("Path escapes managed tool output"))
+        return { absolute: input, real, directory: managed, root: managedRoot }
+      }
       const selected = yield* select(reference)
       const absolute = path.resolve(selected.directory, input ?? ".")
       if (!FSUtil.contains(selected.directory, absolute))

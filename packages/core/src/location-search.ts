@@ -25,7 +25,7 @@ export const MAX_LINE_PREVIEW_LENGTH = 2_000
 export const ResultLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_RESULT_LIMIT))
 
 const RootInput = {
-  path: RelativePath.pipe(Schema.optional),
+  path: Schema.String.pipe(Schema.optional),
   reference: Schema.NonEmptyString.pipe(Schema.optional),
 }
 

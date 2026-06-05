@@ -179,7 +179,7 @@ const Success = Schema.Struct({
   provider: Provider,
   text: Schema.String,
   truncated: Schema.Boolean,
-  resource: ToolOutputStore.Resource.pipe(Schema.optional),
+  outputPath: Schema.String.pipe(Schema.optional),
 })
 
 const definition = Tool.make({
@@ -199,6 +199,7 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
+        outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),
         execute: ({ parameters, sessionID, call, assertPermission }) => {
           const provider = selectProvider(sessionID, config, config.provider)
           return Effect.gen(function* () {
@@ -239,7 +240,7 @@ export const layer = Layer.effectDiscard(
               provider,
               text: truncated.content,
               truncated: truncated.truncated,
-              ...(truncated.truncated ? { resource: truncated.resource } : {}),
+              ...(truncated.truncated ? { outputPath: truncated.outputPath } : {}),
             }
           }).pipe(
             Effect.catchCause((cause) =>

@@ -4,6 +4,7 @@ import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -11,7 +12,11 @@ const permission = Layer.mock(PermissionV2.Service, {
   assert: () => Effect.void,
 })
 const applications = ApplicationTools.layer
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
+const registry = ToolRegistry.layer.pipe(
+  Layer.provide(permission),
+  Layer.provide(applications),
+  Layer.provide(ToolOutputStore.defaultLayer),
+)
 const it = testEffect(Layer.mergeAll(applications, registry))
 
 const sessionID = SessionV2.ID.make("ses_application_tool")

@@ -83,7 +83,7 @@ describe("SkillTool", () => {
               limits: () => Effect.die("unused"),
               write: () => Effect.die("unused"),
               truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
-              read: () => Effect.die("unused"),
+              bound: (input) => Effect.succeed({ output: input.output, outputPaths: [] }),
               cleanup: () => Effect.die("unused"),
             }),
           )
@@ -117,13 +117,9 @@ describe("SkillTool", () => {
             ])
             truncate = (input) =>
               Effect.succeed({
-                content: "HEAD\n\n... output truncated; full content available as tool-output://opaque ...\n\nTAIL",
+                content: "HEAD\n\n... output truncated; full content saved to /tmp/tool-output/tool_opaque ...\n\nTAIL",
                 truncated: true,
-                resource: new ToolOutputStore.Resource({
-                  uri: "tool-output://opaque",
-                  mime: "text/plain",
-                  size: input.content.length,
-                }),
+                outputPath: "/tmp/tool-output/tool_opaque",
               })
             expect(
               yield* registry.settle({
@@ -131,9 +127,9 @@ describe("SkillTool", () => {
                 call: { type: "tool-call", id: "call-skill-overflow", name: "skill", input: { name: "effect" } },
               }),
             ).toMatchObject({
-              result: { type: "text", value: expect.stringContaining("tool-output://opaque") },
+              result: { type: "text", value: expect.stringContaining("/tmp/tool-output/tool_opaque") },
               output: {
-                structured: { truncated: true, resource: { uri: "tool-output://opaque" } },
+                structured: { truncated: true, outputPath: "/tmp/tool-output/tool_opaque" },
               },
             })
             expect(assertions).toEqual([

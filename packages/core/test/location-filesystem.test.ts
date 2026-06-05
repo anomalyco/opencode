@@ -9,6 +9,7 @@ import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { Repository } from "@opencode-ai/core/repository"
+import { Global } from "@opencode-ai/core/global"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
@@ -22,7 +23,12 @@ const inertReferences = ProjectReference.Service.of({
   containsManagedPath: () => Effect.succeed(false),
 })
 
-function provide(directory: string, references = inertReferences, filesystem = FSUtil.defaultLayer) {
+function provide(
+  directory: string,
+  references = inertReferences,
+  filesystem = FSUtil.defaultLayer,
+  data = Global.Path.data,
+) {
   return Effect.provide(
     FileSystem.layer.pipe(
       Layer.provide(
@@ -31,6 +37,7 @@ function provide(directory: string, references = inertReferences, filesystem = F
           Ripgrep.defaultLayer,
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
           Layer.succeed(ProjectReference.Service, references),
+          Global.layerWith({ data }),
         ),
       ),
     ),
@@ -45,6 +52,27 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("FileSystem", () => {
+  it.live("accepts generated managed output paths and rejects other absolute paths", () =>
+    withTmp((directory) => {
+      const worktree = directory
+      const data = path.join(directory, "data")
+      return Effect.gen(function* () {
+        const managed = path.join(data, "tool-output")
+        const output = path.join(managed, "tool_123")
+        const unrelated = path.join(directory, "secret.txt")
+        yield* Effect.promise(() => fs.mkdir(managed, { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(output, "failure here"))
+        yield* Effect.promise(() => fs.writeFile(unrelated, "secret"))
+        const service = yield* FileSystem.Service
+
+        expect(yield* service.read({ path: output })).toMatchObject({ type: "text", content: "failure here" })
+        expect((yield* service.resolveRoot({ path: output })).real).toBe(output)
+        expect(yield* Effect.exit(service.read({ path: unrelated }))).toMatchObject({ _tag: "Failure" })
+        expect(yield* Effect.exit(service.read({ path: managed }))).toMatchObject({ _tag: "Failure" })
+      }).pipe(provide(worktree, inertReferences, FSUtil.defaultLayer, data))
+    }),
+  )
+
   it.live("reads text and binary files", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

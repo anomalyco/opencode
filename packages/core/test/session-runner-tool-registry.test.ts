@@ -3,6 +3,8 @@ import { Tool, ToolFailure } from "@opencode-ai/llm"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -24,7 +26,15 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
+const bounds: ToolOutputStore.BoundInput[] = []
+const outputStore = Layer.mock(ToolOutputStore.Service, {
+  bound: (input) => Effect.sync(() => bounds.push(input)).pipe(Effect.as({ output: input.output, outputPaths: [] })),
+})
+const registry = ToolRegistry.layer.pipe(
+  Layer.provide(permission),
+  Layer.provide(ApplicationTools.layer),
+  Layer.provide(outputStore),
+)
 const it = testEffect(Layer.mergeAll(permission, registry))
 
 const echo = Tool.make({
@@ -180,6 +190,7 @@ describe("ToolRegistry", () => {
 
   it.effect("settles encoded structured output with canonical projected content", () =>
     Effect.gen(function* () {
+      bounds.length = 0
       const registry = yield* ToolRegistry.Service
       const transform = yield* registry.transform()
 
@@ -202,10 +213,17 @@ describe("ToolRegistry", () => {
           sessionID: SessionV2.ID.make("ses_registry_test"),
           call: { type: "tool-call", id: "call-projected", name: "projected", input: { prefix: "count" } },
         }),
-      ).toEqual({
+      ).toMatchObject({
         result: { type: "text", value: "call-projected:count:2" },
         output: { structured: { count: "2" }, content: [{ type: "text", text: "call-projected:count:2" }] },
       })
+      expect(bounds).toEqual([
+        {
+          sessionID: SessionV2.ID.make("ses_registry_test"),
+          toolCallID: "call-projected",
+          output: { structured: { count: "2" }, content: [{ type: "text", text: "call-projected:count:2" }] },
+        },
+      ])
     }),
   )
 })

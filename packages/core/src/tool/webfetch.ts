@@ -15,7 +15,7 @@ export const MAX_TIMEOUT_SECONDS = 120
 
 export const description = `Fetch content from an HTTP or HTTPS URL and return it as text, markdown, or HTML. Markdown is the default.
 
-Use a more targeted tool when one is available. This tool is read-only. Large text results are truncated with an opaque managed resource URI for paging.`
+Use a more targeted tool when one is available. This tool is read-only. Large text results are truncated and saved to a managed file that ordinary Read, Grep, and Bash tools can inspect.`
 
 const Timeout = Schema.Number.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(MAX_TIMEOUT_SECONDS))
 
@@ -35,7 +35,7 @@ const Success = Schema.Struct({
   format: Parameters.fields.format,
   output: Schema.String,
   truncated: Schema.Boolean,
-  resource: ToolOutputStore.Resource.pipe(Schema.optional),
+  outputPath: Schema.String.pipe(Schema.optional),
 })
 
 type Format = (typeof Parameters.Type)["format"]
@@ -141,6 +141,7 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
+        outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),
         execute: ({ parameters, sessionID, call, assertPermission }) =>
           Effect.gen(function* () {
             const parsed = new URL(parameters.url)
@@ -178,7 +179,7 @@ export const layer = Layer.effectDiscard(
               format: parameters.format,
               output: truncated.content,
               truncated: truncated.truncated,
-              ...(truncated.truncated ? { resource: truncated.resource } : {}),
+              ...(truncated.truncated ? { outputPath: truncated.outputPath } : {}),
             }
           }).pipe(
             Effect.catchCause((cause) =>

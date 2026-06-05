@@ -207,7 +207,8 @@ export const layer = Layer.effect(
         },
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
-      const publish = (event: LLMEvent) => withPublication(publisher.publish(event))
+      const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
+        withPublication(publisher.publish(event, outputPaths))
       if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
         return yield* Effect.die(new RetryTurn(undefined))
       const providerStream = llm.stream(request).pipe(
@@ -216,26 +217,29 @@ export const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
-            yield* tools.settle({ sessionID: session.id, agent: agent.id, call: event }).pipe(
-              Effect.catchCause((cause) => {
-                if (isQuestionRejected(cause)) return Effect.failCause(cause)
-                return Effect.succeed({
-                  result: { type: "error" as const, value: String(Cause.squash(cause)) },
-                  output: undefined,
-                })
-              }),
-              Effect.flatMap((settlement) =>
-                publish(
-                  LLMEvent.toolResult({
-                    id: event.id,
-                    name: event.name,
-                    result: settlement.result,
-                    output: settlement.output,
-                  }),
+            yield* Effect.uninterruptibleMask((restore) =>
+              restore(tools.settle({ sessionID: session.id, agent: agent.id, call: event })).pipe(
+                Effect.catchCause((cause) => {
+                  if (isQuestionRejected(cause) || Cause.hasInterrupts(cause)) return Effect.failCause(cause)
+                  return Effect.succeed({
+                    result: { type: "error" as const, value: String(Cause.squash(cause)) },
+                    output: undefined,
+                    outputPaths: [],
+                  })
+                }),
+                Effect.flatMap((settlement) =>
+                  publish(
+                    LLMEvent.toolResult({
+                      id: event.id,
+                      name: event.name,
+                      result: settlement.result,
+                      output: settlement.output,
+                    }),
+                    settlement.outputPaths ?? [],
+                  ),
                 ),
               ),
-              FiberSet.run(toolFibers),
-            )
+            ).pipe(FiberSet.run(toolFibers))
           }),
         ),
         Effect.ensuring(withPublication(publisher.flush())),

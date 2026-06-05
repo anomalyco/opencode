@@ -200,6 +200,7 @@ The first V2 `apply_patch` leaf supports add, update, and delete hunks. It parse
 - Revisit additional covering indexes as larger-history query shapes become concrete.
 - Expose replayable Session events over HTTP and the generated SDK where remote consumers need them, deciding whether that public cursor should be opaque rather than the embedded API's branded aggregate sequence.
 - Decide whether UI-facing Session subscriptions should optionally interleave ephemeral deltas while connected without advancing the durable cursor.
+- Add provider-aware context control for provider-executed tool results. Generic text truncation cannot replace provider-native structured payloads that must round-trip exactly.
 
 ## Remove Dedicated `session.init` Route
 
