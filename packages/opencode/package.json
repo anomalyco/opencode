@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.16.0",
+  "version": "1.16.2",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -87,8 +87,8 @@
     "@opencode-ai/llm": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/server": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/server": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.9.0",
     "@opentelemetry/api": "1.9.0",

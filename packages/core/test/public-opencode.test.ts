@@ -17,6 +17,7 @@ describe("public native OpenCode API", () => {
         "create",
         "events",
         "get",
+        "interrupt",
         "list",
         "message",
         "messages",

@@ -126,6 +126,29 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("evaluates against an explicit provider-turn agent", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const agents = yield* AgentV2.Service
+      yield* agents.update((editor) =>
+        editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.permissions.push({ action: "read", resource: "*", effect: "deny" })
+        }),
+      )
+      const service = yield* PermissionV2.Service
+
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
+      expect(yield* service.ask(assertion({ agent: AgentV2.ID.make("reviewer") }))).toMatchObject({ effect: "deny" })
+      yield* agents.update((editor) =>
+        editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.permissions = []
+        }),
+      )
+      expect(yield* service.ask(assertion({ agent: AgentV2.ID.make("reviewer") }))).toMatchObject({ effect: "ask" })
+      expect(yield* service.get(PermissionV2.ID.create("per_test"))).not.toHaveProperty("agent")
+    }),
+  )
+
   it.effect("allows and denies from explicit rules without asking", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
@@ -161,6 +184,28 @@ describe("PermissionV2", () => {
         id: PermissionV2.ID.create("per_test"),
         effect: "allow",
       })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("denies omitted-agent permissions when no primary default agent exists", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ agent: null })
+        .where(eq(SessionTable.id, SessionV2.ID.make("ses_test")))
+        .run()
+        .pipe(Effect.orDie)
+      const agents = yield* AgentV2.Service
+      yield* agents.update((editor) => {
+        editor.remove(AgentV2.ID.make("test"))
+        editor.remove(AgentV2.ID.make("build"))
+      })
+
+      const service = yield* PermissionV2.Service
+      expect(yield* service.ask(assertion())).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "deny" })
       expect(yield* service.list()).toEqual([])
     }),
   )
