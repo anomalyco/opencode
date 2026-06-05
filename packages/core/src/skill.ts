@@ -54,6 +54,9 @@ export class Info extends Schema.Class<Info>("SkillV2.Info")({
   content: Schema.String,
 }) {}
 
+export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
+  skills.filter((skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
+
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
@@ -156,9 +159,7 @@ export const layer = Layer.effect(
       forAgent: Effect.fn("SkillV2.forAgent")(function* (id) {
         const current = yield* agent.get(id)
         if (!current) return []
-        return (yield* list()).filter(
-          (skill) => PermissionV2.evaluate("skill", skill.name, current.permissions).effect !== "deny",
-        )
+        return available(yield* list(), current)
       }),
     })
   }),

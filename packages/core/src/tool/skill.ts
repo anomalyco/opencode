@@ -25,18 +25,13 @@ export const Success = Schema.Struct({
   resource: ToolOutputStore.Resource.pipe(Schema.optional),
 })
 
-export const description = (skills: ReadonlyArray<SkillV2.Info>) =>
-  [
-    "Load a specialized skill when the task at hand matches one of the available skills listed below.",
-    "",
-    "Use this tool to inject the skill's instructions and resources into the current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc. in the same directory as the skill.",
-    "",
-    "The skill name must match one of the available skills listed below:",
-    "",
-    ...(skills.length
-      ? skills.map((skill) => `- **${skill.name}**: ${skill.description ?? "No description provided."}`)
-      : ["No skills are currently available."]),
-  ].join("\n")
+export const description = [
+  "Load a specialized skill when the task at hand matches one of the available skills in the system context.",
+  "",
+  "Use this tool to inject the skill's instructions and resources into the current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc. in the same directory as the skill.",
+  "",
+  "The skill name must match one of the available skills in the system context.",
+].join("\n")
 
 export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>) => {
   const directory = path.dirname(skill.location)
@@ -70,9 +65,8 @@ export const layer = Layer.effectDiscard(
     const skills = yield* SkillV2.Service
     const resources = yield* ToolOutputStore.Service
     yield* boot.wait()
-    const available = yield* skills.list()
     const definition = Tool.make({
-      description: description(available),
+      description,
       parameters: Parameters,
       success: Success,
       toModelOutput: ({ output }) => [toolText({ type: "text", text: output.output })],

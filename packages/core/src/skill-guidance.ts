@@ -1,0 +1,79 @@
+export * as SkillGuidance from "./skill-guidance"
+
+import { pathToFileURL } from "url"
+import { Context, Effect, Layer, Schema } from "effect"
+import { AgentV2 } from "./agent"
+import { PermissionV2 } from "./permission"
+import { PluginBoot } from "./plugin/boot"
+import { SkillV2 } from "./skill"
+import { SystemContext } from "./system-context"
+
+const Summary = Schema.Struct({
+  name: Schema.String,
+  description: Schema.String,
+  location: Schema.String,
+})
+type Summary = typeof Summary.Type
+
+const render = (skills: ReadonlyArray<Summary>) =>
+  [
+    "Skills provide specialized instructions and workflows for specific tasks.",
+    "Use the skill tool to load a skill when a task matches its description.",
+    ...(skills.length === 0
+      ? ["No skills are currently available."]
+      : [
+          "<available_skills>",
+          ...skills.flatMap((skill) => [
+            "  <skill>",
+            `    <name>${skill.name}</name>`,
+            `    <description>${skill.description}</description>`,
+            `    <location>${skill.location}</location>`,
+            "  </skill>",
+          ]),
+          "</available_skills>",
+        ]),
+  ].join("\n")
+
+export interface Interface {
+  readonly load: (agentID: AgentV2.ID) => Effect.Effect<SystemContext.SystemContext>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillGuidance") {}
+
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const agents = yield* AgentV2.Service
+    const boot = yield* PluginBoot.Service
+    const skills = yield* SkillV2.Service
+
+    return Service.of({
+      load: Effect.fn("SkillGuidance.load")(function* (agentID) {
+        yield* boot.wait()
+        const agent = yield* agents.get(agentID)
+        if (!agent || PermissionV2.disabled("skill", agent.permissions)) return SystemContext.empty
+        const available = SkillV2.available(yield* skills.list(), agent)
+          .flatMap((skill) =>
+            skill.description === undefined
+              ? []
+              : [{ name: skill.name, description: skill.description, location: pathToFileURL(skill.location).href }],
+          )
+          .toSorted((a, b) => a.name.localeCompare(b.name))
+        return SystemContext.make({
+          key: SystemContext.Key.make("core/skill-guidance"),
+          codec: Schema.toCodecJson(Schema.Array(Summary)),
+          load: Effect.succeed(available),
+          baseline: render,
+          update: (_previous, current) =>
+            [
+              "The available skills have changed. This list supersedes the previous available skills list.",
+              render(current),
+            ].join("\n"),
+          removed: () => "Skill guidance is no longer available. Do not use any previously listed skill.",
+        })
+      }),
+    })
+  }),
+)
+
+export const locationLayer = layer

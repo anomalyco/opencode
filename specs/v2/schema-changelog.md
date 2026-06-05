@@ -768,3 +768,20 @@ Change:
 Compatibility:
 
 - Watcher-backed per-file `Refreshable` instruction observations, configured sources, nested discovery, and plugin-defined context remain follow-up slices.
+
+## 2026-06-05: Admit Selected-Agent Skill Guidance
+
+Affected schema:
+
+- No database, synchronized event, public HTTP API, or generated SDK schema changes.
+
+Change:
+
+- Compose selected-agent, permission-filtered available-skill guidance with Location-wide System Context before Context Epoch admission.
+- Keep skill bodies behind the existing permission-checked `skill` tool and remove the unfiltered skill list from its Location-wide definition.
+- Clear the active Context Epoch after an agent switch, fence epoch creation against the authoritative effective agent, and recheck the agent before provider dispatch.
+- Add the canonical V1-to-V2 runtime-context parity checklist to `specs/v2/session.md`.
+
+Compatibility:
+
+- Existing experimental V2 Context Epochs reconcile the new source at the next safe provider-turn boundary.

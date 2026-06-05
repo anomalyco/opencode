@@ -97,7 +97,7 @@ describe("SkillTool", () => {
             expect(bootWaited).toBe(true)
             expect((yield* registry.definitions())[0]).toMatchObject({
               name: "skill",
-              description: expect.stringContaining("**effect**: Use Effect"),
+              description: SkillTool.description,
             })
             expect(
               yield* registry.execute({
