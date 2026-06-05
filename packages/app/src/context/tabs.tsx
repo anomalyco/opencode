@@ -24,10 +24,7 @@ export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, ses
   const dirBase64 = base64Encode(session.directory)
   return tabs.some(
     (tab) =>
-      tab.type === "session" &&
-      tab.server === server &&
-      tab.dirBase64 === dirBase64 &&
-      tab.sessionId === session.id,
+      tab.type === "session" && tab.server === server && tab.dirBase64 === dirBase64 && tab.sessionId === session.id,
   )
 }
 

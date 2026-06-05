@@ -728,11 +728,7 @@ function HomeSessionLeading(props: {
           style={{ right: "calc(100% + 12px)" }}
         />
       </Show>
-      <HomeSessionAvatar
-        project={props.project}
-        session={props.session}
-        activeServer={props.activeServer}
-      />
+      <HomeSessionAvatar project={props.project} session={props.session} activeServer={props.activeServer} />
     </div>
   )
 }
