@@ -14,6 +14,9 @@ import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+
+export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
 export type { ProjectAvatarVariant }
 
@@ -74,43 +77,6 @@ export type LayoutRoute =
   | { type: "home" }
   | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
   | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
-
-export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
-  touch(key)
-  seed(key)
-  return key
-}
-
-export function createSessionKeyReader(sessionKey: string | Accessor<string>, ensure: (key: string) => void) {
-  const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
-  return () => {
-    const value = key()
-    ensure(value)
-    return value
-  }
-}
-
-export function pruneSessionKeys(input: {
-  keep?: string
-  max: number
-  used: Map<string, number>
-  view: string[]
-  tabs: string[]
-}) {
-  if (!input.keep) return []
-
-  const keys = new Set<string>([...input.view, ...input.tabs])
-  if (keys.size <= input.max) return []
-
-  const score = (key: string) => {
-    if (key === input.keep) return Number.MAX_SAFE_INTEGER
-    return input.used.get(key) ?? 0
-  }
-
-  return Array.from(keys)
-    .sort((a, b) => score(b) - score(a))
-    .slice(input.max)
-}
 
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
