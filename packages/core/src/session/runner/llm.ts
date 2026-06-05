@@ -78,7 +78,7 @@ import { SessionContextEpoch } from "../context-epoch"
 
 // QUESTION: Did this exist previously, or did we add this limit? Does it make sense?
 const MAX_STEPS = 25
-type Promotion = "steer" | "queue"
+type Promotion = Extract<SessionInput.Delivery, "steer" | "queue">
 
 export const layer = Layer.effect(
   Service,
