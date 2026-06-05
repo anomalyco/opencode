@@ -461,6 +461,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
+  Layer.provide(RuntimeFlags.defaultLayer),
   Layer.provide(Plugin.layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer))),
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Auth.defaultLayer),
