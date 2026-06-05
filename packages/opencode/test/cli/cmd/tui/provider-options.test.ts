@@ -14,6 +14,23 @@ describe("providerOptions", () => {
     expect(providerOptions([{ id: "mistral", name: "Mistral" }])[0]?.category).toBe("Providers")
   })
 
+  test("sorts provider entries alphabetically and keeps Other last", () => {
+    const options = providerOptions([
+      { id: "openai", name: "OpenAI" },
+      { id: "custom-z", name: "OpenAI" },
+      { id: "anthropic", name: "Anthropic" },
+      { id: "google", name: "Google" },
+    ])
+
+    expect(options.map((option) => option.value)).toEqual([
+      "anthropic",
+      "google",
+      "custom-z",
+      "openai",
+      "__opencode_custom_provider__",
+    ])
+  })
+
   test("does not collide with a configured provider named other", () => {
     const values = providerOptions([{ id: "other", name: "Other Provider" }]).map((option) => option.value)
     expect(new Set(values).size).toBe(values.length)

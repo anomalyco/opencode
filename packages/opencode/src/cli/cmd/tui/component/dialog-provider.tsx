@@ -16,15 +16,6 @@ import { isConsoleManagedProvider } from "@tui/util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
 
-const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  "opencode-go": 1,
-  openai: 2,
-  "github-copilot": 3,
-  anthropic: 4,
-  google: 5,
-}
-
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
 const CUSTOM_PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 
@@ -48,7 +39,10 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
   return [
     ...pipe(
       list,
-      sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
+      sortBy(
+        (x) => x.name.toLowerCase(),
+        (x) => x.id,
+      ),
       map((provider) => ({
         type: "provider" as const,
         title: provider.name,
@@ -60,7 +54,7 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
           openai: "(ChatGPT Plus/Pro or API key)",
           "opencode-go": "Low cost subscription for everyone",
         }[provider.id],
-        category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
+        category: "Providers",
       })),
     ),
     {
