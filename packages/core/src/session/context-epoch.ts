@@ -285,22 +285,15 @@ const fence = Effect.fnUntraced(function* (
   agent: AgentV2.ID,
   expectedRevision: number,
 ) {
-  yield* db
-    .transaction(
-      () =>
-        Effect.gen(function* () {
-          yield* requireEffectiveAgent(db, sessionID, agent)
-          const epoch = yield* db
-            .select({ revision: SessionContextEpochTable.revision })
-            .from(SessionContextEpochTable)
-            .where(eq(SessionContextEpochTable.session_id, sessionID))
-            .get()
-            .pipe(Effect.orDie)
-          if (!epoch || epoch.revision !== expectedRevision) return yield* Effect.die(new RevisionMismatch())
-        }),
-      { behavior: "immediate" },
-    )
+  const current = yield* db
+    .select({ agent: SessionTable.agent, revision: SessionContextEpochTable.revision })
+    .from(SessionContextEpochTable)
+    .innerJoin(SessionTable, eq(SessionTable.id, SessionContextEpochTable.session_id))
+    .where(eq(SessionContextEpochTable.session_id, sessionID))
+    .get()
     .pipe(Effect.orDie)
+  if (!current || AgentV2.effectiveID(current.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+  if (current.revision !== expectedRevision) return yield* Effect.die(new RevisionMismatch())
 })
 
 const advance = Effect.fnUntraced(function* (

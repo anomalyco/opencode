@@ -277,7 +277,9 @@ export const layer = Layer.effect(
     ) => Effect.Effect<boolean, RunError> = (sessionID, promotion) =>
       runTurnAttempt(sessionID, promotion).pipe(
         Effect.catchDefect((defect) =>
-          defect instanceof RetryTurn ? runTurn(sessionID, defect.promotion) : Effect.die(defect),
+          defect instanceof RetryTurn
+            ? Effect.yieldNow.pipe(Effect.andThen(runTurn(sessionID, defect.promotion)))
+            : Effect.die(defect),
         ),
       )
 
