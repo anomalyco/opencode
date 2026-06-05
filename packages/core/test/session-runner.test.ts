@@ -19,18 +19,21 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { QuestionV2 } from "@opencode-ai/core/question"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { ContextSnapshotDecodeError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionContextEpoch } from "@opencode-ai/core/session/context-epoch"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { NativeTool } from "@opencode-ai/core/tool/native"
 import {
   SessionContextEpochTable,
@@ -40,7 +43,8 @@ import {
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SystemContext } from "@opencode-ai/core/system-context"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context-registry"
+import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -107,6 +111,7 @@ const permission = Layer.succeed(
 )
 const applications = ApplicationTools.layer
 const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
+const agents = AgentV2.layer
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
     registry.contribute((editor) => {
@@ -144,14 +149,16 @@ const echo = Layer.effectDiscard(
     }),
   ),
 ).pipe(Layer.provide(registry))
+let modelResolveHook = Effect.void
 const models = SessionRunnerModel.layerWith((session) =>
-  Effect.succeed(session.model?.id === "replacement" ? replacementModel : model),
+  modelResolveHook.pipe(Effect.as(session.model?.id === "replacement" ? replacementModel : model)),
 )
 const systemContextKey = SystemContext.Key.make("test/context")
 let systemBaseline = "Initial context"
 let systemRemoved = false
 let systemUnavailable = false
 let systemLoadHook = Effect.void
+const skillBaselines = new Map<AgentV2.ID, string>()
 const systemContext = Layer.effectDiscard(
   SystemContextRegistry.Service.pipe(
     Effect.flatMap((registry) =>
@@ -182,6 +189,21 @@ const systemContext = Layer.effectDiscard(
   ),
 ).pipe(Layer.provideMerge(SystemContextRegistry.layer))
 const location = Location.layer({ directory: AbsolutePath.make("/project") }).pipe(Layer.provide(Project.defaultLayer))
+const skillGuidance = Layer.mock(SkillGuidance.Service, {
+  load: (agent) =>
+    Effect.succeed(
+      skillBaselines.has(agent.id)
+        ? SystemContext.make({
+            key: SystemContext.Key.make("test/skill-guidance"),
+            codec: Schema.toCodecJson(Schema.String),
+            load: Effect.succeed(skillBaselines.get(agent.id)!),
+            baseline: String,
+            update: (_previous, current) => current,
+            removed: () => "Skill guidance removed",
+          })
+        : SystemContext.empty,
+    ),
+})
 const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -191,6 +213,8 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(models),
   Layer.provide(systemContext),
   Layer.provide(location),
+  Layer.provide(agents),
+  Layer.provide(skillGuidance),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -218,11 +242,13 @@ const it = testEffect(
     client,
     permission,
     applications,
+    agents,
     registry,
     echo,
     models,
     systemContext,
     location,
+    skillGuidance,
     runner,
     coordinator,
     execution,
@@ -257,6 +283,8 @@ const setup = Effect.gen(function* () {
   systemRemoved = false
   systemUnavailable = false
   systemLoadHook = Effect.void
+  modelResolveHook = Effect.void
+  skillBaselines.clear()
   responses = undefined
   streamFailure = undefined
   responseStream = undefined
@@ -635,6 +663,31 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("fails gracefully when a stored context snapshot cannot be decoded", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+      yield* db
+        .update(SessionContextEpochTable)
+        .set({ snapshot: { invalid: { value: "bad" } } })
+        .where(eq(SessionContextEpochTable.session_id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+      requests.length = 0
+
+      const exit = yield* session.resume(sessionID).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(ContextSnapshotDecodeError)
+      expect(requests).toHaveLength(0)
+    }),
+  )
+
   it.effect("does not create a source Location epoch after a concurrent Session move", () =>
     Effect.gen(function* () {
       yield* setup
@@ -699,6 +752,381 @@ describe("SessionRunnerLLM", () => {
       ).toHaveLength(1)
       yield* replaySessionProjection(sessionID)
       expect(yield* session.messages({ sessionID })).toHaveLength(3)
+    }),
+  )
+
+  it.effect("includes the effective default agent system before durable context", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-build", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions", "Initial context"])
+    }),
+  )
+
+  it.effect("uses the configured default agent system for omitted-agent sessions", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) => {
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        })
+        editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.system = "Reviewer instructions"
+          agent.mode = "primary"
+        })
+        editor.default(AgentV2.ID.make("reviewer"))
+      })
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-reviewer", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", "Initial context"])
+      expect((yield* session.messages({ sessionID }))[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
+    }),
+  )
+
+  it.effect("uses an explicitly selected non-build agent system", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) =>
+        editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.system = "Reviewer instructions"
+          agent.mode = "primary"
+        }),
+      )
+      yield* db
+        .update(SessionTable)
+        .set({ agent: "reviewer" })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-selected", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", "Initial context"])
+      expect((yield* session.messages({ sessionID }))[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
+    }),
+  )
+
+  it.effect("composes selected-agent skill guidance and replaces it after an agent switch", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      skillBaselines.set(AgentV2.ID.make("build"), "Build skills")
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+      skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
+      yield* events.publish(SessionEvent.AgentSwitched, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: DateTime.makeUnsafe(1),
+        agent: "reviewer",
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
+        ["Initial context\n\nBuild skills"],
+        ["Initial context\n\nReviewer skills"],
+      ])
+    }),
+  )
+
+  it.effect("retries first-epoch preparation when the selected agent changes during observation", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      skillBaselines.set(AgentV2.ID.make("build"), "Build skills")
+      skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
+      let switched = false
+      systemLoadHook = Effect.suspend(() => {
+        if (switched) return Effect.void
+        switched = true
+        return events
+          .publish(SessionEvent.AgentSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            agent: "reviewer",
+          })
+          .pipe(Effect.asVoid)
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
+        ["Initial context\n\nReviewer skills"],
+      ])
+    }),
+  )
+
+  it.effect("opens a queued activity once when the selected agent changes during observation", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      skillBaselines.set(AgentV2.ID.make("build"), "Build skills")
+      skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
+      let switched = false
+      systemLoadHook = Effect.suspend(() => {
+        if (switched) return Effect.void
+        switched = true
+        return events
+          .publish(SessionEvent.AgentSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            agent: "reviewer",
+          })
+          .pipe(Effect.asVoid)
+      })
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Queued" }),
+        delivery: "queue",
+        resume: false,
+      })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect((yield* session.context(sessionID)).filter((message) => message.type === "user")).toHaveLength(1)
+    }),
+  )
+
+  it.effect("retries an agent switch before the final provider-dispatch boundary", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      skillBaselines.set(AgentV2.ID.make("build"), "Build skills")
+      skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
+      let switched = false
+      modelResolveHook = Effect.suspend(() => {
+        if (switched) return Effect.void
+        switched = true
+        return events
+          .publish(SessionEvent.AgentSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            agent: "reviewer",
+          })
+          .pipe(Effect.asVoid)
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
+        ["Initial context\n\nReviewer skills"],
+      ])
+      expect(
+        yield* db
+          .select({ replacementSeq: SessionContextEpochTable.replacement_seq })
+          .from(SessionContextEpochTable)
+          .where(eq(SessionContextEpochTable.session_id, sessionID))
+          .get()
+          .pipe(Effect.orDie),
+      ).toEqual({ replacementSeq: null })
+    }),
+  )
+
+  it.effect("retries a model switch before the final provider-dispatch boundary", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      let switched = false
+      modelResolveHook = Effect.suspend(() => {
+        if (switched) return Effect.void
+        switched = true
+        return events
+          .publish(SessionEvent.ModelSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            model: { id: ModelV2.ID.make("replacement"), providerID: ProviderV2.ID.make("fake") },
+          })
+          .pipe(Effect.asVoid)
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+      expect(requests.map((request) => request.model)).toEqual([replacementModel])
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([["Initial context"]])
+    }),
+  )
+
+  it.effect("fences an unchanged epoch read across an agent ABA replacement request", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+      let switched = false
+      systemLoadHook = Effect.suspend(() => {
+        if (switched) return Effect.void
+        switched = true
+        return events
+          .publish(SessionEvent.AgentSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            agent: AgentV2.ID.make("reviewer"),
+          })
+          .pipe(
+            Effect.andThen(
+              events.publish(SessionEvent.AgentSwitched, {
+                sessionID,
+                messageID: SessionMessage.ID.create(),
+                timestamp: DateTime.makeUnsafe(2),
+                agent: AgentV2.defaultID,
+              }),
+            ),
+            Effect.asVoid,
+          )
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(
+        yield* db
+          .select({ replacementSeq: SessionContextEpochTable.replacement_seq })
+          .from(SessionContextEpochTable)
+          .where(eq(SessionContextEpochTable.session_id, sessionID))
+          .get()
+          .pipe(Effect.orDie),
+      ).toEqual({ replacementSeq: null })
+    }),
+  )
+
+  it.effect("rejects stale agent guidance when committing an existing-epoch replacement", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+      yield* events.publish(SessionEvent.AgentSwitched, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: DateTime.makeUnsafe(1),
+        agent: AgentV2.ID.make("reviewer"),
+      })
+      const context = (text: string) =>
+        Effect.succeed(
+          SystemContext.make({
+            key: systemContextKey,
+            codec: Schema.toCodecJson(Schema.String),
+            load: Effect.succeed(text),
+            baseline: String,
+            update: (_previous, current) => current,
+          }),
+        )
+      const location = (yield* session.get(sessionID)).location
+
+      expect(
+        yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          context("Stale build context"),
+          sessionID,
+          location,
+          AgentV2.defaultID,
+        ).pipe(Effect.catchDefect(Effect.succeed)),
+      ).toBeInstanceOf(SessionContextEpoch.AgentMismatch)
+
+      expect(
+        yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          context("Reviewer context"),
+          sessionID,
+          location,
+          AgentV2.ID.make("reviewer"),
+        ),
+      ).toMatchObject({ baseline: "Reviewer context" })
+    }),
+  )
+
+  it.effect("blocks a cross-agent provider turn while replacement context is unavailable", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      skillBaselines.set(AgentV2.defaultID, "Build skills")
+      skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+      yield* events.publish(SessionEvent.AgentSwitched, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: DateTime.makeUnsafe(1),
+        agent: AgentV2.ID.make("reviewer"),
+      })
+      systemUnavailable = true
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+
+      requests.length = 0
+      const blocked = yield* session.resume(sessionID).pipe(Effect.exit)
+      expect(Exit.isFailure(blocked)).toBe(true)
+      if (Exit.isFailure(blocked))
+        expect(Cause.squash(blocked.cause)).toBeInstanceOf(SessionContextEpoch.AgentReplacementBlocked)
+      expect(requests).toHaveLength(0)
+
+      systemUnavailable = false
+      yield* session.resume(sessionID)
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
+        ["Initial context\n\nReviewer skills"],
+      ])
     }),
   )
 

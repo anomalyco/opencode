@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { expectAppVisible } from "../utils/waits"
 
 const directory = "C:/OpenCode/PromptThinkingLevelRegression"
 const projectID = "proj_prompt_thinking_level_regression"
@@ -56,7 +57,7 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
   const composer = page.locator('[data-component="session-composer"]')
   const input = composer.locator('[data-component="prompt-input"]')
   const control = composer.locator('[data-component="prompt-variant-control"]')
-  await expect(composer).toBeVisible()
+  await expectAppVisible(composer)
 
   await idleComposer(page)
   await expect(control).toBeHidden()
