@@ -1294,9 +1294,11 @@ describe("session.message-v2.toModelMessage", () => {
     expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("the answer")
   })
 
-  test("leaves empty text alone when reasoning signature is under 'bedrock' namespace", async () => {
-    // Bedrock signed reasoning is preserved as reasoning metadata, but unlike the
-    // direct Anthropic path we do not preserve empty text separators for Bedrock.
+  test("substitutes space for empty text between Bedrock signed reasoning blocks", async () => {
+    // Bedrock extended thinking produces the same structural pattern as Anthropic:
+    // reasoning(bedrock: sig), text(""), text("answer"). hasSignedReasoning now
+    // covers bedrock signatures, so the empty separator is preserved as " " just
+    // like the Anthropic path, rather than being dropped entirely.
     const assistantID = "m-assistant-bedrock"
     const input: SessionV1.WithParts[] = [
       {
@@ -1318,12 +1320,12 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
+    expect(texts.map((t) => t.text)).toStrictEqual([" ", "answer"])
   })
 
-  test("leaves empty text alone when reasoning has no Anthropic signature", async () => {
-    // Non-Anthropic providers' reasoning doesn't position-validate, so empty text
-    // should be filtered normally rather than substituted.
+  test("drops empty text when reasoning has no signature", async () => {
+    // Non-signed reasoning (no anthropic/bedrock signature) means hasSignedReasoning
+    // is false, so empty text parts are dropped rather than substituted.
     const assistantID = "m-assistant-unsigned"
     const input: SessionV1.WithParts[] = [
       {
@@ -1340,10 +1342,10 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["answer"])
   })
 
-  test("leaves empty text alone in assistant messages without reasoning", async () => {
+  test("drops empty text in assistant messages without reasoning", async () => {
     const assistantID = "m-assistant-no-reasoning"
     const input: SessionV1.WithParts[] = [
       {
@@ -1359,7 +1361,77 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["hello"])
+  })
+
+  test("filters out assistant messages whose only content is an empty text part", async () => {
+    // Mirrors the existing user-message equivalent: an assistant turn that only
+    // held an empty text block (e.g. a stream that opened text-start then aborted
+    // before any delta arrived) should be omitted from the model context entirely.
+    const assistantID = "m-assistant-empty-only"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          { ...basePart(assistantID, "p1"), type: "text", text: "" },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
+  test("drops empty text parts alongside tool calls: tool calls survive", async () => {
+    // Primary bug scenario: model responds with tool calls only. processor.ts
+    // opens a text block (text-start) then closes it (text-end) with no delta,
+    // leaving text:"" in the DB. On the next turn this empty part must be dropped
+    // while the tool call is preserved intact.
+    const userID = "m-user-tc"
+    const assistantID = "m-assistant-tc"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          { ...basePart(userID, "u1"), type: "text", text: "run a tool" },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          { ...basePart(assistantID, "a1"), type: "text", text: "" },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "file.txt",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // assistant message must exist (tool call is present)
+    const assistant = result.find((m) => m.role === "assistant")
+    expect(assistant).toBeDefined()
+
+    // no empty text content part in the assistant message
+    const textParts = (assistant!.content as any[]).filter((p) => p.type === "text")
+    expect(textParts).toHaveLength(0)
+
+    // tool call is present
+    const toolCalls = (assistant!.content as any[]).filter((p) => p.type === "tool-call")
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].toolName).toBe("bash")
   })
 })
 
