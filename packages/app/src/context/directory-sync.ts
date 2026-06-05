@@ -276,7 +276,7 @@ export const createDirSyncContext = (
 
   const evict = (directory: string, setStore: Setter, sessionIDs: string[]) => {
     if (sessionIDs.length === 0) return
-    clearSessionPrefetch(directory, sessionIDs)
+    clearSessionPrefetch(serverSDK.scope, directory, sessionIDs)
     for (const sessionID of sessionIDs) {
       serverSync.todo.set(sessionID, undefined)
     }
@@ -348,6 +348,7 @@ export const createDirSyncContext = (
           setMeta("cursor", key, next.cursor)
           setMeta("complete", key, next.complete)
           setSessionPrefetch({
+            scope: serverSDK.scope,
             directory: input.directory,
             sessionID: input.sessionID,
             limit: message.length,
@@ -438,7 +439,7 @@ export const createDirSyncContext = (
 
         touch(directory, setStore, sessionID)
 
-        const seeded = getSessionPrefetch(directory, sessionID)
+        const seeded = getSessionPrefetch(serverSDK.scope, directory, sessionID)
         if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
           batch(() => {
             setMeta("limit", key, seeded.limit)
@@ -449,10 +450,10 @@ export const createDirSyncContext = (
         }
 
         return runInflight(inflight, key, async () => {
-          const pending = getSessionPrefetchPromise(directory, sessionID)
+          const pending = getSessionPrefetchPromise(serverSDK.scope, directory, sessionID)
           if (pending) {
             await pending
-            const seeded = getSessionPrefetch(directory, sessionID)
+            const seeded = getSessionPrefetch(serverSDK.scope, directory, sessionID)
             if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
               batch(() => {
                 setMeta("limit", key, seeded.limit)
