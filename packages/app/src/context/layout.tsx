@@ -438,27 +438,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return directory
     }
 
-    createEffect(() => {
-      const projects = projectView.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
-
-      batch(() => {
-        for (const project of projects) {
-          const root = rootFor(project.worktree)
-          if (root === project.worktree) continue
-
-          projectView.projects.close(project.worktree)
-
-          if (!seen.has(root)) {
-            projectView.projects.open(root)
-            seen.add(root)
-          }
-
-          if (project.expanded) projectView.projects.expand(root)
-        }
-      })
-    })
-
     const enriched = createMemo(() => projectView.projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()
@@ -552,10 +531,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       projects: {
         list,
         open(directory: string) {
-          const root = rootFor(directory)
-          if (projectView.projects.list().find((x) => x.worktree === root)) return
-          void serverSync.project.loadSessions(root)
-          projectView.projects.open(root)
+          if (projectView.projects.list().find((x) => x.worktree === directory)) return
+          void serverSync.project.loadSessions(directory)
+          projectView.projects.open(directory)
         },
         close(directory: string) {
           projectView.projects.close(directory)
@@ -573,7 +551,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return projectView.projects.last()
         },
         touch(directory: string) {
-          projectView.projects.touch(rootFor(directory))
+          projectView.projects.touch(directory)
         },
       },
       sidebar: {

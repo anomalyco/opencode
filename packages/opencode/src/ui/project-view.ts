@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
@@ -17,6 +18,7 @@ const defaultViewID = "default"
 
 export const Entry = Schema.Struct({
   project: Project.Info,
+  directory: Schema.String,
   position: NonNegativeInt,
   expanded: Schema.Boolean,
 }).annotate({ identifier: "UiProjectViewEntry" })
@@ -25,6 +27,7 @@ export type Entry = Schema.Schema.Type<typeof Entry>
 export const Info = Schema.Struct({
   projects: Schema.Array(Entry),
   lastProject: optionalOmitUndefined(Project.Info),
+  lastProjectDirectory: optionalOmitUndefined(Schema.String),
 }).annotate({ identifier: "UiProjectView" })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -124,16 +127,22 @@ export const layer = Layer.effect(
         .onConflictDoNothing()
         .run()
 
-    const getProjectID = Effect.fn("UiProjectView.getProjectID")(function* (input: ProjectRef) {
-      if (input.projectID) return input.projectID
-      if (input.directory) return (yield* project.fromDirectory(input.directory)).project.id
-      return yield* new InvalidProjectRefError({ message: "Expected projectID or directory" })
-    })
-
     const requireProject = Effect.fn("UiProjectView.requireProject")(function* (projectID: ProjectV2.ID) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       if (!row) return yield* new ProjectNotFoundError({ projectID })
       return Project.fromRow(row)
+    })
+
+    const resolveProjectRef = Effect.fn("UiProjectView.resolveProjectRef")(function* (input: ProjectRef) {
+      if (input.projectID) {
+        const result = yield* requireProject(input.projectID)
+        return { projectID: input.projectID, directory: input.directory ? FSUtil.resolve(input.directory) : result.worktree }
+      }
+      if (input.directory) {
+        const result = yield* project.fromDirectory(input.directory)
+        return { projectID: result.project.id, directory: FSUtil.resolve(input.directory) }
+      }
+      return yield* new InvalidProjectRefError({ message: "Expected projectID or directory" })
     })
 
     const read = Effect.fn("UiProjectView.read")(function* (d: DatabaseLike) {
@@ -147,7 +156,7 @@ export const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       const last = yield* d
-        .select({ project: ProjectTable })
+        .select({ last: UiProjectViewLastProjectTable, project: ProjectTable })
         .from(UiProjectViewLastProjectTable)
         .innerJoin(ProjectTable, eq(UiProjectViewLastProjectTable.project_id, ProjectTable.id))
         .where(eq(UiProjectViewLastProjectTable.view_id, defaultViewID))
@@ -156,55 +165,63 @@ export const layer = Layer.effect(
       return {
         projects: rows.map((row) => ({
           project: Project.fromRow(row.project),
+          directory: row.open.directory ?? row.project.worktree,
           position: row.open.position,
           expanded: row.open.expanded,
         })),
-        ...(last ? { lastProject: Project.fromRow(last.project) } : {}),
+        ...(last ? { lastProject: Project.fromRow(last.project), lastProjectDirectory: last.last.directory } : {}),
       } satisfies Info
     })
 
-    const replaceRows = (d: DatabaseLike, rows: { projectID: ProjectV2.ID; expanded: boolean }[]) =>
+    const replaceRows = (d: DatabaseLike, rows: { projectID: ProjectV2.ID; expanded: boolean; directory?: string }[]) =>
       Effect.gen(function* () {
         yield* ensureView(d).pipe(Effect.orDie)
-        if (rows.length > 0) {
-          const existing = yield* d
-            .select({ id: ProjectTable.id })
-            .from(ProjectTable)
-            .where(
-              inArray(
-                ProjectTable.id,
-                rows.map((row) => row.projectID),
-              ),
-            )
-            .all()
-            .pipe(Effect.orDie)
-          const existingIDs = new Set(existing.map((row) => row.id))
-          const missing = rows.find((row) => !existingIDs.has(row.projectID))
-          if (missing) return yield* new ProjectNotFoundError({ projectID: missing.projectID })
-        }
         const oldRows = yield* d
           .select()
           .from(UiOpenProjectTable)
           .where(eq(UiOpenProjectTable.view_id, defaultViewID))
           .all()
           .pipe(Effect.orDie)
-        const created = new Map(oldRows.map((row) => [row.project_id, row.time_created]))
+        const previous = new Map(oldRows.map((row) => [row.project_id, row]))
+        const existing = yield* (rows.length === 0
+          ? Effect.succeed([])
+          : d
+              .select({ id: ProjectTable.id, worktree: ProjectTable.worktree })
+              .from(ProjectTable)
+              .where(
+                inArray(
+                  ProjectTable.id,
+                  rows.map((row) => row.projectID),
+                ),
+              )
+              .all()
+              .pipe(Effect.orDie))
+        const existingByID = new Map(existing.map((row) => [row.id, row]))
+        if (rows.length > 0) {
+          const missing = rows.find((row) => !existingByID.has(row.projectID))
+          if (missing) return yield* new ProjectNotFoundError({ projectID: missing.projectID })
+        }
+        const resolvedRows = rows.map((row) => ({
+          ...row,
+          directory: row.directory ?? previous.get(row.projectID)?.directory ?? existingByID.get(row.projectID)?.worktree ?? "",
+        }))
         yield* d
           .delete(UiOpenProjectTable)
           .where(eq(UiOpenProjectTable.view_id, defaultViewID))
           .run()
           .pipe(Effect.orDie)
         const now = Date.now()
-        if (rows.length > 0)
+        if (resolvedRows.length > 0)
           yield* d
             .insert(UiOpenProjectTable)
             .values(
-              rows.map((row, position) => ({
+              resolvedRows.map((row, position) => ({
                 view_id: defaultViewID,
                 project_id: row.projectID,
+                directory: row.directory,
                 position,
                 expanded: row.expanded,
-                time_created: created.get(row.projectID) ?? now,
+                time_created: previous.get(row.projectID)?.time_created ?? now,
                 time_updated: now,
               })),
             )
@@ -265,8 +282,8 @@ export const layer = Layer.effect(
     })
 
     const openProject = Effect.fn("UiProjectView.openProject")(function* (input: OpenProjectInput) {
-      const projectID = yield* getProjectID(input)
-      yield* requireProject(projectID)
+      const ref = yield* resolveProjectRef(input)
+      const projectID = ref.projectID
       const result = yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
@@ -283,6 +300,7 @@ export const layer = Layer.effect(
             const next = without.toSpliced(position, 0, {
               view_id: defaultViewID,
               project_id: projectID,
+              directory: ref.directory,
               position,
               expanded: input.expanded ?? existing?.expanded ?? true,
               time_created: existing?.time_created ?? Date.now(),
@@ -290,7 +308,7 @@ export const layer = Layer.effect(
             })
             yield* replaceRows(
               tx,
-              next.map((row) => ({ projectID: row.project_id, expanded: row.expanded })),
+              next.map((row) => ({ projectID: row.project_id, expanded: row.expanded, directory: row.directory })),
             )
             return yield* read(tx)
           }),
@@ -321,7 +339,7 @@ export const layer = Layer.effect(
             const next = without.toSpliced(position, 0, { ...existing, expanded: input.expanded ?? existing.expanded })
             yield* replaceRows(
               tx,
-              next.map((row) => ({ projectID: row.project_id, expanded: row.expanded })),
+              next.map((row) => ({ projectID: row.project_id, expanded: row.expanded, directory: row.directory })),
             )
             return yield* read(tx)
           }),
@@ -346,7 +364,7 @@ export const layer = Layer.effect(
               tx,
               current
                 .filter((row) => row.project_id !== projectID)
-                .map((row) => ({ projectID: row.project_id, expanded: row.expanded })),
+                .map((row) => ({ projectID: row.project_id, expanded: row.expanded, directory: row.directory })),
             )
             yield* tx
               .delete(UiProjectViewLastProjectTable)
@@ -367,18 +385,18 @@ export const layer = Layer.effect(
     })
 
     const setLastProject = Effect.fn("UiProjectView.setLastProject")(function* (input: LastProjectInput) {
-      const projectID = yield* getProjectID(input)
-      yield* requireProject(projectID)
+      const ref = yield* resolveProjectRef(input)
+      const projectID = ref.projectID
       const result = yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
             yield* ensureView(tx).pipe(Effect.orDie)
             yield* tx
               .insert(UiProjectViewLastProjectTable)
-              .values({ view_id: defaultViewID, project_id: projectID, time_updated: Date.now() })
+              .values({ view_id: defaultViewID, project_id: projectID, directory: ref.directory, time_updated: Date.now() })
               .onConflictDoUpdate({
                 target: UiProjectViewLastProjectTable.view_id,
-                set: { project_id: projectID, time_updated: Date.now() },
+                set: { project_id: projectID, directory: ref.directory, time_updated: Date.now() },
               })
               .run()
               .pipe(Effect.orDie)

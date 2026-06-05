@@ -2701,6 +2701,7 @@ export type EventTuiSessionSelect = {
 
 export type UiProjectViewEntry = {
   project: Project
+  directory: string
   position: number
   expanded: boolean
 }
@@ -2708,6 +2709,7 @@ export type UiProjectViewEntry = {
 export type UiProjectView = {
   projects: Array<UiProjectViewEntry>
   lastProject?: Project
+  lastProjectDirectory?: string
 }
 
 export type UiProjectViewReplaceOpenProjectsInput = {

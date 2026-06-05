@@ -150,8 +150,12 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
         .sort((a, b) => a.position - b.position)
         .map((entry) => ({
           ...entry.project,
+          worktree: entry.directory ?? entry.project.worktree,
           expanded: entry.expanded,
-          displayName: projectViewProjectDisplayName(entry.project, directoryAliases),
+          displayName: projectViewProjectDisplayName(
+            { name: entry.project.name, worktree: entry.directory ?? entry.project.worktree },
+            directoryAliases,
+          ),
         })),
     )
 
@@ -181,7 +185,7 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
           update((view) => ({
             ...view,
             projects: [
-              { project: pendingProject(directory), position: 0, expanded: true },
+              { project: pendingProject(directory), directory, position: 0, expanded: true },
               ...view.projects.map((entry) => ({ ...entry, position: entry.position + 1 })),
             ],
           }))
@@ -255,7 +259,7 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
           replaceMutation.mutate(projects)
         },
         last() {
-          return query.data?.lastProject?.worktree
+          return query.data?.lastProjectDirectory ?? query.data?.lastProject?.worktree
         },
         touch(directory: string) {
           const key = projectViewDirectoryKey(directory)
@@ -271,7 +275,7 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
           const project = projectForDirectory(directory)
           lastProjectRequests.add(key)
           update((view) => ({ ...view, lastProject: project ?? pendingProject(directory) }))
-          lastProjectMutation.mutate(project?.id ? { projectID: project.id } : { directory }, {
+          lastProjectMutation.mutate(project?.id ? { projectID: project.id, directory } : { directory }, {
             onSettled: () => lastProjectRequests.delete(key),
           })
         },

@@ -61,6 +61,25 @@ describe("project-view helpers", () => {
     )
   })
 
+  test("uses opened directory when a synced entry has a canonical project", () => {
+    const inFlight = new Set<string>()
+    const view = viewWithOpenedProject({ project: project("/"), directory: "/mnt/data/repo" })
+
+    expect(projectViewEntryForDirectory(view, "/mnt/data/repo")?.project.worktree).toBe("/")
+    expect(shouldOpenProjectViewDirectory({ view, directory: "/mnt/data/repo", inFlight })).toBe(false)
+  })
+
+  test("uses lastProjectDirectory to suppress duplicate touches for canonical projects", () => {
+    const inFlight = new Set<string>()
+    const view = {
+      ...viewWithOpenedProject({ project: project("/"), directory: "/mnt/data/repo" }),
+      lastProject: project("/"),
+      lastProjectDirectory: "/mnt/data/repo",
+    }
+
+    expect(shouldTouchProjectViewDirectory({ view, directory: "/mnt/data/repo", inFlight })).toBe(false)
+  })
+
   test("derives a non-empty display name for canonical root aliases", () => {
     const aliases = new Map([[projectViewDirectoryKey("/mnt/data/repo"), projectViewDirectoryKey("/")]])
 
@@ -172,7 +191,13 @@ function pendingProject(worktree: string): Project {
 
 function viewWithProjects(projects: Project[], lastProject?: Project): UiProjectView {
   return {
-    projects: projects.map((item, position) => ({ project: item, position, expanded: true })),
+    projects: projects.map((item, position) => ({ project: item, directory: item.worktree, position, expanded: true })),
     lastProject,
+  }
+}
+
+function viewWithOpenedProject(input: { project: Project; directory: string }): UiProjectView {
+  return {
+    projects: [{ project: input.project, directory: input.directory, position: 0, expanded: true }],
   }
 }

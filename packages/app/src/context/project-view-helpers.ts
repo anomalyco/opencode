@@ -41,9 +41,11 @@ export function shouldTouchProjectViewDirectory(input: {
 }) {
   const key = projectViewDirectoryKey(input.directory)
   if (input.inFlight.has(key)) return false
-  const lastProjectKey = input.view?.lastProject
-    ? projectViewDirectoryKey(input.view.lastProject.worktree)
-    : undefined
+  const lastProjectKey = input.view?.lastProjectDirectory
+    ? projectViewDirectoryKey(input.view.lastProjectDirectory)
+    : input.view?.lastProject
+      ? projectViewDirectoryKey(input.view.lastProject.worktree)
+      : undefined
   if (lastProjectKey === key) return false
   if (lastProjectKey && input.aliases?.get(key) === lastProjectKey) return false
   return true
@@ -99,7 +101,9 @@ export function projectViewProjectDisplayName(
 }
 
 function projectViewEntryForKey(view: UiProjectView | undefined, key: string) {
-  return (view?.projects ?? []).find((entry) => projectViewDirectoryKey(entry.project.worktree) === key)
+  return (view?.projects ?? []).find(
+    (entry) => projectViewDirectoryKey(entry.directory ?? entry.project.worktree) === key,
+  )
 }
 
 function projectViewEntryAtPosition(view: UiProjectView | undefined, position: number) {
@@ -107,7 +111,7 @@ function projectViewEntryAtPosition(view: UiProjectView | undefined, position: n
 }
 
 function projectViewEntryKey(entry: UiProjectView["projects"][number]) {
-  return projectViewDirectoryKey(entry.project.worktree)
+  return projectViewDirectoryKey(entry.directory ?? entry.project.worktree)
 }
 
 function projectViewEntryKeys(view: UiProjectView | undefined) {
@@ -121,6 +125,7 @@ function projectViewEntryKeys(view: UiProjectView | undefined) {
 function projectViewAvailableDirectoryKeys(view: UiProjectView | undefined) {
   const keys = new Set<string>()
   for (const entry of view?.projects ?? []) {
+    keys.add(projectViewDirectoryKey(entry.directory ?? entry.project.worktree))
     keys.add(projectViewDirectoryKey(entry.project.worktree))
   }
   if (view?.lastProject) keys.add(projectViewDirectoryKey(view.lastProject.worktree))

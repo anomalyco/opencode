@@ -449,19 +449,39 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { directory: ctx.directory },
     }))
-    .json(
+    .jsonEffect(
       200,
-      (body, ctx) => {
-        const { entry, project } = onlyProjectViewEntry(body)
-        check(ctx.directory !== undefined, "open project scenario should have a directory")
-        check(project.id === ctx.state.id, "open project should resolve the directory to the current project")
-        check(
-          project.worktree === path.parse(ctx.directory).root,
-          "open project should resolve non-git directories to the global project worktree",
-        )
-        check(entry.position === 0, "opened project should be first")
-        check(entry.expanded === true, "opened project should default to expanded")
-      },
+      (body, ctx) =>
+        Effect.gen(function* () {
+          const { entry, project } = onlyProjectViewEntry(body)
+          check(ctx.directory !== undefined, "open project scenario should have a directory")
+          check(project.id === ctx.state.id, "open project should resolve the directory to the current project")
+          check(
+            project.worktree === path.parse(ctx.directory).root,
+            "open project should resolve non-git directories to the global project worktree",
+          )
+          check(entry.directory === ctx.directory, "open project should preserve requested directory for session sync")
+          check(entry.position === 0, "opened project should be first")
+          check(entry.expanded === true, "opened project should default to expanded")
+
+          const synced = yield* ctx.api({ method: "GET", path: "/ui/project-view", headers: ctx.headers() })
+          check(synced.status === 200, "synced project view should be readable after opening project")
+          const syncedEntry = onlyProjectViewEntry(synced.body).entry
+          check(syncedEntry.directory === ctx.directory, "synced project view should preserve opened directory")
+
+          const touched = yield* ctx.api({
+            method: "PATCH",
+            path: "/ui/project-view/last-project",
+            headers: ctx.headers(),
+            body: { projectID: project.id, directory: ctx.directory },
+          })
+          check(touched.status === 200, "last project touch with opened directory should succeed")
+          object(touched.body)
+          check(
+            touched.body.lastProjectDirectory === ctx.directory,
+            "last project sync should preserve opened directory",
+          )
+        }),
       "status",
     ),
   http.protected

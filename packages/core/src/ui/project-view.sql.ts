@@ -19,6 +19,7 @@ export const UiOpenProjectTable = sqliteTable(
       .$type<ProjectV2.ID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    directory: text().notNull(),
     position: integer().notNull(),
     expanded: integer({ mode: "boolean" }).notNull(),
     ...Timestamps,
@@ -34,5 +35,6 @@ export const UiProjectViewLastProjectTable = sqliteTable("ui_project_view_last_p
     .$type<ProjectV2.ID>()
     .notNull()
     .references(() => ProjectTable.id, { onDelete: "cascade" }),
+  directory: text().notNull(),
   time_updated: integer().notNull(),
 })

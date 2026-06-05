@@ -108,16 +108,21 @@ function HomeDesign() {
   const projects = createMemo(() => {
     const opened = openedProjects()
     const openedKeys = new Set(opened.map((project) => pathKey(project.worktree)))
+    const openedIDs = new Set(opened.flatMap((project) => (project.id ? [project.id] : [])))
     return [
       ...opened,
       ...recentProjects()
         .filter((project) => !openedKeys.has(pathKey(project.worktree)))
+        .filter((project) => !project.id || !openedIDs.has(project.id))
         .slice(0, HOME_RECENT_PROJECT_LIMIT),
     ]
   })
   const closedRecentProjects = createMemo(() => {
     const openedKeys = new Set(openedProjects().map((project) => pathKey(project.worktree)))
-    return recentProjects().filter((project) => !openedKeys.has(pathKey(project.worktree)))
+    const openedIDs = new Set(openedProjects().flatMap((project) => (project.id ? [project.id] : [])))
+    return recentProjects()
+      .filter((project) => !openedKeys.has(pathKey(project.worktree)))
+      .filter((project) => !project.id || !openedIDs.has(project.id))
   })
   const selectedRoot = createMemo(() => {
     const directory = selectedDirectory()
@@ -125,6 +130,10 @@ function HomeDesign() {
     return canonicalProjectRoot(directory)
   })
   const selectedProject = createMemo(() => {
+    const directory = selectedDirectory()
+    if (!directory) return
+    const direct = projects().find((project) => pathKey(project.worktree) === pathKey(directory))
+    if (direct) return direct
     const root = selectedRoot()
     if (!root) return
     return projects().find((project) => pathKey(project.worktree) === pathKey(root))
@@ -193,9 +202,8 @@ function HomeDesign() {
       return
     }
 
-    layout.projects.open(root)
-    layout.projects.touch(root)
-    if (root !== directory) setSelectedDirectory(root, true)
+    layout.projects.open(directory)
+    layout.projects.touch(directory)
   })
 
   function canonicalProjectRoot(directory: string) {
@@ -214,9 +222,9 @@ function HomeDesign() {
   function selectProject(directory: string) {
     const root = canonicalProjectRoot(directory)
     if (!root) return
-    layout.projects.open(root)
-    layout.projects.touch(root)
-    setSelectedDirectory(root)
+    layout.projects.open(directory)
+    layout.projects.touch(directory)
+    setSelectedDirectory(directory)
   }
 
   function clearSelectedProject() {
