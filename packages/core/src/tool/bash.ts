@@ -144,7 +144,7 @@ export const layer = Layer.effectDiscard(
               cwd: target.canonical,
               shell,
               stdin: "ignore",
-              detached: process.platform !== "win32",
+              detached: false,
               forceKillAfter: Duration.seconds(3),
             })
             const timeout = parameters.timeout ?? DEFAULT_TIMEOUT_MS
