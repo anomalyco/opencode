@@ -10,7 +10,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { SkillTool } from "@opencode-ai/core/tool/skill"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 

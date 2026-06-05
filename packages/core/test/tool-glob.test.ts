@@ -6,7 +6,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { GlobTool } from "@opencode-ai/core/tool/glob"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { testEffect } from "./lib/effect"
 
 const sessionID = SessionV2.ID.make("ses_glob_tool_test")

@@ -9,7 +9,7 @@ import { SessionStore } from "../store"
 import { Service, StepLimitExceededError } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
-import { ToolRegistry } from "../../tool-registry"
+import { ToolRegistry } from "../../tool/registry"
 import { SessionRunnerModel } from "./model"
 import { Database } from "../../database/database"
 import { SessionInput } from "../input"
@@ -142,7 +142,8 @@ export const layer = Layer.effect(
       }
       yield* failInterruptedTools(session.id)
       const context = yield* getContext(session.id)
-      const request = LLM.request({ model, messages: toLLMMessages(context, model), tools: yield* tools.definitions() })
+      const toolSnapshot = yield* tools.snapshot()
+      const request = LLM.request({ model, messages: toLLMMessages(context, model), tools: toolSnapshot.definitions })
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: session.agent ?? "build",
@@ -160,7 +161,7 @@ export const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
-            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
+            yield* toolSnapshot.settle({ sessionID: session.id, call: event }).pipe(
               Effect.catchCause((cause) => {
                 if (isQuestionRejected(cause)) return Effect.failCause(cause)
                 return Effect.succeed({

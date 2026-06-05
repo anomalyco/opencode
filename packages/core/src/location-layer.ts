@@ -27,7 +27,8 @@ import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
 import { BuiltInTools } from "./tool/builtins"
-import { ToolRegistry } from "./tool-registry"
+import { ToolRegistry } from "./tool/registry"
+import { ApplicationToolRegistry } from "./tool/application-registry"
 import { ToolOutputStore } from "./tool-output-store"
 import { AppProcess } from "./process"
 import { Ripgrep } from "./ripgrep"
@@ -44,7 +45,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const location = Location.layer(ref)
-    const permissionsAndTools = ToolRegistry.layer.pipe(Layer.provideMerge(PermissionV2.locationLayer))
+    const permissionsAndTools = ToolRegistry.layerWithApplications.pipe(Layer.provideMerge(PermissionV2.locationLayer))
     const services = Layer.mergeAll(
       location,
       Policy.locationLayer,
@@ -108,5 +109,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
+    ApplicationToolRegistry.layer,
   ],
 }) {}

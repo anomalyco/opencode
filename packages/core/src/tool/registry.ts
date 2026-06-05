@@ -1,4 +1,4 @@
-export * as ToolRegistry from "./tool-registry"
+export * as ToolRegistry from "./registry"
 
 import {
   Tool,
@@ -13,10 +13,11 @@ import {
 } from "@opencode-ai/llm"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import { castDraft, enableMapSet } from "immer"
-import { PermissionV2 } from "./permission"
-import { State } from "./state"
-import { SessionSchema } from "./session/schema"
-import type { SessionV2 } from "./session"
+import { PermissionV2 } from "../permission"
+import { State } from "../state"
+import { SessionSchema } from "../session/schema"
+import type { SessionV2 } from "../session"
+import { ApplicationToolRegistry } from "./application-registry"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
@@ -76,16 +77,24 @@ export interface Interface {
   readonly definitions: () => Effect.Effect<ReadonlyArray<ReturnType<typeof Tool.toDefinitions>[number]>>
   readonly execute: (input: ExecuteInput) => Effect.Effect<ToolResultValue>
   readonly settle: (input: ExecuteInput) => Effect.Effect<ToolSettlement>
+  readonly snapshot: () => Effect.Effect<Snapshot, never, Scope.Scope>
+}
+
+export interface Snapshot {
+  readonly definitions: ReadonlyArray<ReturnType<typeof Tool.toDefinitions>[number]>
+  readonly execute: (input: ExecuteInput) => Effect.Effect<ToolResultValue>
+  readonly settle: (input: ExecuteInput) => Effect.Effect<ToolSettlement>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
 
 enableMapSet()
 
-export const layer = Layer.effect(
+export const layerWithApplications = Layer.effect(
   Service,
   Effect.gen(function* () {
     const permission = yield* PermissionV2.Service
+    const applications = yield* ApplicationToolRegistry.Service
     const state = State.create<Data, Editor>({
       initial: () => ({ entries: new Map() }),
       editor: (draft) => ({
@@ -103,10 +112,11 @@ export const layer = Layer.effect(
       }),
     })
 
-    const definitions = Effect.fn("ToolRegistry.definitions")(function* () {
-      return Tool.toDefinitions(
-        Object.fromEntries(Array.from(state.get().entries, ([name, entry]) => [name, entry.tool])),
-      )
+    const effectiveEntries = Effect.fn("ToolRegistry.effectiveEntries")(function* () {
+      const entries = new Map(state.get().entries)
+      // Location tools own their names. Application tools fill otherwise-unclaimed names.
+      for (const [name, entry] of yield* applications.snapshot()) if (!entries.has(name)) entries.set(name, entry)
+      return entries
     })
 
     const invocation = (input: ExecuteInput): Invocation => ({
@@ -115,8 +125,11 @@ export const layer = Layer.effect(
       assertPermission: (request) => permission.assert({ ...request, sessionID: input.sessionID }),
     })
 
-    const settle = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput) {
-      const entry = state.get().entries.get(input.call.name)
+    const settleEntry = Effect.fn("ToolRegistry.settleEntry")(function* (
+      entries: ReadonlyMap<string, Entry>,
+      input: ExecuteInput,
+    ) {
+      const entry = entries.get(input.call.name)
       if (!entry) return { result: { type: "error" as const, value: `Unknown tool: ${input.call.name}` } }
       if (!entry.execute && !entry.tool.execute)
         return { result: { type: "error" as const, value: `Tool has no execute handler: ${input.call.name}` } }
@@ -155,9 +168,21 @@ export const layer = Layer.effect(
       )
     })
 
-    const execute = Effect.fn("ToolRegistry.execute")(function* (input: ExecuteInput) {
-      return (yield* settle(input)).result
+    const snapshot = Effect.fn("ToolRegistry.snapshot")(function* () {
+      const entries = yield* effectiveEntries()
+      const settle = (input: ExecuteInput) => settleEntry(entries, input)
+      return {
+        definitions: Tool.toDefinitions(Object.fromEntries(Array.from(entries, ([name, entry]) => [name, entry.tool]))),
+        settle,
+        execute: (input: ExecuteInput) => settle(input).pipe(Effect.map((settlement) => settlement.result)),
+      }
     })
+
+    const definitions = () => Effect.scoped(snapshot()).pipe(Effect.map((snapshot) => snapshot.definitions))
+    const settle = (input: ExecuteInput) =>
+      Effect.scoped(snapshot()).pipe(Effect.flatMap((snapshot) => snapshot.settle(input)))
+    const execute = (input: ExecuteInput) =>
+      Effect.scoped(snapshot()).pipe(Effect.flatMap((snapshot) => snapshot.execute(input)))
 
     return Service.of({
       transform: state.transform,
@@ -168,6 +193,9 @@ export const layer = Layer.effect(
       definitions,
       execute,
       settle,
+      snapshot,
     })
   }),
 )
+
+export const layer = layerWithApplications.pipe(Layer.provide(ApplicationToolRegistry.layer))

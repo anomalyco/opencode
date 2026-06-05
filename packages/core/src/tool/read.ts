@@ -6,7 +6,7 @@ import { FileSystem } from "../filesystem"
 import { NonNegativeInt, PositiveInt } from "../schema"
 import { PermissionV2 } from "../permission"
 import { ToolOutputStore } from "../tool-output-store"
-import { ToolRegistry } from "../tool-registry"
+import { ToolRegistry } from "./registry"
 
 export const name = "read"
 const LocationInput = Schema.Struct({
