@@ -3,6 +3,12 @@ import type { Project, UiProjectView } from "@opencode-ai/sdk/v2/client"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, onCleanup } from "solid-js"
 import { useServerSDK } from "./server-sdk"
+import {
+  projectViewDirectoryKey,
+  projectViewEntryForDirectory,
+  shouldOpenProjectViewDirectory,
+  shouldTouchProjectViewDirectory,
+} from "./project-view-helpers"
 
 const EMPTY_VIEW: UiProjectView = { projects: [] }
 
@@ -23,11 +29,15 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
     const serverSDK = useServerSDK()
     const queryClient = useQueryClient()
     const queryKey = () => ["ui", "project-view", serverSDK.url] as const
+    const openRequests = new Set<string>()
+    const lastProjectRequests = new Set<string>()
 
     const query = useQuery(() => ({
       queryKey: queryKey(),
       queryFn: () => serverSDK.client.ui.projectView.get().then((x) => x.data ?? EMPTY_VIEW),
     }))
+
+    const currentView = () => queryClient.getQueryData<UiProjectView>(queryKey()) ?? query.data ?? EMPTY_VIEW
 
     const update = (fn: (view: UiProjectView) => UiProjectView) => {
       queryClient.setQueryData<UiProjectView>(queryKey(), (current) => fn(current ?? query.data ?? EMPTY_VIEW))
@@ -97,8 +107,7 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
         .map((entry) => ({ ...entry.project, expanded: entry.expanded })),
     )
 
-    const entryForDirectory = (directory: string) =>
-      (query.data?.projects ?? []).find((entry) => entry.project.worktree === directory)
+    const entryForDirectory = (directory: string) => projectViewEntryForDirectory(currentView(), directory)
 
     const projectForDirectory = (directory: string) => entryForDirectory(directory)?.project
 
@@ -108,7 +117,9 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
       projects: {
         list: projects,
         open(directory: string) {
-          if (entryForDirectory(directory)) return
+          const key = projectViewDirectoryKey(directory)
+          if (!shouldOpenProjectViewDirectory({ view: currentView(), directory, inFlight: openRequests })) return
+          openRequests.add(key)
           update((view) => ({
             ...view,
             projects: [
@@ -116,16 +127,21 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
               ...view.projects.map((entry) => ({ ...entry, position: entry.position + 1 })),
             ],
           }))
-          openMutation.mutate({ directory, expanded: true, position: 0 })
+          openMutation.mutate(
+            { directory, expanded: true, position: 0 },
+            { onSettled: () => openRequests.delete(key) },
+          )
         },
         close(directory: string) {
+          const key = projectViewDirectoryKey(directory)
           const project = projectForDirectory(directory)
           update((view) => ({
             ...view,
             projects: view.projects
-              .filter((entry) => entry.project.worktree !== directory)
+              .filter((entry) => projectViewDirectoryKey(entry.project.worktree) !== key)
               .map((entry, position) => ({ ...entry, position })),
-            lastProject: view.lastProject?.worktree === directory ? undefined : view.lastProject,
+            lastProject:
+              view.lastProject && projectViewDirectoryKey(view.lastProject.worktree) === key ? undefined : view.lastProject,
           }))
           if (!project?.id) {
             refetch()
@@ -134,30 +150,35 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
           closeMutation.mutate(project.id)
         },
         expand(directory: string) {
+          const key = projectViewDirectoryKey(directory)
           const project = projectForDirectory(directory)
           update((view) => ({
             ...view,
             projects: view.projects.map((entry) =>
-              entry.project.worktree === directory ? { ...entry, expanded: true } : entry,
+              projectViewDirectoryKey(entry.project.worktree) === key ? { ...entry, expanded: true } : entry,
             ),
           }))
           if (!project?.id) return
           updateMutation.mutate({ projectID: project.id, expanded: true })
         },
         collapse(directory: string) {
+          const key = projectViewDirectoryKey(directory)
           const project = projectForDirectory(directory)
           update((view) => ({
             ...view,
             projects: view.projects.map((entry) =>
-              entry.project.worktree === directory ? { ...entry, expanded: false } : entry,
+              projectViewDirectoryKey(entry.project.worktree) === key ? { ...entry, expanded: false } : entry,
             ),
           }))
           if (!project?.id) return
           updateMutation.mutate({ projectID: project.id, expanded: false })
         },
         move(directory: string, toIndex: number) {
-          const current = (query.data?.projects ?? []).slice().sort((a, b) => a.position - b.position)
-          const fromIndex = current.findIndex((entry) => entry.project.worktree === directory)
+          const key = projectViewDirectoryKey(directory)
+          const current = currentView()
+            .projects.slice()
+            .sort((a, b) => a.position - b.position)
+          const fromIndex = current.findIndex((entry) => projectViewDirectoryKey(entry.project.worktree) === key)
           if (fromIndex === -1 || fromIndex === toIndex) return
           const next = current.slice()
           const [item] = next.splice(fromIndex, 1)
@@ -177,9 +198,14 @@ export const { use: useProjectView, provider: ProjectViewProvider } = createSimp
           return query.data?.lastProject?.worktree
         },
         touch(directory: string) {
+          const key = projectViewDirectoryKey(directory)
+          if (!shouldTouchProjectViewDirectory({ view: currentView(), directory, inFlight: lastProjectRequests })) return
           const project = projectForDirectory(directory)
+          lastProjectRequests.add(key)
           update((view) => ({ ...view, lastProject: project ?? pendingProject(directory) }))
-          lastProjectMutation.mutate(project?.id ? { projectID: project.id } : { directory })
+          lastProjectMutation.mutate(project?.id ? { projectID: project.id } : { directory }, {
+            onSettled: () => lastProjectRequests.delete(key),
+          })
         },
       },
     }
