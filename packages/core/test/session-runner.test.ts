@@ -886,6 +886,42 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("opens a queued activity once when the selected agent changes during observation", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      skillBaselines.set(AgentV2.ID.make("build"), "Build skills")
+      skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
+      let switched = false
+      systemLoadHook = Effect.suspend(() => {
+        if (switched) return Effect.void
+        switched = true
+        return events
+          .publish(SessionEvent.AgentSwitched, {
+            sessionID,
+            messageID: SessionMessage.ID.create(),
+            timestamp: DateTime.makeUnsafe(1),
+            agent: "reviewer",
+          })
+          .pipe(Effect.asVoid)
+      })
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Queued" }),
+        delivery: "queue",
+        resume: false,
+      })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect((yield* session.context(sessionID)).filter((message) => message.type === "user")).toHaveLength(1)
+    }),
+  )
+
   it.effect("admits removed context as a chronological System message", () =>
     Effect.gen(function* () {
       yield* setup
