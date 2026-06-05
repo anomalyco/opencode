@@ -5,7 +5,7 @@ import { Cause, Effect, Layer, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { LocationSearch } from "../location-search"
 import { Ripgrep } from "../ripgrep"
-import { ToolRegistry } from "../tool-registry"
+import { ToolRegistry } from "./registry"
 
 export const name = "grep"
 

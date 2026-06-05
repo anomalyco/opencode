@@ -6,7 +6,7 @@ import { FileSystem } from "../filesystem"
 import { NonNegativeInt, PositiveInt } from "../schema"
 import { PermissionV2 } from "../permission"
 import { ToolOutputStore } from "../tool-output-store"
-import { ToolRegistry } from "../tool-registry"
+import { ToolRegistry } from "./registry"
 
 export const name = "read"
 const LocationInput = Schema.Struct({
@@ -93,7 +93,7 @@ export const layer = Layer.effectDiscard(
   }),
 )
 export const locationLayer = layer.pipe(
-  Layer.provideMerge(ToolRegistry.layer),
+  Layer.provideMerge(ToolRegistry.defaultLayer),
   Layer.provideMerge(FileSystem.locationLayer),
   Layer.provideMerge(PermissionV2.locationLayer),
   Layer.provideMerge(ToolOutputStore.defaultLayer),

@@ -3,7 +3,7 @@ import { Effect, Exit, Fiber, Layer } from "effect"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { QuestionV2 } from "@opencode-ai/core/question"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
 import { testEffect } from "./lib/effect"
 
@@ -23,7 +23,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const question = Layer.succeed(
   QuestionV2.Service,
   QuestionV2.Service.of({

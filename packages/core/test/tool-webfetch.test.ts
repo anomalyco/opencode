@@ -5,7 +5,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebFetchTool } from "@opencode-ai/core/tool/webfetch"
 import { testEffect } from "./lib/effect"
 
@@ -48,7 +48,7 @@ const resources = Layer.succeed(
     cleanup: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const webfetch = WebFetchTool.layer.pipe(Layer.provide(registry), Layer.provide(http), Layer.provide(resources))
 const it = testEffect(Layer.mergeAll(registry, permission, http, resources, webfetch))
 const fetchWebfetch = WebFetchTool.layer.pipe(

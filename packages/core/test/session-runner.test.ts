@@ -29,7 +29,9 @@ import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
+import { NativeTool } from "@opencode-ai/core/tool/native"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -93,7 +95,8 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const applications = ApplicationTools.layer
+const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
     registry.contribute((editor) => {
@@ -163,6 +166,7 @@ const it = testEffect(
     store,
     client,
     permission,
+    applications,
     registry,
     echo,
     models,
@@ -414,6 +418,55 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("advertises and executes a globally attached application tool", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const applicationTools = yield* ApplicationTools.Service
+      const session = yield* SessionV2.Service
+      const contexts: NativeTool.Context[] = []
+      yield* applicationTools.attach({
+        application_context: NativeTool.make({
+          description: "Read application context",
+          parameters: Schema.Struct({ query: Schema.String }),
+          success: Schema.Struct({ answer: Schema.String }),
+          execute: ({ query }, context) =>
+            Effect.sync(() => {
+              contexts.push(context)
+              return { answer: query.toUpperCase() }
+            }),
+        }),
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Use application context" }), resume: false })
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-application", name: "application_context", input: { query: "hello" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.tools.map((tool) => tool.name)).toContain("application_context")
+      expect(contexts).toEqual([{ sessionID, id: "call-application", name: "application_context" }])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Use application context" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-application",
+              state: { status: "completed", structured: { answer: "HELLO" } },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("starts a real runner turn after default prompt recording", () =>
     Effect.gen(function* () {
       yield* setup

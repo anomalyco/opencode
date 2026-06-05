@@ -8,7 +8,7 @@ import { FSUtil } from "../fs-util"
 import { PluginBoot } from "../plugin/boot"
 import { SkillV2 } from "../skill"
 import { ToolOutputStore } from "../tool-output-store"
-import { ToolRegistry } from "../tool-registry"
+import { ToolRegistry } from "./registry"
 
 export const name = "skill"
 const FILE_LIMIT = 10

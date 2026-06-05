@@ -7,7 +7,7 @@ import { truthy } from "../flag/flag"
 import { InstallationVersion } from "../installation/version"
 import { PositiveInt } from "../schema"
 import { ToolOutputStore } from "../tool-output-store"
-import { ToolRegistry } from "../tool-registry"
+import { ToolRegistry } from "./registry"
 import { checksum } from "../util/encode"
 
 export const name = "websearch"

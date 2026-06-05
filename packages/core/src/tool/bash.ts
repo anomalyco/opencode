@@ -10,7 +10,7 @@ import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PositiveInt } from "../schema"
 import { ToolOutputStore } from "../tool-output-store"
-import { ToolRegistry } from "../tool-registry"
+import { ToolRegistry } from "./registry"
 
 export const name = "bash"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
