@@ -24,24 +24,25 @@
 // Ctrl-c clears a live prompt draft first; otherwise interrupt and exit use a
 // two-press pattern where the first press shows a hint and the second press
 // within 5 seconds actually fires the action.
-import { CliRenderEvents, type CliRenderer, type TreeSitterClient } from "@opentui/core"
+import { CliRenderEvents, type CliRenderer, type KeyEvent, type Renderable, type TreeSitterClient } from "@opentui/core"
+import type { Keymap } from "@opentui/keymap"
 import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
+import { OpencodeKeymapProvider, formatKeyBindings } from "@/cli/cmd/tui/keymap"
 import { withRunSpan } from "./otel"
 import { RUN_COMMAND_PANEL_ROWS, RUN_SUBAGENT_PANEL_ROWS } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
-import { printableBinding } from "./prompt.shared"
 import { RunFooterView } from "./footer.view"
 import { RunScrollbackStream } from "./scrollback.surface"
-import type { RunTheme } from "./theme"
+import { RUN_THEME_FALLBACK, resolveRunTheme, type RunTheme } from "./theme"
 import type {
   FooterApi,
   FooterEvent,
-  FooterKeybinds,
   FooterPatch,
   FooterPromptRoute,
+  FooterQueuedPrompt,
   FooterState,
   FooterSubagentState,
   FooterView,
@@ -55,6 +56,7 @@ import type {
   RunPrompt,
   RunProvider,
   RunResource,
+  RunTuiConfig,
   StreamCommit,
 } from "./types"
 
@@ -80,7 +82,9 @@ type RunFooterOptions = {
   first: boolean
   history?: RunPrompt[]
   theme: RunTheme
-  keybinds: FooterKeybinds
+  keymap: Keymap<Renderable, KeyEvent>
+  tuiConfig: RunTuiConfig
+  backgroundSubagents: boolean
   diffStyle: RunDiffStyle
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onQuestionReply: (input: QuestionReply) => void | Promise<void>
@@ -89,6 +93,7 @@ type RunFooterOptions = {
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
+  onBackground?: () => void
   onExit?: () => void
   onSubagentSelect?: (sessionID: string | undefined) => void
   treeSitterClient?: TreeSitterClient
@@ -101,6 +106,7 @@ const SUBAGENT_ROWS = RUN_SUBAGENT_PANEL_ROWS
 const MODEL_ROWS = RUN_COMMAND_PANEL_ROWS
 const VARIANT_ROWS = RUN_COMMAND_PANEL_ROWS
 const AUTOCOMPLETE_COMPACT_ROWS = 2
+const THEME_REFRESH_DELAYS = [1000, 1000] as const
 
 function createEmptySubagentState(): FooterSubagentState {
   return {
@@ -162,11 +168,13 @@ export class RunFooter implements FooterApi {
   private closed = false
   private destroyed = false
   private prompts = new Set<(input: RunPrompt) => void>()
+  private queuedRemoves = new Set<(messageID: string) => boolean | Promise<boolean>>()
   private closes = new Set<() => void>()
   // Microtask-coalesced commit queue. Flushed on next microtask or on close/destroy.
   private queue: StreamCommit[] = []
   private pending = false
   private flushing: Promise<void> = Promise.resolve()
+  private flushError: unknown
   // Fixed portion of footer height above the textarea.
   private base: number
   private rows = TEXTAREA_MIN_ROWS
@@ -184,20 +192,42 @@ export class RunFooter implements FooterApi {
   private setVariants: Setter<string[]>
   private currentVariant: Accessor<string | undefined>
   private setCurrentVariant: Setter<string | undefined>
+  private theme: Accessor<RunTheme>
+  private setTheme: Setter<RunTheme>
   private state: Accessor<FooterState>
   private setState: Setter<FooterState>
   private view: Accessor<FooterView>
   private setView: Setter<FooterView>
   private subagent: Accessor<FooterSubagentState>
   private setSubagent: (next: FooterSubagentState) => void
+  private queuedPrompts: Accessor<FooterQueuedPrompt[]>
+  private setQueuedPrompts: Setter<FooterQueuedPrompt[]>
   private promptRoute: FooterPromptRoute = { type: "composer" }
   private subagentMenuRows = SUBAGENT_ROWS
   private autocomplete = false
   private interruptTimeout: NodeJS.Timeout | undefined
   private exitTimeout: NodeJS.Timeout | undefined
-  private interruptHint: string
   private requestExitHandler: (() => boolean) | undefined
   private scrollback: RunScrollbackStream
+  private themes: RunTheme[]
+  private paletteRefreshRunning = false
+  private paletteRefreshQueued = false
+  private themeRefreshTimeouts: NodeJS.Timeout[] = []
+
+  private createScrollback(wrote: boolean): RunScrollbackStream {
+    return new RunScrollbackStream(this.renderer, this.theme(), {
+      diffStyle: this.options.diffStyle,
+      wrote,
+      sessionID: this.options.sessionID,
+      treeSitterClient: this.options.treeSitterClient,
+      onThemeRelease: (theme) => {
+        void this.renderer
+          .idle()
+          .catch(() => {})
+          .finally(() => this.destroyTheme(theme))
+      },
+    })
+  }
 
   constructor(
     private renderer: CliRenderer,
@@ -240,6 +270,10 @@ export class RunFooter implements FooterApi {
     const [currentVariant, setCurrentVariant] = createSignal(options.variant)
     this.currentVariant = currentVariant
     this.setCurrentVariant = setCurrentVariant
+    const [theme, setTheme] = createSignal(options.theme)
+    this.theme = theme
+    this.setTheme = setTheme
+    this.themes = [options.theme]
     const [subagent, setSubagent] = createStore<FooterSubagentState>(createEmptySubagentState())
     this.subagent = () => subagent
     this.setSubagent = (next) => {
@@ -248,53 +282,64 @@ export class RunFooter implements FooterApi {
       setSubagent("permissions", reconcile(next.permissions, { key: "id" }))
       setSubagent("questions", reconcile(next.questions, { key: "id" }))
     }
+    const [queuedPrompts, setQueuedPrompts] = createSignal<FooterQueuedPrompt[]>([])
+    this.queuedPrompts = queuedPrompts
+    this.setQueuedPrompts = setQueuedPrompts
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
-    this.interruptHint = printableBinding(options.keybinds.interrupt, options.keybinds.leader) || "esc"
-    this.scrollback = new RunScrollbackStream(renderer, options.theme, {
-      diffStyle: options.diffStyle,
-      wrote: options.wrote,
-      sessionID: options.sessionID,
-      treeSitterClient: options.treeSitterClient,
-    })
+    this.scrollback = this.createScrollback(options.wrote ?? false)
 
     this.renderer.on(CliRenderEvents.DESTROY, this.handleDestroy)
+    this.renderer.on(CliRenderEvents.PALETTE, this.handlePalette)
+    this.renderer.on(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
+    this.renderer.prependInputHandler(this.handleThemeNotification)
+    process.on("SIGUSR2", this.handleThemeSignal)
 
+    const footer = this
     void render(
       () =>
-        createComponent(RunFooterView, {
-          directory: options.directory,
-          state: this.state,
-          view: this.view,
-          subagent: this.subagent,
-          findFiles: options.findFiles,
-          agents: this.agents,
-          resources: this.resources,
-          commands: this.commands,
-          providers: this.providers,
-          currentModel: this.currentModel,
-          variants: this.variants,
-          currentVariant: this.currentVariant,
-          theme: options.theme,
-          diffStyle: options.diffStyle,
-          keybinds: options.keybinds,
-          history: options.history,
-          agent: options.agentLabel,
-          onSubmit: this.handlePrompt,
-          onPermissionReply: this.handlePermissionReply,
-          onQuestionReply: this.handleQuestionReply,
-          onQuestionReject: this.handleQuestionReject,
-          onCycle: this.handleCycle,
-          onInterrupt: this.handleInterrupt,
-          onInputClear: this.handleInputClear,
-          onExitRequest: this.handleExit,
-          onRequestExit: this.setRequestExitHandler,
-          onExit: () => this.close(),
-          onModelSelect: this.handleModelSelect,
-          onVariantSelect: this.handleVariantSelect,
-          onRows: this.syncRows,
-          onLayout: this.syncLayout,
-          onStatus: this.setStatus,
-          onSubagentSelect: options.onSubagentSelect,
+        createComponent(OpencodeKeymapProvider, {
+          keymap: options.keymap,
+          get children() {
+            return createComponent(RunFooterView, {
+              directory: options.directory,
+              state: footer.state,
+              view: footer.view,
+              subagent: footer.subagent,
+              queuedPrompts: footer.queuedPrompts,
+              findFiles: options.findFiles,
+              agents: footer.agents,
+              resources: footer.resources,
+              commands: footer.commands,
+              providers: footer.providers,
+              currentModel: footer.currentModel,
+              variants: footer.variants,
+              currentVariant: footer.currentVariant,
+              theme: footer.theme,
+              diffStyle: options.diffStyle,
+              tuiConfig: options.tuiConfig,
+              backgroundSubagents: options.backgroundSubagents,
+              history: options.history,
+              agent: options.agentLabel,
+              onSubmit: footer.handlePrompt,
+              onPermissionReply: footer.handlePermissionReply,
+              onQuestionReply: footer.handleQuestionReply,
+              onQuestionReject: footer.handleQuestionReject,
+              onCycle: footer.handleCycle,
+              onInterrupt: footer.handleInterrupt,
+              onBackground: options.onBackground,
+              onInputClear: footer.handleInputClear,
+              onExitRequest: footer.handleExit,
+              onRequestExit: footer.setRequestExitHandler,
+              onExit: () => footer.close(),
+              onModelSelect: footer.handleModelSelect,
+              onVariantSelect: footer.handleVariantSelect,
+              onRows: footer.syncRows,
+              onLayout: footer.syncLayout,
+              onStatus: footer.setStatus,
+              onSubagentSelect: options.onSubagentSelect,
+              onQueuedRemove: footer.handleQueuedRemove,
+            })
+          },
         }),
       this.renderer,
     ).catch(() => {
@@ -316,6 +361,13 @@ export class RunFooter implements FooterApi {
     this.prompts.add(fn)
     return () => {
       this.prompts.delete(fn)
+    }
+  }
+
+  public onQueuedRemove(fn: (messageID: string) => boolean | Promise<boolean>): () => void {
+    this.queuedRemoves.add(fn)
+    return () => {
+      this.queuedRemoves.delete(fn)
     }
   }
 
@@ -361,6 +413,15 @@ export class RunFooter implements FooterApi {
 
       this.setVariants(next.variants)
       this.setCurrentVariant(next.current)
+      return
+    }
+
+    if (next.type === "queued.prompts") {
+      if (this.isGone) {
+        return
+      }
+
+      this.setQueuedPrompts(next.prompts)
       return
     }
 
@@ -434,7 +495,9 @@ export class RunFooter implements FooterApi {
           },
         ),
       )
-      .catch(() => {})
+      .catch((error) => {
+        this.flushError = error
+      })
   }
 
   private present(view: FooterView): void {
@@ -492,6 +555,12 @@ export class RunFooter implements FooterApi {
     }
 
     return this.flushing.then(async () => {
+      if (this.flushError !== undefined) {
+        const error = this.flushError
+        this.flushError = undefined
+        throw error
+      }
+
       if (this.isGone) {
         return
       }
@@ -502,6 +571,30 @@ export class RunFooter implements FooterApi {
 
       await this.renderer.idle().catch(() => {})
     })
+  }
+
+  public resetForReplay(wrote: boolean): void {
+    if (this.isGone) {
+      return
+    }
+
+    this.scrollback.destroy()
+    this.scrollback = this.createScrollback(wrote)
+  }
+
+  public currentTheme(): RunTheme {
+    return this.theme()
+  }
+
+  private destroyTheme(theme: RunTheme): void {
+    const index = this.themes.indexOf(theme)
+    if (index === -1) {
+      return
+    }
+
+    this.themes.splice(index, 1)
+    theme.block.syntax?.destroy()
+    theme.block.subtleSyntax?.destroy()
   }
 
   public close(): void {
@@ -540,6 +633,11 @@ export class RunFooter implements FooterApi {
     this.requestExitHandler = fn
   }
 
+  private handleQueuedRemove = async (messageID: string): Promise<boolean> => {
+    const fn = [...this.queuedRemoves][0]
+    return fn ? await fn(messageID) : false
+  }
+
   private handleInputClear = (): void => {
     this.clearInterruptTimer()
     this.clearExitTimer()
@@ -567,11 +665,13 @@ export class RunFooter implements FooterApi {
               ? 1 + MODEL_ROWS
               : this.promptRoute.type === "variant"
                 ? 1 + VARIANT_ROWS
-                : this.promptRoute.type === "subagent-menu"
+                : this.promptRoute.type === "queued-menu"
                   ? 1 + this.subagentMenuRows
-                  : this.promptRoute.type === "subagent"
-                    ? this.base + SUBAGENT_INSPECTOR_ROWS
-                    : Math.max(base + TEXTAREA_MIN_ROWS, Math.min(base + PROMPT_MAX_ROWS, base + this.rows))
+                  : this.promptRoute.type === "subagent-menu"
+                    ? 1 + this.subagentMenuRows
+                    : this.promptRoute.type === "subagent"
+                      ? this.base + SUBAGENT_INSPECTOR_ROWS
+                      : Math.max(base + TEXTAREA_MIN_ROWS, Math.min(base + PROMPT_MAX_ROWS, base + this.rows))
 
     if (height !== this.renderer.footerHeight) {
       this.renderer.footerHeight = height
@@ -679,7 +779,11 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    const previous = this.currentModel()
     this.setCurrentModel(model)
+    if (!previous || previous.providerID !== model.providerID || previous.modelID !== model.modelID) {
+      this.setCurrentVariant(undefined)
+    }
     void Promise.resolve()
       .then(() => this.options.onModelSelect?.(model))
       .then((result) => {
@@ -781,6 +885,13 @@ export class RunFooter implements FooterApi {
     }, 5000)
   }
 
+  private interruptHint(): string {
+    const bindings = this.options.keymap
+      .getCommandBindings({ visibility: "registered", commands: ["session.interrupt"] })
+      .get("session.interrupt")
+    return formatKeyBindings(bindings, this.options.tuiConfig) || "esc"
+  }
+
   private clearExitTimer(): void {
     if (!this.exitTimeout) {
       return
@@ -815,7 +926,7 @@ export class RunFooter implements FooterApi {
 
     if (next < 2) {
       this.armInterruptTimer()
-      this.patch({ status: `${this.interruptHint} again to interrupt` })
+      this.patch({ status: `${this.interruptHint()} again to interrupt` })
       return true
     }
 
@@ -847,6 +958,82 @@ export class RunFooter implements FooterApi {
     return true
   }
 
+  private handlePalette = (): void => {
+    void resolveRunTheme(this.renderer).then((theme) => {
+      if (this.isGone) {
+        theme.block.syntax?.destroy()
+        theme.block.subtleSyntax?.destroy()
+        return
+      }
+
+      // Keep the last known good theme when a runtime OSC probe times out.
+      if (theme === RUN_THEME_FALLBACK) {
+        return
+      }
+
+      this.themes.push(theme)
+      this.setTheme(theme)
+      this.renderer.setBackgroundColor(theme.background)
+      this.flushing = this.flushing
+        .then(() => this.scrollback.setTheme(theme))
+        .catch((error) => {
+          this.flushError = error
+        })
+    })
+  }
+
+  private handleThemeNotification = (sequence: string): boolean => {
+    if (sequence !== "\x1b[?997;1n" && sequence !== "\x1b[?997;2n") {
+      return false
+    }
+
+    // OpenTUI clears its palette cache only when dark/light mode changes.
+    // Refresh for same-mode terminal theme swaps too.
+    queueMicrotask(this.handleThemeRefresh)
+    return false
+  }
+
+  private handleThemeRefresh = (): void => {
+    if (this.isGone) {
+      return
+    }
+
+    if (this.paletteRefreshRunning) {
+      this.paletteRefreshQueued = true
+      return
+    }
+
+    this.paletteRefreshRunning = true
+    const retry = this.renderer.paletteDetectionStatus === "detecting"
+    this.renderer.clearPaletteCache()
+    void this.renderer
+      .getPalette({ size: 256 })
+      .catch(() => {})
+      .finally(() => {
+        this.paletteRefreshRunning = false
+        if (!retry && !this.paletteRefreshQueued) {
+          return
+        }
+
+        this.paletteRefreshQueued = false
+        this.handleThemeRefresh()
+      })
+  }
+
+  public refreshTheme(): void {
+    this.handleThemeRefresh()
+  }
+
+  private handleThemeSignal = (): void => {
+    // Omarchy signals immediately after requesting a terminal config reload.
+    for (const timeout of this.themeRefreshTimeouts) clearTimeout(timeout)
+    this.themeRefreshTimeouts = THEME_REFRESH_DELAYS.map((delay) =>
+      setTimeout(() => {
+        this.handleThemeRefresh()
+      }, delay),
+    )
+  }
+
   private handleDestroy = (): void => {
     if (this.destroyed) {
       return
@@ -858,9 +1045,17 @@ export class RunFooter implements FooterApi {
     this.clearInterruptTimer()
     this.clearExitTimer()
     this.renderer.off(CliRenderEvents.DESTROY, this.handleDestroy)
+    this.renderer.off(CliRenderEvents.PALETTE, this.handlePalette)
+    this.renderer.off(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
+    this.renderer.removeInputHandler(this.handleThemeNotification)
+    process.off("SIGUSR2", this.handleThemeSignal)
+    for (const timeout of this.themeRefreshTimeouts) clearTimeout(timeout)
+    this.themeRefreshTimeouts.length = 0
     this.prompts.clear()
+    this.queuedRemoves.clear()
     this.closes.clear()
     this.scrollback.destroy()
+    for (const theme of [...this.themes]) this.destroyTheme(theme)
   }
 
   // Drains the commit queue to scrollback. The surface manager owns grouping,
@@ -890,6 +1085,8 @@ export class RunFooter implements FooterApi {
           },
         ),
       )
-      .catch(() => {})
+      .catch((error) => {
+        this.flushError = error
+      })
   }
 }

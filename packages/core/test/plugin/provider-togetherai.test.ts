@@ -90,7 +90,7 @@ describe("TogetherAIPlugin", () => {
 
       expect(result.language).toBeUndefined()
       expect(calls).toEqual([])
-      expect(result.language ?? fakeSelectorSdk(calls).languageModel(result.model.apiID)).toBeDefined()
+      expect(result.language ?? fakeSelectorSdk(calls).languageModel(result.model.api.id)).toBeDefined()
       expect(calls).toEqual(["languageModel:meta-llama/Llama-3.3-70B-Instruct-Turbo"])
     }),
   )

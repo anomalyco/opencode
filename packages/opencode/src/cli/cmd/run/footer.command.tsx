@@ -4,9 +4,8 @@ import { useKeyboard, type JSX } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { RunFooterMenu, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
-import { formatBindings } from "./keymap.shared"
 import type { RunFooterTheme } from "./theme"
-import type { FooterKeybinds, FooterSubagentTab, RunCommand, RunInput, RunProvider } from "./types"
+import type { FooterQueuedPrompt, FooterSubagentTab, RunCommand, RunInput, RunProvider } from "./types"
 
 type PanelEntry = RunFooterMenuItem & {
   category: string
@@ -15,6 +14,7 @@ type PanelEntry = RunFooterMenuItem & {
 
 type CommandEntry =
   | (PanelEntry & { action: "model" })
+  | (PanelEntry & { action: "queued" })
   | (PanelEntry & { action: "subagent" })
   | (PanelEntry & { action: "variant.cycle" })
   | (PanelEntry & { action: "variant.list" })
@@ -36,6 +36,10 @@ type VariantEntry = PanelEntry & {
 type SubagentEntry = PanelEntry & {
   sessionID: string
   current: boolean
+}
+
+type QueuedEntry = PanelEntry & {
+  prompt: FooterQueuedPrompt
 }
 
 type MenuState = ReturnType<typeof createFooterMenuState>
@@ -295,11 +299,13 @@ export function RunCommandMenuBody(props: {
   theme: Accessor<RunFooterTheme>
   commands: Accessor<RunCommand[] | undefined>
   subagents: Accessor<FooterSubagentTab[]>
+  queued: Accessor<FooterQueuedPrompt[]>
   variants: Accessor<string[]>
-  keybinds: FooterKeybinds
+  variantCycle: string
   onClose: () => void
   onModel: () => void
   onSubagent: () => void
+  onQueued: () => void
   onVariant: () => void
   onVariantCycle: () => void
   onCommand: (name: string) => void
@@ -316,6 +322,20 @@ export function RunCommandMenuBody(props: {
         category: "Suggested",
         display: "Switch model",
       },
+      ...(props.queued().length > 0
+        ? [
+            {
+              action: "queued" as const,
+              category: "Suggested",
+              display: "Manage queued prompts",
+              footer: `${props.queued().length} queued`,
+              keywords: props
+                .queued()
+                .map((item) => item.prompt.text)
+                .join(" "),
+            },
+          ]
+        : []),
       ...(props.subagents().length > 0
         ? [
             {
@@ -334,7 +354,7 @@ export function RunCommandMenuBody(props: {
         action: "variant.cycle",
         category: "Suggested",
         display: "Variant cycle",
-        footer: formatBindings(props.keybinds.variantCycle, props.keybinds.leader),
+        footer: props.variantCycle,
         keywords: "variant cycle",
       },
       ...(props.variants().length > 0
@@ -385,6 +405,11 @@ export function RunCommandMenuBody(props: {
 
     if (item.action === "subagent") {
       props.onSubagent()
+      return
+    }
+
+    if (item.action === "queued") {
+      props.onQueued()
       return
     }
 
@@ -551,6 +576,102 @@ export function RunSubagentSelectBody(props: {
         rows={menu.rows}
         limit={SUBAGENT_LIST_ROWS}
         empty="No active subagents"
+        border={false}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        grouped={false}
+      />
+    </PanelShell>
+  )
+}
+
+export function RunQueuedPromptSelectBody(props: {
+  theme: Accessor<RunFooterTheme>
+  prompts: Accessor<FooterQueuedPrompt[]>
+  onClose: () => void
+  onEdit: (prompt: FooterQueuedPrompt) => void | Promise<void>
+  onDelete: (prompt: FooterQueuedPrompt) => void | Promise<void>
+  onRows?: (rows: number) => void
+}) {
+  let field: InputRenderable | undefined
+  const [query, setQuery] = createSignal("")
+  const entries = createMemo<QueuedEntry[]>(() =>
+    props.prompts().map((prompt) => ({
+      category: "",
+      display: prompt.prompt.text.replaceAll("\n", " "),
+      footer: "queued · ctrl+e edit · ctrl+d remove",
+      keywords: prompt.prompt.text,
+      prompt,
+    })),
+  )
+  const items = createMemo<QueuedEntry[]>(() => match(query(), entries()))
+  const menu = createFooterMenuState({ count: () => items().length, limit: SUBAGENT_LIST_ROWS })
+  const selected = () => items()[menu.selected()]
+
+  createEffect(() => {
+    query()
+    menu.reset()
+  })
+
+  createEffect(() => {
+    props.onRows?.(menu.rows() + PANEL_FRAME_ROWS)
+  })
+
+  useKeyboard((event) => {
+    if (event.defaultPrevented) {
+      return
+    }
+
+    const item = selected()
+    const ctrl = event.ctrl && !event.meta && !event.shift && !event.super
+    if (item && (event.name === "delete" || (ctrl && event.name === "d"))) {
+      event.preventDefault()
+      props.onDelete(item.prompt)
+      return
+    }
+
+    if (item && ctrl && event.name === "e") {
+      event.preventDefault()
+      props.onEdit(item.prompt)
+      return
+    }
+
+    handleKey({
+      event,
+      menu,
+      field: () => field,
+      setQuery,
+      select: () => {
+        const item = selected()
+        if (item) props.onEdit(item.prompt)
+      },
+      close: props.onClose,
+    })
+  })
+
+  return (
+    <PanelShell
+      id="run-direct-footer-queued-panel"
+      title="Queued prompts"
+      query={query()}
+      count={items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={(input) => {
+        field = input
+      }}
+      onQuery={setQuery}
+    >
+      <RunFooterMenu
+        id="run-direct-footer-queued-list"
+        theme={props.theme}
+        items={items}
+        selected={menu.selected}
+        offset={menu.offset}
+        rows={menu.rows}
+        limit={SUBAGENT_LIST_ROWS}
+        empty="No queued prompts"
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}

@@ -1,18 +1,16 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Git } from "../../src/git"
-import { InstanceRef } from "../../src/effect/instance-ref"
-import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Worktree } from "../../src/worktree"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  Layer.mergeAll(Worktree.defaultLayer, AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
+  Layer.mergeAll(Worktree.defaultLayer, FSUtil.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
 )
 const wintest = process.platform !== "win32" ? it.instance : it.instance.skip
 
@@ -41,11 +39,6 @@ const waitReady = Effect.fn("WorktreeTest.waitReady")(function* () {
 const removeCreatedWorktree = (directory: string) =>
   Effect.gen(function* () {
     const svc = yield* Worktree.Service
-    const ctx = yield* Effect.gen(function* () {
-      return yield* InstanceRef
-    }).pipe(provideInstance(directory))
-    if (!ctx) return yield* Effect.die(new Error("missing test instance"))
-    yield* Effect.promise(() => InstanceRuntime.disposeInstance(ctx))
     const ok = yield* svc.remove({ directory })
     if (!ok) return yield* Effect.fail(new Error(`failed to remove worktree ${directory}`))
   })
@@ -215,6 +208,22 @@ describe("Worktree", () => {
     )
 
     it.instance(
+      "lists the active linked worktree but not the project checkout",
+      () =>
+        withCreatedWorktree(undefined, ({ info }) =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const svc = yield* Worktree.Service
+            const list = yield* svc.list().pipe(provideInstance(info.directory))
+
+            expect(list.map((item) => item.name)).toContain(info.name)
+            expect(list.map((item) => item.name)).not.toContain(path.basename(test.directory).toLowerCase())
+          }),
+        ),
+      { git: true },
+    )
+
+    it.instance(
       "create with custom name",
       () =>
         withCreatedWorktree({ name: "test-workspace" }, ({ info }) =>
@@ -256,7 +265,7 @@ describe("Worktree", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          const fs = yield* AppFileSystem.Service
+          const fs = yield* FSUtil.Service
           const svc = yield* Worktree.Service
           const parent = path.join(path.dirname(test.directory), `${path.basename(test.directory)}-parent`)
           const target = path.join(parent, path.basename(test.directory))
