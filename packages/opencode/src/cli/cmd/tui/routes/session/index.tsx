@@ -21,7 +21,7 @@ import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
-import { generateSubtleSyntax, selectedForeground, useTheme } from "@tui/context/theme"
+import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type {
@@ -198,6 +198,17 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const foregroundTasks = createMemo(() =>
+    messages().flatMap((message) =>
+      (sync.data.part[message.id] ?? []).filter(
+        (part): part is ToolPart =>
+          part.type === "tool" &&
+          part.tool === "task" &&
+          part.state.status === "running" &&
+          part.state.metadata?.background !== true,
+      ),
+    ),
+  )
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
@@ -1009,6 +1020,20 @@ export function Session() {
       },
     },
     {
+      title: "Background subagents",
+      value: "session.background",
+      category: "Session",
+      hidden: true,
+      enabled: foregroundTasks().length > 0,
+      run: () => {
+        void sdk.client.experimental.session.background({
+          sessionID: route.sessionID,
+          workspace: project.workspace.current(),
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Go to child session",
       value: "session.child.first",
       category: "Session",
@@ -1086,6 +1111,13 @@ export function Session() {
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: foregroundTasks().length > 0,
+    priority: 1,
+    bindings: tuiConfig.keybinds.get("session.background"),
   }))
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1253,7 +1285,10 @@ export function Session() {
               </scrollbox>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
-                  <PermissionPrompt request={permissions()[0]} />
+                  <PermissionPrompt
+                    request={permissions()[0]}
+                    directory={sync.session.get(permissions()[0].sessionID)?.directory}
+                  />
                 </Show>
                 <Show when={permissions().length === 0 && questions().length > 0}>
                   <QuestionPrompt
@@ -1453,6 +1488,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const childShortcut = useCommandShortcut("session.child.first")
+  const backgroundShortcut = useCommandShortcut("session.background")
 
   return (
     <>
@@ -1476,6 +1512,19 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <text fg={theme.text}>
             {childShortcut()}
             <span style={{ fg: theme.textMuted }}> view subagents</span>
+            <Show
+              when={props.parts.some(
+                (x) =>
+                  x.type === "tool" &&
+                  x.tool === "task" &&
+                  x.state.status === "running" &&
+                  x.state.metadata?.background !== true,
+              )}
+            >
+              <span style={{ fg: theme.textMuted }}> · </span>
+              {backgroundShortcut()}
+              <span style={{ fg: theme.textMuted }}> background</span>
+            </Show>
           </text>
         </box>
       </Show>
@@ -1551,7 +1600,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     return end === undefined ? 0 : Math.max(0, end - props.part.time.start)
   })
   const summary = createMemo(() => reasoningSummary(content()))
-  const syntax = createMemo(() => generateSubtleSyntax(theme))
+  const syntax = createSyntaxStyleMemo(() => generateSubtleSyntax(theme))
 
   const toggle = () => {
     if (!inMinimal()) return
@@ -2485,7 +2534,7 @@ function Skill(props: ToolProps<typeof SkillTool>) {
 function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
   const { theme } = useTheme()
   const errors = createMemo(() => {
-    const normalized = Filesystem.normalizePath(props.filePath)
+    const normalized = Filesystem.normalizePath(typeof props.filePath === "string" ? props.filePath : "")
     const arr = props.diagnostics?.[normalized] ?? []
     return arr.filter((x) => x.severity === 1).slice(0, 3)
   })
@@ -2515,7 +2564,7 @@ function input(input: Record<string, any>, omit?: string[]): string {
 }
 
 function filetype(input?: string) {
-  if (!input) return "none"
+  if (typeof input !== "string" || !input) return "none"
   const ext = path.extname(input)
   const language = LANGUAGE_EXTENSIONS[ext]
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"

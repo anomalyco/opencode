@@ -14,6 +14,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 void Log.init({ print: false })
 
@@ -33,7 +34,7 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, agent = "de
     role: "user" as const,
     sessionID,
     agent,
-    model: { providerID: ProviderV2.ID.make("openai"), modelID: ProviderV2.ModelID.make("gpt-4") },
+    model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("gpt-4") },
     time: { created: Date.now() },
   })
 })
@@ -49,7 +50,7 @@ const assistant = Effect.fn("test.assistant")(function* (sessionID: SessionID, p
     path: { cwd: dir, root: dir },
     cost: 0,
     tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    modelID: ProviderV2.ModelID.make("gpt-4"),
+    modelID: ModelV2.ID.make("gpt-4"),
     providerID: ProviderV2.ID.make("openai"),
     parentID,
     time: { created: Date.now() },
@@ -117,7 +118,7 @@ describe("revert + compact workflow", () => {
             agent: "default",
             model: {
               providerID: ProviderV2.ID.make("openai"),
-              modelID: ProviderV2.ModelID.make("gpt-4"),
+              modelID: ModelV2.ID.make("gpt-4"),
             },
             time: {
               created: Date.now(),
@@ -149,7 +150,7 @@ describe("revert + compact workflow", () => {
               reasoning: 0,
               cache: { read: 0, write: 0 },
             },
-            modelID: ProviderV2.ModelID.make("gpt-4"),
+            modelID: ModelV2.ID.make("gpt-4"),
             providerID: ProviderV2.ID.make("openai"),
             parentID: userMsg1.id,
             time: {
@@ -174,7 +175,7 @@ describe("revert + compact workflow", () => {
             agent: "default",
             model: {
               providerID: ProviderV2.ID.make("openai"),
-              modelID: ProviderV2.ModelID.make("gpt-4"),
+              modelID: ModelV2.ID.make("gpt-4"),
             },
             time: {
               created: Date.now(),
@@ -206,7 +207,7 @@ describe("revert + compact workflow", () => {
               reasoning: 0,
               cache: { read: 0, write: 0 },
             },
-            modelID: ProviderV2.ModelID.make("gpt-4"),
+            modelID: ModelV2.ID.make("gpt-4"),
             providerID: ProviderV2.ID.make("openai"),
             parentID: userMsg2.id,
             time: {
@@ -279,7 +280,7 @@ describe("revert + compact workflow", () => {
             agent: "default",
             model: {
               providerID: ProviderV2.ID.make("openai"),
-              modelID: ProviderV2.ModelID.make("gpt-4"),
+              modelID: ModelV2.ID.make("gpt-4"),
             },
             time: {
               created: Date.now(),
@@ -311,7 +312,7 @@ describe("revert + compact workflow", () => {
               reasoning: 0,
               cache: { read: 0, write: 0 },
             },
-            modelID: ProviderV2.ModelID.make("gpt-4"),
+            modelID: ModelV2.ID.make("gpt-4"),
             providerID: ProviderV2.ID.make("openai"),
             parentID: userMsg.id,
             time: {

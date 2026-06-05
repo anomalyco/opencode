@@ -3,6 +3,7 @@ import { Command } from "@/command"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
 import { Context, Effect, Layer, SynchronizedRef } from "effect"
 import type * as ACPError from "./error"
@@ -10,7 +11,7 @@ import type * as ACPError from "./error"
 export type ModelOption = {
   readonly providerID: ProviderV2.ID
   readonly providerName: string
-  readonly modelID: ProviderV2.ModelID
+  readonly modelID: ModelV2.ID
   readonly modelName: string
 }
 
@@ -24,7 +25,7 @@ export type ModelVariants = NonNullable<Provider.Model["variants"]>
 
 export type DefaultModel = {
   readonly providerID: ProviderV2.ID
-  readonly modelID: ProviderV2.ModelID
+  readonly modelID: ModelV2.ID
 }
 
 export type Snapshot = {
