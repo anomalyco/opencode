@@ -1,4 +1,16 @@
-import { createEffect, createMemo, createResource, For, Match, Show, startTransition, Switch, untrack } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  For,
+  Match,
+  onMount,
+  Show,
+  startTransition,
+  Switch,
+  untrack,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useMatch, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -230,7 +242,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
           : undefined,
         "align-self": electronWindows() ? "flex-start" : undefined,
       }}
-      data-tauri-drag-region
+      // data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
     >
@@ -393,9 +405,16 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               ].filter((v) => v !== undefined)
             })
 
+            const [tabsAreOverflowing, setTabsAreOverflowing] = createSignal(false)
+            let tabScrollRef!: HTMLDivElement
+
+            function refreshTabsAreOverflowing() {
+              setTabsAreOverflowing(tabScrollRef.scrollWidth > tabScrollRef.clientWidth)
+            }
+
             return (
               <div
-                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 pt-2"
+                class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 pr-3 pt-2"
                 classList={{
                   "pl-2": mac(),
                   "pl-4": !mac(),
@@ -410,60 +429,86 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   size="large"
                   as="a"
                   href="/"
-                  class="!w-9"
+                  class="!w-9 shrink-0"
                   icon={<IconV2 name="grid-plus" />}
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
-                <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
-                  <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
-                    <For each={tabsStore}>
-                      {(tab, i) => (
-                        <>
-                          {i() !== 0 && (
-                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                          )}
-                          <TabNavItem
-                            href={tabHref(tab)}
-                            server={tab.server}
-                            directory={decode64(tab.dirBase64)!}
-                            sessionId={tab.sessionId}
-                            onNavigate={() => navigateTab(tab)}
-                            onClose={() => tabsStoreActions.removeTab(i())}
-                            active={currentTab() === tab}
-                            activeServer={tab.server === server.key}
-                          />
-                        </>
-                      )}
-                    </For>
-                  </div>
-                  <Show
-                    when={creating() && params.dir}
-                    fallback={
-                      <IconButtonV2
-                        type="button"
-                        variant="ghost-muted"
-                        size="large"
-                        class="shrink-0"
-                        icon={<IconV2 name="plus" />}
-                        as="a"
-                        href={newSessionHref()}
-                        aria-label={language.t("command.session.new")}
-                      />
-                    }
-                  >
-                    <NewSessionTabItem
-                      href={`/${params.dir}/session`}
-                      title={language.t("command.session.new")}
-                      onClose={() => {
-                        const tab = tabsStore.at(-1)
-                        if (tab) navigateTab(tab)
-                        else navigate("/")
+                <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar" ref={tabScrollRef}>
+                  <div class="flex min-w-0 flex-row items-center gap-1.5">
+                    <For each={[...tabsStore, ...tabsStore, ...tabsStore]}>
+                      {(tab, i) => {
+                        let ref!: HTMLDivElement
+
+                        onMount(() => {
+                          refreshTabsAreOverflowing()
+                        })
+
+                        return (
+                          <>
+                            {i() !== 0 && (
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                            )}
+                            <TabNavItem
+                              ref={ref}
+                              href={tabHref(tab)}
+                              server={tab.server}
+                              directory={decode64(tab.dirBase64)!}
+                              sessionId={tab.sessionId}
+                              onNavigate={() => {
+                                navigateTab(tab)
+
+                                ref.scrollIntoView({ behavior: "instant" })
+                              }}
+                              onClose={() => tabsStoreActions.removeTab(i())}
+                              active={currentTab() === tab}
+                              activeServer={tab.server === server.key}
+                              forceTruncate={tabsAreOverflowing()}
+                            />
+                          </>
+                        )
                       }}
-                    />
-                  </Show>
-                  <div class="min-w-0 flex-1" />
+                    </For>
+                    <Show when={creating() && params.dir}>
+                      {(_) => {
+                        let ref!: HTMLDivElement
+
+                        onMount(() => {
+                          ref.scrollIntoView({ behavior: "instant" })
+                        })
+
+                        return (
+                          <>
+                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                            <NewSessionTabItem
+                              ref={ref}
+                              href={`/${params.dir}/session`}
+                              title={language.t("command.session.new")}
+                              onClose={() => {
+                                const tab = tabsStore.at(-1)
+                                if (tab) navigateTab(tab)
+                                else navigate("/")
+                              }}
+                            />
+                          </>
+                        )
+                      }}
+                    </Show>
+                  </div>
                 </div>
+                <Show when={!(creating() && params.dir)}>
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    size="large"
+                    class="shrink-0"
+                    icon={<IconV2 name="plus" />}
+                    as="a"
+                    href={newSessionHref()}
+                    aria-label={language.t("command.session.new")}
+                  />
+                </Show>
+                <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
                 <Show when={windows() && !electronWindows()}>
                   <div data-tauri-decorum-tb class="flex flex-row" />
@@ -615,7 +660,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 "flex items-center min-w-0 justify-end": true,
                 "pr-2": !windows(),
               }}
-              data-tauri-drag-region
+              // data-tauri-drag-region
               onMouseDown={drag}
             >
               <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
@@ -685,6 +730,7 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
 }
 
 function TabNavItem(props: {
+  ref?: HTMLDivElement
   href: string
   server: ServerConnection.Key
   directory: string
@@ -694,6 +740,7 @@ function TabNavItem(props: {
   onNavigate: () => void
   active?: boolean
   activeServer: boolean
+  forceTruncate?: boolean
 }) {
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
@@ -710,6 +757,7 @@ function TabNavItem(props: {
   const [session] = createResource(
     () => {
       const ctx = dirSyncCtx()
+      console.log({ ctx, sessionId: props.sessionId })
       if (!ctx || !props.sessionId) return
       return [props.sessionId, ctx] as const
     },
@@ -722,6 +770,7 @@ function TabNavItem(props: {
 
   return (
     <div
+      ref={props.ref}
       class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={props.active}
       onMouseDown={(event) => {
@@ -731,6 +780,7 @@ function TabNavItem(props: {
     >
       <Show when={session.latest}>
         {(session) => {
+          console.log({ session: session() })
           const project = createMemo(() => projectForSession(session(), serverCtx()?.projects.list() ?? []))
 
           return (
@@ -756,7 +806,10 @@ function TabNavItem(props: {
         }}
       </Show>
 
-      <div class="absolute not-group-hover:not-group-data-[active=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
+      <div
+        class="absolute not-group-hover:not-group-data-[active=true]:not-data-[truncate=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 data-[truncate=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2"
+        data-truncate={props.forceTruncate}
+      >
         <div
           class="absolute inset-0 rounded-r-[6px] bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
           style={{
@@ -796,7 +849,7 @@ function ProjectTabAvatar(props: {
   )
 }
 
-function NewSessionTabItem(props: { href: string; title: string; onClose: () => void }) {
+function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: string; onClose: () => void }) {
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -804,7 +857,8 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
   }
   return (
     <div
-      class="group relative flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      ref={props.ref}
+      class="group relative shrink-0 flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
       onMouseDown={(event) => {
         if (event.button !== 1) return
         closeTab(event)
