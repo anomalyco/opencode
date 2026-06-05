@@ -65,7 +65,7 @@ Client            Runner                         System Context Registry       C
    │                 ├─ Baseline + chronological history ─────────────────────────────────────────────────────────────────────────▶
 ```
 
-Model switches and completed compactions request lazy baseline replacement. An agent switch or Session move clears the epoch so a complete effective baseline must initialize before provider dispatch. Epoch creation is fenced against the authoritative Session Location and effective agent, preventing an old runner from recreating stale privileged context after a concurrent change.
+Agent switches, model switches, and completed compactions request lazy baseline replacement. A switch admitted after the current safe provider-turn boundary applies to the next provider turn while leaving the already-prepared baseline durable. A Session move clears the epoch so the destination Location must initialize a complete baseline before another provider turn. Epoch creation is fenced against the authoritative Session Location and effective agent, preventing an old runner from recreating stale privileged context after a concurrent change.
 
 ```text
 Session                            Epoch

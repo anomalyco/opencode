@@ -6,9 +6,9 @@ import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 import { QuestionV2 } from "../../question"
-import { SkillGuidance } from "../../skill-guidance"
-import { SystemContext } from "../../system-context"
-import { SystemContextRegistry } from "../../system-context-registry"
+import { SystemContext } from "../../system-context/index"
+import { SystemContextRegistry } from "../../system-context/registry"
+import { SkillGuidance } from "../../skill/guidance"
 import { ToolRegistry } from "../../tool/registry"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionEvent } from "../event"
@@ -124,34 +124,42 @@ export const layer = Layer.effect(
       cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
 
     class RetryTurn extends Error {
-      constructor(readonly promotion: "steer" | "queue" | undefined) {
+      constructor(readonly promotion: SessionInput.Delivery | undefined) {
         super()
       }
     }
+    const retryAgentMismatch = (promotion: SessionInput.Delivery | undefined) =>
+      Effect.catchDefect((defect) =>
+        defect instanceof SessionContextEpoch.AgentMismatch ? Effect.die(new RetryTurn(promotion)) : Effect.die(defect),
+      )
+
+    const loadSystemContext = (sessionID: SessionSchema.ID) =>
+      getSession(sessionID).pipe(
+        Effect.flatMap((session) =>
+          Effect.all([systemContext.load(), agents.resolve(session.agent)], { concurrency: "unbounded" }),
+        ),
+        Effect.flatMap(([context, agent]) =>
+          Effect.all([Effect.succeed(context), skillGuidance.load(agent?.id ?? AgentV2.defaultID)], {
+            concurrency: "unbounded",
+          }),
+        ),
+        Effect.map(SystemContext.combine),
+      )
 
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
-      promotion: "steer" | "queue" | undefined,
+      promotion: SessionInput.Delivery | undefined,
     ) {
       const session = yield* getSession(sessionID)
       const agent = yield* agents.resolve(session.agent)
       const agentID = agent?.id ?? AgentV2.defaultID
-      const currentSystemContext = Effect.all([systemContext.load(), skillGuidance.load(agentID)], {
-        concurrency: "unbounded",
-      }).pipe(Effect.map(SystemContext.combine))
       const initialized = yield* SessionContextEpoch.initialize(
         db,
-        currentSystemContext,
+        loadSystemContext(sessionID),
         session.id,
         session.location,
         agentID,
-      ).pipe(
-        Effect.catchDefect((defect) =>
-          defect instanceof SessionContextEpoch.AgentMismatch
-            ? Effect.die(new RetryTurn(promotion))
-            : Effect.die(defect),
-        ),
-      )
+      ).pipe(retryAgentMismatch(promotion))
       const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
       if (promotion) {
@@ -164,13 +172,14 @@ export const layer = Layer.effect(
       }
       const system =
         initialized ??
-        (yield* SessionContextEpoch.prepare(db, events, currentSystemContext, session.id, session.location, agentID).pipe(
-          Effect.catchDefect((defect) =>
-            defect instanceof SessionContextEpoch.AgentMismatch
-              ? Effect.die(new RetryTurn(undefined))
-              : Effect.die(defect),
-          ),
-        ))
+        (yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          loadSystemContext(sessionID),
+          session.id,
+          session.location,
+          agentID,
+        ).pipe(retryAgentMismatch(undefined)))
       const current = yield* getSession(sessionID)
       if ((yield* agents.resolve(current.agent))?.id !== agent?.id) return yield* runTurn(sessionID, undefined)
       const model = yield* models.resolve(current)
@@ -272,7 +281,7 @@ export const layer = Layer.effect(
     }, Effect.scoped)
     const runTurn: (
       sessionID: SessionSchema.ID,
-      promotion: "steer" | "queue" | undefined,
+      promotion: SessionInput.Delivery | undefined,
     ) => Effect.Effect<boolean, RunError> = (sessionID, promotion) =>
       runTurnAttempt(sessionID, promotion).pipe(
         Effect.catchDefect((defect) =>
@@ -288,7 +297,7 @@ export const layer = Layer.effect(
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (input.force !== true && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
-      let promotion: "steer" | "queue" | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
+      let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
       while (openActivity) {
         let needsContinuation = true

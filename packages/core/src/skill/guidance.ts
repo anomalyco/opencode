@@ -1,12 +1,12 @@
-export * as SkillGuidance from "./skill-guidance"
+export * as SkillGuidance from "./guidance"
 
 import { pathToFileURL } from "url"
 import { Context, Effect, Layer, Schema } from "effect"
-import { AgentV2 } from "./agent"
-import { PermissionV2 } from "./permission"
-import { PluginBoot } from "./plugin/boot"
-import { SkillV2 } from "./skill"
-import { SystemContext } from "./system-context"
+import { AgentV2 } from "../agent"
+import { PermissionV2 } from "../permission"
+import { PluginBoot } from "../plugin/boot"
+import { SkillV2 } from "../skill"
+import { SystemContext } from "../system-context/index"
 
 const Summary = Schema.Struct({
   name: Schema.String,

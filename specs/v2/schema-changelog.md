@@ -779,7 +779,9 @@ Change:
 
 - Compose selected-agent, permission-filtered available-skill guidance with Location-wide System Context before Context Epoch admission.
 - Keep skill bodies behind the existing permission-checked `skill` tool and remove the unfiltered skill list from its Location-wide definition.
-- Clear the active Context Epoch after an agent switch, fence epoch creation against the authoritative effective agent, and recheck the agent before provider dispatch.
+- Stop missing-skill errors from enumerating the unfiltered Location-wide skill catalog.
+- Request Context Epoch replacement after an agent switch, dynamically re-observe the effective agent during retries, and fence first-epoch creation against the authoritative effective agent.
+- Group the System Context algebra, registry, and built-ins under `system-context/`; keep source producers and Context Epoch persistence with their owning Skill, instruction, and Session modules; rename projected conversation selection to Session History.
 - Add the canonical V1-to-V2 runtime-context parity checklist to `specs/v2/session.md`.
 
 Compatibility:

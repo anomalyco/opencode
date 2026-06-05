@@ -357,7 +357,7 @@ export const layer = Layer.effectDiscard(
         .pipe(
           Effect.orDie,
           Effect.andThen(run(db, event)),
-          Effect.andThen(SessionContextEpoch.reset(db, event.data.sessionID)),
+          Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)),
         )
     })
     yield* events.project(SessionEvent.ModelSwitched, (event) =>

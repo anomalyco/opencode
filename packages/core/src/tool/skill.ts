@@ -52,10 +52,7 @@ export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>)
   ].join("\n")
 }
 
-const notFound = (name: string, skills: ReadonlyArray<SkillV2.Info>) =>
-  new ToolFailure({
-    message: `Skill "${name}" not found. Available skills: ${skills.map((skill) => skill.name).join(", ") || "none"}`,
-  })
+const notFound = (name: string) => new ToolFailure({ message: `Skill "${name}" not found` })
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -79,7 +76,7 @@ export const layer = Layer.effectDiscard(
           Effect.gen(function* () {
             const current = yield* skills.list()
             const skill = current.find((skill) => skill.name === parameters.name)
-            if (!skill) return yield* notFound(parameters.name, current)
+            if (!skill) return yield* notFound(parameters.name)
             return yield* Effect.gen(function* () {
               yield* assertPermission({ action: name, resources: [skill.name], save: [skill.name] })
               const directory = path.dirname(skill.location)

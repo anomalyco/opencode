@@ -1,7 +1,7 @@
-export * as SystemContextRegistry from "./system-context-registry"
+export * as SystemContextRegistry from "./registry"
 
 import { Context, Effect, Layer, Ref, Scope } from "effect"
-import { SystemContext } from "./system-context"
+import { SystemContext } from "./index"
 
 export interface Contribution {
   readonly key: SystemContext.Key

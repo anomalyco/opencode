@@ -5,7 +5,7 @@ import { Context, Effect, Schema } from "effect"
 import { SessionSchema } from "../schema"
 import type { ContextSnapshotDecodeError, MessageDecodeError } from "../error"
 import { SessionRunnerModel } from "./model"
-import type { SystemContext } from "../../system-context"
+import type { SystemContext } from "../../system-context/index"
 
 export class StepLimitExceededError extends Schema.TaggedErrorClass<StepLimitExceededError>()(
   "SessionRunner.StepLimitExceededError",

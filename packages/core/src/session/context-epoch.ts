@@ -6,8 +6,7 @@ import { AgentV2 } from "../agent"
 import type { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { Location } from "../location"
-import { SystemContext } from "../system-context"
-import { SystemContextRegistry } from "../system-context-registry"
+import { SystemContext } from "../system-context/index"
 import { ContextSnapshotDecodeError } from "./error"
 import { SessionEvent } from "./event"
 import { SessionInput } from "./input"
@@ -187,7 +186,7 @@ const insert = Effect.fnUntraced(function* (
             .get()
             .pipe(Effect.orDie)
           if (!placed) return yield* Effect.die(new LocationMismatch())
-          if ((placed.agent ?? "build") !== agent) return yield* Effect.die(new AgentMismatch())
+          if (AgentV2.effectiveID(placed.agent) !== agent) return yield* Effect.die(new AgentMismatch())
           const baselineSeq = yield* SessionInput.latestSeq(db, sessionID)
           yield* db
             .insert(SessionContextEpochTable)

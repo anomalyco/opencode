@@ -8,6 +8,10 @@ OpenCode sessions preserve durable conversational history while assembling the r
 The structured collection of contextual facts presented to the model as initial instructions and chronological updates.
 _Avoid_: System prompt
 
+**Session History**:
+The projected chronological conversation selected for a provider turn after applying the active compaction and **Context Epoch** cutoffs.
+_Avoid_: Session Context
+
 **Context Source**:
 One independently observed typed value within the **System Context**, represented by a stable key, JSON codec, infallible loader, pure baseline/update renderers, and an optional removal renderer for dynamic sources.
 _Avoid_: Prompt fragment
@@ -38,6 +42,7 @@ The point immediately before a provider call, after durable input promotion and 
 ## Relationships
 
 - A **System Context** is an opaque carrier composed from zero or more **Context Sources**.
+- **Session History** contains projected conversational messages and admitted **Mid-Conversation System Messages**; the active **Baseline System Context** remains separate provider-request state.
 - The **System Context Registry** uses stable-keyed scoped contributions to assemble the current **System Context**; contributor removal naturally removes its sources at the next **Safe Provider-Turn Boundary**.
 - A changed **Context Source** may produce one **Mid-Conversation System Message** containing its newly effective state.
 - A **Mid-Conversation System Message** persists the exact combined rendered text sent to the model.
@@ -66,7 +71,7 @@ The point immediately before a provider call, after durable input promotion and 
 - The first instruction-service slice observes global and upward project `AGENTS.md` files as one ordered aggregate **Context Source** at each **Safe Provider-Turn Boundary**.
 - Built-in and instruction context producers register through the **System Context Registry** with stable contribution keys. Plugin-defined context registration and hot-reload lifecycle remain a follow-up built on the same scoped registry seam.
 - Selected-agent available-skill guidance is a **Context Source** composed with Location-wide registry sources immediately before Context Epoch admission. It lists only described skills permitted for that agent; skill bodies remain intentionally loaded through the permission-checked `skill` tool.
-- Switching the selected agent clears the active **Context Epoch** so agent-specific context cannot remain in the active baseline. Epoch creation is fenced against the authoritative effective agent, and the runner rechecks that agent before provider dispatch.
+- Switching the selected agent requests **Context Epoch** replacement. A switch admitted after the current **Safe Provider-Turn Boundary** applies to the next provider turn while leaving the already-prepared baseline durable. Epoch creation is fenced against the authoritative effective agent, and retries re-observe the current agent.
 - Context source changes never wake idle sessions; the next naturally scheduled **Safe Provider-Turn Boundary** loads and compares current values lazily.
 - Once admitted, a **Mid-Conversation System Message** remains durable even if the following provider attempt fails and is replayed unchanged on retry.
 - **Mid-Conversation System Messages** remain durable Session-message history; normal user-facing transcript surfaces may hide them.
