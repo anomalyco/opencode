@@ -1,6 +1,7 @@
 export * as ReadTool from "./read"
 
 import { Tool, ToolFailure } from "@opencode-ai/llm"
+// @ts-ignore Bun's static file import is embedded by `bun build --compile`; some consumers also declare *.wasm.
 import photonWasm from "@silvia-odwyer/photon-node/photon_rs_bg.wasm" with { type: "file" }
 import { Cause, Effect, Layer, Schema } from "effect"
 import path from "node:path"
