@@ -11,11 +11,10 @@ function Directory(props: { api: TuiPluginApi }) {
   const destination = useHomeSessionDestination()
   const dir = createMemo(() => {
     const selected = destination?.destination()
-    if (selected?.type === "new") return
-    if (selected?.type === "directory") return selected.directory.replace(Global.Path.home, "~")
-    const dir = props.api.state.path.directory || process.cwd()
-    const out = dir.replace(Global.Path.home, "~")
-    const branch = props.api.state.vcs?.branch
+    if (!selected || selected.type === "new") return
+    const out = selected.directory.replace(Global.Path.home, "~")
+    const branch =
+      selected.directory === (props.api.state.path.directory || process.cwd()) ? props.api.state.vcs?.branch : undefined
     if (branch) return out + ":" + branch
     return out
   })
