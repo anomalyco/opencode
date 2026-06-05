@@ -7,6 +7,7 @@ node_modules
 **/node_modules
 **/.output
 **/dist
+!packages/opencode/dist/opencode-linux-x64/bin/opencode
 **/.turbo
 **/.vite
 **/coverage

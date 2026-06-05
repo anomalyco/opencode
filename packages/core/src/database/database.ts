@@ -59,6 +59,11 @@ export function layerFromPgUrl(url: string) {
 }
 
 export function path() {
+  const url = DatabaseDialect.sqlitePath()
+  if (url) {
+    if (url === ":memory:" || isAbsolute(url)) return url
+    return join(Global.Path.data, url)
+  }
   if (Flag.OPENCODE_DB) {
     if (Flag.OPENCODE_DB === ":memory:" || isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
     return join(Global.Path.data, Flag.OPENCODE_DB)

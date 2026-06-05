@@ -14,6 +14,34 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+    profiles:
+      - local-pg
+
+  opencode-local-pg:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      OPENCODE_DATABASE_URL: postgresql://opencode:opencode@postgres:5432/opencode
+    volumes:
+      - /home/jadson:/home/jadson
+    stdin_open: true
+    tty: true
+    profiles:
+      - local-pg
+
+  opencode-neon:
+    build: .
+    env_file: .env
+    environment:
+      OPENCODE_DATABASE_URL: ${OPENCODE_DATABASE_URL}
+    volumes:
+      - /home/jadson:/home/jadson
+    stdin_open: true
+    tty: true
+    profiles:
+      - neon
 
 volumes:
   pgdata:

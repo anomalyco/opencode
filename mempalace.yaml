@@ -1,0 +1,65 @@
+wing: opencode
+rooms:
+- name: github
+  description: Files from github/
+  keywords:
+  - github
+  - github
+- name: configuration
+  description: Files from infra/
+  keywords:
+  - configuration
+  - infra
+- name: nix
+  description: Files from nix/
+  keywords:
+  - nix
+  - nix
+- name: packages
+  description: Files from packages/
+  keywords:
+  - packages
+  - packages
+- name: patches
+  description: Files from patches/
+  keywords:
+  - patches
+  - patches
+- name: perf
+  description: Files from perf/
+  keywords:
+  - perf
+  - perf
+- name: script
+  description: Files from script/
+  keywords:
+  - script
+  - script
+- name: sdks
+  description: Files from sdks/
+  keywords:
+  - sdks
+  - sdks
+- name: planning
+  description: Files from specs/
+  keywords:
+  - planning
+  - specs
+- name: scripts
+  description: Files from scripts/
+  keywords:
+  - scripts
+  - scripts
+- name: documentation
+  description: Files from docs/
+  keywords:
+  - documentation
+  - docs
+- name: frontend
+  description: Files from ui/
+  keywords:
+  - frontend
+  - ui
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []
