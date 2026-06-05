@@ -3,7 +3,7 @@ export * as SessionRunner from "./index"
 import type { LLMError } from "@opencode-ai/llm"
 import { Context, Effect, Schema } from "effect"
 import { SessionSchema } from "../schema"
-import type { MessageDecodeError } from "../error"
+import type { ContextSnapshotDecodeError, MessageDecodeError } from "../error"
 import { SessionRunnerModel } from "./model"
 import type { SystemContext } from "../../system-context"
 
@@ -19,6 +19,7 @@ export type RunError =
   | LLMError
   | SessionRunnerModel.Error
   | MessageDecodeError
+  | ContextSnapshotDecodeError
   | StepLimitExceededError
   | SystemContext.InitializationBlocked
 
