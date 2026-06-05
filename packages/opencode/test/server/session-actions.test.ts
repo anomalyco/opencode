@@ -90,4 +90,23 @@ describe("session action routes", () => {
       }),
     { git: true },
   )
+
+  it.instance(
+    "experimental background route is a no-op without synchronous subagents",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* Effect.acquireRelease(SessionNs.use.create({}), (created) =>
+          SessionNs.use.remove(created.id).pipe(Effect.ignore),
+        )
+
+        const res = yield* requestInDirectory(`/experimental/session/${session.id}/background`, test.directory, {
+          method: "POST",
+        })
+
+        expect(res.status).toBe(200)
+        expect(yield* res.json).toBe(false)
+      }),
+    { git: true },
+  )
 })

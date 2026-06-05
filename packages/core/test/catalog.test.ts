@@ -6,6 +6,7 @@ import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { Policy } from "@opencode-ai/core/policy"
+import { Project } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
@@ -187,7 +188,12 @@ describe("CatalogV2", () => {
       yield* events.publish(
         PluginV2.Event.Added,
         { id: PluginV2.ID.make("test-transform") },
-        { location: { directory: AbsolutePath.make("other") } },
+        {
+          location: new Location.Info({
+            directory: AbsolutePath.make("other"),
+            project: { id: Project.ID.global, directory: AbsolutePath.make("other") },
+          }),
+        },
       )
       yield* Effect.yieldNow
 
@@ -272,6 +278,34 @@ describe("CatalogV2", () => {
 
       yield* transform(models)
       expect(Option.getOrUndefined(yield* catalog.model.default())?.id).toBe(newest)
+    }),
+  )
+
+  it.effect("ignores a configured default on a disabled provider", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const disabledProvider = ProviderV2.ID.make("disabled")
+      const enabledProvider = ProviderV2.ID.make("enabled")
+      const disabledModel = ModelV2.ID.make("configured")
+      const fallbackModel = ModelV2.ID.make("fallback")
+      const transform = yield* catalog.transform()
+
+      yield* transform((catalog) => {
+        catalog.provider.update(disabledProvider, (provider) => {
+          provider.enabled = false
+        })
+        catalog.model.update(disabledProvider, disabledModel, () => {})
+        catalog.provider.update(enabledProvider, (provider) => {
+          provider.enabled = { via: "custom", data: {} }
+        })
+        catalog.model.update(enabledProvider, fallbackModel, () => {})
+        catalog.model.default.set(disabledProvider, disabledModel)
+      })
+
+      expect(Option.getOrUndefined(yield* catalog.model.default())).toMatchObject({
+        providerID: enabledProvider,
+        id: fallbackModel,
+      })
     }),
   )
 

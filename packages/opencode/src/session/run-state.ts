@@ -4,7 +4,6 @@ import { Runner } from "@/effect/runner"
 import { BackgroundJob } from "@/background/job"
 import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
-import { MessageV2 } from "./message-v2"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
 
@@ -78,7 +77,7 @@ export const layer = Layer.effect(
       yield* cancelBackgroundJobs(background, sessionID)
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
-      if (!existing || !existing.busy) {
+      if (!existing) {
         yield* status.set(sessionID, { type: "idle" })
         return
       }
