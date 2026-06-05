@@ -477,6 +477,29 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("classifies prompt-too-long provider errors", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              error: { type: "invalid_request_error", message: "prompt is too long: 210000 tokens" },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "invalid_request_error: prompt is too long: 210000 tokens",
+          classification: "context-overflow",
+        },
+      ])
+    }),
+  )
+
   it.effect("falls back to error type when no message is present", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

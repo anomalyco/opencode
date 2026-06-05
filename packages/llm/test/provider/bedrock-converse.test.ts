@@ -351,6 +351,23 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("classifies input-too-long validation exceptions", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(eventStreamBody(["validationException", { message: "Input is too long for requested model" }])),
+        ),
+      )
+
+      expect(response.events.find((event) => event.type === "provider-error")).toEqual({
+        type: "provider-error",
+        message: "Input is too long for requested model",
+        classification: "context-overflow",
+        retryable: false,
+      })
+    }),
+  )
+
   it.effect("rejects requests with no auth path", () =>
     Effect.gen(function* () {
       const unsignedModel = AmazonBedrock.configure({
