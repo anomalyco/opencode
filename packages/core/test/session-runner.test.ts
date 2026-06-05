@@ -19,6 +19,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { QuestionV2 } from "@opencode-ai/core/question"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { ContextSnapshotDecodeError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -628,6 +629,31 @@ describe("SessionRunnerLLM", () => {
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(SystemContext.InitializationBlocked)
       expect(requests).toHaveLength(1)
       expect(yield* SessionInput.hasPending(db, sessionID, "steer")).toBe(true)
+    }),
+  )
+
+  it.effect("fails gracefully when a stored context snapshot cannot be decoded", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+      yield* db
+        .update(SessionContextEpochTable)
+        .set({ snapshot: { invalid: { value: "bad" } } })
+        .where(eq(SessionContextEpochTable.session_id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+      requests.length = 0
+
+      const exit = yield* session.resume(sessionID).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(ContextSnapshotDecodeError)
+      expect(requests).toHaveLength(0)
     }),
   )
 
