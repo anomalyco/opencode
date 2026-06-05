@@ -252,6 +252,48 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("separates pre-interrupt and post-interrupt explicit waiters", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const cleanupStarted = yield* Deferred.make<void>()
+        const cleanupGate = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make<string, void, never>({
+          drain: () =>
+            Effect.sync(() => ++runs).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(firstStarted, undefined).pipe(
+                      Effect.andThen(Effect.never),
+                      Effect.onInterrupt(() =>
+                        Deferred.succeed(cleanupStarted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
+                      ),
+                    )
+                  : Deferred.succeed(secondStarted, undefined),
+              ),
+            ),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(firstStarted)
+        const before = yield* coordinator.run("session").pipe(Effect.exit, Effect.forkChild)
+        const interrupt = yield* coordinator.interrupt("session").pipe(Effect.forkChild)
+        yield* Deferred.await(cleanupStarted)
+        const after = yield* coordinator.run("session").pipe(Effect.exit, Effect.forkChild)
+        yield* Deferred.succeed(cleanupGate, undefined)
+
+        const beforeExit = yield* Fiber.join(before)
+        expect(Exit.isFailure(beforeExit) && Cause.hasInterruptsOnly(beforeExit.cause)).toBeTrue()
+        yield* Fiber.join(interrupt)
+        yield* Fiber.join(after)
+        yield* Deferred.await(secondStarted)
+        expect(runs).toBe(2)
+      }),
+    ),
+  )
+
   it.effect("waits for interrupt cleanup before settling callers", () =>
     Effect.scoped(
       Effect.gen(function* () {

@@ -189,8 +189,7 @@ export const make = <Key, A, E>(options: {
         if (entry !== undefined) {
           if (entry.stopping) {
             entry.rerun = strongest(entry.rerun, "run")
-            entry.successorExplicit ??=
-              entry.mode === "wake" ? (entry.explicit ?? Deferred.makeUnsafe<A, E>()) : Deferred.makeUnsafe<A, E>()
+            entry.successorExplicit ??= Deferred.makeUnsafe<A, E>()
             return restore(awaitRun(entry.successorExplicit))
           }
           if (entry.mode === "wake") {
