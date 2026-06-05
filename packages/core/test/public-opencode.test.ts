@@ -25,5 +25,4 @@ describe("public native OpenCode API", () => {
       expect(yield* opencode.sessions.list()).toBeArray()
     }),
   )
-
 })

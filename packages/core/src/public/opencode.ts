@@ -42,7 +42,7 @@ export const layer = Layer.effect(
             agent: input.agent,
             model: input.model,
             location: input.location,
-        }),
+          }),
         get: sessions.get,
         list: sessions.list,
         prompt: (input) =>
