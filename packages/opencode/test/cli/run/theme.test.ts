@@ -82,6 +82,43 @@ test("returns syntax styles and indexed splash colors", async () => {
   }
 })
 
+test("uses refreshed background brightness when cached renderer mode is stale", async () => {
+  const colors = terminalColors({
+    defaultBackground: "#fbf1c7",
+    defaultForeground: "#3c3836",
+  })
+  const stale = await resolveRunTheme(renderer({ themeMode: "dark", colors }))
+  const light = await resolveRunTheme(renderer({ themeMode: "light", colors }))
+
+  try {
+    expect(expectRgba(stale.footer.surface).toInts()).toEqual(expectRgba(light.footer.surface).toInts())
+  } finally {
+    stale.block.syntax?.destroy()
+    stale.block.subtleSyntax?.destroy()
+    light.block.syntax?.destroy()
+    light.block.subtleSyntax?.destroy()
+  }
+})
+
+test("keeps renderer mode when refreshed default background is unavailable", async () => {
+  const colors = {
+    ...terminalColors(),
+    defaultBackground: null,
+    palette: ["#000000", ...terminalColors().palette.slice(1)],
+  }
+  const light = await resolveRunTheme(renderer({ themeMode: "light", colors }))
+  const dark = await resolveRunTheme(renderer({ themeMode: "dark", colors }))
+
+  try {
+    expect(expectRgba(light.footer.surface).toInts()).not.toEqual(expectRgba(dark.footer.surface).toInts())
+  } finally {
+    light.block.syntax?.destroy()
+    light.block.subtleSyntax?.destroy()
+    dark.block.syntax?.destroy()
+    dark.block.subtleSyntax?.destroy()
+  }
+})
+
 test("keeps dark surfaces neutral on saturated backgrounds", () => {
   const theme = resolveTheme(
     generateSystem(

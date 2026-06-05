@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
+import { RGBA, type BoxRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
@@ -16,7 +17,7 @@ import {
 } from "@/cli/cmd/run/footer.command"
 import { RunFooterView } from "@/cli/cmd/run/footer.view"
 import { RunEntryContent } from "@/cli/cmd/run/scrollback.writer"
-import { RUN_THEME_FALLBACK } from "@/cli/cmd/run/theme"
+import { RUN_THEME_FALLBACK, type RunTheme } from "@/cli/cmd/run/theme"
 import type {
   FooterState,
   FooterSubagentState,
@@ -153,6 +154,7 @@ async function renderFooter(
   input: {
     tuiConfig?: RunTuiConfig
     commands?: RunCommand[]
+    theme?: () => RunTheme
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean
   } = {},
@@ -183,7 +185,7 @@ async function renderFooter(
           state={state}
           view={view}
           subagent={subagents}
-          theme={RUN_THEME_FALLBACK}
+          theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           tuiConfig={config}
           backgroundSubagents={true}
           agent="opencode"
@@ -226,6 +228,31 @@ async function renderFooter(
     },
   }
 }
+
+test("direct footer updates composer background when theme changes", async () => {
+  const surface = RGBA.fromHex("#123456")
+  const [theme, setTheme] = createSignal(RUN_THEME_FALLBACK)
+  const app = await renderFooter({ theme })
+
+  try {
+    await app.renderOnce()
+    const area = app.renderer.root.findDescendantById("run-direct-footer-composer-area") as BoxRenderable
+
+    expect(area.backgroundColor.toInts()).not.toEqual(surface.toInts())
+    setTheme({
+      ...RUN_THEME_FALLBACK,
+      footer: {
+        ...RUN_THEME_FALLBACK.footer,
+        surface,
+      },
+    })
+    await app.renderOnce()
+
+    expect(area.backgroundColor.toInts()).toEqual(surface.toInts())
+  } finally {
+    app.cleanup()
+  }
+})
 
 test("run entry content updates when live commit text changes", async () => {
   const [commit, setCommit] = createSignal<StreamCommit>({
@@ -612,7 +639,7 @@ test("direct footer shows editable prompts and additional queued work while runn
           queuedPrompts={() => [
             { messageID: "m-queued", partID: "p-queued", prompt: { text: "follow up", parts: [] } },
           ]}
-          theme={RUN_THEME_FALLBACK}
+          theme={() => RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
           backgroundSubagents={true}
           agent="opencode"
