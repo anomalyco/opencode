@@ -779,7 +779,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             scroll.setScroll(key(), tab, pos)
           },
           todoCollapsed: {
-            get: () => s().todoCollapsed ?? false,
+            get: (fallback = false) => s().todoCollapsed ?? fallback,
             set(collapsed: boolean) {
               const session = key()
               const current = store.sessionView[session]
