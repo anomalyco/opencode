@@ -2249,8 +2249,8 @@ it.instance(
       })
 
       if (msg.info.role !== "user") throw new Error("expected user message")
-      expect(msg.info.model.providerID).toBe(ProviderID.make("test"))
-      expect(msg.info.model.modelID).toBe(ModelID.make("test-model-2"))
+      expect(msg.info.model.providerID).toBe(ProviderV2.ID.make("test"))
+      expect(msg.info.model.modelID).toBe(ModelV2.ID.make("test-model-2"))
 
       yield* sessions.remove(session.id)
     }),
