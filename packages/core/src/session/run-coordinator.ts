@@ -6,6 +6,8 @@ import { SessionSchema } from "./schema"
 
 export type Mode = "run" | "wake"
 
+type Demand = { readonly _tag: "run" } | { readonly _tag: "wake"; readonly seq?: number }
+
 /**
  * Runs at most one drain chain per key while allowing different keys to drain concurrently.
  *
@@ -36,17 +38,24 @@ export interface Coordinator<Key, A, E> {
 type Entry<A, E> = {
   readonly done: Deferred.Deferred<A, E>
   readonly settled: Deferred.Deferred<Exit.Exit<A, E>>
-  mode: Mode
-  modeSeq?: number
-  nextMode?: Mode
-  nextSeq?: number
+  current: Demand
+  pending?: Demand
   explicitWaiter?: Deferred.Deferred<A, E>
   interruptSeq?: number
   owner?: Fiber.Fiber<void, never>
   stopping: boolean
 }
 
-const strongest = (left: Mode | undefined, right: Mode): Mode => (left === "run" || right === "run" ? "run" : "wake")
+const coalesce = (left: Demand | undefined, right: Demand): Demand => {
+  if (left?._tag === "run" || right._tag === "run") return { _tag: "run" }
+  return { _tag: "wake", seq: maxSeq(left?.seq, right.seq) }
+}
+
+const maxSeq = (left: number | undefined, right: number | undefined) => {
+  if (left === undefined) return right
+  if (right === undefined) return left
+  return Math.max(left, right)
+}
 
 /** Constructs a scoped coordinator. Every in-memory transition is synchronous. */
 export const make = <Key, A, E>(options: {
@@ -69,23 +78,22 @@ export const make = <Key, A, E>(options: {
       }),
     )
 
-    const makeEntry = (mode: Mode, explicitWaiter?: Deferred.Deferred<A, E>, modeSeq?: number): Entry<A, E> => ({
+    const makeEntry = (current: Demand, explicitWaiter?: Deferred.Deferred<A, E>): Entry<A, E> => ({
       done: Deferred.makeUnsafe<A, E>(),
       settled: Deferred.makeUnsafe<Exit.Exit<A, E>>(),
-      mode,
-      modeSeq,
+      current,
       explicitWaiter,
       stopping: false,
     })
 
-    const start = (key: Key, entry: Entry<A, E>, mode: Mode, successor = false) => {
+    const start = (key: Key, entry: Entry<A, E>, demand: Demand, successor = false) => {
       const ready = Deferred.makeUnsafe<void>()
-      const drain = Effect.suspend(() => options.drain(key, mode))
+      const drain = Effect.suspend(() => options.drain(key, demand._tag))
       // Initial work retains immediate-start behavior but cannot run before ownership is published.
       // Observer-started successors yield once so synchronous drains cannot recurse on the JS stack.
       const owner = fork(
         (successor ? Effect.yieldNow.pipe(Effect.andThen(drain)) : Deferred.await(ready).pipe(Effect.andThen(drain))).pipe(
-          Effect.onExit((exit) => Effect.sync(() => settle(key, entry, mode, exit))),
+          Effect.onExit((exit) => Effect.sync(() => settle(key, entry, demand, exit))),
           Effect.exit,
           Effect.asVoid,
         ),
@@ -94,17 +102,17 @@ export const make = <Key, A, E>(options: {
       if (!successor) Deferred.doneUnsafe(ready, Effect.void)
     }
 
-    const settle = (key: Key, entry: Entry<A, E>, mode: Mode, exit: Exit.Exit<A, E>) => {
+    const settle = (key: Key, entry: Entry<A, E>, demand: Demand, exit: Exit.Exit<A, E>) => {
       if (closed) {
         Deferred.doneUnsafe(entry.done, exit)
         Deferred.doneUnsafe(entry.settled, Effect.succeed(exit))
         return
       }
-      if (mode === "run" && entry.explicitWaiter !== undefined) {
+      if (demand._tag === "run" && entry.explicitWaiter !== undefined) {
         Deferred.doneUnsafe(entry.explicitWaiter, exit)
         entry.explicitWaiter = undefined
       }
-      if (entry.stopping && mode === "wake" && entry.explicitWaiter !== undefined) {
+      if (entry.stopping && demand._tag === "wake" && entry.explicitWaiter !== undefined) {
         Deferred.doneUnsafe(entry.explicitWaiter, exit)
         entry.explicitWaiter = undefined
       }
@@ -114,13 +122,11 @@ export const make = <Key, A, E>(options: {
         return
       }
       if (exit._tag === "Success" && !entry.stopping) {
-        if (entry.nextMode !== undefined) {
-          const mode = entry.nextMode
-          entry.nextMode = undefined
-          entry.mode = mode
-          entry.modeSeq = entry.nextSeq
-          entry.nextSeq = undefined
-          start(key, entry, mode, true)
+        if (entry.pending !== undefined) {
+          const pending = entry.pending
+          entry.pending = undefined
+          entry.current = pending
+          start(key, entry, pending, true)
           return
         }
         active.delete(key)
@@ -129,17 +135,16 @@ export const make = <Key, A, E>(options: {
         return
       }
 
-      const successor =
-        entry.nextMode !== undefined ? makeEntry(entry.nextMode, entry.explicitWaiter, entry.nextSeq) : undefined
+      const successor = entry.pending !== undefined ? makeEntry(entry.pending, entry.explicitWaiter) : undefined
       if (successor === undefined) active.delete(key)
       else active.set(key, successor)
-      if (successor !== undefined) start(key, successor, successor.mode, true)
+      if (successor !== undefined) start(key, successor, successor.current, true)
       Deferred.doneUnsafe(entry.done, exit)
       Deferred.doneUnsafe(entry.settled, Effect.succeed(exit))
       if (
         exit._tag === "Failure" &&
         !(entry.stopping && Cause.hasInterruptsOnly(exit.cause)) &&
-        mode === "wake" &&
+        demand._tag === "wake" &&
         options.onFailure !== undefined
       ) {
         report(Effect.suspend(() => options.onFailure!(key, exit.cause)))
@@ -153,14 +158,13 @@ export const make = <Key, A, E>(options: {
         const entry = active.get(key)
         if (entry !== undefined) {
           if (!acceptsWake(entry, seq)) return
-          entry.nextMode = strongest(entry.nextMode, "wake")
-          entry.nextSeq = maxSeq(entry.nextSeq, seq)
+          entry.pending = coalesce(entry.pending, { _tag: "wake", seq })
           return
         }
 
-        const next = makeEntry("wake", undefined, seq)
+        const next = makeEntry({ _tag: "wake", seq })
         active.set(key, next)
-        start(key, next, "wake")
+        start(key, next, next.current)
       })
 
     const awaitIdle = (key: Key): Effect.Effect<void, E> =>
@@ -187,16 +191,16 @@ export const make = <Key, A, E>(options: {
           return entry?.stopping && entry.owner !== undefined ? Fiber.interrupt(entry.owner) : Effect.void
         if (seq !== undefined) interruptSeq.set(key, seq)
         if (entry?.owner === undefined) return Effect.void
-        if (seq !== undefined && entry.mode === "wake" && entry.modeSeq !== undefined && entry.modeSeq > seq)
+        if (seq !== undefined && entry.current._tag === "wake" && entry.current.seq !== undefined && entry.current.seq > seq)
           return Effect.void
         if (entry.stopping) {
           entry.interruptSeq = maxSeq(entry.interruptSeq, seq)
-          suppressNextBefore(entry, seq)
+          suppressPendingAtOrBefore(entry, seq)
           return Fiber.interrupt(entry.owner)
         }
         entry.stopping = true
         entry.interruptSeq = seq
-        suppressNextBefore(entry, seq)
+        suppressPendingAtOrBefore(entry, seq)
         return Fiber.interrupt(entry.owner)
       })
 
@@ -210,18 +214,17 @@ export const make = <Key, A, E>(options: {
           if (entry.stopping) {
             return restore(Deferred.await(entry.settled).pipe(Effect.andThen(run(key))))
           }
-          if (entry.mode === "wake") {
-            entry.nextMode = "run"
-            entry.nextSeq = undefined
+          if (entry.current._tag === "wake") {
+            entry.pending = coalesce(entry.pending, { _tag: "run" })
             entry.explicitWaiter ??= Deferred.makeUnsafe<A, E>()
             return restore(awaitRun(entry.explicitWaiter))
           }
           return restore(awaitRun(entry.done))
         }
 
-        const next = makeEntry("run")
+        const next = makeEntry({ _tag: "run" })
         active.set(key, next)
-        start(key, next, "run")
+        start(key, next, next.current)
         return restore(awaitRun(next.done))
       })
     }
@@ -239,16 +242,10 @@ export const make = <Key, A, E>(options: {
       return latest === undefined || (seq !== undefined && seq > latest)
     }
 
-    function maxSeq(left: number | undefined, right: number | undefined) {
-      if (left === undefined) return right
-      if (right === undefined) return left
-      return Math.max(left, right)
-    }
-
-    function suppressNextBefore(entry: Entry<A, E>, seq: number | undefined) {
-      if (entry.nextMode === "wake" && seq !== undefined && entry.nextSeq !== undefined && entry.nextSeq > seq) return
-      entry.nextMode = undefined
-      entry.nextSeq = undefined
+    function suppressPendingAtOrBefore(entry: Entry<A, E>, seq: number | undefined) {
+      if (entry.pending?._tag === "wake" && seq !== undefined && entry.pending.seq !== undefined && entry.pending.seq > seq)
+        return
+      entry.pending = undefined
     }
   })
 
