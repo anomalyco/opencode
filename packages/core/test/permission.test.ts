@@ -12,6 +12,8 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -22,13 +24,22 @@ const current = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
 const events = EventV2.layer.pipe(Layer.provide(database))
-const sessions = SessionV2.layer.pipe(Layer.provide(database))
+const store = SessionStore.layer.pipe(Layer.provide(database))
+const sessions = SessionV2.layer.pipe(
+  Layer.provide(events),
+  Layer.provide(database),
+  Layer.provide(store),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(SessionExecution.noopLayer),
+)
 const saved = PermissionSaved.layer.pipe(Layer.provide(database))
 const layer = PermissionV2.locationLayer.pipe(
   Layer.provideMerge(database),
+  Layer.provideMerge(store),
   Layer.provideMerge(events),
   Layer.provideMerge(current),
   Layer.provideMerge(sessions),
+  Layer.provideMerge(SessionExecution.noopLayer),
   Layer.provideMerge(saved),
 )
 const it = testEffect(layer)
@@ -124,6 +135,67 @@ describe("PermissionV2", () => {
       const denied = yield* service.assert(assertion()).pipe(Effect.flip)
       expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
       expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("uses build permissions when the Session agent is omitted", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ agent: null })
+        .where(eq(SessionTable.id, SessionV2.ID.make("ses_test")))
+        .run()
+        .pipe(Effect.orDie)
+      const agents = yield* AgentV2.Service
+      const update = yield* agents.transform()
+      yield* update((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.permissions = [{ action: "todowrite", resource: "*", effect: "allow" }]
+        }),
+      )
+
+      const service = yield* PermissionV2.Service
+      expect(yield* service.ask(assertion({ action: "todowrite", resources: ["*"] }))).toEqual({
+        id: PermissionV2.ID.create("per_test"),
+        effect: "allow",
+      })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("evaluates bash with the normal configured-rule semantics", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const service = yield* PermissionV2.Service
+      const bash = assertion({ action: "bash", resources: ["pwd"] })
+      expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "allow" })
+
+      yield* setRules([])
+      expect(yield* service.ask(bash)).toEqual({ id: PermissionV2.ID.create("per_test"), effect: "ask" })
+      expect(yield* service.get(PermissionV2.ID.create("per_test"))).toBeDefined()
+    }),
+  )
+
+  it.effect("uses saved bash approvals while preserving configured deny precedence", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "bash", resources: ["pwd"] })
+
+      const service = yield* PermissionV2.Service
+      expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
+        id: PermissionV2.ID.create("per_test"),
+        effect: "allow",
+      })
+      expect(yield* service.list()).toEqual([])
+
+      yield* setRules([{ action: "bash", resource: "*", effect: "deny" }])
+      expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
+        id: PermissionV2.ID.create("per_test"),
+        effect: "deny",
+      })
     }),
   )
 

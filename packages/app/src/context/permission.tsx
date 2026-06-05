@@ -46,6 +46,7 @@ function hasPermissionPromptRules(permission: unknown) {
 
 export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
   name: "Permission",
+  gate: false,
   init: () => {
     const params = useParams()
     const serverSDK = useServerSDK()
@@ -60,7 +61,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     const [store, setStore, _, ready] = persisted(
       {
-        ...Persist.global("permission", ["permission.v3"]),
+        ...Persist.serverGlobal(serverSDK.scope, "permission", ["permission.v3"]),
         migrate(value) {
           if (!value || typeof value !== "object" || Array.isArray(value)) return value
 

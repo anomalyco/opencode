@@ -3,6 +3,8 @@
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
+import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import "@opencode-ai/core/account"
 import "@opencode-ai/core/catalog"
@@ -24,10 +26,11 @@ export const layer = Layer.effect(
         const workspaceID = yield* WorkspaceRef
         return yield* events.publish(definition, data, {
           ...options,
-          location: {
+          location: new Location.Info({
             directory: AbsolutePath.make(ctx.directory),
             ...(workspaceID ? { workspaceID } : {}),
-          },
+            project: { id: Project.ID.make(ctx.project.id), directory: AbsolutePath.make(ctx.worktree) },
+          }),
         })
       })
 
@@ -40,6 +43,25 @@ export const layer = Layer.effect(
           project: ctx?.project.id,
           workspace: workspaceID,
           payload: { id: event.id, type: event.type, properties: event.data },
+        })
+        const sync = EventV2.registry.get(event.type)?.sync
+        if (sync === undefined || event.seq === undefined || event.version === undefined) return
+        const aggregateID = (event.data as Record<string, unknown>)[sync.aggregate]
+        if (typeof aggregateID !== "string") return
+        GlobalBus.emit("event", {
+          directory: event.location?.directory ?? ctx?.directory,
+          project: ctx?.project.id,
+          workspace: workspaceID,
+          payload: {
+            type: "sync",
+            syncEvent: {
+              id: event.id,
+              type: EventV2.versionedType(event.type, event.version),
+              seq: event.seq,
+              aggregateID,
+              data: event.data,
+            },
+          },
         })
       }),
     )
