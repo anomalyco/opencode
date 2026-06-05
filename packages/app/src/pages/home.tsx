@@ -11,7 +11,6 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TabStateIndicator } from "@opencode-ai/ui/v2/tab-state-indicator"
 import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -23,26 +22,24 @@ import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer, useServerManagementController } from "@/components/dialog-select-server"
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, useServer } from "@/context/server"
+import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
-import { usePermission } from "@/context/permission"
 import {
   closeHomeProject,
   displayName,
   getProjectAvatarSource,
   homeProjectDirectories,
   homeProjectNavigation,
-  homeSessionServerStatus,
   type HomeProjectSelection,
   projectForSession,
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
+import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
-import { messageAgentColor } from "@/utils/agent"
-import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
 import { useGlobal } from "@/context/global"
 import { useCommand } from "@/context/command"
 import { useSettings } from "@/context/settings"
@@ -64,8 +61,6 @@ type HomeSessionRecord = {
   project: LocalProject
   projectName: string
 }
-
-type HomeSessionSync = Pick<ReturnType<typeof useServerSync>, "child">
 
 type HomeSessionGroup = {
   id: "today" | "yesterday" | "older"
@@ -111,53 +106,6 @@ function buildHomeSessionRecords(input: {
 
 function matchesHomeSessionSearch(record: HomeSessionRecord, query: string) {
   return `${record.session.title} ${record.projectName}`.toLowerCase().includes(query)
-}
-
-function createHomeSessionStatus(input: {
-  record: () => HomeSessionRecord
-  sync: () => HomeSessionSync
-  activeServer: () => boolean
-}) {
-  const notification = useNotification()
-  const permission = usePermission()
-  const sessionStore = createMemo(() => input.sync().child(input.record().session.directory, { bootstrap: false })[0])
-  const unseenCount = createMemo(() =>
-    input.activeServer() ? notification.session.unseenCount(input.record().session.id) : 0,
-  )
-  const hasError = createMemo(
-    () => input.activeServer() && notification.session.unseenHasError(input.record().session.id),
-  )
-  const hasPermissions = createMemo(
-    () =>
-      input.activeServer() &&
-      !!sessionPermissionRequest(
-        sessionStore().session,
-        sessionStore().permission,
-        input.record().session.id,
-        (item) => {
-          return !permission.autoResponds(item, input.record().session.directory)
-        },
-      ),
-  )
-  const serverStatus = createMemo(() =>
-    homeSessionServerStatus(input.activeServer(), () => ({
-      working: sessionStore().session_working(input.record().session.id),
-      tint: messageAgentColor(sessionStore().message[input.record().session.id], sessionStore().agent),
-    })),
-  )
-  const isWorking = createMemo(() => {
-    if (hasPermissions()) return false
-    return serverStatus().working
-  })
-  const tint = createMemo(() => serverStatus().tint)
-  return {
-    unseenCount,
-    hasError,
-    hasPermissions,
-    isWorking,
-    tint,
-    show: createMemo(() => isWorking() || hasPermissions() || hasError() || unseenCount() > 0),
-  }
 }
 
 function homeSessionSearchKey(record: HomeSessionRecord) {
@@ -424,7 +372,7 @@ function HomeDesign() {
             open={searchOpen()}
             loading={sessionLoad.isLoading}
             results={searchResults()}
-            sync={focusedSync()}
+            server={state.selection.server}
             activeServer={state.selection.server === server.key}
             noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
             bindFocus={(focus) => {
@@ -464,7 +412,7 @@ function HomeDesign() {
                             {(record) => (
                               <HomeSessionRow
                                 record={record}
-                                sync={focusedSync()}
+                                server={state.selection.server}
                                 activeServer={state.selection.server === server.key}
                                 openSession={openSession}
                               />
@@ -748,13 +696,54 @@ function HomeProjectAvatar(props: { project: LocalProject }) {
   )
 }
 
+function HomeSessionAvatar(props: { project: LocalProject; session: Session; activeServer: boolean }) {
+  const directory = () => props.session.directory
+  const sessionId = () => props.session.id
+  const state = useSessionTabAvatarState(directory, sessionId, () => props.activeServer)
+  return (
+    <ProjectAvatar
+      fallback={displayName(props.project)}
+      src={getProjectAvatarSource(props.project.id, props.project.icon)}
+      variant={getProjectAvatarVariant(props.project.icon?.color)}
+      unread={state.unread()}
+      loading={state.loading()}
+    />
+  )
+}
+
+function HomeSessionLeading(props: {
+  project: LocalProject
+  session: Session
+  server: ServerConnection.Key
+  activeServer: boolean
+}) {
+  const tabs = useTabs()
+  const hasOpenTab = createMemo(() => sessionHasOpenTab(tabs.store, props.server, props.session))
+  return (
+    <div class="relative shrink-0">
+      <Show when={hasOpenTab()}>
+        <span
+          aria-hidden="true"
+          class="pointer-events-none absolute top-1/2 h-[7px] w-[3px] -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
+          style={{ right: "calc(100% + 12px)" }}
+        />
+      </Show>
+      <HomeSessionAvatar
+        project={props.project}
+        session={props.session}
+        activeServer={props.activeServer}
+      />
+    </div>
+  )
+}
+
 function HomeSessionSearch(props: {
   value: string
   placeholder: string
   open: boolean
   loading: boolean
   results: HomeSessionRecord[]
-  sync: HomeSessionSync
+  server: ServerConnection.Key
   activeServer: boolean
   noResultsLabel: string
   bindFocus: (focus: () => void) => void
@@ -870,7 +859,7 @@ function HomeSessionSearch(props: {
                           {(record) => (
                             <HomeSessionSearchResultRow
                               record={record}
-                              sync={props.sync}
+                              server={props.server}
                               activeServer={props.activeServer}
                               selected={store.active === homeSessionSearchKey(record)}
                               onHighlight={() => setStore("active", homeSessionSearchKey(record))}
@@ -956,17 +945,12 @@ function HomeSessionSearch(props: {
 
 function HomeSessionSearchResultRow(props: {
   record: HomeSessionRecord
-  sync: HomeSessionSync
+  server: ServerConnection.Key
   activeServer: boolean
   selected: boolean
   onHighlight: () => void
   onSelect: (session: Session) => void
 }) {
-  const status = createHomeSessionStatus({
-    record: () => props.record,
-    sync: () => props.sync,
-    activeServer: () => props.activeServer,
-  })
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
 
   const key = () => homeSessionSearchKey(props.record)
@@ -986,34 +970,12 @@ function HomeSessionSearchResultRow(props: {
       onMouseEnter={() => props.onHighlight()}
       onClick={() => props.onSelect(props.record.session)}
     >
-      <Show
-        when={status.show()}
-        fallback={
-          <div class="flex size-4 shrink-0 items-center justify-center">
-            <TabStateIndicator />
-          </div>
-        }
-      >
-        <div
-          class="flex size-4 shrink-0 items-center justify-center"
-          style={{ color: status.tint() ?? "var(--icon-interactive-base)" }}
-        >
-          <Switch>
-            <Match when={status.isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={status.hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={status.hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={status.unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-      </Show>
+      <HomeSessionLeading
+        project={props.record.project}
+        session={props.record.session}
+        server={props.server}
+        activeServer={props.activeServer}
+      />
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
         <span
           class={`${HOME_SEARCH_RESULT_TITLE} ${props.record.projectName ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
@@ -1053,15 +1015,10 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
 
 function HomeSessionRow(props: {
   record: HomeSessionRecord
-  sync: HomeSessionSync
+  server: ServerConnection.Key
   activeServer: boolean
   openSession: (session: Session) => void
 }) {
-  const status = createHomeSessionStatus({
-    record: () => props.record,
-    sync: () => props.sync,
-    activeServer: () => props.activeServer,
-  })
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
 
   return (
@@ -1071,34 +1028,12 @@ function HomeSessionRow(props: {
       class={`${HOME_ROW} h-10 gap-2 px-6 py-3 pl-4`}
       onClick={() => props.openSession(props.record.session)}
     >
-      <Show
-        when={status.show()}
-        fallback={
-          <div class="flex size-4 shrink-0 items-center justify-center">
-            <TabStateIndicator />
-          </div>
-        }
-      >
-        <div
-          class="flex size-4 shrink-0 items-center justify-center"
-          style={{ color: status.tint() ?? "var(--icon-interactive-base)" }}
-        >
-          <Switch>
-            <Match when={status.isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={status.hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={status.hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={status.unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-      </Show>
+      <HomeSessionLeading
+        project={props.record.project}
+        session={props.record.session}
+        server={props.server}
+        activeServer={props.activeServer}
+      />
       <span
         class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${props.record.projectName ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
       >
