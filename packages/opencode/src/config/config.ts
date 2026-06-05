@@ -295,7 +295,7 @@ export const layer = Layer.effect(
           )
           .pipe(
             Effect.catchIf(
-              (e) => e.reason._tag === "PermissionDenied",
+              (e) => e.reason._tag === "PermissionDenied" || e.reason._tag === "NotFound",
               () => Effect.void,
             ),
           )
@@ -424,7 +424,7 @@ export const layer = Layer.effect(
             }
           }
 
-          yield* ensureGitignore(dir).pipe(Effect.orDie)
+          yield* ensureGitignore(dir).pipe(Effect.catchAll(() => Effect.void))
 
           const dep = yield* npmSvc
             .install(dir, {
