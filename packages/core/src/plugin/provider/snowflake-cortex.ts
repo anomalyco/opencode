@@ -24,7 +24,11 @@ export function cortexFetch(upstream: FetchLike = fetch) {
     if (!response.ok && response.status === 400) {
       try {
         const errorData = (await response.clone().json()) as Record<string, unknown>
-        if (String(errorData.message || errorData.error || "").toLowerCase().includes("conversation complete")) {
+        if (
+          String(errorData.message || errorData.error || "")
+            .toLowerCase()
+            .includes("conversation complete")
+        ) {
           return new Response(
             JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }] }),
             { status: 200, headers: new Headers({ "content-type": "application/json" }) },
@@ -45,7 +49,9 @@ export function cortexFetch(upstream: FetchLike = fetch) {
             ctrl.close()
             return
           }
-          ctrl.enqueue(encoder.encode(decoder.decode(value, { stream: true }).replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
+          ctrl.enqueue(
+            encoder.encode(decoder.decode(value, { stream: true }).replace(/"role"\s*:\s*""/g, '"role":"assistant"')),
+          )
         },
         cancel() {
           reader.cancel()
@@ -65,8 +71,7 @@ export const SnowflakeCortexPlugin = PluginV2.define({
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("snowflake-cortex")) return
         const pat =
-          process.env.SNOWFLAKE_CORTEX_PAT ??
-          (typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined)
+          process.env.SNOWFLAKE_CORTEX_PAT ?? (typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined)
         const upstream = typeof evt.options.fetch === "function" ? (evt.options.fetch as FetchLike) : undefined
         if (evt.options.includeUsage !== false) evt.options.includeUsage = true
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))

@@ -860,10 +860,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         (auth?.type === "api" ? auth.metadata?.account : undefined) ??
         input.options?.account
 
-      const pat =
-        env["SNOWFLAKE_CORTEX_PAT"] ??
-        (auth?.type === "api" ? auth.key : undefined) ??
-        input.options?.apiKey
+      const pat = env["SNOWFLAKE_CORTEX_PAT"] ?? (auth?.type === "api" ? auth.key : undefined) ?? input.options?.apiKey
 
       if (!account || !pat) {
         const missing = [!account && "SNOWFLAKE_ACCOUNT", !pat && "SNOWFLAKE_CORTEX_PAT"].filter(Boolean).join(", ")
@@ -905,7 +902,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                 const errorMessage = String(errorData.message || errorData.error || "")
                 if (errorMessage.toLowerCase().includes("conversation complete")) {
                   return new Response(
-                    JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }] }),
+                    JSON.stringify({
+                      choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }],
+                    }),
                     { status: 200, headers: new Headers({ "content-type": "application/json" }) },
                   )
                 }
