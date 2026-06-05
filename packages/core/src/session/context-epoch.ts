@@ -69,7 +69,9 @@ const prepareOnce = Effect.fnUntraced(function* (
     return { baseline: generation.baseline, baselineSeq }
   }
 
-  const snapshot = yield* Schema.decodeUnknownEffect(SystemContext.Snapshot)(stored.snapshot).pipe(Effect.orDie)
+  const snapshot = yield* Schema.decodeUnknownEffect(SystemContext.Snapshot)(stored.snapshot).pipe(
+    Effect.mapError((e) => new Error(`Failed to decode context snapshot: ${String(e)}`)),
+  )
   const result =
     stored.replacement_seq === null
       ? yield* SystemContext.reconcile(value, snapshot)
