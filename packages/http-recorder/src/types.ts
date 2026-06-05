@@ -20,6 +20,24 @@ export interface HttpInteraction {
   readonly response: ResponseSnapshot
 }
 
+export type WebSocketEvent =
+  | { readonly direction: "client" | "server"; readonly kind: "text"; readonly body: string }
+  | {
+      readonly direction: "client" | "server"
+      readonly kind: "binary"
+      readonly body: string
+      readonly bodyEncoding: "base64"
+    }
+
+export interface WebSocketInteraction {
+  readonly transport: "websocket"
+  readonly open: {
+    readonly url: string
+    readonly headers: Record<string, string>
+  }
+  readonly events: ReadonlyArray<WebSocketEvent>
+}
+
 export type RequestMatcher = (incoming: RequestSnapshot, recorded: RequestSnapshot) => boolean
 
 export interface RedactOptions {
@@ -37,4 +55,17 @@ export interface RecorderOptions {
   readonly metadata?: CassetteMetadata
   readonly redact?: RedactOptions
   readonly match?: RequestMatcher
+}
+
+export interface WebSocketRequest {
+  readonly url: string
+  readonly headers?: Record<string, string>
+}
+
+export interface WebSocketRecorderOptions {
+  readonly directory?: string
+  readonly metadata?: CassetteMetadata
+  readonly redact?: RedactOptions
+  readonly compareClientMessagesAsJson?: boolean
+  readonly protocols?: string | Array<string>
 }

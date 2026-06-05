@@ -2,4 +2,4 @@
 "@opencode-ai/http-recorder": minor
 ---
 
-Publish the initial beta of the Effect HTTP record/replay library.
+Publish the initial beta of the Effect HTTP and WebSocket record/replay library.

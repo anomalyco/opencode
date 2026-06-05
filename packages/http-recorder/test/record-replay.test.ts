@@ -1,7 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { describe, expect, test } from "bun:test"
-import { Cause, Effect, Exit, Scope, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { Headers, HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { Socket } from "effect/unstable/socket"
 import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
@@ -206,120 +207,277 @@ describe("http-recorder", () => {
     })
   })
 
-  test("replays websocket interactions seeded into the in-memory cassette adapter", async () => {
-    await Effect.runPromise(
-      Effect.scoped(
+  test("records WebSocket frames in observed client/server order", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-websocket-"))
+    const response = JSON.stringify({ type: "response.completed", token: "server-secret" })
+    let receive: ((message: string | Uint8Array) => Effect.Effect<unknown, unknown, unknown> | void) | undefined
+    const upstream = Socket.make({
+      runRaw: (handler, options) =>
         Effect.gen(function* () {
-          const cassette = yield* HttpRecorderInternal.Cassette.Service
-          const executor = yield* HttpRecorderInternal.makeWebSocketExecutor({
-            name: "websocket/replay",
-            cassette,
-            compareClientMessagesAsJson: true,
-            live: { open: () => Effect.die(new Error("unexpected live WebSocket open")) },
-          })
-          const connection = yield* executor.open({
-            url: "wss://example.test/realtime",
-            headers: Headers.fromInput({ "content-type": "application/json" }),
-          })
-          yield* connection.sendText(JSON.stringify({ type: "response.create" }))
-          const messages: Array<string | Uint8Array> = []
-          yield* connection.messages.pipe(Stream.runForEach((message) => Effect.sync(() => messages.push(message))))
-          yield* connection.close
-
-          expect(messages).toEqual([JSON.stringify({ type: "response.completed" })])
-        }).pipe(
-          Effect.provide(
-            HttpRecorderInternal.Cassette.memory({
-              "websocket/replay": [
-                {
-                  transport: "websocket",
-                  open: { url: "wss://example.test/realtime", headers: { "content-type": "application/json" } },
-                  client: [{ kind: "text", body: JSON.stringify({ type: "response.create" }) }],
-                  server: [{ kind: "text", body: JSON.stringify({ type: "response.completed" }) }],
-                },
-              ],
-            }),
-          ),
-        ),
+          receive = handler
+          if (options?.onOpen) yield* options.onOpen
+          receive = undefined
+        }),
+      writer: Effect.succeed(() =>
+        Effect.suspend(() => {
+          const result = receive?.(response)
+          return Effect.isEffect(result) ? Effect.asVoid(result) : Effect.void
+        }),
       ),
-    )
-  })
+    })
 
-  test("WebSocket open mismatches do not consume the interaction", async () => {
     await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const cassette = yield* HttpRecorderInternal.Cassette.Service
-          const executor = yield* HttpRecorderInternal.makeWebSocketExecutor({
-            name: "websocket/retry",
-            cassette,
-            live: { open: () => Effect.die(new Error("unexpected live WebSocket open")) },
-          })
-          const mismatch = yield* Effect.exit(
-            executor.open({ url: "wss://example.test/wrong", headers: Headers.fromInput({}) }),
-          )
-          expect(Exit.isFailure(mismatch)).toBe(true)
-
-          const connection = yield* executor.open({
-            url: "wss://example.test/realtime",
-            headers: Headers.fromInput({}),
-          })
-          yield* connection.messages.pipe(Stream.runDrain)
-          yield* connection.close
-        }).pipe(
-          Effect.provide(
-            HttpRecorderInternal.Cassette.memory({
-              "websocket/retry": [
-                {
-                  transport: "websocket",
-                  open: { url: "wss://example.test/realtime", headers: {} },
-                  client: [],
-                  server: [],
-                },
-              ],
-            }),
-          ),
-        ),
-      ),
-    )
-  })
-
-  test("records websocket interactions into the shared cassette service", async () => {
-    await runRecorder(
       Effect.gen(function* () {
-        const cassette = yield* HttpRecorderInternal.Cassette.Service
-        const executor = yield* HttpRecorderInternal.makeWebSocketExecutor({
-          name: "websocket/record",
-          mode: "record",
-          metadata: { provider: "test" },
-          cassette,
-          live: {
-            open: () =>
-              Effect.succeed({
-                sendText: () => Effect.void,
-                messages: Stream.fromIterable([JSON.stringify({ type: "response.completed" })]),
-                close: Effect.void,
-              }),
-          },
+        const socket = yield* Socket.Socket
+        const write = yield* socket.writer
+        yield* socket.runRaw(() => {}, {
+          onOpen: write(JSON.stringify({ type: "response.create", token: "client-secret" })),
         })
-        const connection = yield* executor.open({
-          url: "wss://example.test/realtime",
-          headers: Headers.fromInput({ "content-type": "application/json" }),
-        })
-        yield* connection.sendText(JSON.stringify({ type: "response.create" }))
-        yield* connection.messages.pipe(Stream.runDrain)
-        yield* connection.close
-
-        expect(yield* cassette.read("websocket/record")).toMatchObject([
-          {
-            transport: "websocket",
-            open: { url: "wss://example.test/realtime", headers: { "content-type": "application/json" } },
-            client: [{ kind: "text", body: JSON.stringify({ type: "response.create" }) }],
-            server: [{ kind: "text", body: JSON.stringify({ type: "response.completed" }) }],
-          },
-        ])
-      }),
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          HttpRecorderInternal.socketLayer(
+            "websocket/record",
+            { url: "wss://example.test/realtime", headers: { "content-type": "application/json" } },
+            { directory, metadata: { provider: "test" }, mode: "record" },
+          ).pipe(Layer.provide(Layer.succeed(Socket.Socket, upstream))),
+        ),
+      ),
     )
+
+    expect(JSON.parse(fs.readFileSync(path.join(directory, "websocket/record.json"), "utf8"))).toMatchObject({
+      interactions: [
+        {
+          transport: "websocket",
+          open: { url: "wss://example.test/realtime", headers: { "content-type": "application/json" } },
+          events: [
+            { direction: "client", kind: "text", body: '{"type":"response.create","token":"[REDACTED]"}' },
+            { direction: "server", kind: "text", body: '{"type":"response.completed","token":"[REDACTED]"}' },
+          ],
+        },
+      ],
+    })
+  })
+
+  test("WebSocket replay preserves causal frame ordering", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-websocket-"))
+    await seedCassetteDirectory(directory, "websocket/replay", [
+      {
+        transport: "websocket",
+        open: { url: "wss://example.test/realtime", headers: {} },
+        events: [
+          { direction: "server", kind: "text", body: '{"type":"session.created"}' },
+          { direction: "client", kind: "text", body: '{"type":"response.create","prompt":"hello"}' },
+          { direction: "server", kind: "text", body: '{"type":"response.completed"}' },
+        ],
+      },
+    ])
+
+    const received: string[] = []
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const socket = yield* Socket.Socket
+        const write = yield* socket.writer
+        yield* socket.runRaw((message) => {
+          if (typeof message !== "string") return
+          received.push(message)
+          if (JSON.parse(message).type === "session.created")
+            return write('{"prompt":"hello","type":"response.create"}')
+        })
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          HttpRecorder.layerSocket(
+            "websocket/replay",
+            { url: "wss://example.test/realtime" },
+            { directory, compareClientMessagesAsJson: true },
+          ).pipe(
+            Layer.provide(
+              Layer.succeed(
+                Socket.Socket,
+                Socket.make({
+                  runRaw: () => Effect.die(new Error("unexpected live WebSocket run")),
+                  writer: Effect.succeed(() => Effect.die(new Error("unexpected live WebSocket write"))),
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(received).toEqual(['{"type":"session.created"}', '{"type":"response.completed"}'])
+  })
+
+  test("WebSocket replay runs message handlers concurrently", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-websocket-"))
+    await seedCassetteDirectory(directory, "websocket/concurrent-handlers", [
+      {
+        transport: "websocket",
+        open: { url: "wss://example.test/realtime", headers: {} },
+        events: [
+          { direction: "server", kind: "text", body: "first" },
+          { direction: "server", kind: "text", body: "second" },
+        ],
+      },
+    ])
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const socket = yield* Socket.Socket
+        const second = yield* Deferred.make<void>()
+        yield* socket.runString((message) =>
+          message === "first" ? Deferred.await(second) : Deferred.succeed(second, undefined),
+        )
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          HttpRecorder.layerSocket(
+            "websocket/concurrent-handlers",
+            { url: "wss://example.test/realtime" },
+            { directory },
+          ).pipe(
+            Layer.provide(
+              Layer.succeed(
+                Socket.Socket,
+                Socket.make({
+                  runRaw: () => Effect.die(new Error("unexpected live WebSocket run")),
+                  writer: Effect.succeed(() => Effect.die(new Error("unexpected live WebSocket write"))),
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    )
+  })
+
+  test("WebSocket replay rejects close with unconsumed events", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-websocket-"))
+    await seedCassetteDirectory(directory, "websocket/early-close", [
+      {
+        transport: "websocket",
+        open: { url: "wss://example.test/realtime", headers: {} },
+        events: [{ direction: "client", kind: "text", body: "expected" }],
+      },
+    ])
+
+    const exit = await Effect.runPromise(
+      Effect.gen(function* () {
+        const socket = yield* Socket.Socket
+        const write = yield* socket.writer
+        return yield* Effect.exit(socket.runRaw(() => {}, { onOpen: write(new Socket.CloseEvent(1000)) }))
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          HttpRecorder.layerSocket("websocket/early-close", { url: "wss://example.test/realtime" }, { directory }).pipe(
+            Layer.provide(
+              Layer.succeed(
+                Socket.Socket,
+                Socket.make({
+                  runRaw: () => Effect.die(new Error("unexpected live WebSocket run")),
+                  writer: Effect.succeed(() => Effect.die(new Error("unexpected live WebSocket write"))),
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(failureText(exit)).toContain("closed with unconsumed events")
+  })
+
+  test("failed WebSocket runs do not write complete cassettes", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-websocket-"))
+    const exit = await Effect.runPromise(
+      Effect.gen(function* () {
+        const socket = yield* Socket.Socket
+        return yield* Effect.exit(socket.runRaw(() => {}))
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          HttpRecorderInternal.socketLayer(
+            "websocket/failed-run",
+            { url: "wss://example.test/realtime" },
+            { directory, mode: "record" },
+          ).pipe(
+            Layer.provide(
+              Layer.succeed(
+                Socket.Socket,
+                Socket.make({
+                  runRaw: () => Effect.die(new Error("connection failed")),
+                  writer: Effect.succeed(() => Effect.void),
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(fs.existsSync(path.join(directory, "websocket/failed-run.json"))).toBe(false)
+  })
+
+  test("WebSocket replay preserves binary frame kinds across reconnects", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-websocket-"))
+    const interaction = {
+      transport: "websocket" as const,
+      open: { url: "wss://example.test/binary", headers: {} },
+      events: [
+        {
+          direction: "client" as const,
+          kind: "binary" as const,
+          body: Buffer.from([1, 2]).toString("base64"),
+          bodyEncoding: "base64" as const,
+        },
+        {
+          direction: "server" as const,
+          kind: "binary" as const,
+          body: Buffer.from([3, 4]).toString("base64"),
+          bodyEncoding: "base64" as const,
+        },
+      ],
+    }
+    await seedCassetteDirectory(directory, "websocket/binary", [interaction, interaction])
+
+    const received: number[][] = []
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const socket = yield* Socket.Socket
+        const write = yield* socket.writer
+        const run = socket.runRaw(
+          (message) => {
+            if (typeof message === "string") throw new Error("Expected a binary WebSocket frame")
+            received.push([...message])
+          },
+          { onOpen: write(new Uint8Array([1, 2])) },
+        )
+        yield* run
+        yield* run
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          HttpRecorder.layerSocket("websocket/binary", { url: "wss://example.test/binary" }, { directory }).pipe(
+            Layer.provide(
+              Layer.succeed(
+                Socket.Socket,
+                Socket.make({
+                  runRaw: () => Effect.die(new Error("unexpected live WebSocket run")),
+                  writer: Effect.succeed(() => Effect.die(new Error("unexpected live WebSocket write"))),
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(received).toEqual([
+      [3, 4],
+      [3, 4],
+    ])
   })
 
   test("replay returns recorded responses in order for identical requests", async () => {
@@ -666,49 +824,5 @@ describe("http-recorder", () => {
       ),
     )
     expect(names).toEqual(["alpha/one", "beta"])
-  })
-
-  test("WebSocket replay decodes binary frames recorded as base64", async () => {
-    const binaryServer = new Uint8Array([1, 2, 3, 4])
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const cassette = yield* HttpRecorderInternal.Cassette.Service
-          const executor = yield* HttpRecorderInternal.makeWebSocketExecutor({
-            name: "ws/binary",
-            cassette,
-            live: { open: () => Effect.die(new Error("unexpected live WebSocket open")) },
-          })
-          const connection = yield* executor.open({
-            url: "wss://example.test/binary",
-            headers: Headers.fromInput({}),
-          })
-          const messages: Array<string | Uint8Array> = []
-          yield* connection.messages.pipe(Stream.runForEach((m) => Effect.sync(() => messages.push(m))))
-          yield* connection.close
-
-          expect(messages).toHaveLength(1)
-          const message = messages[0]
-          expect(message).toBeInstanceOf(Uint8Array)
-          if (!(message instanceof Uint8Array)) throw new Error("Expected binary WebSocket frame")
-          expect(Array.from(message)).toEqual([1, 2, 3, 4])
-        }).pipe(
-          Effect.provide(
-            HttpRecorderInternal.Cassette.memory({
-              "ws/binary": [
-                {
-                  transport: "websocket",
-                  open: { url: "wss://example.test/binary", headers: {} },
-                  client: [],
-                  server: [
-                    { kind: "binary", body: Buffer.from(binaryServer).toString("base64"), bodyEncoding: "base64" },
-                  ],
-                },
-              ],
-            }),
-          ),
-        ),
-      ),
-    )
   })
 })

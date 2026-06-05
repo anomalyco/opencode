@@ -14,7 +14,7 @@ const build = await Bun.build({
 })
 if (!build.success) throw new AggregateError(build.logs, "Failed to build @opencode-ai/http-recorder")
 
-const publicFiles = new Set(["index.js", "index.d.ts", "effect.d.ts", "types.d.ts"])
+const publicFiles = new Set(["index.js", "index.d.ts", "effect.d.ts", "socket.d.ts", "types.d.ts"])
 await Promise.all(
   (await readdir("dist")).filter((file) => !publicFiles.has(file)).map((file) => rm(`dist/${file}`, { force: true })),
 )

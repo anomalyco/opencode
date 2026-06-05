@@ -21,10 +21,13 @@ export const verifyPackage = async (archive: string) => {
       path.join(directory, "consumer.ts"),
       `import { HttpRecorder, type RecorderOptions } from "@opencode-ai/http-recorder"
 import { HttpClient } from "effect/unstable/http/HttpClient"
+import { Socket } from "effect/unstable/socket/Socket"
 
 const options: RecorderOptions = { redact: { jsonFields: ["access_token"] } }
 HttpRecorder.layer("consumer/custom", options) satisfies import("effect/Layer").Layer<HttpClient, never, HttpClient>
 HttpRecorder.layerFetch("consumer/fetch", options) satisfies import("effect/Layer").Layer<HttpClient>
+HttpRecorder.layerSocket("consumer/socket", { url: "wss://example.test" }) satisfies import("effect/Layer").Layer<Socket, never, Socket>
+HttpRecorder.layerWebSocket("consumer/websocket", "wss://example.test") satisfies import("effect/Layer").Layer<Socket>
 `,
     )
     await writeFile(
