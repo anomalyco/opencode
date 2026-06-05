@@ -3783,13 +3783,13 @@
   [data-page="stats"] [data-component="model-usage-chart"] {
     --model-usage-mobile-bar-width: 16px;
     --model-usage-mobile-track-width: calc(
-      var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap)) -
-        var(--model-usage-bar-gap)
+      var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap))
     );
     width: calc(100% + 48px);
     height: 360px;
     margin-inline: -24px;
     padding-inline: 24px;
+    direction: rtl;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
@@ -3801,6 +3801,7 @@
 
   [data-page="stats"] [data-slot="model-usage-axis"],
   [data-page="stats"] [data-slot="model-usage-bars"] {
+    direction: ltr;
     width: var(--model-usage-mobile-track-width);
     min-width: var(--model-usage-mobile-track-width);
   }
