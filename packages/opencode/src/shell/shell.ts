@@ -188,7 +188,10 @@ export function args(file: string, command: string, cwd: string) {
     ]
   }
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (ps(file)) {
+    const encoded = `$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ${command}`
+    return ["-NoProfile", "-Command", encoded]
+  }
   return ["-c", command]
 }
 
