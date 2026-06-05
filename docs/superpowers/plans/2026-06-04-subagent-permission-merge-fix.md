@@ -12,18 +12,18 @@
 
 ## Background (verified facts the implementer must trust)
 
-- **Bug location:** [`src/session/prompt.ts:1223-1230`](../../../packages/opencode/src/session/prompt.ts). `session.permission = permissions` replaces the whole ruleset.
+- **Bug location:** [`src/session/prompt.ts:1231-1238`](../../../packages/opencode/src/session/prompt.ts). `session.permission = permissions` replaces the whole ruleset.
 - **Why subagents hit it:** [`src/tool/task.ts:144-159`](../../../packages/opencode/src/tool/task.ts) creates the subagent session with `deriveSubagentSessionPermission(...)` (parent agent edit denies + parent session external_directory/deny rules + todowrite/task denies). Then [`src/tool/task.ts:185-199`](../../../packages/opencode/src/tool/task.ts) calls `ops.prompt({ ..., tools: { todowrite: false?, task: false?, ...primary_tools:false } })`. For typical subagents `input.tools` is non-empty, so the overwrite fires and destroys the derived rules.
 - **Where session.permission is consumed:** [`src/session/tools.ts:64-72`](../../../packages/opencode/src/session/tools.ts) builds `ruleset: Permission.merge(input.agent.permission, input.session.permission ?? [])` for every subagent tool call.
 - **evaluate is last-match-wins:** [`packages/core/src/permission.ts:21-31`](../../../packages/core/src/permission.ts) — `rulesets.flat().findLast(...)`. So tool-toggle rules appended last keep priority; default is `ask` when nothing matches.
 - **`input.tools` is deprecated:** [`src/session/prompt.ts:1687-1690`](../../../packages/opencode/src/session/prompt.ts) — "tools and permissions have been merged, you can set permissions on the session itself now." The overwrite is legacy behavior.
-- **Existing test gap:** [`test/tool/task.test.ts:380-429`](../../../packages/opencode/test/tool/task.test.ts) uses `stubOps({ onPrompt })` — it stubs `prompt`, so the real overwrite at `prompt.ts:1228` is never run. [`test/agent/plan-mode-subagent-bypass.test.ts`](../../../packages/opencode/test/agent/plan-mode-subagent-bypass.test.ts) only tests the `deriveSubagentSessionPermission` helper in isolation. Neither catches this bug.
-- **Test harness for the real path:** [`test/session/prompt.test.ts:1-57`](../../../packages/opencode/test/session/prompt.test.ts) already defines `const it = testEffect(makeHttp())` providing `Session.Service` and `SessionPrompt.Service`. `prompt.prompt({ ..., noReply: true })` runs the overwrite (line 1223-1230) and returns at line 1232 **without needing an LLM response**.
+- **Existing test gap:** [`test/tool/task.test.ts:380-429`](../../../packages/opencode/test/tool/task.test.ts) uses `stubOps({ onPrompt })` — it stubs `prompt`, so the real overwrite at `prompt.ts:1236` is never run. [`test/agent/plan-mode-subagent-bypass.test.ts`](../../../packages/opencode/test/agent/plan-mode-subagent-bypass.test.ts) only tests the `deriveSubagentSessionPermission` helper in isolation. Neither catches this bug.
+- **Test harness for the real path:** [`test/session/prompt.test.ts:1-57`](../../../packages/opencode/test/session/prompt.test.ts) already defines `const it = testEffect(makeHttp())` providing `Session.Service` and `SessionPrompt.Service`. `prompt.prompt({ ..., noReply: true })` runs the overwrite (line 1231-1238) and returns at line 1240 **without needing an LLM response**.
 - **`Permission` is already imported** in `prompt.ts` (used at line 394 and line 1223).
 
 ## File Structure
 
-- Modify: `packages/opencode/src/session/prompt.ts` (lines 1223-1230) — change overwrite to merge.
+- Modify: `packages/opencode/src/session/prompt.ts` (lines 1231-1238) — change overwrite to merge.
 - Modify: `packages/opencode/test/session/prompt.test.ts` — add one `it.instance` regression test using the existing `it`/`makeHttp()` harness (DRY: reuse the harness, do not build a new one).
 
 No new files. No new exports. The change is localized.
@@ -117,14 +117,14 @@ git commit -m "test(session): regression for subagent permission overwrite"
 ### Task 2: Fix the overwrite (merge instead of replace)
 
 **Files:**
-- Modify: `packages/opencode/src/session/prompt.ts:1223-1230`
+- Modify: `packages/opencode/src/session/prompt.ts:1231-1238`
 
 - [ ] **Step 1: Replace the overwrite with a merge**
 
-Current code (lines 1223-1230):
+Current code (lines 1231-1238):
 
 ```typescript
-      const permissions: Permission.Rule[] = []
+      const permissions: PermissionV1.Rule[] = []
       for (const [t, enabled] of Object.entries(input.tools ?? {})) {
         permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
       }
@@ -137,7 +137,7 @@ Current code (lines 1223-1230):
 Replace with:
 
 ```typescript
-      const permissions: Permission.Rule[] = []
+      const permissions: PermissionV1.Rule[] = []
       for (const [t, enabled] of Object.entries(input.tools ?? {})) {
         permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
       }
@@ -234,8 +234,8 @@ Expected: exit code 0.
 **2. Placeholder scan** — No TBD/TODO/"handle edge cases"/"similar to". Every code step has full code and exact run commands with expected output. ✓
 
 **3. Type consistency**
-- Rule shape `{ permission, pattern, action }` matches [`Permission.Rule`](../../../packages/opencode/src/permission/index.ts) (`permission: string`, `pattern: string`, `action: Action`). ✓
-- `permissions: Permission.Rule[]` already declared at line 1223; `Permission` already imported. ✓
+- Rule shape `{ permission, pattern, action }` matches [`PermissionV1.Rule`](../../../packages/opencode/src/permission/index.ts) (`permission: string`, `pattern: string`, `action: Action`). ✓
+- `permissions: PermissionV1.Rule[]` already declared at line 1231; `Permission` already imported. ✓
 - `session.permission` is `Permission.Ruleset | undefined`; `?? []` guard and `setPermission({ sessionID, permission })` signature match [`session.ts:757-762`](../../../packages/opencode/src/session/session.ts). ✓
 - `prompt.prompt` `PromptInput.tools` is `Record<string, boolean>` (optional) per [`prompt.ts:1687`](../../../packages/opencode/src/session/prompt.ts). ✓
 - `sessions.create({ permission })` and `sessions.get(...).permission` usage matches [`task.test.ts:406-424`](../../../packages/opencode/test/tool/task.test.ts). ✓
