@@ -17,6 +17,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
+import { Snapshot } from "../../src/snapshot"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -235,6 +236,18 @@ const boot = Effect.fn("test.boot")(function* () {
   return { processors, session, provider }
 })
 
+const failingSnapshot = Layer.mock(Snapshot.Service)({
+  track: (options?: Snapshot.TrackOptions) =>
+    Effect.gen(function* () {
+      if (options?.onPreparingSnapshotsStart) yield* options.onPreparingSnapshotsStart()
+      return yield* Effect.die(new Error("simulated snapshot failure"))
+    }),
+})
+const failingSnapshotEnv = LayerNode.buildLayer(root, {
+  replacements: [...replacements, LayerNode.replace(Snapshot.node, failingSnapshot)],
+})
+const failingSnapshotIt = testEffect(failingSnapshotEnv)
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -284,6 +297,35 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
         expect(parts.some((part) => part.type === "text" && part.text === "hello")).toBe(true)
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+failingSnapshotIt.live("session.processor finalizes preparing snapshots part when initial snapshot fails", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "hi")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const exit = yield* processors
+          .create({
+            assistantMessage: msg,
+            sessionID: chat.id,
+            model: mdl,
+          })
+          .pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        const parts = yield* MessageV2.parts(msg.id)
+        const preparing = parts.find(
+          (part): part is SessionV1.PreparingSnapshotsPart => part.type === "preparing-snapshots",
+        )
+        expect(preparing).toBeDefined()
+        expect(preparing?.time.end).toBeDefined()
+      }),
+    { config: cfg },
   ),
 )
 

@@ -41,13 +41,10 @@ interface GitResult {
 
 type State = Omit<Interface, "init">
 
-// Fired immediately before a fresh source-HEAD sync. The session processor
-// uses this to add an Indexing part to the chat. Not invoked when the
-// index is already in sync.
-export type IndexingStartHook = () => Effect.Effect<void>
+export type PreparingSnapshotsStartHook = () => Effect.Effect<void>
 
 export interface TrackOptions {
-  readonly onIndexingStart?: IndexingStartHook
+  readonly onPreparingSnapshotsStart?: PreparingSnapshotsStartHook
 }
 
 export interface Interface {
@@ -116,23 +113,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const ignore = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return new Set<string>()
-          const check = yield* git(
-            [
-              ...quote,
-              "--git-dir",
-              path.join(state.worktree, ".git"),
-              "--work-tree",
-              state.worktree,
-              "check-ignore",
-              "--no-index",
-              "--stdin",
-              "-z",
-            ],
-            {
-              cwd: state.directory,
-              stdin: feed(files),
-            },
-          )
+          const check = yield* git([...quote, "check-ignore", "--no-index", "--stdin", "-z"], {
+            cwd: state.worktree,
+            stdin: feed(files),
+          })
           if (check.code !== 0 && check.code !== 1) return new Set<string>()
           return new Set(check.text.split("\0").filter(Boolean))
         })
@@ -145,7 +129,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
             ],
             {
-              cwd: state.directory,
+              cwd: state.worktree,
               stdin: feed(files),
             },
           )
@@ -156,7 +140,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
-              cwd: state.directory,
+              cwd: state.worktree,
               stdin: feed(files),
             },
           )
@@ -219,7 +203,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           return true
         })
 
-        const syncedHeadPath = path.join(state.gitdir, "info", "synced-head")
+        const syncedHeadPath = path.join(state.gitdir, "info", "synced-head-worktree-v1")
         const readSyncedHead = Effect.fnUntraced(function* () {
           const text = (yield* read(syncedHeadPath)).trim()
           return text || undefined
@@ -230,19 +214,30 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             yield* fs.writeFileString(syncedHeadPath, hash + "\n").pipe(Effect.orDie)
           })
 
+        const trackedIgnoredFiles = Effect.fnUntraced(function* () {
+          const result = yield* sourceGit([...quote, "ls-files", "-ci", "--exclude-standard", "-z"])
+          if (result.code !== 0) return []
+          return result.text.split("\0").filter(Boolean)
+        })
+
         // Import the source HEAD tree into the snapshot index. Cheap because
         // alternates makes every blob already resolvable.
         const importHead = Effect.fnUntraced(function* (head: string) {
           const read = yield* git([...core, ...args(["read-tree", head])], { cwd: state.worktree })
           if (read.code !== 0) {
-            log.warn("failed to read-tree source HEAD", { head, exitCode: read.code, stderr: read.stderr })
+            yield* Effect.logWarning("failed to read-tree source HEAD", {
+              head,
+              exitCode: read.code,
+              stderr: read.stderr,
+            })
             return false
           }
           // Without --refresh, diff-files reports every entry as potentially
           // modified and the next git add re-hashes everything. Use -q, not
           // --quiet: the latter is not a valid flag for update-index and
           // silently disables the refresh.
-          yield* git([...core, ...args(["update-index", "--refresh", "-q"])], { cwd: state.directory })
+          yield* git([...core, ...args(["update-index", "--refresh", "-q"])], { cwd: state.worktree })
+          yield* drop(yield* trackedIgnoredFiles())
           return true
         })
 
@@ -258,12 +253,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             syncedHead = head
             return // synced (matched persisted state)
           }
-          // Index isn't synced. About to run read-tree + update-index
-          // --refresh. Fire the indexing hook unconditionally so the
-          // caller can show a spinner; even on small repos the wait is
-          // short, but the user always sees what's happening.
-          if (options?.onIndexingStart) {
-            yield* options.onIndexingStart().pipe(Effect.catch(() => Effect.void))
+          if (options?.onPreparingSnapshotsStart) {
+            yield* options.onPreparingSnapshotsStart().pipe(Effect.catch(() => Effect.void))
           }
           const alternates = yield* setupAlternates()
           if (!alternates) return // couldn't sync: alternates setup failed
@@ -342,10 +333,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           const [diff, other] = yield* Effect.all(
             [
               git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
-                cwd: state.directory,
+                cwd: state.worktree,
               }),
               git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
-                cwd: state.directory,
+                cwd: state.worktree,
               }),
             ],
             { concurrency: 2 },
@@ -383,7 +374,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             (yield* Effect.all(
               allow.map((item) =>
                 fs
-                  .stat(path.join(state.directory, item))
+                  .stat(path.join(state.worktree, item))
                   .pipe(Effect.catch(() => Effect.void))
                   .pipe(
                     Effect.map((stat) => {
@@ -398,7 +389,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           )
           const block = new Set(untracked.filter((item) => large.has(item)))
           yield* sync(Array.from(block))
-          // Stage only the allowed candidate paths so snapshot updates stay scoped.
+          // Stage only changed/untracked candidate paths so clean HEAD entries stay cheap.
           yield* stage(allow.filter((item) => !block.has(item)))
         })
 
@@ -407,7 +398,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             Effect.gen(function* () {
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
-              const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
+              const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.worktree })
               if (result.code !== 0) {
                 yield* Effect.logWarning("cleanup failed", {
                   exitCode: result.code,
@@ -424,9 +415,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           return yield* locked(
             Effect.gen(function* () {
               if (!(yield* enabled())) return
-              const existed = yield* exists(state.gitdir)
+              const initialized = yield* exists(path.join(state.gitdir, "HEAD"))
               yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
-              if (!existed) {
+              if (!initialized) {
                 yield* git(["init"], {
                   env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
                 })
@@ -446,10 +437,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               // large repos this is the difference between a sub-second
               // track() and a +10min git add storm. When sync can't happen
               // (e.g. fresh git init with no commits), add() falls through
-              // to the bulk-add path; such repos are small.
+              // to the bulk-add path
               yield* ensureHeadSynced(options)
               yield* add()
-              const result = yield* git(args(["write-tree"]), { cwd: state.directory })
+              const result = yield* git(args(["write-tree"]), { cwd: state.worktree })
               const hash = result.text.trim()
               yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
               return hash
@@ -464,7 +455,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               const result = yield* git(
                 [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
                 {
-                  cwd: state.directory,
+                  cwd: state.worktree,
                 },
               )
               if (result.code !== 0) {
@@ -714,7 +705,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
                   const batch = yield* appProcess.run(
                     ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
-                      cwd: state.directory,
+                      cwd: state.worktree,
                       extendEnv: true,
                     }),
                     { stdin: refs.map((item) => item.ref).join("\n") + "\n" },
@@ -797,7 +788,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
               const statuses = yield* git(
                 [...quote, ...args(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."])],
-                { cwd: state.directory },
+                { cwd: state.worktree },
               )
 
               for (const line of statuses.text.trim().split("\n")) {
@@ -810,7 +801,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               const numstat = yield* git(
                 [...quote, ...args(["diff", "--no-ext-diff", "--no-renames", "--numstat", from, to, "--", "."])],
                 {
-                  cwd: state.directory,
+                  cwd: state.worktree,
                 },
               )
 

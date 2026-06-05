@@ -14936,6 +14936,44 @@
         "required": ["id", "sessionID", "messageID", "type", "text", "time"],
         "additionalProperties": false
       },
+      "PreparingSnapshotsPart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^prt"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["preparing-snapshots"]
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["start"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "type", "time"],
+        "additionalProperties": false
+      },
       "FilePartSourceText": {
         "type": "object",
         "properties": {
@@ -15559,6 +15597,9 @@
           },
           {
             "$ref": "#/components/schemas/ReasoningPart"
+          },
+          {
+            "$ref": "#/components/schemas/PreparingSnapshotsPart"
           },
           {
             "$ref": "#/components/schemas/FilePart"

@@ -108,38 +108,31 @@ export const layer = Layer.effect(
     const database = yield* Database.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
-      // Pre-capture snapshot before the LLM stream starts. The AI SDK may
-      // execute tools internally before emitting start-step events, so
-      // capturing inside the event handler can be too late.
-      //
-      // The snapshot service invokes onIndexingStart when about to sync
-      // the index to a new source HEAD. We use it to insert an IndexingPart
-      // into the chat so the user sees a spinner during the wait. Skipped
-      // when the index is already synced, so steady-state prompts add no
-      // part.
-      //
-      // Array wraps the part because TS narrows `let foo: T | undefined` to
-      // `never` when only mutated inside a closure.
-      const indexingPartHolder: [SessionV1.IndexingPart | undefined] = [undefined]
-      const initialSnapshot = yield* snapshot.track({
-        onIndexingStart: () =>
-          Effect.gen(function* () {
-            const next: SessionV1.IndexingPart = {
-              id: PartID.ascending(),
-              messageID: input.assistantMessage.id,
-              sessionID: input.assistantMessage.sessionID,
-              type: "indexing",
-              time: { start: Date.now() },
-            }
-            indexingPartHolder[0] = next
-            yield* session.updatePart(next).pipe(Effect.ignore)
-          }),
+      // Capture before streaming; some providers execute tools before
+      // emitting step-start events.
+      const preparingSnapshotsPartHolder: [SessionV1.PreparingSnapshotsPart | undefined] = [undefined]
+      const finishPreparingSnapshotsPart = Effect.gen(function* () {
+        const preparingSnapshotsPart = preparingSnapshotsPartHolder[0]
+        if (!preparingSnapshotsPart || preparingSnapshotsPart.time.end !== undefined) return
+        preparingSnapshotsPart.time.end = Date.now()
+        yield* session.updatePart(preparingSnapshotsPart).pipe(Effect.ignore)
       })
-      const indexingPart = indexingPartHolder[0]
-      if (indexingPart) {
-        indexingPart.time.end = Date.now()
-        yield* session.updatePart(indexingPart).pipe(Effect.ignore)
-      }
+      const initialSnapshot = yield* snapshot
+        .track({
+          onPreparingSnapshotsStart: () =>
+            Effect.gen(function* () {
+              const next: SessionV1.PreparingSnapshotsPart = {
+                id: PartID.ascending(),
+                messageID: input.assistantMessage.id,
+                sessionID: input.assistantMessage.sessionID,
+                type: "preparing-snapshots",
+                time: { start: Date.now() },
+              }
+              preparingSnapshotsPartHolder[0] = next
+              yield* session.updatePart(next).pipe(Effect.ignore)
+            }),
+        })
+        .pipe(Effect.onExit(() => finishPreparingSnapshotsPart))
       const ctx: ProcessorContext = {
         assistantMessage: input.assistantMessage,
         sessionID: input.sessionID,

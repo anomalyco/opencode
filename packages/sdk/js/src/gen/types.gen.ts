@@ -189,6 +189,17 @@ export type ReasoningPart = {
   }
 }
 
+export type PreparingSnapshotsPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "preparing-snapshots"
+  time: {
+    start: number
+    end?: number
+  }
+}
+
 export type FilePartSourceText = {
   value: string
   start: number
@@ -393,6 +404,7 @@ export type Part =
       agent: string
     }
   | ReasoningPart
+  | PreparingSnapshotsPart
   | FilePart
   | ToolPart
   | StepStartPart

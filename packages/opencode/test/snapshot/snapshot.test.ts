@@ -2,6 +2,8 @@ import { afterEach, expect } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
@@ -9,6 +11,7 @@ import { Snapshot } from "../../src/snapshot"
 import {
   disposeAllInstances,
   provideInstance,
+  requireInstance,
   testInstanceStoreLayer,
   TestInstance,
   tmpdirScoped,
@@ -1151,27 +1154,115 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    // First commit, first track. Snapshot is synced to commit A.
+    // The preparing-snapshots hook only fires when a sync actually runs,
+    // so counting it distinguishes re-sync from the bulk-add fallback
+    // (which would also capture new files and pass revert assertions).
+    let syncs = 0
+    const options = {
+      onPreparingSnapshotsStart: () =>
+        Effect.sync(() => {
+          syncs++
+        }),
+    }
+    // First commit, first track. Snapshot syncs to commit A.
     yield* write(`${tmp.path}/staged.txt`, "v1")
     yield* exec(tmp.path, ["git", "add", "staged.txt"])
     yield* exec(tmp.path, ["git", "commit", "-m", "v1"])
-    const first = yield* snapshot.track()
+    const first = yield* snapshot.track(options)
     expect(first).toBeTruthy()
+    expect(syncs).toBe(1)
 
-    // New commit B introduces a new file. Snapshot must re-sync so the
-    // new file is captured for revert.
+    // New commit B. The changed HEAD must trigger a second sync.
     yield* write(`${tmp.path}/staged-v2.txt`, "v2")
     yield* exec(tmp.path, ["git", "add", "staged-v2.txt"])
     yield* exec(tmp.path, ["git", "commit", "-m", "v2"])
-    const second = yield* snapshot.track()
+    const second = yield* snapshot.track(options)
     expect(second).toBeTruthy()
+    expect(syncs).toBe(2)
 
-    // Delete the v2 file and verify the new snapshot can restore it.
+    // Delete the v2 file and verify the re-synced snapshot restores it.
     yield* rm(`${tmp.path}/staged-v2.txt`)
     const patch = yield* snapshot.patch(second!)
     expect(patch.files).toContain(fwd(tmp.path, "staged-v2.txt"))
     yield* snapshot.revert([patch])
     expect(yield* readText(`${tmp.path}/staged-v2.txt`)).toBe("v2")
+  }),
+  { git: true },
+)
+
+it.live(
+  "tracks the whole worktree when opened from a subdirectory",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    yield* mkdirp(`${dir}/subdir`)
+    yield* write(`${dir}/root-tracked.txt`, "root-original")
+    yield* exec(dir, ["git", "add", "root-tracked.txt"])
+    yield* exec(dir, ["git", "commit", "-m", "add root-tracked.txt"])
+
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+
+      yield* write(`${dir}/root-tracked.txt`, "root-modified")
+      yield* write(`${dir}/root-untracked.txt`, "root-untracked")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(dir, "root-tracked.txt"))
+      expect(patch.files).toContain(fwd(dir, "root-untracked.txt"))
+
+      yield* snapshot.revert([patch])
+      expect(yield* readText(`${dir}/root-tracked.txt`)).toBe("root-original")
+      expect(yield* exists(`${dir}/root-untracked.txt`)).toBe(false)
+    }).pipe(provideInstance(`${dir}/subdir`))
+  }),
+)
+
+it.instance(
+  "does not restore tracked files that match source ignore rules",
+  Effect.gen(function* () {
+    const tmp = yield* TestInstance
+    const snapshot = yield* Snapshot.Service
+    yield* write(`${tmp.directory}/.gitignore`, "ignored-tracked.txt\n")
+    yield* write(`${tmp.directory}/ignored-tracked.txt`, "ignored content")
+    yield* exec(tmp.directory, ["git", "add", ".gitignore"])
+    yield* exec(tmp.directory, ["git", "add", "-f", "ignored-tracked.txt"])
+    yield* exec(tmp.directory, ["git", "commit", "-m", "add ignored tracked file"])
+
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    yield* rm(`${tmp.directory}/ignored-tracked.txt`)
+    yield* snapshot.restore(before!)
+    expect(yield* exists(`${tmp.directory}/ignored-tracked.txt`)).toBe(false)
+  }),
+  { git: true },
+)
+
+it.instance(
+  "does not recreate borrowed files when source alternates are unavailable",
+  Effect.gen(function* () {
+    const tmp = yield* TestInstance
+    const snapshot = yield* Snapshot.Service
+    yield* write(`${tmp.directory}/borrowed.txt`, "borrowed content")
+    yield* exec(tmp.directory, ["git", "add", "borrowed.txt"])
+    yield* exec(tmp.directory, ["git", "commit", "-m", "add borrowed.txt"])
+
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    const instance = yield* requireInstance
+    yield* rm(
+      path.join(
+        Global.Path.data,
+        "snapshot",
+        instance.project.id,
+        Hash.fast(instance.worktree),
+        "objects",
+        "info",
+        "alternates",
+      ),
+    )
+    yield* rm(`${tmp.directory}/borrowed.txt`)
+    yield* snapshot.restore(before!)
+    expect(yield* exists(`${tmp.directory}/borrowed.txt`)).toBe(false)
   }),
   { git: true },
 )
@@ -1185,15 +1276,52 @@ it.instance(
     // must fall back to the bulk-add path.
     yield* Effect.promise(() => fs.rm(path.join(tmp.directory, ".git", "refs", "heads", "main"), { force: true }))
     yield* Effect.promise(() => fs.rm(path.join(tmp.directory, ".git", "refs", "heads", "master"), { force: true }))
-    yield* Effect.promise(() =>
-      fs.writeFile(path.join(tmp.directory, ".git", "HEAD"), "ref: refs/heads/main\n"),
-    )
+    yield* Effect.promise(() => fs.writeFile(path.join(tmp.directory, ".git", "HEAD"), "ref: refs/heads/main\n"))
     yield* write(`${tmp.directory}/lonely.txt`, "still snapshots")
     const result = yield* snapshot.track()
     expect(result).toBeTruthy()
     yield* rm(`${tmp.directory}/lonely.txt`)
     const patch = yield* snapshot.patch(result!)
     expect(patch.files).toContain(fwd(tmp.directory, "lonely.txt"))
+    yield* snapshot.revert([patch])
+    expect(yield* readText(`${tmp.directory}/lonely.txt`)).toBe("still snapshots")
+  }),
+  { git: true },
+)
+
+it.instance(
+  "heals a partial gitdir that was never fully initialized",
+  Effect.gen(function* () {
+    const snapshot = yield* Snapshot.Service
+    const instance = yield* requireInstance
+    const gitdir = path.join(Global.Path.data, "snapshot", instance.project.id, Hash.fast(instance.worktree))
+
+    // Simulate the partial state observed in the wild: an earlier session
+    // crashed before git init populated HEAD/config/refs, but left the
+    // subdirectories that setupAlternates and sync create. The fix should
+    // detect the missing HEAD and re-init instead of failing every track.
+    yield* Effect.promise(() => fs.mkdir(path.join(gitdir, "info"), { recursive: true }))
+    yield* Effect.promise(() => fs.mkdir(path.join(gitdir, "objects", "info"), { recursive: true }))
+    yield* Effect.promise(() => fs.writeFile(path.join(gitdir, "info", "exclude"), ""))
+
+    let hookCount = 0
+    const result = yield* snapshot.track({
+      onPreparingSnapshotsStart: () =>
+        Effect.sync(() => {
+          hookCount++
+        }),
+    })
+    expect(result).toBeTruthy()
+
+    // A subsequent track() reuses the in-memory cache, so the hook does
+    // not refire even though the previous call had to repair the gitdir.
+    yield* snapshot.track({
+      onPreparingSnapshotsStart: () =>
+        Effect.sync(() => {
+          hookCount++
+        }),
+    })
+    expect(hookCount).toBe(1)
   }),
   { git: true },
 )

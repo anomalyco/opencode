@@ -420,11 +420,11 @@ export type ReasoningPart = {
   }
 }
 
-export type IndexingPart = {
+export type PreparingSnapshotsPart = {
   id: string
   sessionID: string
   messageID: string
-  type: "indexing"
+  type: "preparing-snapshots"
   time: {
     start: number
     end?: number
@@ -637,7 +637,7 @@ export type Part =
   | TextPart
   | SubtaskPart
   | ReasoningPart
-  | IndexingPart
+  | PreparingSnapshotsPart
   | FilePart
   | ToolPart
   | StepStartPart

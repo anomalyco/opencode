@@ -121,19 +121,16 @@ export const ReasoningPart = Schema.Struct({
 }).annotate({ identifier: "ReasoningPart" })
 export type ReasoningPart = Types.DeepMutable<Schema.Schema.Type<typeof ReasoningPart>>
 
-// Records the snapshot index sync that runs before the LLM stream on
-// first track per worktree, and on sessions where source HEAD has
-// moved since last sync. Same shape as ReasoningPart so the TUI can
-// render a spinner then a final state line in chat.
-export const IndexingPart = Schema.Struct({
+// Records snapshot preparation before the LLM stream starts.
+export const PreparingSnapshotsPart = Schema.Struct({
   ...partBase,
-  type: Schema.Literal("indexing"),
+  type: Schema.Literal("preparing-snapshots"),
   time: Schema.Struct({
     start: NonNegativeInt,
     end: Schema.optional(NonNegativeInt),
   }),
-}).annotate({ identifier: "IndexingPart" })
-export type IndexingPart = Types.DeepMutable<Schema.Schema.Type<typeof IndexingPart>>
+}).annotate({ identifier: "PreparingSnapshotsPart" })
+export type PreparingSnapshotsPart = Types.DeepMutable<Schema.Schema.Type<typeof PreparingSnapshotsPart>>
 
 const filePartSourceBase = {
   text: Schema.Struct({
@@ -374,7 +371,7 @@ export const Part = Schema.Union([
   TextPart,
   SubtaskPart,
   ReasoningPart,
-  IndexingPart,
+  PreparingSnapshotsPart,
   FilePart,
   ToolPart,
   StepStartPart,
@@ -389,7 +386,7 @@ export type Part =
   | TextPart
   | SubtaskPart
   | ReasoningPart
-  | IndexingPart
+  | PreparingSnapshotsPart
   | FilePart
   | ToolPart
   | StepStartPart
