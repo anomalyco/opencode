@@ -167,17 +167,10 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
 
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
-  const compact = Effect.fn("SessionCompaction.compact")(function* (input: Input & { readonly forced: boolean }) {
+  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
     const context = input.model.route.defaults.limits?.context
-    if ((!config.auto && !input.forced) || context === undefined || context <= 0) return false
+    if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    if (
-      !input.forced &&
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-        context - Math.max(output, config.buffer)
-    )
-      return false
-
     const selected = select(input.entries, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
@@ -196,7 +189,8 @@ export const make = (dependencies: Dependencies) => {
     })
 
     const chunks: string[] = []
-    yield* dependencies.llm
+    let failed = false
+    const summarized = yield* dependencies.llm
       .stream(
         LLM.request({
           model: input.model,
@@ -207,13 +201,15 @@ export const make = (dependencies: Dependencies) => {
       )
       .pipe(
         Stream.runForEach((event) => {
-          if (!LLMEvent.is.textDelta(event)) return Effect.void
-          chunks.push(event.text)
+          if (LLMEvent.is.providerError(event)) failed = true
+          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
           return Effect.void
         }),
+        Effect.as(true),
+        Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
       )
     const summary = chunks.join("")
-    if (!summary.trim()) return yield* Effect.die("Compaction returned an empty summary")
+    if (!summarized || failed || !summary.trim()) return false
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
       sessionID: input.sessionID,
       messageID,
@@ -224,8 +220,20 @@ export const make = (dependencies: Dependencies) => {
     })
     return true
   })
+  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
+    if (!config.auto) return false
+    const context = input.model.route.defaults.limits?.context
+    if (context === undefined || context <= 0) return false
+    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    if (
+      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
+      context - Math.max(output, config.buffer)
+    )
+      return false
+    return yield* compactAfterOverflow(input)
+  })
   return {
-    compactIfNeeded: (input: Input) => compact({ ...input, forced: false }),
-    compactAfterOverflow: (input: Input) => compact({ ...input, forced: true }),
+    compactIfNeeded,
+    compactAfterOverflow,
   }
 }

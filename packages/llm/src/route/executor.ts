@@ -259,10 +259,7 @@ const statusReason = (input: {
   ) {
     return new InvalidRequestReason({
       message: input.message,
-      classification:
-        /"code"\s*:\s*"context_length_exceeded"/i.test(body) || isContextOverflow(body)
-          ? "context-overflow"
-          : undefined,
+      classification: isContextOverflow(body) ? "context-overflow" : undefined,
       http: input.http,
     })
   }

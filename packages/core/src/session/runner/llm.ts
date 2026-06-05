@@ -7,7 +7,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Schema, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -138,30 +138,28 @@ export const layer = Layer.effect(
     const isQuestionRejected = (cause: Cause.Cause<unknown>) =>
       cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
 
-    /**
-     * The prepared provider turn became stale before dispatch. Reload durable Session state and prepare it again,
-     * preserving any input promotion that was not consumed by the abandoned preparation.
-     */
-    class RebuildPreparedTurn extends Schema.TaggedErrorClass<RebuildPreparedTurn>()(
-      "SessionRunner.RebuildPreparedTurn",
-      {
-        promotion: SessionInput.Delivery.pipe(Schema.optional),
-      },
-    ) {}
+    type TurnTransition =
+      // Request preparation observed a concurrent Session change and must restart from durable state.
+      | { readonly _tag: "RebuildPreparedTurn"; readonly promotion?: SessionInput.Delivery }
+      // Overflow compaction completed; rebuild once through the path without overflow recovery.
+      | { readonly _tag: "ContinueAfterOverflowCompaction" }
 
-    /**
-     * A provider rejected the request before durable assistant output and overflow compaction completed. Rebuild the
-     * same logical turn once from the new checkpoint through the path that cannot perform another overflow recovery.
-     */
-    class ContinueAfterOverflowCompaction extends Schema.TaggedErrorClass<ContinueAfterOverflowCompaction>()(
-      "SessionRunner.ContinueAfterOverflowCompaction",
-      {},
-    ) {}
+    class TurnTransitionError extends Error {
+      constructor(readonly transition: TurnTransition) {
+        super()
+      }
+    }
+
+    const rebuildPreparedTurn = (promotion?: SessionInput.Delivery) =>
+      new TurnTransitionError({ _tag: "RebuildPreparedTurn", promotion })
+    const continueAfterOverflowCompaction = new TurnTransitionError({
+      _tag: "ContinueAfterOverflowCompaction",
+    })
 
     const retryAgentMismatch = (promotion: SessionInput.Delivery | undefined) =>
       Effect.catchDefect((defect) =>
         defect instanceof SessionContextEpoch.AgentMismatch
-          ? new RebuildPreparedTurn({ promotion })
+          ? Effect.die(rebuildPreparedTurn(promotion))
           : Effect.die(defect),
       )
 
@@ -209,7 +207,7 @@ export const layer = Layer.effect(
         ).pipe(retryAgentMismatch(undefined)))
       const current = yield* getSession(sessionID)
       if ((yield* agents.select(current.agent)).id !== agent.id || !sameModel(current.model, session.model))
-        return yield* new RebuildPreparedTurn({})
+        return yield* Effect.die(rebuildPreparedTurn())
       const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
@@ -222,7 +220,7 @@ export const layer = Layer.effect(
         tools: yield* tools.definitions(),
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
-        return yield* new RebuildPreparedTurn({})
+        return yield* Effect.die(rebuildPreparedTurn())
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -237,13 +235,13 @@ export const layer = Layer.effect(
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
       if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
-        return yield* new RebuildPreparedTurn({})
+        return yield* Effect.die(rebuildPreparedTurn())
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
-            if (event.type === "provider-error") {
-              if (event.classification === "context-overflow" && !publisher.hasAssistantStarted()) {
+            if (LLMEvent.is.providerError(event)) {
+              if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
                 overflowFailure = event
                 return
               }
@@ -282,14 +280,15 @@ export const layer = Layer.effect(
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const stream = yield* restore(providerStream).pipe(Effect.exit)
-          const failure = stream._tag === "Failure" ? stream.cause.reasons.find(Cause.isFailReason)?.error : undefined
+          const failure =
+            stream._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) : undefined
           if (
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
             isContextOverflowFailure(overflowFailure ?? failure) &&
-            (yield* recoverOverflow({ sessionID: session.id, entries, model, request }))
+            (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
           )
-            return yield* new ContinueAfterOverflowCompaction()
+            return yield* Effect.die(continueAfterOverflowCompaction)
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
@@ -334,30 +333,29 @@ export const layer = Layer.effect(
 
     const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion) {
       return yield* runTurnAttempt(sessionID, promotion).pipe(
-        Effect.catchTags({
-          "SessionRunner.RebuildPreparedTurn": Effect.fnUntraced(function* (restart) {
+        Effect.catchDefect(
+          Effect.fnUntraced(function* (defect) {
+            if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
+            if (defect.transition._tag === "ContinueAfterOverflowCompaction")
+              return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, restart.promotion)
+            return yield* runAfterOverflowCompaction(sessionID, defect.transition.promotion)
           }),
-          // This attempt was constructed without overflow recovery, so the transition cannot be emitted.
-          "SessionRunner.ContinueAfterOverflowCompaction": () =>
-            Effect.die("Post-compaction provider attempt cannot recover another overflow"),
-        }),
+        ),
       )
     })
 
     const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion) {
       return yield* runTurnAttempt(sessionID, promotion, compaction.compactAfterOverflow).pipe(
-        Effect.catchTags({
-          "SessionRunner.RebuildPreparedTurn": Effect.fnUntraced(function* (restart) {
+        Effect.catchDefect(
+          Effect.fnUntraced(function* (defect) {
+            if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
-            return yield* runTurn(sessionID, restart.promotion)
+            if (defect.transition._tag === "ContinueAfterOverflowCompaction")
+              return yield* runAfterOverflowCompaction(sessionID, undefined)
+            return yield* runTurn(sessionID, defect.transition.promotion)
           }),
-          "SessionRunner.ContinueAfterOverflowCompaction": Effect.fnUntraced(function* () {
-            yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined)
-          }),
-        }),
+        ),
       )
     })
 

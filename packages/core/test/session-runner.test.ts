@@ -354,6 +354,21 @@ const providerUnavailable = () =>
     reason: new TransportReason({ message: "Provider unavailable" }),
   })
 
+const setupOverflowRecovery = Effect.gen(function* () {
+  yield* setup
+  const session = yield* SessionV2.Service
+  response = fragmentFixture("text", "text-earlier", ["Earlier answer"]).completeEvents
+  yield* session.prompt({
+    sessionID,
+    prompt: new Prompt({ text: "Earlier question ".repeat(700) }),
+    resume: false,
+  })
+  yield* session.resume(sessionID)
+  currentModel = recoveryModel
+  requests.length = 0
+  return session
+})
+
 const userTexts = (request: LLMRequest) =>
   request.messages.flatMap((message) =>
     message.role === "user"
@@ -1469,18 +1484,7 @@ describe("SessionRunnerLLM", () => {
 
   it.effect("forces one compaction and retries after provider context overflow", () =>
     Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      response = fragmentFixture("text", "text-earlier", ["Earlier answer"]).completeEvents
-      yield* session.prompt({
-        sessionID,
-        prompt: new Prompt({ text: "Earlier question ".repeat(700) }),
-        resume: false,
-      })
-      yield* session.resume(sessionID)
-
-      currentModel = recoveryModel
-      requests.length = 0
+      const session = yield* setupOverflowRecovery
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
@@ -1509,18 +1513,7 @@ describe("SessionRunnerLLM", () => {
 
   it.effect("persists a second context overflow after one recovery", () =>
     Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      response = fragmentFixture("text", "text-earlier", ["Earlier answer"]).completeEvents
-      yield* session.prompt({
-        sessionID,
-        prompt: new Prompt({ text: "Earlier question ".repeat(700) }),
-        resume: false,
-      })
-      yield* session.resume(sessionID)
-
-      currentModel = recoveryModel
-      requests.length = 0
+      const session = yield* setupOverflowRecovery
       const overflow = () => [
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
@@ -1543,18 +1536,7 @@ describe("SessionRunnerLLM", () => {
 
   it.effect("recovers once from a raw context overflow failure", () =>
     Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      response = fragmentFixture("text", "text-earlier", ["Earlier answer"]).completeEvents
-      yield* session.prompt({
-        sessionID,
-        prompt: new Prompt({ text: "Earlier question ".repeat(700) }),
-        resume: false,
-      })
-      yield* session.resume(sessionID)
-
-      currentModel = recoveryModel
-      requests.length = 0
+      const session = yield* setupOverflowRecovery
       responseStream = Stream.fail(
         new LLMError({
           module: "test",
@@ -1577,6 +1559,51 @@ describe("SessionRunnerLLM", () => {
         { type: "compaction", summary: "## Goal\n- Recover raw overflow" },
         { type: "assistant", finish: "stop" },
       ])
+    }),
+  )
+
+  it.effect("publishes the original overflow when recovery summarization fails", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responses = [
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        [LLMEvent.providerError({ message: "summary unavailable" })],
+      ]
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      const context = yield* session.context(sessionID)
+      expect(context.some((message) => message.type === "compaction")).toBe(false)
+      expect(context.slice(-2)).toMatchObject([
+        { type: "user", text: "Continue" },
+        { type: "assistant", finish: "error", error: { message: "prompt too long" } },
+      ])
+    }),
+  )
+
+  it.effect("interrupts overflow recovery while the summary provider is running", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responses = [
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        fragmentFixture("text", "text-summary", ["## Goal\n- Interrupted"]).completeEvents,
+      ]
+      const firstGate = yield* Deferred.make<void>()
+      const summaryGate = yield* Deferred.make<void>()
+      streamGate = firstGate
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      while (requests.length < 1) yield* Effect.yieldNow
+      streamGate = summaryGate
+      yield* Deferred.succeed(firstGate, undefined)
+      while (requests.length < 2) yield* Effect.yieldNow
+
+      yield* session.interrupt(sessionID)
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      streamGate = undefined
+      expect(requests).toHaveLength(2)
+      expect((yield* session.context(sessionID)).some((message) => message.type === "compaction")).toBe(false)
     }),
   )
 
