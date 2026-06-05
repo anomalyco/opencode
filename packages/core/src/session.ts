@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { Cause, Effect, Layer, Schema, Context, Stream } from "effect"
+import { Cause, DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -132,7 +132,7 @@ export interface Interface {
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
-  }) => Effect.Effect<void, OperationUnavailableError>
+  }) => Effect.Effect<void, NotFoundError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -384,8 +384,20 @@ export const layer = Layer.effect(
       switchAgent: Effect.fn("V2Session.switchAgent")(function* () {
         return yield* new OperationUnavailableError({ operation: "switchAgent" })
       }),
-      switchModel: Effect.fn("V2Session.switchModel")(function* () {
-        return yield* new OperationUnavailableError({ operation: "switchModel" })
+      switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        if (
+          session.model?.providerID === input.model.providerID &&
+          session.model.id === input.model.id &&
+          (session.model.variant ?? "default") === (input.model.variant ?? "default")
+        )
+          return
+        yield* events.publish(SessionEvent.ModelSwitched, {
+          sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
+          timestamp: yield* DateTime.now,
+          model: input.model,
+        })
       }),
       compact: Effect.fn("V2Session.compact")(function* (input) {
         yield* result.get(input.sessionID)

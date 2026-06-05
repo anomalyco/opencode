@@ -52,6 +52,20 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.effect("returns the latest defined scalar from priority-ordered documents", () =>
+    Effect.sync(() => {
+      const entries = [
+        new Config.Document({ type: "document", info: new Config.Info({ model: "openrouter/openai/gpt-5" }) }),
+        new Config.Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
+        new Config.Document({ type: "document", info: new Config.Info({}) }),
+        new Config.Document({ type: "document", info: new Config.Info({ model: "openrouter/openai/gpt-5.5" }) }),
+      ]
+
+      expect(Config.latest(entries, "model")).toBe("openrouter/openai/gpt-5.5")
+      expect(Config.latest(entries, "default_agent")).toBeUndefined()
+    }),
+  )
+
   it.effect("detects v1 configuration from any v1-only top-level key", () =>
     Effect.sync(() => {
       expect(ConfigMigrateV1.isV1({ snapshot: false })).toBe(true)
