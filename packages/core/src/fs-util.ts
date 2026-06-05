@@ -84,7 +84,10 @@ export namespace FSUtil {
 
       const readJson = Effect.fn("FileSystem.readJson")(function* (path: string) {
         const text = yield* fs.readFileString(path)
-        return JSON.parse(text)
+        return yield* Effect.try({
+          try: () => JSON.parse(text),
+          catch: (cause) => new FileSystemError({ method: "readJson", cause }),
+        })
       })
 
       const writeJson = Effect.fn("FileSystem.writeJson")(function* (path: string, data: unknown, mode?: number) {
