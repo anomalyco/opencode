@@ -44,11 +44,13 @@ export class Info extends Schema.Class<Info>("AgentV2.Info")({
 
 type Data = {
   agents: Map<ID, Info>
+  default?: ID
 }
 
 export type Editor = {
   list: () => readonly Info[]
   get: (id: ID) => Info | undefined
+  default: (id: ID | undefined) => void
   update: (id: ID, fn: (agent: Draft<Info>) => void) => void
   remove: (id: ID) => void
 }
@@ -57,6 +59,8 @@ export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
   readonly update: (update: State.Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
+  readonly default: () => Effect.Effect<Info | undefined>
+  readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
   readonly all: () => Effect.Effect<Info[]>
 }
 
@@ -72,6 +76,9 @@ export const layer = Layer.effect(
       editor: (draft) => ({
         list: () => Array.fromIterable(draft.agents.values()) as Info[],
         get: (id) => draft.agents.get(id),
+        default: (id) => {
+          draft.default = id
+        },
         update: (id, fn) => {
           const current = draft.agents.get(id) ?? castDraft(Info.empty(id))
           if (!draft.agents.has(id)) draft.agents.set(id, current)
@@ -83,6 +90,19 @@ export const layer = Layer.effect(
         },
       }),
     })
+    const selectable = (agent: Info | undefined) =>
+      agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
+    const selectedDefault = () => {
+      const data = state.get()
+      const configured = data.default ? selectable(data.agents.get(data.default)) : undefined
+      if (configured) return configured
+      const build = selectable(data.agents.get(ID.make("build")))
+      if (build) return build
+      for (const agent of data.agents.values()) {
+        const fallback = selectable(agent)
+        if (fallback) return fallback
+      }
+    }
 
     return Service.of({
       transform: state.transform,
@@ -92,6 +112,13 @@ export const layer = Layer.effect(
       }),
       get: Effect.fn("AgentV2.get")(function* (id) {
         return state.get().agents.get(id)
+      }),
+      default: Effect.fn("AgentV2.default")(function* () {
+        return selectedDefault()
+      }),
+      resolve: Effect.fn("AgentV2.resolve")(function* (id) {
+        if (id !== undefined) return state.get().agents.get(ID.make(id))
+        return selectedDefault()
       }),
       all: Effect.fn("AgentV2.all")(function* () {
         return Array.fromIterable(state.get().agents.values())

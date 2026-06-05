@@ -32,6 +32,7 @@ import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { NativeTool } from "@opencode-ai/core/tool/native"
 import {
   SessionContextEpochTable,
@@ -107,6 +108,7 @@ const permission = Layer.succeed(
 )
 const applications = ApplicationTools.layer
 const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
+const agents = AgentV2.layer
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
     registry.contribute((editor) => {
@@ -189,6 +191,7 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(registry),
   Layer.provide(models),
   Layer.provide(systemContext),
+  Layer.provide(agents),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -214,6 +217,7 @@ const it = testEffect(
     client,
     permission,
     applications,
+    agents,
     registry,
     echo,
     models,
@@ -721,6 +725,78 @@ describe("SessionRunnerLLM", () => {
       ).toHaveLength(1)
       yield* replaySessionProjection(sessionID)
       expect(yield* session.messages({ sessionID })).toHaveLength(3)
+    }),
+  )
+
+  it.effect("includes the effective default agent system before durable context", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-build", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions", "Initial context"])
+    }),
+  )
+
+  it.effect("uses the configured default agent system for omitted-agent sessions", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) => {
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        })
+        editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.system = "Reviewer instructions"
+          agent.mode = "primary"
+        })
+        editor.default(AgentV2.ID.make("reviewer"))
+      })
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-reviewer", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", "Initial context"])
+      expect((yield* session.messages({ sessionID }))[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
+    }),
+  )
+
+  it.effect("uses an explicitly selected non-build agent system", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) =>
+        editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.system = "Reviewer instructions"
+          agent.mode = "primary"
+        }),
+      )
+      yield* db.update(SessionTable).set({ agent: "reviewer" }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-selected", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", "Initial context"])
+      expect((yield* session.messages({ sessionID }))[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
     }),
   )
 

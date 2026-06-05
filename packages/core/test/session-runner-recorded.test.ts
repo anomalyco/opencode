@@ -6,6 +6,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -48,6 +49,7 @@ const permission = Layer.succeed(
   }),
 )
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
+const agents = AgentV2.layer
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
@@ -65,6 +67,7 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(registry),
   Layer.provide(models),
   Layer.provide(systemContext),
+  Layer.provide(agents),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -89,6 +92,7 @@ const it = testEffect(
     executor,
     client,
     permission,
+    agents,
     registry,
     models,
     systemContext,

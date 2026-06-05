@@ -16,6 +16,7 @@ import { SessionInput } from "../input"
 import { QuestionV2 } from "../../question"
 import { SystemContextRegistry } from "../../system-context-registry"
 import { SessionContextEpoch } from "../context-epoch"
+import { AgentV2 } from "../../agent"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -84,6 +85,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const llm = yield* LLMClient.Service
+    const agents = yield* AgentV2.Service
     const tools = yield* ToolRegistry.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
@@ -134,6 +136,7 @@ export const layer = Layer.effect(
       const session = yield* getSession(sessionID)
       const initialized = yield* SessionContextEpoch.initialize(db, systemContext, session.id, session.location)
       const model = yield* models.resolve(session)
+      const agent = yield* agents.resolve(session.agent)
       const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
       if (promotion) {
@@ -149,13 +152,13 @@ export const layer = Layer.effect(
       const context = yield* store.runnerContext(session.id, system.baselineSeq)
       const request = LLM.request({
         model,
-        system: system.baseline.length > 0 ? [SystemPart.make(system.baseline)] : [],
+        system: [agent?.system, system.baseline].filter((part): part is string => part !== undefined && part.length > 0).map(SystemPart.make),
         messages: toLLMMessages(context, model),
         tools: yield* tools.definitions(),
       })
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
-        agent: session.agent ?? "build",
+        agent: agent?.id ?? "build",
         model: {
           id: ModelV2.ID.make(model.id),
           providerID: ProviderV2.ID.make(model.provider),
