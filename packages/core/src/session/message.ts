@@ -2,15 +2,15 @@ export * as SessionMessage from "./message"
 
 import { Schema } from "effect"
 import { ProviderMetadata } from "@opencode-ai/llm"
-import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
 import { SessionEvent } from "./event"
 import { Prompt } from "./prompt"
+import { SessionMessageID } from "./message-id"
 
-export const ID = EventV2.ID
-export type ID = Schema.Schema.Type<typeof ID>
+export const ID = SessionMessageID.ID
+export type ID = typeof ID.Type
 
 const Base = {
   id: ID,
@@ -49,6 +49,12 @@ export class Synthetic extends Schema.Class<Synthetic>("Session.Message.Syntheti
   sessionID: SessionEvent.Synthetic.data.fields.sessionID,
   text: SessionEvent.Synthetic.data.fields.text,
   type: Schema.Literal("synthetic"),
+}) {}
+
+export class System extends Schema.Class<System>("Session.Message.System")({
+  ...Base,
+  type: Schema.Literal("system"),
+  text: SessionEvent.ContextUpdated.data.fields.text,
 }) {}
 
 export class Shell extends Schema.Class<Shell>("Session.Message.Shell")({
@@ -170,7 +176,16 @@ export class Compaction extends Schema.Class<Compaction>("Session.Message.Compac
   ...Base,
 }) {}
 
-export const Message = Schema.Union([AgentSwitched, ModelSwitched, User, Synthetic, Shell, Assistant, Compaction])
+export const Message = Schema.Union([
+  AgentSwitched,
+  ModelSwitched,
+  User,
+  Synthetic,
+  System,
+  Shell,
+  Assistant,
+  Compaction,
+])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Session.Message" })
 

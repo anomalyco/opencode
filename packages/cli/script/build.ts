@@ -44,7 +44,7 @@ const targets = singleFlag
   : allTargets
 
 for (const item of targets) {
-  const name = [
+  const target = [
     binary,
     item.os === "win32" ? "windows" : item.os,
     item.arch,
@@ -53,6 +53,7 @@ for (const item of targets) {
   ]
     .filter(Boolean)
     .join("-")
+  const name = target.replace(binary, "cli")
   console.log(`building ${name}`)
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
@@ -67,7 +68,7 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(binary, "bun") as Bun.Build.CompileTarget,
+      target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
       outfile: `./dist/${name}/bin/${binary}`,
       execArgv: [`--user-agent=${binary}/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
@@ -93,6 +94,7 @@ for (const item of targets) {
         name: `@opencode-ai/${name}`,
         version: Script.version,
         license: "MIT",
+        repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
         os: [item.os],
         cpu: [item.arch],
       },

@@ -390,7 +390,6 @@ export const SessionReview = (props: SessionReviewProps) => {
               <Accordion multiple value={open()} onChange={handleChange}>
                 <For each={files()}>
                   {(file) => {
-                    console.log({ file })
                     const diff = () => itemsMap()[file]
 
                     // binary files have empty diffs that we can't render

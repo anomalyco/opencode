@@ -13,6 +13,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
+import { BackgroundJob } from "@/background/job"
 import { Config } from "@/config/config"
 import { Command } from "@/command"
 import * as Observability from "@opencode-ai/core/effect/observability"
@@ -214,6 +215,7 @@ export function createRoutes(
       Account.defaultLayer,
       Agent.defaultLayer,
       Auth.defaultLayer,
+      BackgroundJob.defaultLayer,
       Command.defaultLayer,
       Config.defaultLayer,
       Format.defaultLayer,

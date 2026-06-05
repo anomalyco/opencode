@@ -1,17 +1,7 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import {
-  batch,
-  createContext,
-  createEffect,
-  getOwner,
-  onCleanup,
-  onMount,
-  type ParentProps,
-  untrack,
-  useContext,
-} from "solid-js"
+import { batch, getOwner, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
@@ -44,6 +34,8 @@ import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
+import type { ServerScope } from "@/utils/server-scope"
+import { persisted } from "@/utils/persist"
 
 type GlobalStore = {
   ready: boolean
@@ -59,34 +51,39 @@ type GlobalStore = {
   reload: undefined | "pending" | "complete"
 }
 
-export const loadMcpQuery = (directory: string, sdk: OpencodeClient) =>
+export const loadMcpQuery = (scope: ServerScope, directory: string, sdk: OpencodeClient) =>
   queryOptions({
-    queryKey: [directory, "mcp"] as const,
+    queryKey: [scope, directory, "mcp"] as const,
     queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
   })
 
-export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>
+export const loadLspQuery = (scope: ServerScope, directory: string, sdk: OpencodeClient) =>
   queryOptions({
-    queryKey: [directory, "lsp"] as const,
+    queryKey: [scope, directory, "lsp"] as const,
     queryFn: () => sdk.lsp.status().then((r) => r.data ?? []),
   })
 
-function makeQueryOptionsApi(serverSDK: () => OpencodeClient, sdkFor: (dir: PathKey) => OpencodeClient) {
+function makeQueryOptionsApi(
+  scope: ServerScope,
+  serverSDK: () => OpencodeClient,
+  sdkFor: (dir: PathKey) => OpencodeClient,
+) {
   return {
-    globalConfig: () => loadGlobalConfigQuery(serverSDK()),
-    projects: () => loadProjectsQuery(serverSDK()),
+    globalConfig: () => loadGlobalConfigQuery(scope, serverSDK()),
+    projects: () => loadProjectsQuery(scope, serverSDK()),
     providers: (directory: PathKey | null) =>
-      loadProvidersQuery(directory, directory === null ? serverSDK() : sdkFor(directory)),
-    path: (directory: PathKey | null) => loadPathQuery(directory, directory === null ? serverSDK() : sdkFor(directory)),
-    agents: (directory: PathKey) => loadAgentsQuery(directory, sdkFor(directory)),
-    mcp: (directory: PathKey) => loadMcpQuery(directory, sdkFor(directory)),
-    lsp: (directory: PathKey) => loadLspQuery(directory, sdkFor(directory)),
-    sessions: (directory: PathKey) => ({ queryKey: [directory, "loadSessions"] as const }),
+      loadProvidersQuery(scope, directory, directory === null ? serverSDK() : sdkFor(directory)),
+    path: (directory: PathKey | null) =>
+      loadPathQuery(scope, directory, directory === null ? serverSDK() : sdkFor(directory)),
+    agents: (directory: PathKey) => loadAgentsQuery(scope, directory, sdkFor(directory)),
+    mcp: (directory: PathKey) => loadMcpQuery(scope, directory, sdkFor(directory)),
+    lsp: (directory: PathKey) => loadLspQuery(scope, directory, sdkFor(directory)),
+    sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
   }
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContext(_serverSDK?: ServerSDK) {
+export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
   const serverSDK: ServerSDK = _serverSDK ?? useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
@@ -109,7 +106,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     return sdk
   }
 
-  const queryOptionsApi = makeQueryOptionsApi(() => serverSDK.client, sdkFor)
+  const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, () => serverSDK.client, sdkFor)
 
   const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
     queries: [queryOptionsApi.globalConfig(), queryOptionsApi.providers(null), queryOptionsApi.path(null)],
@@ -166,10 +163,11 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
   }) as typeof setGlobalStore
 
   const bootstrap = useQuery(() => ({
-    queryKey: ["bootstrap"],
+    queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
       await bootstrapGlobal({
         serverSDK: serverSDK.client,
+        scope: serverSDK.scope,
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,
         formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
@@ -208,12 +206,14 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
   const queue = createRefreshQueue({
     paused,
     key: directoryKey,
-    bootstrap: () => queryClient.fetchQuery({ queryKey: ["bootstrap"] }),
+    bootstrap: () => queryClient.fetchQuery({ queryKey: [serverSDK.scope, "bootstrap"] }),
     bootstrapInstance,
   })
 
   const children = createChildStoreManager({
     owner,
+    scope: serverSDK.scope,
+    persist: persisted,
     isBooting: (directory) => booting.has(directory),
     isLoadingSessions: (directory) => sessionLoads.has(directory),
     onBootstrap: (directory) => {
@@ -237,8 +237,8 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       queue.clear(key)
       sessionMeta.delete(key)
       sdkCache.delete(key)
-      clearProviderRev(key)
-      clearSessionPrefetchDirectory(key)
+      clearProviderRev(serverSDK.scope, key)
+      clearSessionPrefetchDirectory(serverSDK.scope, key)
     },
     translate: language.t,
     queryOptions: queryOptionsApi,
@@ -338,6 +338,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
+        scope: serverSDK.scope,
         mcp: children.mcp(key),
         global: {
           config: globalStore.config,
@@ -449,8 +450,10 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       bootstrap.refetch()
       // Invalidate all provider queries so newly configured custom providers
       // appear immediately in the available provider list across all directories.
-      queryClient.invalidateQueries({ queryKey: [null, "providers"] })
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "providers" })
+      queryClient.invalidateQueries({ queryKey: [serverSDK.scope, null, "providers"] })
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === serverSDK.scope && query.queryKey[2] === "providers",
+      })
     },
   }))
 
@@ -476,8 +479,20 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
   }
 }
 
+export function createServerSyncContext(_serverSDK?: ServerSDK) {
+  const inner = createServerSyncContextInner(_serverSDK)
+  return Object.assign(inner, {
+    createDirSyncContext: createRefCountMap(
+      (dir) => createDirSyncContext(dir, inner, _serverSDK),
+      (dir) => inner.disableMcp(dir),
+      directoryKey,
+    ),
+  })
+}
+
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
+  gate: false,
   init: (props: { server?: ServerConnection.Any }) => {
     const global = useGlobal()
     const language = useLanguage()
@@ -487,13 +502,7 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
     if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
     const ctx = global.createServerCtx(conn)
 
-    return Object.assign(ctx.sync, {
-      createDirSyncContext: createRefCountMap(
-        (dir) => createDirSyncContext(dir, ctx.sync),
-        (dir) => ctx.sync.disableMcp(dir),
-        directoryKey,
-      ),
-    })
+    return ctx.sync
   },
 })
 
