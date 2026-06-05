@@ -51,6 +51,14 @@ Versioning note: automated upstream mirrors are published as
 - Web: restored queued follow-up prompts by preserving `followup: "queue"` in
   app and server UI settings. Busy-session submissions in queue mode now enqueue
   instead of sending immediately.
+- Web (v2 UI): preserved desktop session tabs across direct session URL visits
+  and reloads by persisting titlebar session tabs per workspace while keeping
+  subagent/child sessions out of the tab strip.
+- Web (v2 UI): improved desktop session tab overflow, close, and keyboard
+  navigation behavior so active/root tabs stay visible and non-active tab closes
+  do not navigate away.
+- Web (v2 UI): defaulted the session todo dock to collapsed on mobile when the
+  user has not explicitly toggled it, while keeping desktop expanded by default.
 - Web (v2 UI): kept mobile-only v2 session chrome out of v1 UI, including the
   floating project bar, mobile Session/Changes titlebar control, and mobile
   changes view path.
