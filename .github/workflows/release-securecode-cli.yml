@@ -33,7 +33,17 @@ permissions:
 
 jobs:
   cli:
-    runs-on: ubuntu-24.04
+    # macOS runner を使うのは、bun の `--compile` が出力する macOS arm64
+    # バイナリの ad-hoc (linker-signed) 署名が `macho.zig` の sig_size バグで
+    # truncated になり、Apple Silicon の AMFI が SIGKILL するため、配布前に
+    # Apple 純正 `codesign --sign -` で ad-hoc 再署名する必要があるから。
+    # codesign は macOS でしか動かないので runner ごと macOS に揃える。
+    # Linux/Windows バイナリは bun の cross-compile で macOS 上から生成可能。
+    # Refs:
+    #   - oven-sh/bun#29120 — truncated code signature in v1.3.12
+    #   - https://bun.com/docs/guides/runtime/codesign-macos-executable
+    #   - acompany-develop/securecode#294
+    runs-on: macos-14
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

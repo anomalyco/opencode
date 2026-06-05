@@ -339,10 +339,15 @@ install_binary() {
   cp "$src" "$dest"
   chmod 755 "$dest"
   if [ "$(uname -s)" = "Darwin" ]; then
-    # Strip the macOS quarantine xattr so Gatekeeper allows the unsigned binary
-    # to run without a "developer cannot be verified" pop-up. Drop once
-    # securecode is properly signed.
-    xattr -cr "$dest" 2>/dev/null || true
+    # Strip the macOS quarantine xattr so Gatekeeper allows the ad-hoc
+    # signed binary to run without a "developer cannot be verified" pop-up.
+    # Drop once securecode is signed with Apple Developer ID + notarized.
+    #
+    # Use /usr/bin/xattr explicitly. Homebrew's Python `xattr` package
+    # installs an `xattr` shim under /opt/homebrew/bin that does NOT
+    # support `-r` and aborts with "option -r not recognized" if it wins
+    # PATH precedence. Refs acompany-develop/securecode#294.
+    /usr/bin/xattr -cr "$dest" 2>/dev/null || true
   fi
 }
 

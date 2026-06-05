@@ -70,6 +70,21 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   await $`bun build --compile --target=${bunTarget} script/securecode-supervisor.ts --outfile ${supervisorBin}`.cwd(root)
   await fs.chmod(supervisorBin, 0o755)
 
+  // 3) darwin バイナリは Apple 純正 codesign で ad-hoc 再署名する。bun が
+  // 出力する linker-signed 署名は macho.zig の sig_size バグで truncated に
+  // なり、Apple Silicon の AMFI が起動時に SIGKILL する。`codesign --force
+  // --sign -` で正しい ad-hoc 署名に上書きすると整合性が回復する。Linux 側
+  // は AMFI 強制が無いので署名不要。
+  // この処理は macOS runner 上でのみ動作する (workflow 側で runner を
+  // macos-14 に設定)。Refs:
+  //   - oven-sh/bun#29120
+  //   - https://bun.com/docs/guides/runtime/codesign-macos-executable
+  //   - acompany-develop/securecode#294
+  if (dir.name.includes("darwin")) {
+    await $`codesign --force --sign - ${innerBin}`
+    await $`codesign --force --sign - ${supervisorBin}`
+  }
+
   await fs.copyFile(path.join(root, "LICENSE"), path.join(tmp, "LICENSE"))
   if (await exists(thirdPartyLicensesSrc)) {
     await fs.copyFile(thirdPartyLicensesSrc, path.join(tmp, "THIRD-PARTY-LICENSES.txt"))
