@@ -85,7 +85,7 @@ const prepareOnce = Effect.fnUntraced(function* (
     return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
   if (result._tag === "ReplacementReady") {
     const replacementSeq = stored.replacement_seq ?? (yield* SessionInput.latestSeq(db, sessionID))
-    yield* replace(db, sessionID, stored.revision, replacementSeq, result.generation)
+    yield* replace(db, sessionID, agent, stored.revision, replacementSeq, result.generation)
     return { baseline: result.generation.baseline, baselineSeq: replacementSeq }
   }
 
@@ -214,26 +214,45 @@ const insert = Effect.fnUntraced(function* (
 const replace = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
+  agent: AgentV2.ID,
   expectedRevision: number,
   baselineSeq: number,
   generation: SystemContext.Generation,
 ) {
-  const updated = yield* db
-    .update(SessionContextEpochTable)
-    .set({
-      baseline: generation.baseline,
-      snapshot: generation.snapshot,
-      baseline_seq: baselineSeq,
-      replacement_seq: null,
-      revision: expectedRevision + 1,
-    })
-    .where(
-      and(eq(SessionContextEpochTable.session_id, sessionID), eq(SessionContextEpochTable.revision, expectedRevision)),
+  yield* db
+    .transaction(
+      () =>
+        Effect.gen(function* () {
+          const selected = yield* db
+            .select({ agent: SessionTable.agent })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, sessionID))
+            .get()
+            .pipe(Effect.orDie)
+          if (!selected || AgentV2.effectiveID(selected.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+          const updated = yield* db
+            .update(SessionContextEpochTable)
+            .set({
+              baseline: generation.baseline,
+              snapshot: generation.snapshot,
+              baseline_seq: baselineSeq,
+              replacement_seq: null,
+              revision: expectedRevision + 1,
+            })
+            .where(
+              and(
+                eq(SessionContextEpochTable.session_id, sessionID),
+                eq(SessionContextEpochTable.revision, expectedRevision),
+              ),
+            )
+            .returning({ revision: SessionContextEpochTable.revision })
+            .get()
+            .pipe(Effect.orDie)
+          if (!updated) return yield* Effect.die(new RevisionMismatch())
+        }),
+      { behavior: "immediate" },
     )
-    .returning({ revision: SessionContextEpochTable.revision })
-    .get()
     .pipe(Effect.orDie)
-  if (!updated) return yield* Effect.die(new RevisionMismatch())
 })
 
 const advance = Effect.fnUntraced(function* (

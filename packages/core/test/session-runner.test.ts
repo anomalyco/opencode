@@ -26,6 +26,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionContextEpoch } from "@opencode-ai/core/session/context-epoch"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
@@ -966,6 +967,57 @@ describe("SessionRunnerLLM", () => {
           .get()
           .pipe(Effect.orDie),
       ).toEqual({ replacementSeq: null })
+    }),
+  )
+
+  it.effect("rejects stale agent guidance when committing an existing-epoch replacement", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+      yield* events.publish(SessionEvent.AgentSwitched, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: DateTime.makeUnsafe(1),
+        agent: AgentV2.ID.make("reviewer"),
+      })
+      const context = (text: string) =>
+        Effect.succeed(
+          SystemContext.make({
+            key: systemContextKey,
+            codec: Schema.toCodecJson(Schema.String),
+            load: Effect.succeed(text),
+            baseline: String,
+            update: (_previous, current) => current,
+          }),
+        )
+      const location = (yield* session.get(sessionID)).location
+
+      expect(
+        yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          context("Stale build context"),
+          sessionID,
+          location,
+          AgentV2.defaultID,
+        ).pipe(Effect.catchDefect(Effect.succeed)),
+      ).toBeInstanceOf(SessionContextEpoch.AgentMismatch)
+
+      expect(
+        yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          context("Reviewer context"),
+          sessionID,
+          location,
+          AgentV2.ID.make("reviewer"),
+        ),
+      ).toMatchObject({ baseline: "Reviewer context" })
     }),
   )
 
