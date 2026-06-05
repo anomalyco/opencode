@@ -21,6 +21,7 @@ import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 import { Lifecycle } from "./utils/lifecycle"
 
 const ADAPTER = "gemini"
+const IMAGE_MIMES = new Set<string>(ProviderShared.IMAGE_MIMES)
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // =============================================================================
@@ -141,8 +142,6 @@ interface ParserState {
   readonly reasoningSignature?: string
 }
 
-const mediaData = ProviderShared.mediaBytes
-
 // =============================================================================
 // Tool Schema Conversion
 // =============================================================================
@@ -181,8 +180,11 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [name] } }),
   })
 
-const lowerUserPart = (part: TextPart | MediaPart) =>
-  part.type === "text" ? { text: part.text } : { inlineData: { mimeType: part.mediaType, data: mediaData(part) } }
+const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPart | MediaPart) {
+  if (part.type === "text") return { text: part.text }
+  const media = yield* ProviderShared.validateMedia("Gemini", part, IMAGE_MIMES)
+  return { inlineData: { mimeType: media.mime, data: media.base64 } }
+})
 
 const googleMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ google: metadata })
 
@@ -216,7 +218,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "media"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
-        parts.push(lowerUserPart(part))
+        parts.push(yield* lowerUserPart(part))
       }
       contents.push({ role: "user", parts })
       continue
@@ -273,7 +275,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       })
       for (const item of content) {
         if (item.type === "text") continue
-        parts.push({ inlineData: { mimeType: item.mediaType, data: mediaData(item) } })
+        const media = yield* ProviderShared.validateMedia("Gemini", item, IMAGE_MIMES)
+        parts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
       }
     }
     contents.push({ role: "user", parts })

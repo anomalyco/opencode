@@ -22,6 +22,7 @@ import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-chat"
+const IMAGE_MIMES = new Set<string>(ProviderShared.IMAGE_MIMES)
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/chat/completions"
 
@@ -199,9 +200,11 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   },
 })
 
-const lowerMedia = (part: Extract<MediaPart | ToolResultContentPart, { type: "media" }>) => ({
-  type: "image_url" as const,
-  image_url: { url: ProviderShared.mediaDataUrl(part) },
+const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (
+  part: Extract<MediaPart | ToolResultContentPart, { type: "media" }>,
+) {
+  const media = yield* ProviderShared.validateMedia("OpenAI Chat", part, IMAGE_MIMES)
+  return { type: "image_url" as const, image_url: { url: media.dataUrl } }
 })
 
 const openAICompatibleReasoningContent = (native: unknown) =>
@@ -214,8 +217,8 @@ const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (mes
       content.push({ type: "text", text: part.text })
       continue
     }
-    if (part.type === "media" && part.mediaType.startsWith("image/")) {
-      content.push(lowerMedia(part))
+    if (part.type === "media") {
+      content.push(yield* lowerMedia(part))
       continue
     }
     return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text", "media"])
@@ -260,6 +263,7 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
 
 const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (message: OpenAIChatRequestMessage) {
   const messages: OpenAIChatMessage[] = []
+  const images: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["tool-result"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
@@ -273,34 +277,54 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (m
     const media = content.filter(
       (item): item is Extract<ToolResultContentPart, { type: "media" }> => item.type === "media",
     )
-    if (media.some((item) => !item.mediaType.startsWith("image/")))
-      return yield* invalid("OpenAI Chat tool-result media content only supports images")
-    if (media.length > 0) messages.push({ role: "user", content: media.map(lowerMedia) })
+    images.push(...(yield* Effect.forEach(media, lowerMedia)))
   }
-  return messages
+  return { messages, images }
 })
 
 const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: OpenAIChatRequestMessage) {
   if (message.role === "user") return [yield* lowerUserMessage(message)]
   if (message.role === "assistant") return [yield* lowerAssistantMessage(message)]
-  return yield* lowerToolMessages(message)
+  return (yield* lowerToolMessages(message)).messages
 })
 
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const messages = [...system]
+  const pendingImages: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const flushImages = () => {
+    if (pendingImages.length === 0) return
+    messages.push({ role: "user", content: pendingImages.splice(0) })
+  }
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
+      if (pendingImages.length > 0) {
+        messages.push({ role: "user", content: [...pendingImages.splice(0), { type: "text", text: part.text }] })
+        continue
+      }
       const previous = messages.at(-1)
-      if (previous?.role === "user")
+      if (previous?.role === "user" && typeof previous.content === "string")
         messages[messages.length - 1] = { role: "user", content: `${previous.content}\n${part.text}` }
+      else if (previous?.role === "user" && Array.isArray(previous.content))
+        messages[messages.length - 1] = {
+          role: "user",
+          content: [...previous.content, { type: "text", text: part.text }],
+        }
       else messages.push({ role: "user", content: part.text })
       continue
     }
+    if (message.role === "tool") {
+      const lowered = yield* lowerToolMessages(message)
+      messages.push(...lowered.messages)
+      pendingImages.push(...lowered.images)
+      continue
+    }
+    flushImages()
     messages.push(...(yield* lowerMessage(message)))
   }
+  flushImages()
   return messages
 })
 
