@@ -1906,7 +1906,7 @@ noLLMServer.instance(
       const pluginFile = path.join(dir, "plugin.ts")
       const beforeMarker = path.join(dir, "read-before-marker.json")
       const afterMarker = path.join(dir, "read-after-marker.json")
-      const image = path.join(dir, "hook-test.png")
+      const image = path.resolve(import.meta.dir, "../tool/fixtures/large-image.png")
 
       yield* writeText(
         pluginFile,
@@ -1925,7 +1925,6 @@ noLLMServer.instance(
         ].join("\n"),
       )
       yield* writeConfig(dir, { ...cfg, plugin: [pathToFileURL(pluginFile).href] })
-      yield* Effect.promise(() => Bun.write(image, new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 1, 2, 3])))
 
       const msg = yield* prompt.prompt({
         sessionID: session.id,
@@ -1943,8 +1942,8 @@ noLLMServer.instance(
       })
 
       if (msg.info.role !== "user") throw new Error("expected user message")
-      const beforeMarkerExists = yield* Effect.sync(() => Bun.file(beforeMarker).exists())
-      const afterMarkerExists = yield* Effect.sync(() => Bun.file(afterMarker).exists())
+      const beforeMarkerExists = yield* Effect.promise(() => Bun.file(beforeMarker).exists())
+      const afterMarkerExists = yield* Effect.promise(() => Bun.file(afterMarker).exists())
       expect(beforeMarkerExists).toBe(true)
       expect(afterMarkerExists).toBe(true)
 
