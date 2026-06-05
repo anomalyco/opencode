@@ -58,7 +58,9 @@ export const layer = Layer.effectDiscard(
                 final.target.resource !== target.resource ||
                 final.target.real !== target.real
               )
-                return yield* Effect.die(new Error("Directory changed after permission approval"))
+                return yield* new ToolFailure({
+                  message: "Directory changed after permission approval. Please re-read and try again.",
+                })
               return yield* filesystem.listPageResolved(final.target, { offset, limit })
             }
             const target = resolved.target
@@ -69,7 +71,9 @@ export const layer = Layer.effectDiscard(
             })
             const final = yield* filesystem.resolveReadPath(input)
             if (final.type !== "file" || final.target.resource !== target.resource || final.target.real !== target.real)
-              return yield* Effect.die(new Error("File changed after permission approval"))
+              return yield* new ToolFailure({
+                message: "File changed after permission approval. Please re-read and try again.",
+              })
             if (
               final.target.size > FileSystem.MAX_READ_BYTES ||
               input.offset !== undefined ||
@@ -78,14 +82,16 @@ export const layer = Layer.effectDiscard(
               return yield* filesystem.readTextPageResolved(final.target, { offset: input.offset, limit: input.limit })
             return yield* filesystem.readResolved(final.target, FileSystem.MAX_READ_BYTES)
           }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.fail(
+            Effect.catchCause((cause) => {
+              const errors: unknown[] = []
+              Cause.forEach(cause, (error) => errors.push(error))
+              const messages = errors.map((e) => String(e)).join("\n")
+              return Effect.fail(
                 new ToolFailure({
-                  message: `Unable to read ${"resource" in input ? input.resource : input.path}`,
-                  error: Cause.squash(cause),
+                  message: `Unable to read ${"resource" in input ? input.resource : input.path}:\n${messages}`,
                 }),
-              ),
-            ),
+              )
+            }),
           )
         },
       }),
