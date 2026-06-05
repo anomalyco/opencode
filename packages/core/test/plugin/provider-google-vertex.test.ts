@@ -35,6 +35,27 @@ void mock.module("google-auth-library", () => ({
 }))
 
 describe("GoogleVertexPlugin", () => {
+  it.effect("ignores OpenAI-compatible providers that are not Google Vertex", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
+      yield* plugin.add(GoogleVertexPlugin)
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) =>
+        catalog.provider.update(ProviderV2.ID.opencode, (provider) => {
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://opencode.ai/zen/v1",
+          }
+        }),
+      )
+
+      const provider = yield* catalog.provider.get(ProviderV2.ID.opencode)
+      expect(provider.request.body).toEqual({})
+    }),
+  )
+
   it.effect("resolves project and location from env using legacy precedence", () =>
     withEnv(
       {
