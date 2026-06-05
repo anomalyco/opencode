@@ -142,8 +142,7 @@ export const layer = Layer.effect(
       }
       yield* failInterruptedTools(session.id)
       const context = yield* getContext(session.id)
-      const toolSnapshot = yield* tools.snapshot()
-      const request = LLM.request({ model, messages: toLLMMessages(context, model), tools: toolSnapshot.definitions })
+      const request = LLM.request({ model, messages: toLLMMessages(context, model), tools: yield* tools.definitions() })
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: session.agent ?? "build",
@@ -161,7 +160,7 @@ export const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
-            yield* toolSnapshot.settle({ sessionID: session.id, call: event }).pipe(
+            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
               Effect.catchCause((cause) => {
                 if (isQuestionRejected(cause)) return Effect.failCause(cause)
                 return Effect.succeed({

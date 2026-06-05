@@ -30,8 +30,8 @@ import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { ApplicationTool } from "@opencode-ai/core/tool/application"
-import { ApplicationToolRegistry } from "@opencode-ai/core/tool/application-registry"
+import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
+import { NativeTool } from "@opencode-ai/core/tool/native"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -95,7 +95,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const applications = ApplicationToolRegistry.layer
+const applications = ApplicationTools.layer
 const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
@@ -421,11 +421,11 @@ describe("SessionRunnerLLM", () => {
   it.effect("advertises and executes a globally attached application tool", () =>
     Effect.gen(function* () {
       yield* setup
-      const applicationTools = yield* ApplicationToolRegistry.Service
+      const applicationTools = yield* ApplicationTools.Service
       const session = yield* SessionV2.Service
-      const contexts: ApplicationTool.Context[] = []
+      const contexts: NativeTool.Context[] = []
       yield* applicationTools.attach({
-        application_context: ApplicationTool.make({
+        application_context: NativeTool.make({
           description: "Read application context",
           parameters: Schema.Struct({ query: Schema.String }),
           success: Schema.Struct({ answer: Schema.String }),

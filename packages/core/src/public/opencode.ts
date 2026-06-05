@@ -9,7 +9,7 @@ import { SessionV2 } from "../session"
 import * as SessionExecutionLocal from "../session/execution/local"
 import { SessionProjector } from "../session/projector"
 import { SessionStore } from "../session/store"
-import { ApplicationToolRegistry } from "../tool/application-registry"
+import { ApplicationTools } from "../tool/application-tools"
 import { Session } from "./session"
 import { Tool } from "./tool"
 
@@ -31,14 +31,14 @@ const SessionsLayer = SessionV2.layer.pipe(
   Layer.provide(ProjectV2.defaultLayer),
   Layer.orDie,
 )
-const ApplicationTools = ApplicationToolRegistry.layer
+const ApplicationToolsLayer = ApplicationTools.layer
 
 // TODO: Accept explicit storage so tests and embeddings can select disposable or application-owned persistence.
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const sessions = yield* SessionV2.Service
-    const tools = yield* ApplicationToolRegistry.Service
+    const tools = yield* ApplicationTools.Service
     return Service.of({
       tools: { attach: tools.attach },
       sessions: {
@@ -71,6 +71,6 @@ export const layer = Layer.effect(
       },
     })
   }),
-).pipe(Layer.provide(Layer.merge(ApplicationTools, SessionsLayer)))
+).pipe(Layer.provide(Layer.merge(ApplicationToolsLayer, SessionsLayer)))
 
 // TODO: Add OpenCode.create(...) as the Promise facade over the same native API semantics.

@@ -20,9 +20,9 @@ import { Project } from "../src/project"
 import { ProjectReference } from "../src/project-reference"
 import { LocationSearch } from "../src/location-search"
 import { ToolRegistry } from "../src/tool/registry"
-import { ApplicationToolRegistry } from "../src/tool/application-registry"
+import { ApplicationTools } from "../src/tool/application-tools"
 
-const applicationTools = ApplicationToolRegistry.layer
+const applicationTools = ApplicationTools.layer
 const it = testEffect(
   Layer.merge(
     applicationTools,
@@ -50,7 +50,7 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap(([blocked, allowed]) =>
         Effect.gen(function* () {
-          yield* (yield* ApplicationToolRegistry.Service).attach({
+          yield* (yield* ApplicationTools.Service).attach({
             application_context: Tool.make({
               description: "Read application context",
               parameters: Schema.Struct({}),

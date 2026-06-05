@@ -1,17 +1,16 @@
 import { describe, expect } from "bun:test"
 import { Tool } from "@opencode-ai/core/public"
-import { ApplicationTool } from "@opencode-ai/core/tool/application"
-import { ApplicationToolRegistry } from "@opencode-ai/core/tool/application-registry"
+import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
+import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
 const permission = Layer.mock(PermissionV2.Service, {
   assert: () => Effect.void,
 })
-const applications = ApplicationToolRegistry.layer
+const applications = ApplicationTools.layer
 const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
 const it = testEffect(Layer.mergeAll(applications, registry))
 
@@ -32,10 +31,10 @@ const contextual = (contexts: Tool.Context[]) =>
     ],
   })
 
-describe("ApplicationToolRegistry", () => {
+describe("ApplicationTools", () => {
   it.effect("advertises and executes a scoped application tool with Session context", () =>
     Effect.gen(function* () {
-      const applications = yield* ApplicationToolRegistry.Service
+      const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
       const contexts: Tool.Context[] = []
 
@@ -71,7 +70,7 @@ describe("ApplicationToolRegistry", () => {
 
   it.effect("removes an application tool when its attachment scope closes", () =>
     Effect.gen(function* () {
-      const applications = yield* ApplicationToolRegistry.Service
+      const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
 
@@ -83,35 +82,27 @@ describe("ApplicationToolRegistry", () => {
     }),
   )
 
-  it.effect("pins one attachment generation through an in-flight tool snapshot", () =>
+  it.effect("removes a tool before settling a call produced from an earlier definition", () =>
     Effect.gen(function* () {
-      const applications = yield* ApplicationToolRegistry.Service
+      const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
-      const firstContexts: Tool.Context[] = []
-      const secondContexts: Tool.Context[] = []
       const attachmentScope = yield* Scope.make()
-      const snapshotScope = yield* Scope.make()
-      yield* applications.attach({ contextual: contextual(firstContexts) }).pipe(Scope.provide(attachmentScope))
-      const snapshot = yield* registry.snapshot().pipe(Scope.provide(snapshotScope))
+      yield* applications.attach({ contextual: contextual([]) }).pipe(Scope.provide(attachmentScope))
+      expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["contextual"])
 
-      const closing = yield* Scope.close(attachmentScope, Exit.void).pipe(Effect.forkChild)
-      yield* Effect.yieldNow
-      yield* applications.attach({ contextual: contextual(secondContexts) })
-      yield* snapshot.settle({
-        sessionID,
-        call: { type: "tool-call", id: "call-first", name: "contextual", input: { query: "first" } },
-      })
-
-      expect(firstContexts).toEqual([{ sessionID, id: "call-first", name: "contextual" }])
-      expect(secondContexts).toEqual([])
-      yield* Scope.close(snapshotScope, Exit.void)
-      yield* Fiber.join(closing)
+      yield* Scope.close(attachmentScope, Exit.void)
+      expect(
+        yield* registry.settle({
+          sessionID,
+          call: { type: "tool-call", id: "call-removed", name: "contextual", input: { query: "hello" } },
+        }),
+      ).toEqual({ result: { type: "error", value: "Unknown tool: contextual" } })
     }),
   )
 
   it.effect("does not leak an attachment into an already closed scope", () =>
     Effect.gen(function* () {
-      const applications = yield* ApplicationToolRegistry.Service
+      const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
       yield* Scope.close(scope, Exit.void)
@@ -122,28 +113,61 @@ describe("ApplicationToolRegistry", () => {
     }),
   )
 
-  it.effect("rejects overlapping application tool names atomically", () =>
+  it.effect("captures the attached record before later State rebuilds", () =>
     Effect.gen(function* () {
-      const applications = yield* ApplicationToolRegistry.Service
-      yield* applications.attach({ existing: contextual([]) })
+      const applications = yield* ApplicationTools.Service
+      const registry = yield* ToolRegistry.Service
+      const attached = { stable: contextual([]) }
+      yield* applications.attach(attached)
+      Object.assign(attached, { late: contextual([]) })
 
-      const failure = yield* applications
-        .attach({ available: contextual([]), existing: contextual([]) })
-        .pipe(Effect.flip)
+      yield* Effect.scoped(applications.attach({ temporary: contextual([]) }))
 
-      expect(failure.name).toBe("existing")
-      expect(Array.from((yield* Effect.scoped(applications.snapshot())).keys())).toEqual(["existing"])
+      expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["stable"])
+    }),
+  )
+
+  it.effect("settles with the current same-name application tool and restores earlier attachments", () =>
+    Effect.gen(function* () {
+      const applications = yield* ApplicationTools.Service
+      const registry = yield* ToolRegistry.Service
+      const firstContexts: Tool.Context[] = []
+      const secondContexts: Tool.Context[] = []
+      const scope = yield* Scope.make()
+      yield* applications.attach({ contextual: contextual(firstContexts) })
+      expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["contextual"])
+      yield* applications.attach({ contextual: contextual(secondContexts) }).pipe(Scope.provide(scope))
+
+      yield* registry.settle({
+        sessionID,
+        call: { type: "tool-call", id: "call-second", name: "contextual", input: { query: "second" } },
+      })
+      yield* Scope.close(scope, Exit.void)
+      yield* registry.settle({
+        sessionID,
+        call: { type: "tool-call", id: "call-first", name: "contextual", input: { query: "first" } },
+      })
+
+      expect(secondContexts).toEqual([{ sessionID, id: "call-second", name: "contextual" }])
+      expect(firstContexts).toEqual([{ sessionID, id: "call-first", name: "contextual" }])
     }),
   )
 
   it.effect("keeps the Location tool when an application tool has the same name", () =>
     Effect.gen(function* () {
-      const applications = yield* ApplicationToolRegistry.Service
+      const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
       const transform = yield* registry.transform()
       const locationContexts: Tool.Context[] = []
       const applicationContexts: Tool.Context[] = []
-      yield* transform((editor) => editor.set("shared", ApplicationTool.entry(contextual(locationContexts))))
+      const location = contextual(locationContexts)
+      yield* transform((editor) =>
+        editor.set("shared", {
+          tool: location.definition,
+          execute: ({ parameters, sessionID, call }) =>
+            location.execute(parameters, { sessionID, id: call.id, name: call.name }),
+        }),
+      )
       yield* applications.attach({ shared: contextual(applicationContexts) })
 
       expect((yield* registry.definitions()).map((definition) => definition.name)).toEqual(["shared"])

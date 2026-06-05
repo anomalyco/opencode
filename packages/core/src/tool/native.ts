@@ -1,12 +1,8 @@
-export * as ApplicationTool from "./application"
+export * as NativeTool from "./native"
 
-import { Tool as LLMTool, ToolFailure } from "@opencode-ai/llm"
+import { Tool, ToolFailure } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import type { SessionSchema } from "../session/schema"
-import type { ToolRegistry } from "./registry"
-
-const TypeId: unique symbol = Symbol.for("@opencode/ApplicationTool")
-const entries = new WeakMap<object, ToolRegistry.Entry<any, any>>()
 
 export interface Context {
   readonly sessionID: SessionSchema.ID
@@ -16,14 +12,15 @@ export interface Context {
 
 export type SchemaType<A> = Schema.Codec<A, any, never, never>
 
-export interface Tool<Parameters extends SchemaType<any>, Success extends SchemaType<any>> {
-  readonly [TypeId]: {
-    readonly parameters: Parameters
-    readonly success: Success
-  }
+export interface Executable<Parameters extends SchemaType<any>, Success extends SchemaType<any>> {
+  readonly definition: Tool.Tool<Parameters, Success>
+  readonly execute: (
+    parameters: Schema.Schema.Type<Parameters>,
+    context: Context,
+  ) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
 }
 
-export type Any = Tool<any, any>
+export type Any = Executable<any, any>
 
 export const Failure = ToolFailure
 export type Failure = ToolFailure
@@ -50,18 +47,16 @@ export function make<Parameters extends SchemaType<any>, Success extends SchemaT
     readonly parameters: Schema.Schema.Type<Parameters>
     readonly output: Success["Encoded"]
   }) => ReadonlyArray<Content>
-}): Tool<Parameters, Success> {
-  const tool: Tool<Parameters, Success> = {
-    [TypeId]: { parameters: config.parameters, success: config.success },
-  }
-  entries.set(tool, {
-    tool: LLMTool.make({
+}): Executable<Parameters, Success> {
+  const toModelOutput = config.toModelOutput
+  return {
+    definition: Tool.make({
       description: config.description,
       parameters: config.parameters,
       success: config.success,
-      toModelOutput: config.toModelOutput
+      toModelOutput: toModelOutput
         ? (input) =>
-            config.toModelOutput!(input).map((content) =>
+            toModelOutput(input).map((content) =>
               content.type === "text"
                 ? content
                 : {
@@ -73,10 +68,6 @@ export function make<Parameters extends SchemaType<any>, Success extends SchemaT
             )
         : undefined,
     }),
-    execute: ({ parameters, sessionID, call }) =>
-      config.execute(parameters, { sessionID, id: call.id, name: call.name }),
-  })
-  return tool
+    execute: config.execute,
+  }
 }
-
-export const entry = (tool: Any): ToolRegistry.Entry<any, any> => entries.get(tool)!

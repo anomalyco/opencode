@@ -28,7 +28,7 @@ import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
 import { BuiltInTools } from "./tool/builtins"
 import { ToolRegistry } from "./tool/registry"
-import { ApplicationToolRegistry } from "./tool/application-registry"
+import { ApplicationTools } from "./tool/application-tools"
 import { ToolOutputStore } from "./tool-output-store"
 import { AppProcess } from "./process"
 import { Ripgrep } from "./ripgrep"
@@ -109,6 +109,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
-    ApplicationToolRegistry.layer,
+    ApplicationTools.layer,
   ],
 }) {}
