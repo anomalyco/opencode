@@ -472,52 +472,54 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
-                <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
-                  <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
-                    <For each={tabsStore}>
-                      {(tab, i) => (
-                        <>
-                          <Show when={decode64(tab.dirBase64)}>
-                            {(directory) => (
-                              <>
-                                {i() !== 0 && (
-                                  <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                                )}
-                                <TabNavItem
-                                  href={tabHref(tab)}
-                                  directory={directory()}
-                                  sessionId={tab.sessionId}
-                                  onClose={() => tabsStoreActions.removeTab(i())}
-                                  active={currentTab() === tab}
-                                />
-                              </>
-                            )}
-                          </Show>
-                        </>
-                      )}
-                    </For>
-                  </div>
-                  <Show
-                    when={creating() && params.dir}
-                    fallback={
-                      <IconButtonV2
-                        type="button"
-                        variant="ghost-muted"
-                        size="large"
-                        class="shrink-0"
-                        icon={<IconV2 name="plus" />}
-                        as="a"
-                        href={newSessionHref()}
-                        aria-label={language.t("command.session.new")}
+                <div class="min-w-0 flex-1 flex flex-row items-center gap-1.5 overflow-hidden">
+                  <div class="hidden min-w-0 flex-row items-center gap-1.5 overflow-hidden xl:flex">
+                    <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
+                      <For each={tabsStore}>
+                        {(tab, i) => (
+                          <>
+                            <Show when={decode64(tab.dirBase64)}>
+                              {(directory) => (
+                                <>
+                                  {i() !== 0 && (
+                                    <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                                  )}
+                                  <TabNavItem
+                                    href={tabHref(tab)}
+                                    directory={directory()}
+                                    sessionId={tab.sessionId}
+                                    onClose={() => tabsStoreActions.removeTab(i())}
+                                    active={currentTab() === tab}
+                                  />
+                                </>
+                              )}
+                            </Show>
+                          </>
+                        )}
+                      </For>
+                    </div>
+                    <Show
+                      when={creating() && params.dir}
+                      fallback={
+                        <IconButtonV2
+                          type="button"
+                          variant="ghost-muted"
+                          size="large"
+                          class="shrink-0"
+                          icon={<IconV2 name="plus" />}
+                          as="a"
+                          href={newSessionHref()}
+                          aria-label={language.t("command.session.new")}
+                        />
+                      }
+                    >
+                      <NewSessionTabItem
+                        href={`/${params.dir}/session`}
+                        title={language.t("command.session.new")}
+                        onClose={() => navigate(tabsStore.at(-1) ? tabHref(tabsStore.at(-1)!) : "/")}
                       />
-                    }
-                  >
-                    <NewSessionTabItem
-                      href={`/${params.dir}/session`}
-                      title={language.t("command.session.new")}
-                      onClose={() => navigate(tabsStore.at(-1) ? tabHref(tabsStore.at(-1)!) : "/")}
-                    />
-                  </Show>
+                    </Show>
+                  </div>
                   <div class="min-w-0 flex-1" />
                 </div>
                 <TitlebarV2Right state={v2RightState()} />
