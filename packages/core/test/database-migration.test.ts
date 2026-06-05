@@ -10,6 +10,7 @@ import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
+import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -62,18 +63,96 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_input'`),
         ).toEqual({ name: "session_input" })
-        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 29 })
+        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 30 })
         expect(
           yield* db.all(
-            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
+            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_input_session_admitted_seq_idx', 'session_input_session_promoted_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
           ),
         ).toEqual([
           { name: "event_aggregate_seq_idx" },
           { name: "event_aggregate_type_seq_idx" },
+          { name: "session_input_session_admitted_seq_idx" },
           { name: "session_input_session_pending_delivery_seq_idx" },
+          { name: "session_input_session_promoted_seq_idx" },
           { name: "session_message_session_seq_idx" },
           { name: "session_message_session_time_created_id_idx" },
           { name: "session_message_session_type_seq_idx" },
+        ])
+      }),
+    )
+  })
+
+  test("resets beta history and rebuilds event-sourced Session input storage", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, workspace_id text)`)
+        yield* db.run(sql`CREATE TABLE workspace (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE message (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE part (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE INDEX event_aggregate_seq_idx ON event (aggregate_id, seq)`)
+        yield* db.run(sql`CREATE INDEX event_aggregate_type_seq_idx ON event (aggregate_id, type, seq)`)
+        yield* db.run(
+          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE INDEX session_message_session_seq_idx ON session_message (session_id, seq)`)
+        yield* db.run(
+          sql`CREATE TABLE session_input (seq integer PRIMARY KEY AUTOINCREMENT, id text NOT NULL UNIQUE, session_id text NOT NULL, prompt text NOT NULL, delivery text NOT NULL, promoted_seq integer, time_created integer NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE INDEX session_input_session_pending_delivery_seq_idx ON session_input (session_id, promoted_seq, delivery, seq)`,
+        )
+        yield* db.run(sql`INSERT INTO session (id, workspace_id) VALUES ('session', 'wrk_old')`)
+        yield* db.run(sql`INSERT INTO workspace (id) VALUES ('wrk_old')`)
+        yield* db.run(sql`INSERT INTO message (id) VALUES ('message')`)
+        yield* db.run(sql`INSERT INTO part (id) VALUES ('part')`)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 0)`)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_old', 'session', 0, 'old.1', '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('msg_old', 'session', 'user', 0, 1, 1, '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, prompt, delivery, time_created) VALUES ('msg_pending', 'session', '{}', 'steer', 1)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [eventSourcedSessionInputMigration])
+
+        expect(yield* db.all(sql`SELECT id, workspace_id FROM session`)).toEqual([
+          { id: "session", workspace_id: null },
+        ])
+        expect(yield* db.all(sql`SELECT id FROM workspace`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM message`)).toEqual([{ id: "message" }])
+        expect(yield* db.all(sql`SELECT id FROM part`)).toEqual([{ id: "part" }])
+        expect(yield* db.all(sql`SELECT id FROM event`)).toEqual([])
+        expect(yield* db.all(sql`SELECT aggregate_id FROM event_sequence`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM session_message`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM session_input`)).toEqual([])
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA table_info(session_input)`)).map((column) => column.name),
+        ).toEqual(["id", "session_id", "prompt", "delivery", "admitted_seq", "promoted_seq", "time_created"])
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(session_message)`)).find(
+            (index) => index.name === "session_message_session_seq_idx",
+          ),
+        ).toMatchObject({ unique: 1 })
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(event)`)).find(
+            (index) => index.name === "event_aggregate_seq_idx",
+          ),
+        ).toMatchObject({ unique: 1 })
+        expect(
+          (yield* db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(session_input)`)).filter((index) =>
+            ["session_input_session_admitted_seq_idx", "session_input_session_promoted_seq_idx"].includes(index.name),
+          ),
+        ).toEqual([
+          expect.objectContaining({ name: "session_input_session_promoted_seq_idx", unique: 1 }),
+          expect.objectContaining({ name: "session_input_session_admitted_seq_idx", unique: 1 }),
         ])
       }),
     )
