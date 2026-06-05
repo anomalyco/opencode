@@ -1,7 +1,8 @@
 export * as Session from "./session"
 
-import { Effect, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { EventV2 } from "../event"
+import { ModelV2 } from "../model"
 import { SessionV2 } from "../session"
 import { MessageDecodeError } from "../session/error"
 import { SessionEvent } from "../session/event"
@@ -42,6 +43,23 @@ export type NotFoundError = SessionV2.NotFoundError
 
 export const PromptConflictError = SessionV2.PromptConflictError
 export type PromptConflictError = SessionV2.PromptConflictError
+
+export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavailableError>()(
+  "Session.ModelUnavailableError",
+  {
+    providerID: Model.Ref.fields.providerID,
+    modelID: Model.Ref.fields.id,
+  },
+) {}
+
+export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
+  "Session.VariantUnavailableError",
+  {
+    providerID: Model.Ref.fields.providerID,
+    modelID: Model.Ref.fields.id,
+    variant: ModelV2.VariantID,
+  },
+) {}
 
 export { MessageDecodeError }
 
@@ -89,7 +107,9 @@ export interface Interface {
   readonly get: (sessionID: ID) => Effect.Effect<Info, NotFoundError>
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly prompt: (input: PromptInput) => Effect.Effect<Admission, NotFoundError | PromptConflictError>
-  readonly switchModel: (input: SwitchModelInput) => Effect.Effect<void, NotFoundError>
+  readonly switchModel: (
+    input: SwitchModelInput,
+  ) => Effect.Effect<void, NotFoundError | ModelUnavailableError | VariantUnavailableError>
   /** Interrupt the active V2 execution chain for one Session on this process. Interrupting an idle or missing Session is a no-op. */
   readonly interrupt: (sessionID: ID) => Effect.Effect<void>
   readonly messages: (input: MessagesInput) => Effect.Effect<Message[], NotFoundError | MessageDecodeError>
