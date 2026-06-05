@@ -114,7 +114,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const focusInput = actions.focusInput
 
   const sessionCommand = withCategory(language.t("command.category.session"))
-  const projectCommand = withCategory(language.t("command.category.project"))
   const fileCommand = withCategory(language.t("command.category.file"))
   const contextCommand = withCategory(language.t("command.category.context"))
   const viewCommand = withCategory(language.t("command.category.view"))
@@ -347,25 +346,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     })
   }
 
-  const reloadConfig = async () => {
-    await sdk.client.project
-      .reload()
-      .then(() =>
-        showToast({
-          title: language.t("toast.project.reloadConfig.success.title"),
-          description: language.t("toast.project.reloadConfig.success.description"),
-          variant: "success",
-        }),
-      )
-      .catch(() =>
-        showToast({
-          title: language.t("toast.project.reloadConfig.failed.title"),
-          description: language.t("toast.project.reloadConfig.failed.description"),
-          variant: "error",
-        }),
-      )
-  }
-
   const fork = () => {
     void import("@/components/dialog-fork").then((x) => {
       dialog.show(() => <x.DialogFork />)
@@ -438,33 +418,26 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
-  const projectCmds = () => [
-    projectCommand({
-      id: "project.reloadConfig",
-      title: language.t("command.project.reloadConfig"),
-      description: language.t("command.project.reloadConfig.description"),
-      slash: "reload-config",
-      onSelect: reloadConfig,
-    }),
-  ]
-
-  const fileCmds = () => [
-    fileCommand({
-      id: "file.open",
-      title: language.t("command.file.open"),
-      description: language.t("palette.search.placeholder"),
-      keybind: "mod+k,mod+p",
-      slash: "open",
-      onSelect: openFile,
-    }),
-    fileCommand({
-      id: "tab.close",
-      title: language.t("command.tab.close"),
-      keybind: "mod+w",
-      disabled: !closableTab(),
-      onSelect: closeTab,
-    }),
-  ]
+  const fileCmds = () => {
+    const tab = closableTab()
+    return [
+      fileCommand({
+        id: "file.open",
+        title: language.t("command.file.open"),
+        description: language.t("palette.search.placeholder"),
+        keybind: "mod+k,mod+p",
+        slash: "open",
+        onSelect: openFile,
+      }),
+      tab &&
+        fileCommand({
+          id: "tab.close",
+          title: language.t("command.tab.close"),
+          keybind: "mod+w",
+          onSelect: closeTab,
+        }),
+    ].filter((v) => !!v)
+  }
 
   const contextCmds = () => [
     contextCommand({
@@ -599,7 +572,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   command.register("session", () => [
     ...sessionCmds(),
-    ...projectCmds(),
     ...shareCmds(),
     ...fileCmds(),
     ...contextCmds(),

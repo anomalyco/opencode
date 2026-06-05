@@ -13,6 +13,12 @@ Versioning note: automated upstream mirrors are published as
 
 - No unreleased personal changes.
 
+## v1.15.13-c0dn.8 - 2026-06-05
+
+### Fixed
+- Web (v2 UI): restored titlebar session tabs by porting upstream tab handling
+  and fixing project/new-session tab behavior.
+
 ## v1.15.13-c0dn.6 - 2026-06-04
 
 ### Added
