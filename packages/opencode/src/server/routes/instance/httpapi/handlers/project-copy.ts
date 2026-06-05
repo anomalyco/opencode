@@ -81,7 +81,7 @@ export const projectCopyHandlers = HttpApiBuilder.group(InstanceHttpApi, "projec
           messages: [
             {
               role: "user",
-              content: `Generate a short filesystem-safe name for a project working copy based on this context:\n${text}`,
+              content: `Generate a short 3-4 word name that describes this task:\n${text}`,
             },
           ],
         })
@@ -90,7 +90,8 @@ export const projectCopyHandlers = HttpApiBuilder.group(InstanceHttpApi, "projec
           Stream.map((event) => event.text),
           Stream.mkString,
         )
-      return slugify(result) || Slug.create()
+      const output = result.trim()
+      return output ? slugify(output.split(/\s+/).slice(0, 4).join(" ")) : Slug.create()
     })
 
     const create = Effect.fn("ProjectCopyHttpApi.create")(function* (ctx: {
