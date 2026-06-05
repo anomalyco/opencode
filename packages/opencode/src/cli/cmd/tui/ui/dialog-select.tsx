@@ -22,6 +22,7 @@ import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
 
 export interface DialogSelectProps<T> {
   title: string
+  titleView?: JSX.Element
   placeholder?: string
   footer?: JSX.Element
   options: DialogSelectOption<T>[]
@@ -32,11 +33,13 @@ export interface DialogSelectProps<T> {
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
   renderFilter?: boolean
+  locked?: boolean
   actions?: {
     command: string
     title: string
     side?: "left" | "right"
-    disabled?: boolean
+    hidden?: boolean
+    disabled?: boolean | ((option: DialogSelectOption<T> | undefined) => boolean)
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   footerHints?: {
@@ -108,17 +111,18 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let input: InputRenderable
 
   const actions = createMemo(() => props.actions ?? [])
+  const shownActions = createMemo(() => actions().filter((item) => !item.hidden))
   const actionBindings = useKeymapSelector((keymap) =>
     keymap.getCommandBindings({
       visibility: "registered",
-      commands: actions().map((item) => item.command),
+      commands: shownActions().map((item) => item.command),
     }),
   )
 
   const actionLabels = createMemo(() => {
     const labels = new Map<string, string>()
 
-    for (const action of actions()) {
+    for (const action of shownActions()) {
       const label = formatKeyBindings(actionBindings().get(action.command), tuiConfig)
       if (label) labels.set(action.command, label)
     }
@@ -126,12 +130,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return labels
   })
   const visibleActions = createMemo(() => [
-    ...actions()
+    ...shownActions()
       .map((item) => ({ ...item, label: actionLabels().get(item.command) ?? "" }))
-      .filter((item) => !item.disabled && item.label),
+      .filter((item) => item.label),
     ...(props.footerHints ?? []),
   ])
-  const actionItems = createMemo(() => visibleActions().filter(isActionItem))
+  const actionItems = createMemo(() => visibleActions().filter(isActionItem).filter((item) => !isActionDisabled(item)))
 
   createEffect(() => {
     const index = focusedAction()
@@ -217,6 +221,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   )
 
   function move(direction: number) {
+    if (props.locked) return
     if (flat().length === 0) return
     let next = store.selected + direction
     if (next < 0) next = flat().length - 1
@@ -252,6 +257,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function submit() {
+    if (props.locked) return
     setStore("input", "keyboard")
     const index = focusedAction()
     if (index !== undefined) {
@@ -265,6 +271,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function moveAction(direction: 1 | -1) {
+    if (props.locked) return
     const total = actionItems().length
     if (total === 0) return
     setFocusedAction((index) => {
@@ -275,7 +282,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   useBindings(() => {
-    const enabledActions = actions().filter((item) => !item.disabled)
+    const visible = shownActions()
 
     return {
       commands: [
@@ -320,6 +327,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "First item",
           category: "Dialog",
           run() {
+            if (props.locked) return
             setStore("input", "keyboard")
             moveTo(0)
           },
@@ -329,6 +337,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Last item",
           category: "Dialog",
           run() {
+            if (props.locked) return
             setStore("input", "keyboard")
             moveTo(flat().length - 1)
           },
@@ -339,11 +348,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           category: "Dialog",
           run: submit,
         },
-        ...enabledActions.map((item) => ({
+        ...visible.map((item) => ({
           name: item.command,
           title: item.title,
           category: "Dialog",
           run() {
+            if (props.locked) return
+            if (isActionDisabled(item)) return
             setStore("input", "keyboard")
             const option = selected()
             if (!option) return
@@ -361,8 +372,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           "dialog.select.end",
           "dialog.select.submit",
         ]),
-        ...enabledActions.flatMap((item) => tuiConfig.keybinds.get(item.command)),
-        ...(enabledActions.length
+        ...visible.flatMap((item) => tuiConfig.keybinds.get(item.command)),
+        ...(visible.length
           ? [
               {
                 key: "tab",
@@ -380,7 +391,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           : []),
         ...(props.bindings ?? []).filter((binding) => {
           if (typeof binding.cmd !== "string") return true
-          return enabledActions.some((item) => item.command === binding.cmd)
+          return visible.some((item) => item.command === binding.cmd)
         }),
       ],
     }
@@ -408,7 +419,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 
   function triggerAction(item: VisibleAction | undefined) {
-    if (!item || !isActionItem(item)) return
+    if (props.locked) return
+    if (!item || !isActionItem(item) || isActionDisabled(item)) return
     setStore("input", "keyboard")
     const option = selected()
     if (!option) return
@@ -419,7 +431,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return "onTrigger" in item
   }
 
+  function isActionDisabled(item: Action) {
+    return typeof item.disabled === "function" ? item.disabled(selected()) : item.disabled
+  }
+
   function isActionFocused(item: VisibleAction) {
+    if (props.locked) return false
     if (!isActionItem(item)) return false
     return actionItems().indexOf(item) === focusedAction()
   }
@@ -434,19 +451,24 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <span style={{ fg: theme.textMuted }}>{action.item.label}</span>
         </text>
       )
-    const active = createMemo(() => isActionFocused(action.item))
+    const item = action.item
+    const active = createMemo(() => isActionFocused(item))
+    const disabled = createMemo(() => isActionDisabled(item))
     const fg = selectedForeground(theme)
     return (
       <box
         flexDirection="row"
         paddingRight={1}
         backgroundColor={active() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-        onMouseUp={() => triggerAction(action.item)}
+        onMouseUp={() => triggerAction(item)}
       >
-        <text fg={active() ? fg : theme.text} attributes={active() ? TextAttributes.BOLD : undefined}>
-          {action.item.title}
+        <text
+          fg={disabled() ? theme.textMuted : active() ? fg : theme.text}
+          attributes={active() ? TextAttributes.BOLD : undefined}
+        >
+          {item.title}
         </text>
-        <text fg={active() ? fg : theme.textMuted}> {action.item.label}</text>
+        <text fg={disabled() ? theme.textMuted : active() ? fg : theme.textMuted}> {item.label}</text>
       </box>
     )
   }
@@ -455,9 +477,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     <box gap={1} paddingBottom={1} flexGrow={1}>
       <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-            {props.title}
-          </text>
+          {props.titleView ?? (
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              {props.title}
+            </text>
+          )}
           <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
             esc
           </text>
@@ -466,6 +490,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <box paddingTop={1}>
             <input
               onInput={(e) => {
+                if (props.locked) return
                 batch(() => {
                   setStore("filter", e)
                   props.onFilter?.(e)
@@ -525,7 +550,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   </Show>
                   <For each={options}>
                     {(option) => {
-                      const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
+                       const active = createMemo(() => !props.locked && isDeepEqual(option.value, selected()?.value))
                       const current = createMemo(() => isDeepEqual(option.value, props.current))
                       return (
                         <box
@@ -533,20 +558,24 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           flexDirection="column"
                           position="relative"
                           onMouseMove={() => {
+                            if (props.locked) return
                             setStore("input", "mouse")
                             setFocusedAction(undefined)
                           }}
                           onMouseUp={() => {
+                            if (props.locked) return
                             option.onSelect?.(dialog)
                             props.onSelect?.(option)
                           }}
                           onMouseOver={() => {
+                            if (props.locked) return
                             if (store.input !== "mouse") return
                             const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
                             if (index === -1) return
                             moveTo(index)
                           }}
                           onMouseDown={() => {
+                            if (props.locked) return
                             const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
                             if (index === -1) return
                             moveTo(index)

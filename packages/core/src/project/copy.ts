@@ -34,6 +34,7 @@ export type CreateInput = typeof CreateInput.Type
 export const RemoveInput = Schema.Struct({
   projectID: Project.ID,
   directory: AbsolutePath,
+  force: Schema.Boolean,
 }).annotate({ identifier: "ProjectCopy.RemoveInput" })
 export type RemoveInput = typeof RemoveInput.Type
 
@@ -82,7 +83,10 @@ export interface Strategy {
     sourceDirectory: AbsolutePath
     directory: AbsolutePath
   }) => Effect.Effect<Copy, Git.WorktreeError | DirectoryUnavailableError>
-  readonly remove: (directory: AbsolutePath) => Effect.Effect<void, Git.WorktreeError | DirectoryUnavailableError>
+  readonly remove: (input: {
+    directory: AbsolutePath
+    force: boolean
+  }) => Effect.Effect<void, Git.WorktreeError | DirectoryUnavailableError>
   readonly list: (directory: AbsolutePath) => Effect.Effect<Copy[], Git.WorktreeError | DirectoryUnavailableError>
   readonly detect: (directory: AbsolutePath) => Effect.Effect<boolean>
 }
@@ -209,7 +213,7 @@ export const layer = Layer.effect(
       const copyDirectory = yield* canonical(input.directory)
       const id = yield* detect({ directory: copyDirectory })
       if (!id) return yield* new StrategyNotFoundError({ directory: copyDirectory })
-      yield* strategy(id).remove(copyDirectory)
+      yield* strategy(id).remove({ directory: copyDirectory, force: input.force })
       yield* changed(input.projectID, yield* removeStored(input.projectID, copyDirectory))
     })
 

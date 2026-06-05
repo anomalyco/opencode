@@ -57,7 +57,14 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       <DialogMoveSession
         projectID={projectID}
         current={
-          homeDestination?.destination() ?? (session ? { type: "directory", directory: session.directory } : undefined)
+          homeDestination?.destination() ??
+          (session
+            ? {
+                type: "directory",
+                directory: session.directory,
+                subdirectory: !!session.path,
+              }
+            : undefined)
         }
         onSelect={(selection) => {
           const sessionID = input.sessionID()
