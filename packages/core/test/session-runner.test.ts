@@ -1566,7 +1566,6 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      const coordinator = yield* SessionRunCoordinator.Service
       const { db } = yield* Database.Service
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt current work" }), resume: false })
 
@@ -1593,10 +1592,10 @@ describe("SessionRunnerLLM", () => {
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
       expect(requests).toHaveLength(1)
       expect(yield* SessionInput.hasPending(db, sessionID, "queue")).toBe(true)
-      yield* coordinator.wake(sessionID)
+      const resumed = yield* session.resume(sessionID).pipe(Effect.forkChild)
       while (requests.length < 2) yield* Effect.yieldNow
       yield* Deferred.succeed(streamGate, undefined)
-      yield* coordinator.awaitIdle(sessionID)
+      yield* Fiber.join(resumed)
       streamGate = undefined
       streamStarted = undefined
 

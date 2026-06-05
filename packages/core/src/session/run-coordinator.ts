@@ -19,26 +19,29 @@ export type Mode = "run" | "wake"
  * `wake` reports that durable work may now be available. It starts a chain while idle or
  * requests one coalesced follow-up while draining. Repeated wakes collapse together.
  *
- * `interrupt` stops the current ownership chain. Advisory wakes received while stopping are
- * suppressed; explicit runs wait for interruption cleanup before starting a fresh chain.
+ * `interrupt` stops the current ownership chain. Advisory wakes from before the interrupt
+ * boundary are suppressed; advisory wakes after the boundary run after cleanup.
  */
 export interface Coordinator<Key, A, E> {
   /** Starts or joins one explicit drain generation. */
   readonly run: (key: Key) => Effect.Effect<A, E>
   /** Coalesces one wake-up after durable work is recorded. */
-  readonly wake: (key: Key) => Effect.Effect<void>
+  readonly wake: (key: Key, seq?: number) => Effect.Effect<void>
   /** Waits until the current ownership chain settles. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void, E>
   /** Interrupts the active ownership chain without automatically draining pending wakes. */
-  readonly interrupt: (key: Key) => Effect.Effect<void>
+  readonly interrupt: (key: Key, seq?: number) => Effect.Effect<void>
 }
 
 type Entry<A, E> = {
   readonly done: Deferred.Deferred<A, E>
   readonly settled: Deferred.Deferred<Exit.Exit<A, E>>
   mode: Mode
-  rerun?: Mode
-  explicit?: Deferred.Deferred<A, E>
+  modeSeq?: number
+  nextMode?: Mode
+  nextSeq?: number
+  explicitWaiter?: Deferred.Deferred<A, E>
+  interruptSeq?: number
   owner?: Fiber.Fiber<void, never>
   stopping: boolean
 }
@@ -52,6 +55,7 @@ export const make = <Key, A, E>(options: {
 }): Effect.Effect<Coordinator<Key, A, E>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const active = new Map<Key, Entry<A, E>>()
+    const interruptSeq = new Map<Key, number>()
     const report = yield* FiberSet.makeRuntime<never, void, never>()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
     const shutdown = Deferred.makeUnsafe<void>()
@@ -61,14 +65,16 @@ export const make = <Key, A, E>(options: {
         closed = true
         Deferred.doneUnsafe(shutdown, Effect.void)
         active.clear()
+        interruptSeq.clear()
       }),
     )
 
-    const makeEntry = (mode: Mode, explicit?: Deferred.Deferred<A, E>): Entry<A, E> => ({
+    const makeEntry = (mode: Mode, explicitWaiter?: Deferred.Deferred<A, E>, modeSeq?: number): Entry<A, E> => ({
       done: Deferred.makeUnsafe<A, E>(),
       settled: Deferred.makeUnsafe<Exit.Exit<A, E>>(),
       mode,
-      explicit,
+      modeSeq,
+      explicitWaiter,
       stopping: false,
     })
 
@@ -94,13 +100,13 @@ export const make = <Key, A, E>(options: {
         Deferred.doneUnsafe(entry.settled, Effect.succeed(exit))
         return
       }
-      if (mode === "run" && entry.explicit !== undefined) {
-        Deferred.doneUnsafe(entry.explicit, exit)
-        entry.explicit = undefined
+      if (mode === "run" && entry.explicitWaiter !== undefined) {
+        Deferred.doneUnsafe(entry.explicitWaiter, exit)
+        entry.explicitWaiter = undefined
       }
-      if (entry.stopping && mode === "wake" && entry.explicit !== undefined) {
-        Deferred.doneUnsafe(entry.explicit, exit)
-        entry.explicit = undefined
+      if (entry.stopping && mode === "wake" && entry.explicitWaiter !== undefined) {
+        Deferred.doneUnsafe(entry.explicitWaiter, exit)
+        entry.explicitWaiter = undefined
       }
       if (active.get(key) !== entry) {
         Deferred.doneUnsafe(entry.done, exit)
@@ -108,10 +114,12 @@ export const make = <Key, A, E>(options: {
         return
       }
       if (exit._tag === "Success" && !entry.stopping) {
-        if (entry.rerun !== undefined) {
-          const mode = entry.rerun
-          entry.rerun = undefined
+        if (entry.nextMode !== undefined) {
+          const mode = entry.nextMode
+          entry.nextMode = undefined
           entry.mode = mode
+          entry.modeSeq = entry.nextSeq
+          entry.nextSeq = undefined
           start(key, entry, mode, true)
           return
         }
@@ -121,7 +129,8 @@ export const make = <Key, A, E>(options: {
         return
       }
 
-      const successor = !entry.stopping && entry.rerun !== undefined ? makeEntry(entry.rerun, entry.explicit) : undefined
+      const successor =
+        entry.nextMode !== undefined ? makeEntry(entry.nextMode, entry.explicitWaiter, entry.nextSeq) : undefined
       if (successor === undefined) active.delete(key)
       else active.set(key, successor)
       if (successor !== undefined) start(key, successor, successor.mode, true)
@@ -137,17 +146,19 @@ export const make = <Key, A, E>(options: {
       }
     }
 
-    const wake = (key: Key) =>
+    const wake = (key: Key, seq?: number) =>
       Effect.sync(() => {
         if (closed) return
+        if (!isAfterInterrupt(key, seq)) return
         const entry = active.get(key)
         if (entry !== undefined) {
-          if (entry.stopping) return
-          entry.rerun = strongest(entry.rerun, "wake")
+          if (!acceptsWake(entry, seq)) return
+          entry.nextMode = strongest(entry.nextMode, "wake")
+          entry.nextSeq = maxSeq(entry.nextSeq, seq)
           return
         }
 
-        const next = makeEntry("wake")
+        const next = makeEntry("wake", undefined, seq)
         active.set(key, next)
         start(key, next, "wake")
       })
@@ -168,14 +179,24 @@ export const make = <Key, A, E>(options: {
         if (firstFailure !== undefined) return yield* Effect.failCause(firstFailure)
       })
 
-    const interrupt = (key: Key): Effect.Effect<void> =>
+    const interrupt = (key: Key, seq?: number): Effect.Effect<void> =>
       Effect.suspend(() => {
         const entry = active.get(key)
+        const latest = interruptSeq.get(key)
+        if (seq !== undefined && latest !== undefined && seq <= latest)
+          return entry?.stopping && entry.owner !== undefined ? Fiber.interrupt(entry.owner) : Effect.void
+        if (seq !== undefined) interruptSeq.set(key, seq)
         if (entry?.owner === undefined) return Effect.void
-        if (!entry.stopping) {
-          entry.stopping = true
-          entry.rerun = undefined
+        if (seq !== undefined && entry.mode === "wake" && entry.modeSeq !== undefined && entry.modeSeq > seq)
+          return Effect.void
+        if (entry.stopping) {
+          entry.interruptSeq = maxSeq(entry.interruptSeq, seq)
+          suppressNextBefore(entry, seq)
+          return Fiber.interrupt(entry.owner)
         }
+        entry.stopping = true
+        entry.interruptSeq = seq
+        suppressNextBefore(entry, seq)
         return Fiber.interrupt(entry.owner)
       })
 
@@ -190,9 +211,10 @@ export const make = <Key, A, E>(options: {
             return restore(Deferred.await(entry.settled).pipe(Effect.andThen(run(key))))
           }
           if (entry.mode === "wake") {
-            entry.rerun = "run"
-            entry.explicit ??= Deferred.makeUnsafe<A, E>()
-            return restore(awaitRun(entry.explicit))
+            entry.nextMode = "run"
+            entry.nextSeq = undefined
+            entry.explicitWaiter ??= Deferred.makeUnsafe<A, E>()
+            return restore(awaitRun(entry.explicitWaiter))
           }
           return restore(awaitRun(entry.done))
         }
@@ -206,6 +228,27 @@ export const make = <Key, A, E>(options: {
 
     function awaitRun(done: Deferred.Deferred<A, E>): Effect.Effect<A, E> {
       return Effect.raceFirst(Deferred.await(done), Deferred.await(shutdown).pipe(Effect.andThen(Effect.interrupt)))
+    }
+
+    function acceptsWake(entry: Entry<A, E>, seq: number | undefined) {
+      return !entry.stopping || (entry.interruptSeq !== undefined && seq !== undefined && seq > entry.interruptSeq)
+    }
+
+    function isAfterInterrupt(key: Key, seq: number | undefined) {
+      const latest = interruptSeq.get(key)
+      return latest === undefined || (seq !== undefined && seq > latest)
+    }
+
+    function maxSeq(left: number | undefined, right: number | undefined) {
+      if (left === undefined) return right
+      if (right === undefined) return left
+      return Math.max(left, right)
+    }
+
+    function suppressNextBefore(entry: Entry<A, E>, seq: number | undefined) {
+      if (entry.nextMode === "wake" && seq !== undefined && entry.nextSeq !== undefined && entry.nextSeq > seq) return
+      entry.nextMode = undefined
+      entry.nextSeq = undefined
     }
   })
 

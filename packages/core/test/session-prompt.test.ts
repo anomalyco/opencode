@@ -24,7 +24,9 @@ const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provi
 const store = SessionStore.layer.pipe(Layer.provide(database))
 const executionCalls: SessionV2.ID[] = []
 const interruptCalls: SessionV2.ID[] = []
+const interruptSeqs: Array<number | undefined> = []
 const wakeCalls: SessionV2.ID[] = []
+const wakeSeqs: Array<number | undefined> = []
 const execution = Layer.succeed(
   SessionExecution.Service,
   SessionExecution.Service.of({
@@ -32,13 +34,15 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         executionCalls.push(sessionID)
       }),
-    interrupt: (sessionID) =>
+    interrupt: (sessionID, seq) =>
       Effect.sync(() => {
         interruptCalls.push(sessionID)
+        interruptSeqs.push(seq)
       }),
-    wake: (sessionID) =>
+    wake: (sessionID, seq) =>
       Effect.sync(() => {
         wakeCalls.push(sessionID)
+        wakeSeqs.push(seq)
       }),
   }),
 )
@@ -100,6 +104,15 @@ const eventCount = (type: string) =>
       ),
   )
 
+const interruptEvent = Database.Service.use(({ db }) =>
+  db
+    .select()
+    .from(EventTable)
+    .where(eq(EventTable.type, "session.next.interrupt.requested.1"))
+    .get()
+    .pipe(Effect.orDie),
+)
+
 describe("SessionV2.prompt", () => {
   it.effect("delegates execution continuation through SessionExecution", () =>
     Effect.gen(function* () {
@@ -118,9 +131,15 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       interruptCalls.length = 0
+      interruptSeqs.length = 0
 
       yield* session.interrupt(sessionID)
       expect(interruptCalls).toEqual([sessionID])
+      expect(interruptSeqs).toHaveLength(1)
+      expect(typeof interruptSeqs[0]).toBe("number")
+      expect(yield* eventCount("session.next.interrupt.requested.1")).toBe(1)
+      expect(yield* interruptEvent).toMatchObject({ aggregate_id: sessionID, seq: interruptSeqs[0] })
+      expect(yield* session.messages({ sessionID })).toEqual([])
     }),
   )
 
@@ -128,9 +147,11 @@ describe("SessionV2.prompt", () => {
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       interruptCalls.length = 0
+      interruptSeqs.length = 0
 
       yield* session.interrupt(SessionV2.ID.make("ses_missing"))
       expect(interruptCalls).toEqual([SessionV2.ID.make("ses_missing")])
+      expect(interruptSeqs).toEqual([undefined])
     }),
   )
 
@@ -539,11 +560,13 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       executionCalls.length = 0
       wakeCalls.length = 0
+      wakeSeqs.length = 0
 
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run by default" }) })
+      const admitted = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run by default" }) })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([sessionID])
+      expect(wakeSeqs).toEqual([admitted.admittedSeq])
     }),
   )
 
@@ -553,11 +576,13 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       executionCalls.length = 0
       wakeCalls.length = 0
+      wakeSeqs.length = 0
 
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run explicitly" }), resume: true })
+      const admitted = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run explicitly" }), resume: true })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([sessionID])
+      expect(wakeSeqs).toEqual([admitted.admittedSeq])
     }),
   )
 
@@ -567,11 +592,13 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       executionCalls.length = 0
       wakeCalls.length = 0
+      wakeSeqs.length = 0
 
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Do not run" }), resume: false })
 
       expect(executionCalls).toEqual([])
       expect(wakeCalls).toEqual([])
+      expect(wakeSeqs).toEqual([])
     }),
   )
 })

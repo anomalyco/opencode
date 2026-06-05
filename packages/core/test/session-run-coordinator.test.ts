@@ -51,6 +51,77 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("suppresses stale wakes after an idle interrupt boundary", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make({ drain: () => Effect.sync(() => runs++) })
+
+        yield* coordinator.interrupt("session", 2)
+        yield* coordinator.wake("session", 1)
+        yield* coordinator.awaitIdle("session")
+        expect(runs).toBe(0)
+
+        yield* coordinator.wake("session", 3)
+        yield* coordinator.awaitIdle("session")
+        expect(runs).toBe(1)
+      }),
+    ),
+  )
+
+  it.effect("does not interrupt a wake newer than the interrupt boundary", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const interrupted = yield* Deferred.make<void>()
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Deferred.await(gate)),
+              Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+            ),
+        })
+
+        yield* coordinator.wake("session", 3)
+        yield* Deferred.await(started)
+        yield* coordinator.interrupt("session", 2)
+        expect(yield* Deferred.isDone(interrupted)).toBeFalse()
+        yield* Deferred.succeed(gate, undefined)
+        yield* coordinator.awaitIdle("session")
+      }),
+    ),
+  )
+
+  it.effect("preserves a queued wake newer than the interrupt boundary", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () =>
+            Effect.sync(() => ++runs).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Effect.never))
+                  : Deferred.succeed(secondStarted, undefined),
+              ),
+            ),
+        })
+
+        yield* coordinator.wake("session", 1)
+        yield* Deferred.await(firstStarted)
+        yield* coordinator.wake("session", 3)
+        yield* coordinator.interrupt("session", 2)
+        yield* Deferred.await(secondStarted)
+        yield* coordinator.awaitIdle("session").pipe(Effect.exit)
+
+        expect(runs).toBe(2)
+      }),
+    ),
+  )
+
   it.effect("interrupts only the requested key", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -141,9 +212,9 @@ describe("SessionRunCoordinator", () => {
 
         yield* coordinator.wake("session")
         yield* Deferred.await(firstStarted)
-        const interrupt = yield* coordinator.interrupt("session").pipe(Effect.forkChild)
+        const interrupt = yield* coordinator.interrupt("session", 2).pipe(Effect.forkChild)
         yield* Effect.yieldNow
-        yield* coordinator.wake("session")
+        yield* coordinator.wake("session", 1)
         yield* Deferred.await(firstInterrupted)
         expect(runs).toBe(1)
         yield* Deferred.succeed(cleanupGate, undefined)
@@ -151,7 +222,93 @@ describe("SessionRunCoordinator", () => {
         yield* coordinator.awaitIdle("session")
 
         expect(runs).toBe(1)
+        yield* coordinator.wake("session", 3)
+        yield* Deferred.await(secondStarted)
+        yield* coordinator.awaitIdle("session")
+        expect(runs).toBe(2)
+      }),
+    ),
+  )
+
+  it.effect("remembers a wake received after the interrupt boundary during cleanup", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const firstInterrupted = yield* Deferred.make<void>()
+        const cleanupGate = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () =>
+            Effect.sync(() => ++runs).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(firstStarted, undefined).pipe(
+                      Effect.andThen(Effect.never),
+                      Effect.onInterrupt(() =>
+                        Deferred.succeed(firstInterrupted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
+                      ),
+                    )
+                  : Deferred.succeed(secondStarted, undefined),
+              ),
+            ),
+        })
+
         yield* coordinator.wake("session")
+        yield* Deferred.await(firstStarted)
+        const interrupt = yield* coordinator.interrupt("session", 2).pipe(Effect.forkChild)
+        yield* Deferred.await(firstInterrupted)
+        yield* coordinator.wake("session", 3)
+        const staleInterrupt = yield* coordinator.interrupt("session", 1).pipe(Effect.forkChild)
+        expect(runs).toBe(1)
+        yield* Deferred.succeed(cleanupGate, undefined)
+        yield* Fiber.join(interrupt)
+        yield* Fiber.join(staleInterrupt)
+        yield* Deferred.await(secondStarted)
+        yield* coordinator.awaitIdle("session")
+
+        expect(runs).toBe(2)
+      }),
+    ),
+  )
+
+  it.effect("moves the stop barrier forward for repeated interrupts", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const firstInterrupted = yield* Deferred.make<void>()
+        const cleanupGate = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () =>
+            Effect.sync(() => ++runs).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(firstStarted, undefined).pipe(
+                      Effect.andThen(Effect.never),
+                      Effect.onInterrupt(() =>
+                        Deferred.succeed(firstInterrupted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
+                      ),
+                    )
+                  : Deferred.succeed(secondStarted, undefined),
+              ),
+            ),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(firstStarted)
+        const firstInterrupt = yield* coordinator.interrupt("session", 2).pipe(Effect.forkChild)
+        yield* Deferred.await(firstInterrupted)
+        yield* coordinator.wake("session", 3)
+        const secondInterrupt = yield* coordinator.interrupt("session", 4).pipe(Effect.forkChild)
+        yield* Deferred.succeed(cleanupGate, undefined)
+        yield* Fiber.join(firstInterrupt)
+        yield* Fiber.join(secondInterrupt)
+        yield* coordinator.awaitIdle("session")
+        expect(runs).toBe(1)
+
+        yield* coordinator.wake("session", 5)
         yield* Deferred.await(secondStarted)
         yield* coordinator.awaitIdle("session")
         expect(runs).toBe(2)
