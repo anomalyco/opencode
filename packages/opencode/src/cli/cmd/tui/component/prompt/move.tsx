@@ -37,6 +37,11 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       )
       const directory = result.data?.directory
       if (!directory) throw new Error("No project copy directory returned")
+
+      // Call a location-based route to make sure it's bootstrapped
+      // before moving on
+      await sdk.client.path.get({ directory }, { throwOnError: true })
+
       setProgress("Creating session")
       return directory
     } catch (err) {
