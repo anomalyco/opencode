@@ -1,9 +1,10 @@
 import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
 import { Session } from "@/session/session"
-import { Database } from "@/storage/db"
-import { SyncEvent } from "@/sync"
-import { EventTable } from "@/sync/event.sql"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { asc } from "drizzle-orm"
 import { and } from "drizzle-orm"
 import { eq } from "drizzle-orm"
@@ -21,8 +22,10 @@ const log = Log.create({ service: "server.sync" })
 export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handlers) =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
+    const session = yield* Session.Service
     const scope = yield* Scope.Scope
-    const sync = yield* SyncEvent.Service
+    const events = yield* EventV2Bridge.Service
+    const { db } = yield* Database.Service
 
     const start = Effect.fn("SyncHttpApi.start")(function* () {
       yield* workspace
@@ -32,27 +35,28 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
     })
 
     const replay = Effect.fn("SyncHttpApi.replay")(function* (ctx: { payload: typeof ReplayPayload.Type }) {
-      const events: SyncEvent.SerializedEvent[] = ctx.payload.events.map((event) => ({
+      const payload: EventV2.SerializedEvent[] = ctx.payload.events.map((event) => ({
         id: event.id,
         aggregateID: event.aggregateID,
         seq: event.seq,
         type: event.type,
         data: { ...event.data },
       }))
-      const source = events[0].aggregateID
+      const source = payload[0].aggregateID
       log.info("sync replay requested", {
         sessionID: source,
-        events: events.length,
-        first: events[0]?.seq,
-        last: events.at(-1)?.seq,
+        events: payload.length,
+        first: payload[0]?.seq,
+        last: payload.at(-1)?.seq,
         directory: ctx.payload.directory,
       })
-      yield* sync.replayAll(events)
+      const ownerID = yield* InstanceState.workspaceID
+      yield* events.replayAll(payload, { ownerID, strictOwner: true })
       log.info("sync replay complete", {
         sessionID: source,
-        events: events.length,
-        first: events[0]?.seq,
-        last: events.at(-1)?.seq,
+        events: payload.length,
+        first: payload[0]?.seq,
+        last: payload.at(-1)?.seq,
       })
       return { sessionID: source }
     })
@@ -61,12 +65,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
       const workspaceID = yield* InstanceState.workspaceID
       if (!workspaceID) return yield* new HttpApiError.BadRequest({})
 
-      yield* sync.run(Session.Event.Updated, {
-        sessionID: ctx.payload.sessionID,
-        info: {
-          workspaceID,
-        },
-      })
+      yield* session.setWorkspace({ sessionID: ctx.payload.sessionID, workspaceID })
 
       log.info("sync session stolen", {
         sessionID: ctx.payload.sessionID,
@@ -78,18 +77,17 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
 
     const history = Effect.fn("SyncHttpApi.history")(function* (ctx: { payload: typeof HistoryPayload.Type }) {
       const exclude = Object.entries(ctx.payload)
-      return Database.use((db) =>
-        db
-          .select()
-          .from(EventTable)
-          .where(
-            exclude.length > 0
-              ? not(or(...exclude.map(([id, seq]) => and(eq(EventTable.aggregate_id, id), lte(EventTable.seq, seq))))!)
-              : undefined,
-          )
-          .orderBy(asc(EventTable.seq))
-          .all(),
-      )
+      return yield* db
+        .select()
+        .from(EventTable)
+        .where(
+          exclude.length > 0
+            ? not(or(...exclude.map(([id, seq]) => and(eq(EventTable.aggregate_id, id), lte(EventTable.seq, seq))))!)
+            : undefined,
+        )
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
     })
 
     return handlers.handle("start", start).handle("replay", replay).handle("steal", steal).handle("history", history)

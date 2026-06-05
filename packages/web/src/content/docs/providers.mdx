@@ -727,7 +727,7 @@ DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inferen
 
 OpenCode supports two authentication methods:
 
-- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode auto-creates a Model Access Key and discovers your available Models & Inference Routers.
+- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode uses your DigitalOcean API token directly for inference and discovers your Inference Routers.
 - **Model Access Key** — Paste an existing key from the DigitalOcean console.
 
 #### OAuth (Recommended)
@@ -751,7 +751,11 @@ OpenCode supports two authentication methods:
 3. Your browser opens to authorize OpenCode. Sign in and approve.
 
    :::note
-   OpenCode creates a Model Access Key named `opencode-oauth-<timestamp>` in your DigitalOcean account. You can rotate or revoke it from the **Model Access Keys** page in the "Manage" section of the DigitalOcean console under Inference.
+   OpenCode requests `genai:read` and `inference:query` OAuth scopes. Your DigitalOcean API token is used directly for inference — no separate Model Access Key is created.
+   :::
+
+   :::note
+   Inference Routers only appear in the model picker after OAuth. Pasting a Model Access Key manually does not discover routers.
    :::
 
 4. Run the `/models` command. Your Inference Routers appear as the format `router:` in the model selection.
@@ -1933,6 +1937,65 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
    ```txt
    /models
    ```
+
+---
+
+### Snowflake Cortex
+
+[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api) gives you access to frontier models (Claude, OpenAI GPT-5, and more) via an OpenAI-compatible API. All inference runs within the Snowflake perimeter and is billed in Snowflake credits. For per-model rates, see the [Snowflake Service Consumption Table](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf).
+
+Don't have a Snowflake account? [Sign up for a free trial](https://signup.snowflake.com/?utm_source=opencode&utm_medium=docs&utm_campaign=cortex-provider).
+
+opencode's core workflow for coding, editing files, and running commands relies on tool calling. Only the Claude and OpenAI families within Snowflake Cortex support this. The provider is limited to those families to support the core workflow.
+
+1. Generate a [Programmatic Access Token (PAT)](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens) in your Snowflake account.
+
+2. Run the `/connect` command and search for **Snowflake Cortex**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted (e.g. `myorg-myaccount` or `xy12345.us-east-1`).
+
+   ```txt
+   ┌ Snowflake Account Identifier
+   │
+   │
+   └ enter
+   ```
+
+4. Enter your **PAT**.
+
+   ```txt
+   ┌ Programmatic Access Token (PAT)
+   │
+   │
+   └ enter
+   ```
+
+5. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+Alternatively, set environment variables before starting opencode:
+
+```bash
+export SNOWFLAKE_ACCOUNT=myorg-myaccount
+export SNOWFLAKE_CORTEX_PAT=your-pat
+```
+
+The model catalog is provided automatically. A minimal `opencode.json` is all that's needed:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "snowflake-cortex/claude-sonnet-4-6",
+  "small_model": "snowflake-cortex/claude-haiku-4-5"
+}
+```
 
 ---
 
