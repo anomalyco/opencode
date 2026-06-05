@@ -6473,10 +6473,41 @@ export type AppSkillsResponses = {
     description?: string
     location: string
     content: string
+    disabled?: boolean
   }>
 }
 
 export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
+
+export type SkillToggleData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill/{name}/toggle"
+}
+
+export type SkillToggleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SkillToggleError = SkillToggleErrors[keyof SkillToggleErrors]
+
+export type SkillToggleResponses = {
+  /**
+   * Skill toggled
+   */
+  200: boolean
+}
+
+export type SkillToggleResponse = SkillToggleResponses[keyof SkillToggleResponses]
 
 export type LspStatusData = {
   body?: never

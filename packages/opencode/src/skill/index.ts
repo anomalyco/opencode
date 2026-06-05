@@ -17,6 +17,7 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
+import { isDisabled } from "@/skill/disabled"
 
 const log = Log.create({ service: "skill" })
 const CLAUDE_EXTERNAL_DIR = ".claude"
@@ -40,6 +41,7 @@ export const Info = Schema.Struct({
   description: Schema.optional(Schema.String),
   location: Schema.String,
   content: Schema.String,
+  disabled: Schema.optional(Schema.Boolean),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -300,7 +302,7 @@ export const layer = Layer.effect(
 
     const all = Effect.fn("Skill.all")(function* () {
       const s = yield* InstanceState.get(state)
-      return Object.values(s.skills)
+      return Object.values(s.skills).map((skill) => ({ ...skill, disabled: isDisabled(skill.name) }))
     })
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
@@ -310,8 +312,14 @@ export const layer = Layer.effect(
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
       const s = yield* InstanceState.get(state)
       const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
-      if (!agent) return list
-      return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
+      const result = !agent
+        ? list.filter((skill) => !isDisabled(skill.name))
+        : list.filter(
+            (skill) =>
+              !isDisabled(skill.name) &&
+              Permission.evaluate("skill", skill.name, agent.permission).action !== "deny",
+          )
+      return result
     })
 
     return Service.of({ get, require, all, dirs, available })

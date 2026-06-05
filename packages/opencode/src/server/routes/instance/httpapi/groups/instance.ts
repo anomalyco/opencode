@@ -51,6 +51,7 @@ export const InstancePaths = {
   command: "/command",
   agent: "/agent",
   skill: "/skill",
+  skillToggle: "/skill/:name/toggle",
   lsp: "/lsp",
   formatter: "/formatter",
 } as const
@@ -164,6 +165,17 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "app.skills",
             summary: "List skills",
             description: "Get a list of all available skills in the OpenCode system.",
+          }),
+        ),
+        HttpApiEndpoint.post("skillToggle", InstancePaths.skillToggle, {
+          query: WorkspaceRoutingQuery,
+          params: { name: Schema.String },
+          success: described(Schema.Boolean, "Skill toggled"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "skill.toggle",
+            summary: "Toggle skill",
+            description: "Enable or disable a skill.",
           }),
         ),
         HttpApiEndpoint.get("lsp", InstancePaths.lsp, {
