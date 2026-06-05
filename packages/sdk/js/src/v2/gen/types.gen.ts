@@ -1120,6 +1120,7 @@ export type GlobalEvent = {
             [key: string]: unknown
           }
           content: Array<ToolTextContent | ToolFileContent>
+          outputPaths?: Array<string>
           result?: unknown
           provider: {
             executed: boolean
@@ -3618,6 +3619,7 @@ export type SyncEventSessionNextToolSuccess = {
         [key: string]: unknown
       }
       content: Array<ToolTextContent | ToolFileContent>
+      outputPaths?: Array<string>
       result?: unknown
       provider: {
         executed: boolean
@@ -3931,6 +3933,7 @@ export type SessionMessageToolStateCompleted = {
   }
   attachments?: Array<PromptFileAttachment>
   content: Array<ToolTextContent | ToolFileContent>
+  outputPaths?: Array<string>
   structured: {
     [key: string]: unknown
   }
@@ -4664,6 +4667,7 @@ export type EventSessionNextToolSuccess = {
       [key: string]: unknown
     }
     content: Array<ToolTextContent | ToolFileContent>
+    outputPaths?: Array<string>
     result?: unknown
     provider: {
       executed: boolean

@@ -12,7 +12,6 @@ import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
-import type { ToolOutputStore } from "../../tool-output-store"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
@@ -221,7 +220,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
     event: LLMEvent,
-    resources: ReadonlyArray<ToolOutputStore.Resource> = [],
+    outputPaths: ReadonlyArray<string> = [],
   ) {
     switch (event.type) {
       case "step-start":
@@ -351,7 +350,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
-          resources,
+          outputPaths,
           result: event.result,
           provider,
         })

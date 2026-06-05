@@ -23,7 +23,6 @@ import { type RunError, Service, StepLimitExceededError } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
-import type { ToolOutputStore } from "../../tool-output-store"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -208,8 +207,8 @@ export const layer = Layer.effect(
         },
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
-      const publish = (event: LLMEvent, resources: ReadonlyArray<ToolOutputStore.Resource> = []) =>
-        withPublication(publisher.publish(event, resources))
+      const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
+        withPublication(publisher.publish(event, outputPaths))
       if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
         return yield* Effect.die(new RetryTurn(undefined))
       const providerStream = llm.stream(request).pipe(
@@ -225,7 +224,7 @@ export const layer = Layer.effect(
                   return Effect.succeed({
                     result: { type: "error" as const, value: String(Cause.squash(cause)) },
                     output: undefined,
-                    resources: [],
+                    outputPaths: [],
                   })
                 }),
                 Effect.flatMap((settlement) =>
@@ -236,7 +235,7 @@ export const layer = Layer.effect(
                       result: settlement.result,
                       output: settlement.output,
                     }),
-                    settlement.resources ?? [],
+                    settlement.outputPaths ?? [],
                   ),
                 ),
               ),

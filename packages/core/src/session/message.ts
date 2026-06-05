@@ -4,7 +4,6 @@ import { Schema } from "effect"
 import { ProviderMetadata } from "@opencode-ai/llm"
 import { ModelV2 } from "../model"
 import { ToolOutput } from "../tool-output"
-import { ToolOutputStore } from "../tool-output-store"
 import { V2Schema } from "../v2-schema"
 import { SessionEvent } from "./event"
 import { Prompt } from "./prompt"
@@ -87,7 +86,7 @@ export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Sessio
   input: Schema.Record(Schema.String, Schema.Unknown),
   attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
   content: ToolOutput.Content.pipe(Schema.Array),
-  resources: SessionEvent.Tool.Success.data.fields.resources,
+  outputPaths: SessionEvent.Tool.Success.data.fields.outputPaths,
   structured: ToolOutput.Structured,
   result: SessionEvent.Tool.Success.data.fields.result,
 }) {}

@@ -22,7 +22,7 @@ export const Success = Schema.Struct({
   directory: Schema.String,
   output: Schema.String,
   truncated: Schema.Boolean,
-  resource: ToolOutputStore.Resource.pipe(Schema.optional),
+  outputPath: Schema.String.pipe(Schema.optional),
 })
 
 export const description = [
@@ -73,7 +73,7 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
-        resources: (output) => (output.resource ? [output.resource] : []),
+        outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),
         execute: ({ parameters, sessionID, call, assertPermission }) =>
           Effect.gen(function* () {
             const current = yield* skills.list()
@@ -99,7 +99,7 @@ export const layer = Layer.effectDiscard(
                 directory,
                 output: output.content,
                 truncated: output.truncated,
-                ...(output.truncated ? { resource: output.resource } : {}),
+                ...(output.truncated ? { outputPath: output.outputPath } : {}),
               }
             }).pipe(Effect.catchCause((cause) => Effect.fail(unableToLoad(parameters.name, Cause.squash(cause)))))
           }),

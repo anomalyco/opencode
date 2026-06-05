@@ -11,19 +11,21 @@ import { Ripgrep as FileSystemRipgrep } from "@opencode-ai/core/filesystem/ripgr
 import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
+import { Global } from "@opencode-ai/core/global"
 import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
 const inertReferences = references({})
 
-function provide(directory: string, projectReferences = inertReferences) {
+function provide(directory: string, projectReferences = inertReferences, data = Global.Path.data) {
   const dependencies = Layer.mergeAll(
     FSUtil.defaultLayer,
     FileSystemRipgrep.defaultLayer,
     AppProcess.defaultLayer,
     Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
     Layer.succeed(ProjectReference.Service, projectReferences),
+    Global.layerWith({ data }),
   )
   const filesystem = FileSystem.layer.pipe(Layer.provide(dependencies))
   const search = LocationSearch.layer.pipe(
@@ -43,6 +45,21 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("LocationSearch", () => {
+  it.live("greps an absolute managed tool-output file", () =>
+    withTmp((directory) => {
+      const data = path.join(directory, "data")
+      const managed = path.join(data, "tool-output")
+      const output = path.join(managed, "tool_123")
+      return Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(managed, { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(output, "ok\nFAIL here\nok"))
+        const search = yield* LocationSearch.Service
+        const result = yield* search.grep({ pattern: "FAIL", path: output })
+        expect(result.items).toMatchObject([{ canonical: output, line: 2, lines: "FAIL here\n" }])
+      }).pipe(provide(directory, inertReferences, data))
+    }),
+  )
+
   it.live("searches files in the active Location with structured bounded results", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

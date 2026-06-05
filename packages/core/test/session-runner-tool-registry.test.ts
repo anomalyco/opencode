@@ -28,7 +28,7 @@ const permission = Layer.succeed(
 )
 const bounds: ToolOutputStore.BoundInput[] = []
 const outputStore = Layer.mock(ToolOutputStore.Service, {
-  bound: (input) => Effect.sync(() => bounds.push(input)).pipe(Effect.as({ output: input.output, resources: [] })),
+  bound: (input) => Effect.sync(() => bounds.push(input)).pipe(Effect.as({ output: input.output, outputPaths: [] })),
 })
 const registry = ToolRegistry.layer.pipe(
   Layer.provide(permission),

@@ -58,7 +58,7 @@ export type Entry<
   readonly execute?: (
     input: AuthorizeInput<Schema.Schema.Type<Parameters>>,
   ) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
-  readonly resources?: (output: Schema.Schema.Type<Success>) => ReadonlyArray<ToolOutputStore.Resource>
+  readonly outputPaths?: (output: Schema.Schema.Type<Success>) => ReadonlyArray<string>
 }
 
 type Data = {
@@ -84,7 +84,7 @@ export interface Interface {
 }
 
 export interface Settlement extends ToolSettlement {
-  readonly resources?: ReadonlyArray<ToolOutputStore.Resource>
+  readonly outputPaths?: ReadonlyArray<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
@@ -177,8 +177,8 @@ export const layer = Layer.effect(
                 const result = ToolOutput.toResultValue(output)
                 return result.type === "error" ? { result } : { result, output }
               })()
-              const retained = entry.resources?.(value) ?? []
-              return retained.length > 0 ? { ...settled, resources: retained } : settled
+              const retained = entry.outputPaths?.(value) ?? []
+              return retained.length > 0 ? { ...settled, outputPaths: retained } : settled
             }),
           )
         }),
@@ -198,12 +198,12 @@ export const layer = Layer.effect(
             toolCallID: input.call.id,
             output: settled.output,
           })
-          if (bounded.output === settled.output && bounded.resources.length === 0) return settled
-          const retained = [...(settled.resources ?? []), ...bounded.resources]
+          if (bounded.output === settled.output && bounded.outputPaths.length === 0) return settled
+          const retained = [...(settled.outputPaths ?? []), ...bounded.outputPaths]
           const result = ToolOutput.toResultValue(bounded.output)
           return result.type === "error"
-            ? { result, resources: retained }
-            : { result, output: bounded.output, resources: retained }
+            ? { result, outputPaths: retained }
+            : { result, output: bounded.output, outputPaths: retained }
         }),
       ),
     )
