@@ -10,6 +10,7 @@ import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
+import PROMPT_SCOUT from "./prompt/scout.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
@@ -21,6 +22,8 @@ import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, Context, Layer, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { type DeepMutable } from "@opencode-ai/core/schema"
@@ -88,165 +91,200 @@ export const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const skill = yield* Skill.Service
     const provider = yield* Provider.Service
+    const flags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make<State>(
-      Effect.fn("Agent.state")(function* (ctx) {
-        const cfg = yield* config.get()
-        const skillDirs = yield* skill.dirs()
-        const whitelistedDirs = [
-          Truncate.GLOB,
-          path.join(Global.Path.tmp, "*"),
-          ...skillDirs.map((dir) => path.join(dir, "*")),
-        ]
-        const readonlyExternalDirectory = {
-          "*": "ask",
-          ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-        } satisfies Record<string, "allow" | "ask" | "deny">
-
-        const defaults = Permission.fromConfig({
-          "*": "allow",
-          doom_loop: "ask",
-          external_directory: {
+        Effect.fn("Agent.state")(function* (ctx) {
+          yield* plugin.init()
+          const cfg = yield* config.get()
+          const skillDirs = yield* skill.dirs()
+          const whitelistedDirs = [
+            Truncate.GLOB,
+            path.join(Global.Path.tmp, "*"),
+            ...skillDirs.map((dir) => path.join(dir, "*")),
+          ]
+          const readonlyExternalDirectory = {
             "*": "ask",
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-          },
-          question: "deny",
-          plan_enter: "deny",
-          plan_exit: "deny",
-          // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
-          read: {
+          } satisfies Record<string, "allow" | "ask" | "deny">
+
+          const defaults = Permission.fromConfig({
             "*": "allow",
-            "*.env": "ask",
-            "*.env.*": "ask",
-            "*.env.example": "allow",
-          },
-        })
+            doom_loop: "ask",
+            external_directory: {
+              "*": "ask",
+              ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+            },
+            question: "deny",
+            plan_enter: "deny",
+            plan_exit: "deny",
+            repo_clone: "deny",
+            repo_overview: "deny",
+            // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
+            read: {
+              "*": "allow",
+              "*.env": "ask",
+              "*.env.*": "ask",
+              "*.env.example": "allow",
+            },
+          })
 
-        const user = Permission.fromConfig(cfg.permission ?? {})
+          const user = Permission.fromConfig(cfg.permission ?? {})
 
-        const agents: Record<string, Info> = {
-          build: {
-            name: "build",
-            description: "The default agent. Executes tools based on configured permissions.",
-            options: {},
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                question: "allow",
-                plan_enter: "allow",
-              }),
-              user,
-            ),
-            mode: "primary",
-            native: true,
-          },
-          plan: {
-            name: "plan",
-            description: "Plan mode. Disallows all edit tools.",
-            options: {},
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                question: "allow",
-                plan_exit: "allow",
-                external_directory: {
-                  [path.join(Global.Path.data, "plans", "*")]: "allow",
-                },
-                edit: {
+          const agents: Record<string, Info> = {
+            build: {
+              name: "build",
+              description: "The default agent. Executes tools based on configured permissions.",
+              options: {},
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  plan_enter: "allow",
+                }),
+                user,
+              ),
+              mode: "primary",
+              native: true,
+            },
+            plan: {
+              name: "plan",
+              description: "Plan mode. Disallows all edit tools.",
+              options: {},
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  question: "allow",
+                  plan_exit: "allow",
+                  external_directory: {
+                    [path.join(Global.Path.data, "plans", "*")]: "allow",
+                  },
+                  edit: {
+                    "*": "deny",
+                    [path.join(".opencode", "plans", "*.md")]: "allow",
+                    [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+                  },
+                }),
+                user,
+              ),
+              mode: "primary",
+              native: true,
+            },
+            general: {
+              name: "general",
+              description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  todowrite: "deny",
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            explore: {
+              name: "explore",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
                   "*": "deny",
-                  [path.join(".opencode", "plans", "*.md")]: "allow",
-                  [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
-                },
-              }),
-              user,
-            ),
-            mode: "primary",
-            native: true,
-          },
-          general: {
-            name: "general",
-            description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                todowrite: "deny",
-              }),
-              user,
-            ),
-            options: {},
-            mode: "subagent",
-            native: true,
-          },
-          explore: {
-            name: "explore",
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                "*": "deny",
-                grep: "allow",
-                glob: "allow",
-                list: "allow",
-                bash: "allow",
-                webfetch: "allow",
-                websearch: "allow",
-                read: "allow",
-                external_directory: readonlyExternalDirectory,
-              }),
-              user,
-            ),
-            description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
-            prompt: PROMPT_EXPLORE,
-            options: {},
-            mode: "subagent",
-            native: true,
-          },
-          compaction: {
-            name: "compaction",
-            mode: "primary",
-            native: true,
-            hidden: true,
-            prompt: PROMPT_COMPACTION,
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                "*": "deny",
-              }),
-              user,
-            ),
-            options: {},
-          },
-          title: {
-            name: "title",
-            mode: "primary",
-            options: {},
-            native: true,
-            hidden: true,
-            temperature: 0.5,
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                "*": "deny",
-              }),
-              user,
-            ),
-            prompt: PROMPT_TITLE,
-          },
-          summary: {
-            name: "summary",
-            mode: "primary",
-            options: {},
-            native: true,
-            hidden: true,
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                "*": "deny",
-              }),
-              user,
-            ),
-            prompt: PROMPT_SUMMARY,
-          },
-        }
+                  grep: "allow",
+                  glob: "allow",
+                  list: "allow",
+                  bash: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                  read: "allow",
+                  external_directory: readonlyExternalDirectory,
+                }),
+                user,
+              ),
+              description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
+              prompt: PROMPT_EXPLORE,
+              options: {},
+              mode: "subagent",
+              native: true,
+            },
+            ...(flags.experimentalScout
+              ? {
+                  scout: {
+                    name: "scout",
+                    permission: Permission.merge(
+                      defaults,
+                      Permission.fromConfig({
+                        "*": "deny",
+                        grep: "allow",
+                        glob: "allow",
+                        webfetch: "allow",
+                        websearch: "allow",
+                        read: "allow",
+                        repo_clone: "allow",
+                        repo_overview: "allow",
+                        external_directory: {
+                          ...readonlyExternalDirectory,
+                          [path.join(Global.Path.repos, "*")]: "allow",
+                        },
+                      }),
+                      user,
+                    ),
+                    description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
+                    prompt: PROMPT_SCOUT,
+                    options: {},
+                    mode: "subagent" as const,
+                    native: true,
+                  },
+                }
+              : {}),
+            compaction: {
+              name: "compaction",
+              mode: "primary",
+              native: true,
+              hidden: true,
+              prompt: PROMPT_COMPACTION,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
+              options: {},
+            },
+            title: {
+              name: "title",
+              mode: "primary",
+              options: {},
+              native: true,
+              hidden: true,
+              temperature: 0.5,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
+              prompt: PROMPT_TITLE,
+            },
+            summary: {
+              name: "summary",
+              mode: "primary",
+              options: {},
+              native: true,
+              hidden: true,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
+              prompt: PROMPT_SUMMARY,
+            },
+          }
+
 
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
           if (value.disable) {
@@ -423,7 +461,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Plugin.defaultLayer),
+  Layer.provide(Plugin.layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer))),
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Config.defaultLayer),
