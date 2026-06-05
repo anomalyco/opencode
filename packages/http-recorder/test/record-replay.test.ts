@@ -575,7 +575,9 @@ describe("http-recorder", () => {
 
     const exit = await Effect.runPromise(
       Effect.exit(
-        post(url, { ok: true }).pipe(Effect.provide(HttpRecorder.layerFetch("unsafe-record", { directory }))),
+        post(url, { ok: true }).pipe(
+          Effect.provide(HttpRecorderInternal.cassetteLayer("unsafe-record", { directory, mode: "record" })),
+        ),
       ),
     )
     expect(Exit.isFailure(exit)).toBe(true)
