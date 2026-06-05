@@ -6,6 +6,7 @@ import { SessionSchema } from "./schema"
 
 export type Mode = "run" | "wake"
 
+/** Why one drain generation should run. Explicit runs dominate advisory wakes when demands coalesce. */
 type Demand = { readonly _tag: "run" } | { readonly _tag: "wake"; readonly seq?: number }
 
 /**
@@ -35,6 +36,7 @@ export interface Coordinator<Key, A, E> {
   readonly interrupt: (key: Key, seq?: number) => Effect.Effect<void>
 }
 
+/** One Session's process-local execution lane: one active demand and at most one coalesced follow-up. */
 type Entry<A, E> = {
   readonly done: Deferred.Deferred<A, E>
   readonly settled: Deferred.Deferred<Exit.Exit<A, E>>
@@ -46,6 +48,7 @@ type Entry<A, E> = {
   stopping: boolean
 }
 
+/** Combines follow-up demand: runs dominate, while wakes retain the newest durable admission sequence. */
 const coalesce = (left: Demand | undefined, right: Demand): Demand => {
   if (left?._tag === "run" || right._tag === "run") return { _tag: "run" }
   return { _tag: "wake", seq: maxSeq(left?.seq, right.seq) }
