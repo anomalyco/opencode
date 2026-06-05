@@ -3,6 +3,7 @@ export * as Catalog from "./catalog"
 import { Context, Effect, Layer, Option, Order, pipe, Schema, Array, Scope, Stream } from "effect"
 import { castDraft, enableMapSet, type Draft } from "immer"
 import { ModelV2 } from "./model"
+import { ModelRequest } from "./model-request"
 import { PluginV2 } from "./plugin"
 import { ProviderV2 } from "./provider"
 import { Location } from "./location"
@@ -106,14 +107,7 @@ export const layer = Layer.effect(
               ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
               : model.api
       const request = {
-        headers: {
-          ...provider.request.headers,
-          ...model.request.headers,
-        },
-        body: {
-          ...provider.request.body,
-          ...model.request.body,
-        },
+        ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
         variant: model.request.variant,
       }
       return new ModelV2.Info({
