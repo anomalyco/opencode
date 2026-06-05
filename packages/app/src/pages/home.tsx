@@ -20,7 +20,8 @@ import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
-import { DialogSelectServer } from "@/components/dialog-select-server"
+import { DialogSelectServer, useServerManagementController } from "@/components/dialog-select-server"
+import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -45,7 +46,9 @@ import { sessionPermissionRequest } from "@/pages/session/composer/session-reque
 import { useGlobal } from "@/context/global"
 import { useCommand } from "@/context/command"
 import { useSettings } from "@/context/settings"
+import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
+import { type ServerHealth } from "@/utils/server-health"
 
 const HOME_SESSION_LIMIT = 15
 const HOME_ROW_LAYOUT =
@@ -497,6 +500,8 @@ function HomeProjectColumn(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   const global = useGlobal()
+  const dialog = useDialog()
+  const controller = useServerManagementController({ navigateOnAdd: false })
   return (
     <aside class="flex min-w-0 flex-col lg:pt-[52px] mt-14 gap-4" aria-label={props.language.t("home.projects")}>
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
@@ -524,29 +529,17 @@ function HomeProjectColumn(props: {
             const serverCtx = global.createServerCtx(item)
             return (
               <div class="flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
-                  <button
-                    type="button"
-                    class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
-                    data-selected={props.selected.server === key && !props.selected.directory ? "" : undefined}
-                    disabled={!healthy()}
-                    onClick={() => props.focusServer(item)}
-                  >
-                    <div class="flex size-4 shrink-0 items-center justify-center">
-                      <ServerHealthIndicator health={global.servers.health[key]} />
-                    </div>
-                    <span class={HOME_PROJECT_NAV_LABEL}>{item.displayName ?? new URL(item.http.url).host}</span>
-                  </button>
-                  <IconButtonV2
-                    data-action="home-add-project"
-                    variant="ghost-muted"
-                    size="small"
-                    class="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/server:opacity-100 focus:opacity-100"
-                    icon={<IconV2 name="folder-add-left" />}
-                    aria-label={props.language.t("home.project.add")}
-                    onClick={() => props.chooseProject(item)}
-                  />
-                </div>
+                <HomeServerRow
+                  server={item}
+                  selected={props.selected.server === key && !props.selected.directory}
+                  healthy={healthy()}
+                  health={global.servers.health[key]}
+                  controller={controller}
+                  focusServer={props.focusServer}
+                  chooseProject={props.chooseProject}
+                  openEdit={(server) => dialog.show(() => <DialogServerV2 mode="edit" server={server} />)}
+                  language={props.language}
+                />
                 <Show when={healthy()}>
                   <div class="mx-3 h-px bg-v2-border-border-base" />
                   <HomeProjectList {...props} server={item} projects={serverCtx.projects.list()} />
@@ -556,7 +549,7 @@ function HomeProjectColumn(props: {
           }}
         </For>
       </Show>
-      <div class="flex min-w-0 flex-col gap-1">
+      <div class="mt-4 flex min-w-0 flex-col gap-1">
         <button
           type="button"
           class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
@@ -575,6 +568,58 @@ function HomeProjectColumn(props: {
         </button>
       </div>
     </aside>
+  )
+}
+
+function HomeServerRow(props: {
+  server: ServerConnection.Any
+  selected: boolean
+  healthy: boolean
+  health: ServerHealth | undefined
+  controller: ReturnType<typeof useServerManagementController>
+  focusServer: (server: ServerConnection.Any) => void
+  chooseProject: (server: ServerConnection.Any) => void
+  openEdit: (server: ServerConnection.Http) => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  const [state, setState] = createStore({ menuOpen: false })
+  return (
+    <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
+      <button
+        type="button"
+        class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
+        data-selected={props.selected ? "" : undefined}
+        disabled={!props.healthy}
+        onClick={() => props.focusServer(props.server)}
+      >
+        <div class="flex size-4 shrink-0 items-center justify-center">
+          <ServerHealthIndicator health={props.health} />
+        </div>
+        <span class={HOME_PROJECT_NAV_LABEL}>
+          {props.server.displayName ?? new URL(props.server.http.url).host}
+        </span>
+      </button>
+      <div
+        class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+        data-menu={state.menuOpen}
+      >
+        <ServerRowMenu
+          server={props.server}
+          controller={props.controller}
+          onEdit={props.openEdit}
+          open={state.menuOpen}
+          onOpenChange={(open) => setState("menuOpen", open)}
+        />
+        <IconButtonV2
+          data-action="home-add-project"
+          variant="ghost-muted"
+          size="small"
+          icon={<IconV2 name="folder-add-left" />}
+          aria-label={props.language.t("home.project.add")}
+          onClick={() => props.chooseProject(props.server)}
+        />
+      </div>
+    </div>
   )
 }
 
