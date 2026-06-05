@@ -51,9 +51,12 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   function open() {
     const projectID = input.projectID()
     if (!projectID) return
+    const sessionID = input.sessionID()
+    const session = sessionID ? sync.session.get(sessionID) : undefined
     dialog.replace(() => (
       <DialogMoveSession
         projectID={projectID}
+        current={homeDestination?.destination() ?? (session ? { type: "directory", directory: session.directory } : undefined)}
         onSelect={(selection) => {
           const sessionID = input.sessionID()
           if (!sessionID) {
