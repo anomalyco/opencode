@@ -2025,6 +2025,7 @@ describe("session.llm.expired-credentials-retry", () => {
 
         expect(first.url.pathname).toContain(apiPath)
         expect(second.url.pathname).toContain(apiPath)
+        expect(state.queue.length).toBe(0)
       }),
     { config: openaiConfig },
   )
@@ -2065,6 +2066,7 @@ describe("session.llm.expired-credentials-retry", () => {
         const result = yield* drain(makeStreamInput(resolved)).pipe(Effect.exit)
 
         expect(result._tag).toBe("Failure")
+        expect(state.queue.length).toBe(0)
       }),
     { config: openaiConfig },
   )

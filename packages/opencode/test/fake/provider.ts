@@ -47,9 +47,11 @@ export namespace ProviderTest {
   export function fake(override: Partial<Provider.Interface> & { model?: Provider.Model; info?: Provider.Info } = {}) {
     const mdl = override.model ?? model()
     const row = override.info ?? info({}, mdl)
+    const evictions = { count: 0 }
     return {
       model: mdl,
       info: row,
+      evictions,
       layer: Layer.succeed(
         Provider.Service,
         Provider.Service.of({
@@ -65,7 +67,11 @@ export namespace ProviderTest {
           getLanguage: Effect.fn("TestProvider.getLanguage")(() =>
             Effect.die(new Error("ProviderTest.getLanguage not configured")),
           ),
-          evictLanguage: Effect.fn("TestProvider.evictLanguage")(() => Effect.void),
+          evictLanguage: Effect.fn("TestProvider.evictLanguage")(() =>
+            Effect.sync(() => {
+              evictions.count++
+            }),
+          ),
           closest: Effect.fn("TestProvider.closest")((providerID) =>
             Effect.succeed(providerID === row.id ? { providerID: row.id, modelID: mdl.id } : undefined),
           ),
