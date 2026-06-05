@@ -3782,8 +3782,10 @@
 
   [data-page="stats"] [data-component="model-usage-chart"] {
     --model-usage-mobile-bar-width: 16px;
+    --model-usage-mobile-edge-space: 48px;
     --model-usage-mobile-track-width: calc(
-      var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap))
+      var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap)) +
+        var(--model-usage-mobile-edge-space)
     );
     width: calc(100% + 48px);
     height: 360px;
