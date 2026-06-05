@@ -161,14 +161,14 @@ describe("run session data", () => {
     ])
   })
 
-  test("shows live output tokens and throughput while assistant text streams", () => {
+  test("shows live output chunk fallback and throughput while assistant text streams", () => {
     let data = createSessionData()
     data = reduce(data, assistant("msg-1", { tokens: emptyTokens() })).data
     data = reduce(data, text({ id: "txt-1", messageID: "msg-1", text: "", time: { start: 1 } })).data
 
     const out = reduce(data, delta("msg-1", "txt-1", "streamed assistant output"))
 
-    expect(out.footer?.patch?.usage).toMatch(/^↑ ~\d+ tokens · [\d.]+ tok\/s$/)
+    expect(out.footer?.patch?.usage).toMatch(/^↑ ~1 token · [\d.]+ tok\/s$/)
   })
 
   test("keeps final provider usage authoritative over live estimates", () => {

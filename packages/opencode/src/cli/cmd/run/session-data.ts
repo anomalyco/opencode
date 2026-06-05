@@ -52,8 +52,8 @@ type LiveUsageSample = {
 type LiveUsage = {
   enabled: boolean
   started: number
-  asciiChars: number
-  nonAsciiChars: number
+  // Count committed assistant/reasoning progress chunks as a provider-neutral live fallback.
+  outputChunks: number
   samples: LiveUsageSample[]
 }
 
@@ -150,8 +150,7 @@ function createLiveUsage(enabled = true): LiveUsage {
   return {
     enabled,
     started: Date.now(),
-    asciiChars: 0,
-    nonAsciiChars: 0,
+    outputChunks: 0,
     samples: [],
   }
 }
@@ -164,13 +163,8 @@ export function setSessionUsageTracking(data: SessionData, enabled: boolean) {
   data.liveUsage.enabled = enabled
 }
 
-function outputTokens(live: LiveUsage): number {
-  const chars = live.asciiChars + live.nonAsciiChars
-  if (chars <= 0) {
-    return 0
-  }
-
-  return Math.max(1, Math.round(live.nonAsciiChars + live.asciiChars / 4))
+function outputEstimate(live: LiveUsage): number {
+  return live.outputChunks
 }
 
 function recordLiveUsage(live: LiveUsage, text: string) {
@@ -178,17 +172,9 @@ function recordLiveUsage(live: LiveUsage, text: string) {
     return false
   }
 
-  for (const char of text) {
-    const point = char.codePointAt(0) ?? 0
-    if (point > 0x7f) {
-      live.nonAsciiChars++
-    } else {
-      live.asciiChars++
-    }
-  }
-
+  live.outputChunks++
   const now = Date.now()
-  const output = outputTokens(live)
+  const output = outputEstimate(live)
   live.samples.push({ time: now, output })
 
   const cutoff = now - LIVE_USAGE_WINDOW
@@ -200,7 +186,7 @@ function recordLiveUsage(live: LiveUsage, text: string) {
 }
 
 function liveTps(live: LiveUsage): number {
-  const output = outputTokens(live)
+  const output = outputEstimate(live)
   if (output <= 0) {
     return 0
   }
@@ -234,7 +220,7 @@ function formatTokenCount(value: number): string {
 }
 
 function formatLiveUsage(live: LiveUsage): string | undefined {
-  const output = outputTokens(live)
+  const output = outputEstimate(live)
   if (output <= 0) {
     return undefined
   }
