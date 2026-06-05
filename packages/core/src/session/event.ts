@@ -373,6 +373,7 @@ export namespace Tool {
       ...ToolBase,
       structured: ToolOutput.Structured,
       content: Schema.Array(ToolOutput.Content),
+      outputPaths: Schema.Array(Schema.String).pipe(Schema.optional),
       result: Schema.Unknown.pipe(Schema.optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,

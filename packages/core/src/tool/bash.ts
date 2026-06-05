@@ -41,7 +41,7 @@ const Success = Schema.Struct({
   truncated: Schema.Boolean,
   stdoutTruncated: Schema.Boolean.pipe(Schema.optional),
   stderrTruncated: Schema.Boolean.pipe(Schema.optional),
-  resource: ToolOutputStore.Resource.pipe(Schema.optional),
+  outputPath: Schema.String.pipe(Schema.optional),
   timedOut: Schema.Boolean.pipe(Schema.optional),
   warnings: Schema.Array(Schema.String).pipe(Schema.optional),
 })
@@ -121,6 +121,7 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
+        outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),
         execute: ({ parameters, sessionID, call, assertPermission }) =>
           Effect.gen(function* () {
             const plan = yield* mutation.resolve({ path: parameters.workdir ?? ".", kind: "directory" })
@@ -187,7 +188,7 @@ export const layer = Layer.effectDiscard(
               ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
               ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
               ...(truncated.truncated && !result.stdoutTruncated && !result.stderrTruncated
-                ? { resource: truncated.resource }
+                ? { outputPath: truncated.outputPath }
                 : {}),
             }
           }).pipe(

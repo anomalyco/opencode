@@ -46,9 +46,8 @@ import { FetchHttpClient } from "effect/unstable/http"
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const location = Location.layer(ref)
-    const permissionsAndTools = ToolRegistry.layer.pipe(Layer.provideMerge(PermissionV2.locationLayer))
     const systemContext = SystemContextBuiltIns.locationLayer
-    const services = Layer.mergeAll(
+    const base = Layer.mergeAll(
       location,
       Policy.locationLayer,
       Config.locationLayer,
@@ -63,13 +62,18 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Pty.locationLayer,
       SkillV2.locationLayer,
       systemContext,
-      permissionsAndTools,
       LocationMutation.locationLayer.pipe(Layer.orDie),
     ).pipe(Layer.provideMerge(location))
+    const resources = ToolOutputStore.layer.pipe(Layer.provide(base))
+    const permissionsAndTools = ToolRegistry.layer.pipe(
+      Layer.provideMerge(PermissionV2.locationLayer),
+      Layer.provide(resources),
+      Layer.provide(base),
+    )
+    const services = Layer.mergeAll(base, resources, permissionsAndTools)
     const commits = FileMutation.locationLayer.pipe(Layer.provide(services))
     const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
-    const resources = ToolOutputStore.layer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(

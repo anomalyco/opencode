@@ -123,7 +123,7 @@ const resources = Layer.succeed(
     limits: () => Effect.die("unused"),
     write: () => Effect.die("unused"),
     truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
-    read: () => Effect.die("unused"),
+    bound: (input) => Effect.succeed({ output: input.output, outputPaths: [] }),
     cleanup: () => Effect.die("unused"),
   }),
 )
@@ -287,13 +287,9 @@ describe("WebSearchTool contribution", () => {
       config = { provider: "exa", enableExa: false, enableParallel: false }
       truncate = (input) =>
         Effect.succeed({
-          content: "HEAD\n\n... output truncated; full content available as tool-output://opaque ...\n\nTAIL",
+          content: "HEAD\n\n... output truncated; full content saved to /tmp/tool-output/tool_opaque ...\n\nTAIL",
           truncated: true,
-          resource: new ToolOutputStore.Resource({
-            uri: "tool-output://opaque",
-            mime: "text/plain",
-            size: input.content.length,
-          }),
+          outputPath: "/tmp/tool-output/tool_opaque",
         })
       const registry = yield* ToolRegistry.Service
 
@@ -302,11 +298,14 @@ describe("WebSearchTool contribution", () => {
         call: { type: "tool-call", id: "call-overflow", name: "websearch", input: { query: "verbose" } },
       })
 
-      expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("tool-output://opaque") })
+      expect(settled.result).toMatchObject({
+        type: "text",
+        value: expect.stringContaining("/tmp/tool-output/tool_opaque"),
+      })
       expect(settled.output?.structured).toMatchObject({
         provider: "exa",
         truncated: true,
-        resource: { uri: "tool-output://opaque", mime: "text/plain" },
+        outputPath: "/tmp/tool-output/tool_opaque",
       })
       expect(truncations).toEqual([{ sessionID, toolCallID: "call-overflow", content: "full search results" }])
     }),
