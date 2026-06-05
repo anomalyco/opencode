@@ -1,5 +1,5 @@
 import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -12,6 +12,7 @@ import { composerDriver, composerEnabled, composerEvent } from "@/testing/sessio
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 import { working as sessionWorking } from "../session-working"
 import { markQuestionProfileUi } from "./session-question-profile"
+import { permissionRequestNotFound } from "./session-question-dock-helpers"
 
 export const todoState = (input: {
   count: number
@@ -152,6 +153,20 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     sdk.client.permission
       .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
       .catch((err: unknown) => {
+        if (permissionRequestNotFound(err, perm.id)) {
+          console.warn(`[permission-dock] stale request missing on server request=${perm.id} session=${perm.sessionID}`)
+          sync.set(
+            "permission",
+            perm.sessionID,
+            produce((draft = []) => {
+              const index = draft.findIndex((item) => item.id === perm.id)
+              if (index !== -1) draft.splice(index, 1)
+              return draft
+            }),
+          )
+          return
+        }
+
         const description = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description })
       })
