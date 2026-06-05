@@ -23,6 +23,7 @@ import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
 export interface DialogSelectProps<T> {
   title: string
   placeholder?: string
+  footer?: JSX.Element
   options: DialogSelectOption<T>[]
   flat?: boolean
   ref?: (ref: DialogSelectRef<T>) => void
@@ -49,9 +50,13 @@ export interface DialogSelectProps<T> {
 
 export interface DialogSelectOption<T = any> {
   title: string
+  titleView?: JSX.Element
   value: T
   description?: string
+  details?: string[]
   footer?: JSX.Element | string
+  titleWidth?: number
+  truncateTitle?: boolean | "left"
   category?: string
   categoryView?: JSX.Element
   disabled?: boolean
@@ -64,6 +69,8 @@ export interface DialogSelectOption<T = any> {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
+  selected: DialogSelectOption<T> | undefined
+  moveTo(value: T): void
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -167,7 +174,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       if (!category) return acc
       return acc + (i > 0 ? 2 : 1)
     }, 0)
-    return flat().length + headers
+    return flat().reduce((acc, option) => acc + 1 + (option.details?.length ?? 0), headers)
   })
 
   const dimensions = useTerminalDimensions()
@@ -336,6 +343,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     get filtered() {
       return filtered()
     },
+    get selected() {
+      return selected()
+    },
+    moveTo(value) {
+      const index = flat().findIndex((option) => isDeepEqual(option.value, value))
+      if (index >= 0) moveTo(index, true)
+    },
   }
   props.ref?.(ref)
 
@@ -349,7 +363,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 
   return (
-    <box gap={1} paddingBottom={1}>
+    <box gap={1} paddingBottom={1} flexGrow={1}>
       <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
@@ -386,94 +400,112 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </box>
         </Show>
       </box>
-      <Show
-        when={grouped().length > 0}
-        fallback={
-          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-            <text fg={theme.textMuted}>No results found</text>
-          </box>
-        }
-      >
-        <scrollbox
-          paddingLeft={1}
-          paddingRight={1}
-          scrollbarOptions={{ visible: false }}
-          scrollAcceleration={scrollAcceleration()}
-          ref={(r: ScrollBoxRenderable) => (scroll = r)}
-          maxHeight={height()}
+      <box flexGrow={1} flexShrink={1}>
+        <Show
+          when={grouped().length > 0}
+          fallback={
+            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+              <text fg={theme.textMuted}>No results found</text>
+            </box>
+          }
         >
-          <For each={grouped()}>
-            {([category, options], index) => (
-              <>
-                <Show when={category}>
-                  <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
-                    <Show
-                      when={options[0]?.categoryView}
-                      fallback={
-                        <text fg={theme.accent} attributes={TextAttributes.BOLD}>
-                          {category}
-                        </text>
-                      }
-                    >
-                      {options[0]?.categoryView}
-                    </Show>
-                  </box>
-                </Show>
-                <For each={options}>
-                  {(option) => {
-                    const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
-                    const current = createMemo(() => isDeepEqual(option.value, props.current))
-                    return (
-                      <box
-                        id={JSON.stringify(option.value)}
-                        flexDirection="row"
-                        position="relative"
-                        onMouseMove={() => {
-                          setStore("input", "mouse")
-                        }}
-                        onMouseUp={() => {
-                          option.onSelect?.(dialog)
-                          props.onSelect?.(option)
-                        }}
-                        onMouseOver={() => {
-                          if (store.input !== "mouse") return
-                          const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
-                          if (index === -1) return
-                          moveTo(index)
-                        }}
-                        onMouseDown={() => {
-                          const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
-                          if (index === -1) return
-                          moveTo(index)
-                        }}
-                        backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
-                        paddingLeft={current() || option.gutter ? 1 : 3}
-                        paddingRight={3}
-                        gap={1}
+          <scrollbox
+            paddingLeft={1}
+            paddingRight={1}
+            scrollbarOptions={{ visible: false }}
+            scrollAcceleration={scrollAcceleration()}
+            ref={(r: ScrollBoxRenderable) => (scroll = r)}
+            maxHeight={height()}
+          >
+            <For each={grouped()}>
+              {([category, options], index) => (
+                <>
+                  <Show when={category}>
+                    <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
+                      <Show
+                        when={options[0]?.categoryView}
+                        fallback={
+                          <text fg={theme.accent} attributes={TextAttributes.BOLD}>
+                            {category}
+                          </text>
+                        }
                       >
-                        <Show when={!current() && option.margin}>
-                          <box position="absolute" left={1} flexShrink={0}>
-                            {option.margin}
+                        {options[0]?.categoryView}
+                      </Show>
+                    </box>
+                  </Show>
+                  <For each={options}>
+                    {(option) => {
+                      const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
+                      const current = createMemo(() => isDeepEqual(option.value, props.current))
+                      return (
+                        <box
+                          id={JSON.stringify(option.value)}
+                          flexDirection="column"
+                          position="relative"
+                          onMouseMove={() => {
+                            setStore("input", "mouse")
+                          }}
+                          onMouseUp={() => {
+                            option.onSelect?.(dialog)
+                            props.onSelect?.(option)
+                          }}
+                          onMouseOver={() => {
+                            if (store.input !== "mouse") return
+                            const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
+                            if (index === -1) return
+                            moveTo(index)
+                          }}
+                          onMouseDown={() => {
+                            const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
+                            if (index === -1) return
+                            moveTo(index)
+                          }}
+                        >
+                          <box
+                            flexDirection="row"
+                            paddingLeft={current() || option.gutter ? 1 : 3}
+                            paddingRight={3}
+                            gap={1}
+                            backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
+                          >
+                            <Show when={!current() && option.margin}>
+                              <box position="absolute" left={1} flexShrink={0}>
+                                {option.margin}
+                              </box>
+                            </Show>
+                            <Option
+                              title={option.title}
+                              titleView={option.titleView}
+                              footer={flatten() ? (option.category ?? option.footer) : option.footer}
+                              titleWidth={option.titleWidth}
+                              truncateTitle={option.truncateTitle}
+                              description={option.description !== category ? option.description : undefined}
+                              active={active()}
+                              current={current()}
+                              gutter={option.gutter}
+                            />
                           </box>
-                        </Show>
-                        <Option
-                          title={option.title}
-                          footer={flatten() ? (option.category ?? option.footer) : option.footer}
-                          description={option.description !== category ? option.description : undefined}
-                          active={active()}
-                          current={current()}
-                          gutter={option.gutter}
-                        />
-                      </box>
-                    )
-                  }}
-                </For>
-              </>
-            )}
-          </For>
-        </scrollbox>
-      </Show>
-      <Show when={visibleActions().length} fallback={<box flexShrink={0} />}>
+                          <For each={option.details}>
+                            {(detail) => (
+                              <box paddingLeft={3} paddingRight={3}>
+                                <text fg={theme.textMuted} wrapMode="none">
+                                  {Locale.truncateMiddle(detail, Math.max(1, Math.min(76, dimensions().width - 12)))}
+                                </text>
+                              </box>
+                            )}
+                          </For>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </>
+              )}
+            </For>
+          </scrollbox>
+        </Show>
+      </box>
+      <Show when={props.footer || visibleActions().length} fallback={<box flexShrink={0} />}>
         <box
           paddingRight={2}
           paddingLeft={4}
@@ -483,6 +515,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           paddingTop={1}
         >
           <box flexDirection="row" gap={2}>
+            {props.footer}
             <For each={left()}>
               {(item) => (
                 <text>
@@ -514,10 +547,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
 function Option(props: {
   title: string
+  titleView?: JSX.Element
   description?: string
   active?: boolean
   current?: boolean
   footer?: JSX.Element | string
+  titleWidth?: number
+  truncateTitle?: boolean | "left"
   gutter?: () => JSX.Element
   onMouseOver?: () => void
 }) {
@@ -531,7 +567,7 @@ function Option(props: {
           ●
         </text>
       </Show>
-      <Show when={!props.current && props.gutter}>
+      <Show when={props.gutter}>
         <box flexShrink={0} marginRight={0}>
           {props.gutter?.()}
         </box>
@@ -544,7 +580,12 @@ function Option(props: {
         wrapMode="none"
         paddingLeft={3}
       >
-        {Locale.truncate(props.title, 61)}
+        {props.titleView ??
+          (props.truncateTitle === false
+            ? props.title
+            : props.truncateTitle === "left"
+              ? Locale.truncateLeft(props.title, props.titleWidth ?? 61)
+              : Locale.truncate(props.title, props.titleWidth ?? 61))}
         <Show when={props.description}>
           <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
         </Show>

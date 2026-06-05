@@ -10,7 +10,6 @@
 
   [data-slot="checkbox-v2-error"] {
     color: var(--state-fg-danger);
-    font-family: var(--font-family-sans);
     font-size: 12px;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-normal);
@@ -90,7 +89,6 @@
     display: inline-flex;
     user-select: none;
     color: inherit;
-    font-family: var(--font-family-sans);
     font-style: normal;
     font-weight: 440;
     font-variant-numeric: tabular-nums;
@@ -109,7 +107,6 @@
 
   [data-slot="checkbox-v2-description"] {
     color: var(--text-text-muted);
-    font-family: var(--font-family-sans);
     font-size: 11px;
     font-weight: 440;
     line-height: 1;

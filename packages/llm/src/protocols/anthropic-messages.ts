@@ -128,6 +128,7 @@ type AnthropicToolResultBlock = Schema.Schema.Type<typeof AnthropicToolResultBlo
 const AnthropicMessage = Schema.Union([
   Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
   Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
+  Schema.Struct({ role: Schema.Literal("system"), content: Schema.Array(AnthropicTextBlock) }),
 ]).pipe(Schema.toTaggedUnion("role"))
 type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
 
@@ -340,13 +341,78 @@ const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultConte
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
+// Mid-conversation system messages are a native Claude API feature only for
+// Opus 4.8. Other Anthropic models intentionally use the same visible wrapped-
+// user fallback as non-Anthropic routes rather than sending a role they reject.
+const supportsNativeSystemUpdates = (request: LLMRequest) => String(request.model.id) === "claude-opus-4-8"
+
+const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
+  const last = message.content.at(-1)
+  return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted === true
+}
+
+const canUseNativeSystemUpdate = (messages: LLMRequest["messages"], index: number) => {
+  const previous = messages[index - 1]
+  const next = messages[index + 1]
+  return (
+    previous !== undefined &&
+    previous.role !== "system" &&
+    (previous.role === "user" || previous.role === "tool" || endsInServerToolUse(previous)) &&
+    next?.role !== "system" &&
+    (next === undefined || next.role === "assistant")
+  )
+}
+
+const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number) => {
+  const pending = new Set<string>()
+  for (const message of messages.slice(0, index)) {
+    for (const part of message.content) {
+      if (message.role === "assistant" && part.type === "tool-call" && part.providerExecuted !== true)
+        pending.add(part.id)
+      if (message.role === "tool" && part.type === "tool-result") pending.delete(part.id)
+    }
+  }
+  return pending.size > 0
+}
+
+const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
+  message: LLMRequest["messages"][number],
+  breakpoints: Cache.Breakpoints,
+) {
+  const content = yield* ProviderShared.systemUpdateText("Anthropic Messages", message)
+  return {
+    role: "system" as const,
+    content: content.map((part) => ({
+      type: "text" as const,
+      text: part.text,
+      cache_control: cacheControl(breakpoints, part.cache),
+    })),
+  }
+})
+
 const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   request: LLMRequest,
   breakpoints: Cache.Breakpoints,
 ) {
   const messages: AnthropicMessage[] = []
 
-  for (const message of request.messages) {
+  for (const [index, message] of request.messages.entries()) {
+    if (message.role === "system") {
+      if (splitsLocalToolResults(request.messages, index))
+        return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
+      if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request.messages, index)) {
+        messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
+        continue
+      }
+      const part = yield* ProviderShared.wrappedSystemUpdate("Anthropic Messages", message)
+      const block = { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
+      const previous = messages.at(-1)
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: [...previous.content, block] }
+      else messages.push({ role: "user", content: [block] })
+      continue
+    }
+
     if (message.role === "user") {
       const content: AnthropicUserBlock[] = []
       for (const part of message.content) {

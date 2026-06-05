@@ -1,5 +1,8 @@
 import type { ProviderOptions, ReasoningEffort, TextVerbosity } from "../schema"
 import { mergeProviderOptions } from "../schema"
+import type { OpenAIResponseIncludable } from "../protocols/utils/openai-options"
+
+export type { OpenAIResponseIncludable } from "../protocols/utils/openai-options"
 
 export interface OpenAIOptionsInput {
   readonly [key: string]: unknown
@@ -7,7 +10,10 @@ export interface OpenAIOptionsInput {
   readonly promptCacheKey?: string
   readonly reasoningEffort?: ReasoningEffort
   readonly reasoningSummary?: "auto"
-  readonly includeEncryptedReasoning?: boolean
+  // OpenAI Responses `include` wire field. Mirrors the official SDK's
+  // `ResponseIncludable[]` union exactly so AI SDK callers and direct
+  // native-SDK callers share one shape and no translation is required.
+  readonly include?: ReadonlyArray<OpenAIResponseIncludable>
   readonly textVerbosity?: TextVerbosity
 }
 
@@ -25,7 +31,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
       promptCacheKey: options?.promptCacheKey,
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
-      includeEncryptedReasoning: options?.includeEncryptedReasoning,
+      include: options?.include,
       textVerbosity: options?.textVerbosity,
     }),
   )
@@ -42,6 +48,12 @@ export const gpt5DefaultOptions = (
   return openAIProviderOptions({
     reasoningEffort: "medium",
     reasoningSummary: "auto",
+    // GPT-5 reasoning models are configured stateless (`store: false`) by
+    // `openAIDefaultOptions` below, so the only way a follow-up turn can
+    // carry reasoning state is via the encrypted reasoning include. Without
+    // this, callers using the default model facade get reasoning summaries
+    // they cannot replay statelessly.
+    include: ["reasoning.encrypted_content"],
     textVerbosity:
       options.textVerbosity === true && id.includes("gpt-5.") && !id.includes("codex") && !id.includes("-chat")
         ? "low"

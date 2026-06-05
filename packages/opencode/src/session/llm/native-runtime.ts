@@ -4,10 +4,18 @@ import { ProviderTransform } from "@/provider/transform"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { asSchema, type ModelMessage, type Tool } from "ai"
-import { Effect } from "effect"
+import { Cause, Effect, FiberSet, Queue } from "effect"
 import * as Stream from "effect/Stream"
 import { FetchHttpClient } from "effect/unstable/http"
-import { tool as nativeTool, ToolFailure, type JsonSchema, type LLMEvent } from "@opencode-ai/llm"
+import {
+  LLMRequest,
+  Tool as NativeTool,
+  ToolFailure,
+  ToolRuntime,
+  toDefinitions,
+  type JsonSchema,
+  type LLMEvent,
+} from "@opencode-ai/llm"
 import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
 
@@ -70,22 +78,66 @@ export function stream(input: StreamInput): StreamResult {
 
   // Integration point with @opencode-ai/llm: native-request lowers session data
   // into an LLMRequest, then LLMClient handles route selection and transport.
-  const stream = input.llmClient.stream({
-    request: LLMNative.request({
-      model: input.model,
-      apiKey: current.apiKey,
-      baseURL: current.baseURL,
-      messages: ProviderTransform.message(input.messages, input.model, input.providerOptions ?? {}),
-      toolChoice: input.toolChoice,
-      temperature: input.temperature,
-      topP: input.topP,
-      topK: input.topK,
-      maxOutputTokens: input.maxOutputTokens,
-      providerOptions: ProviderTransform.providerOptions(input.model, input.providerOptions ?? {}),
-      headers: { ...providerHeaders(input.provider.options.headers), ...input.headers },
-    }),
-    tools: nativeTools(input.tools, input),
+  //
+  // ProviderTransform.providerOptions builds AI-SDK-shaped options for the
+  // selected SDK key (e.g. "openai") and the native LLM SDK reads the same
+  // keys via OpenAIOptions.* (store, reasoningEffort, reasoningSummary,
+  // include, textVerbosity, promptCacheKey). Both sides intentionally use
+  // OpenAI's official wire field names, so this is identity, not translation
+  // — if a field ever needs to differ between the two surfaces, the
+  // translation belongs here, not split across both packages.
+  const tools = nativeTools(input.tools, input)
+  const request = LLMNative.request({
+    model: input.model,
+    apiKey: current.apiKey,
+    baseURL: current.baseURL,
+    messages: ProviderTransform.message(input.messages, input.model, input.providerOptions ?? {}),
+    toolChoice: input.toolChoice,
+    temperature: input.temperature,
+    topP: input.topP,
+    topK: input.topK,
+    maxOutputTokens: input.maxOutputTokens,
+    providerOptions: ProviderTransform.providerOptions(input.model, input.providerOptions ?? {}),
+    headers: { ...providerHeaders(input.provider.options.headers), ...input.headers },
   })
+  const stream = Stream.scoped(
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const settlements = yield* FiberSet.make<void>()
+        const results = yield* Queue.unbounded<LLMEvent, Cause.Done>()
+        const provider = input.llmClient
+          .stream(
+            LLMRequest.update(request, {
+              tools: [...request.tools, ...toDefinitions(tools)],
+            }),
+          )
+          .pipe(
+            Stream.flatMap((event) =>
+              event.type !== "tool-call" || event.providerExecuted
+                ? Stream.make(event)
+                : Stream.make(event).pipe(
+                    Stream.concat(
+                      Stream.fromEffectDrain(
+                        ToolRuntime.dispatch(tools, event).pipe(
+                          Effect.flatMap((dispatched) => Queue.offerAll(results, dispatched.events)),
+                          Effect.catchCause((cause) => Queue.failCause(results, cause)),
+                          Effect.asVoid,
+                          FiberSet.run(settlements, { startImmediately: true }),
+                        ),
+                      ),
+                    ),
+                  ),
+            ),
+            Stream.concat(
+              Stream.fromEffectDrain(
+                FiberSet.awaitEmpty(settlements).pipe(Effect.andThen(Queue.end(results)), Effect.asVoid),
+              ),
+            ),
+          )
+        return provider.pipe(Stream.concat(Stream.fromQueue(results)))
+      }),
+    ),
+  )
 
   return {
     ...current,
@@ -120,7 +172,7 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
       name,
       // Tool execution remains opencode-owned. The native runtime only adapts
       // the @opencode-ai/llm tool call back into the AI SDK Tool.execute shape.
-      nativeTool({
+      NativeTool.make({
         description: item.description ?? "",
         jsonSchema: nativeSchema(item.inputSchema),
         execute: (args: unknown, ctx) =>

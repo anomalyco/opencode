@@ -6,13 +6,14 @@ export type ThinkingMode = "show" | "hide"
 const MODES: readonly ThinkingMode[] = ["show", "hide"] as const
 
 // OpenAI's Responses API surfaces reasoning summaries that start with a bolded
-// title line: "**Inspecting PR workflow**\n\n<body>". GitHub Copilot routes
-// through the same shape, and the opencode provider relays it too. Pull the
-// title out for a nicer label; return null for providers that don't follow
-// this convention so the caller can fall back to a generic "Thinking" string.
-export function reasoningTitle(text: string): string | null {
-  const match = text.trimStart().match(/^\*\*([^*\n]+)\*\*/)
-  return match ? match[1].trim() : null
+// title block: "**Inspecting PR workflow**\n\n<body>". Treat that first block,
+// or a complete title still awaiting its body while streaming, as disclosure
+// metadata so the TUI can style its header independently from the markdown body.
+export function reasoningSummary(text: string) {
+  const content = text.trim()
+  const match = content.match(/^\*\*([^*\n]+)\*\*(?:\r?\n\r?\n|$)/)
+  if (!match) return { title: null, body: content }
+  return { title: match[1].trim(), body: content.slice(match[0].length).trimEnd() }
 }
 
 export function isThinkingMode(value: unknown): value is ThinkingMode {

@@ -5,7 +5,7 @@ import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
 
-export type { OpenAIOptionsInput } from "./openai-options"
+export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options"
 
 export const id = ProviderID.make("openai")
 
