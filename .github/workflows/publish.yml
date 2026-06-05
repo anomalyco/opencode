@@ -1,0 +1,503 @@
+name: publish
+run-name: "${{ format('release {0}', inputs.bump) }}"
+
+on:
+  push:
+    branches:
+      - ci
+      - dev
+      - beta
+      - fix/npm-native-binary-install
+      - snapshot-*
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Bump major, minor, or patch"
+        required: false
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+      version:
+        description: "Override version (optional)"
+        required: false
+        type: string
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
+
+permissions:
+  id-token: write
+  contents: write
+  packages: write
+
+jobs:
+  version:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Install OpenCode
+        if: inputs.bump || inputs.version
+        run: bun i -g opencode-ai
+
+      - id: version
+        run: |
+          ./script/version.ts
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          OPENCODE_BUMP: ${{ inputs.bump }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_REPO: ${{ (github.ref_name == 'beta' && 'anomalyco/opencode-beta') || github.repository }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+      tag: ${{ steps.version.outputs.tag }}
+      repo: ${{ steps.version.outputs.repo }}
+
+  build-cli:
+    needs: version
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Build
+        id: build
+        run: |
+          ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+          ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          GH_REPO: ${{ needs.version.outputs.repo }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli
+          path: |
+            packages/opencode/dist/opencode-darwin*
+            packages/opencode/dist/opencode-linux*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist/opencode-windows*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist/lildax-*
+
+    outputs:
+      version: ${{ needs.version.outputs.version }}
+
+  sign-cli-windows:
+    needs:
+      - build-cli
+      - version
+    runs-on: blacksmith-4vcpu-windows-2025
+    if: github.repository == 'anomalyco/opencode'
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Azure login
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1.2.0
+        with:
+          endpoint: ${{ env.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+          files: |
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Verify Windows CLI signatures
+        shell: pwsh
+        run: |
+          $files = @(
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe",
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe",
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
+          )
+
+          foreach ($file in $files) {
+            $sig = Get-AuthenticodeSignature $file
+            if ($sig.Status -ne "Valid") {
+              throw "Invalid signature for ${file}: $($sig.Status)"
+            }
+          }
+
+      - name: Repack Windows CLI archives
+        working-directory: packages/opencode/dist
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "opencode-windows-arm64\bin\*" -DestinationPath "opencode-windows-arm64.zip" -Force
+          Compress-Archive -Path "opencode-windows-x64\bin\*" -DestinationPath "opencode-windows-x64.zip" -Force
+          Compress-Archive -Path "opencode-windows-x64-baseline\bin\*" -DestinationPath "opencode-windows-x64-baseline.zip" -Force
+
+      - name: Upload signed Windows CLI release assets
+        if: needs.version.outputs.release != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          gh release upload "v${{ needs.version.outputs.version }}" `
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64.zip" `
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64.zip" `
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline.zip" `
+            --clobber `
+            --repo "${{ needs.version.outputs.repo }}"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli-signed-windows
+          path: |
+            packages/opencode/dist/opencode-windows-arm64
+            packages/opencode/dist/opencode-windows-x64
+            packages/opencode/dist/opencode-windows-x64-baseline
+
+  build-electron:
+    needs:
+      - build-cli
+      - version
+    if: github.repository == 'anomalyco/opencode'
+    continue-on-error: false
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-26-intel
+            target: x86_64-apple-darwin
+            platform_flag: --mac --x64
+            bun_install_flags: --os=darwin --cpu=x64
+          - host: macos-26
+            target: aarch64-apple-darwin
+            platform_flag: --mac --arm64
+            bun_install_flags: --os=darwin --cpu=arm64
+          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
+          - host: "windows-2025"
+            target: aarch64-pc-windows-msvc
+            platform_flag: --win --arm64
+          - host: "blacksmith-4vcpu-windows-2025"
+            target: x86_64-pc-windows-msvc
+            platform_flag: --win
+          - host: "blacksmith-4vcpu-ubuntu-2404"
+            target: x86_64-unknown-linux-gnu
+            platform_flag: --linux
+          - host: "blacksmith-4vcpu-ubuntu-2404-arm"
+            target: aarch64-unknown-linux-gnu
+            platform_flag: --linux --arm64
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
+        if: runner.os == 'macOS'
+        with:
+          keychain: build
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Setup Apple API Key
+        if: runner.os == 'macOS'
+        run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          install-flags: ${{ matrix.settings.bun_install_flags }}
+
+      - name: Azure login
+        if: runner.os == 'Windows'
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Cache apt packages
+        if: contains(matrix.settings.host, 'ubuntu')
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/apt-cache
+          key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-electron-${{ hashFiles('.github/workflows/publish.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.settings.target }}-apt-electron-
+
+      - name: Install dependencies (ubuntu only)
+        if: contains(matrix.settings.host, 'ubuntu')
+        run: |
+          mkdir -p ~/apt-cache && chmod -R a+rw ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" rpm
+          sudo chmod -R a+rw ~/apt-cache
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Prepare
+        run: bun ./scripts/prepare.ts
+        working-directory: packages/desktop
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
+          RUST_TARGET: ${{ matrix.settings.target }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+
+      - name: Build
+        run: bun run build
+        working-directory: packages/desktop
+        env:
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
+          SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
+          VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+
+      - name: Package and publish
+        if: needs.version.outputs.release
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish always --config electron-builder.config.ts
+        working-directory: packages/desktop
+        timeout-minutes: 60
+        env:
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      - name: Package (no publish)
+        if: ${{ !needs.version.outputs.release }}
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
+        working-directory: packages/desktop
+        timeout-minutes: 60
+        env:
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+
+      - name: Create and upload macOS .app.tar.gz
+        if: runner.os == 'macOS' && needs.version.outputs.release
+        working-directory: packages/desktop/dist
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          if [[ "${{ matrix.settings.target }}" == "x86_64-apple-darwin" ]]; then
+            APP_DIR="mac"
+            OUT_NAME="opencode-desktop-mac-x64.app.tar.gz"
+          elif [[ "${{ matrix.settings.target }}" == "aarch64-apple-darwin" ]]; then
+            APP_DIR="mac-arm64"
+            OUT_NAME="opencode-desktop-mac-arm64.app.tar.gz"
+          else
+            echo "Unknown macOS target: ${{ matrix.settings.target }}"
+            exit 1
+          fi
+          APP_PATH=$(find "$APP_DIR" -maxdepth 1 -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found in $APP_DIR"
+            exit 1
+          fi
+          tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+          gh release upload "v${{ needs.version.outputs.version }}" "$OUT_NAME" --clobber --repo "${{ needs.version.outputs.repo }}"
+
+      - name: Verify signed Windows Electron artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = @()
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*.exe" | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*unpacked\*.exe" | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*unpacked\resources\opencode-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+
+          foreach ($file in $files | Select-Object -Unique) {
+            $sig = Get-AuthenticodeSignature $file
+            if ($sig.Status -ne "Valid") {
+              throw "Invalid signature for ${file}: $($sig.Status)"
+            }
+          }
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-desktop-${{ matrix.settings.target }}
+          path: packages/desktop/dist/*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: needs.version.outputs.release
+        with:
+          name: latest-yml-${{ matrix.settings.target }}
+          path: packages/desktop/dist/latest*.yml
+
+  publish:
+    needs:
+      - version
+      - build-cli
+      - sign-cli-windows
+      - build-electron
+    if: always() && !failure() && !cancelled()
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli-signed-windows
+          path: packages/opencode/dist
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.version.outputs.release
+        with:
+          pattern: latest-yml-*
+          path: /tmp/latest-yml
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Cache apt packages (AUR)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-aur-${{ hashFiles('.github/workflows/publish.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-aur-
+
+      - name: Setup SSH for AUR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pacman-package-manager
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          git config --global user.email "opencode@sst.dev"
+          git config --global user.name "opencode"
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
+
+      - run: ./script/publish.ts
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_REPO: ${{ needs.version.outputs.repo }}
+          NPM_CONFIG_PROVENANCE: false
+          LATEST_YML_DIR: /tmp/latest-yml
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}

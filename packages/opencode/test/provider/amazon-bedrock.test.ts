@@ -10,6 +10,7 @@ import { Provider } from "@/provider/provider"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer))
 
@@ -32,6 +33,20 @@ afterEach(async () => {
 })
 
 const list = Provider.use.list()
+
+const mantleModelConfig = {
+  provider: { npm: "@ai-sdk/amazon-bedrock/mantle" },
+  limit: { context: 272_000, output: 32_000 },
+  modalities: {
+    input: ["text", "image", "pdf"] as Array<"text" | "image" | "pdf">,
+    output: ["text"] as Array<"text">,
+  },
+}
+
+const mantleOpenAIModelConfig = {
+  ...mantleModelConfig,
+  provider: { npm: "@ai-sdk/amazon-bedrock/mantle", api: "https://bedrock-mantle.us-east-2.api.aws/openai/v1" },
+}
 
 const withAuthJson = (contents: string) =>
   Effect.acquireRelease(
@@ -92,6 +107,65 @@ it.instance(
       expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("eu-west-1")
     }),
   { config: { provider: { "amazon-bedrock": { options: { region: "eu-west-1" } } } } },
+)
+
+it.instance(
+  "Bedrock Mantle: GPT-5.5 uses Responses API and OpenAI base path",
+  () =>
+    Effect.gen(function* () {
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
+      const model = yield* Provider.use.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5"))
+      const language = yield* Provider.use.getLanguage(model)
+      expect((language as { provider: string }).provider).toBe("bedrock-mantle.responses")
+      expect((language as { modelId: string }).modelId).toBe("openai.gpt-5.5")
+      expect(
+        (language as unknown as { config: { url: (input: { path: string; modelId: string }) => string } }).config.url({
+          path: "/responses",
+          modelId: "openai.gpt-5.5",
+        }),
+      ).toBe("https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses")
+    }),
+  {
+    config: {
+      provider: {
+        "amazon-bedrock": {
+          options: { region: "us-east-2" },
+          models: { "openai.gpt-5.5": mantleOpenAIModelConfig },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "Bedrock Mantle: GPT OSS safeguard uses Chat Completions and Mantle base path",
+  () =>
+    Effect.gen(function* () {
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
+      const model = yield* Provider.use.getModel(
+        ProviderV2.ID.amazonBedrock,
+        ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
+      )
+      const language = yield* Provider.use.getLanguage(model)
+      expect((language as { provider: string }).provider).toBe("bedrock-mantle.chat")
+      expect((language as { modelId: string }).modelId).toBe("openai.gpt-oss-safeguard-120b")
+      expect(
+        (language as unknown as { config: { url: (input: { path: string; modelId: string }) => string } }).config.url({
+          path: "/chat/completions",
+          modelId: "openai.gpt-oss-safeguard-120b",
+        }),
+      ).toBe("https://bedrock-mantle.us-east-1.api.aws/v1/chat/completions")
+    }),
+  {
+    config: {
+      provider: {
+        "amazon-bedrock": {
+          options: { region: "us-east-1" },
+          models: { "openai.gpt-oss-safeguard-120b": mantleModelConfig },
+        },
+      },
+    },
+  },
 )
 
 it.instance(

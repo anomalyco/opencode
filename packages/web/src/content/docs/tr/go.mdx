@@ -59,6 +59,7 @@ Mevcut model listesi şunları içerir:
 - **MiniMax M2.7**
 - **MiniMax M3**
 - **Qwen3.6 Plus**
+- **Qwen3.7 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
@@ -91,6 +92,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 | MiniMax M2.7      | 3,400              | 8,500          | 17,000      |
 | MiniMax M2.5      | 6,300              | 15,900         | 31,800      |
 | Qwen3.7 Max       | 950                | 2,390          | 4,770       |
+| Qwen3.7 Plus      | 4,300              | 10,800         | 21,600      |
 | Qwen3.6 Plus      | 3,300              | 8,200          | 16,300      |
 | DeepSeek V4 Pro   | 3,450              | 8,550          | 17,150      |
 | DeepSeek V4 Flash | 31,650             | 79,050         | 158,150     |
@@ -104,6 +106,7 @@ Tahminler, gözlemlenen ortalama istek modellerine dayanır:
 - MiniMax M3 — İstek başına 810 girdi, 62.000 önbelleğe alınmış, 225 çıktı token'ı
 - MiniMax M2.7/M2.5 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
 - Qwen3.7 Max — İstek başına 420 girdi, 66.000 önbelleğe alınmış, 200 çıktı token'ı
+- Qwen3.7 Plus — İstek başına 500 girdi, 57.000 önbelleğe alınmış, 190 çıktı token'ı
 - Qwen3.6 Plus — İstek başına 500 girdi, 57.000 önbelleğe alınmış, 190 çıktı token'ı
 - MiMo-V2.5 — İstek başına 830 girdi, 71.500 önbelleğe alınmış, 295 çıktı token'ı
 - MiMo-V2.5-Pro — İstek başına 790 girdi, 86.000 önbelleğe alınmış, 305 çıktı token'ı
@@ -122,6 +125,7 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara da dayanır:
 | MiniMax M2.7      | $0.30 | $1.20  | $0.06       | $0.375       |
 | MiniMax M2.5      | $0.30 | $1.20  | $0.06       | $0.375       |
 | Qwen3.7 Max       | $2.50 | $7.50  | $0.50       | $3.125       |
+| Qwen3.7 Plus      | $0.40 | $1.60  | $0.04       | $0.50        |
 | Qwen3.6 Plus      | $0.50 | $3.00  | $0.05       | $0.625       |
 | DeepSeek V4 Pro   | $1.74 | $3.48  | $0.0145     | -            |
 | DeepSeek V4 Flash | $0.14 | $0.28  | $0.0028     | -            |
@@ -160,6 +164,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K2.6 için yapılandırmanızda `opencode-go/kimi-k2.6` kullanmalısınız.

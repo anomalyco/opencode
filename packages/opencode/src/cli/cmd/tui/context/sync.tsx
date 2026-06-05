@@ -29,7 +29,7 @@ import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import * as Log from "@opencode-ai/core/util/log"
-import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
+import { emptyConsoleState, type ConsoleState } from "@opencode-ai/core/v1/config/console-state"
 import path from "path"
 import { useKV } from "./kv"
 import { aggregateFailures } from "./aggregate-failures"
@@ -248,6 +248,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             "session",
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
+            }),
+          )
+          break
+        }
+
+        case "session.next.moved": {
+          const result = Binary.search(store.session, event.properties.sessionID, (s) => s.id)
+          if (!result.found) break
+          setStore(
+            "session",
+            result.index,
+            produce((session) => {
+              session.directory = event.properties.location.directory
+              session.path = event.properties.subdirectory
+              session.workspaceID = event.properties.location.workspaceID
+              session.time.updated = event.properties.timestamp
             }),
           )
           break
