@@ -27,6 +27,7 @@ const toZod = (input: Record<string, string>): z.ZodType => {
 
 export const resolveDynamic = Effect.fn("DynamicTools.resolve")(function* () {
   const runtime = yield* ToolRuntime
+  yield* initDynamic()
   const signatures = yield* runtime.list()
 
   return signatures.map((sig) => {
@@ -51,6 +52,7 @@ export const resolveDynamic = Effect.fn("DynamicTools.resolve")(function* () {
 
 export const resolveDynamicCatalog = Effect.fn("DynamicTools.resolveCatalog")(function* () {
   const runtime = yield* ToolRuntime
+  yield* initDynamic()
   const signatures = yield* runtime.listCatalog()
 
   return signatures.map((sig) => {
@@ -73,17 +75,15 @@ export const resolveDynamicCatalog = Effect.fn("DynamicTools.resolveCatalog")(fu
   })
 })
 
-export const initDynamic = Effect.fn("DynamicTools.init")(function* () {
-  const runtime = yield* ToolRuntime
-
+export const syncDynamic = Effect.fn("DynamicTools.sync")(function* (runtime: ToolRuntime) {
   const matches = Glob.scanSync("tools/*.ts", { cwd: process.cwd(), absolute: true, dot: true, symlink: true })
-  if (matches.length === 0) {
-    log.info("no dynamic tool files found in tools/")
-    return
-  }
+  if (matches.length === 0) return
 
   for (const match of matches) {
     const name = path.basename(match, path.extname(match))
+    const already = yield* runtime.isRegistered(name)
+    if (already) continue
+
     yield* runtime
       .register(name, match)
       .pipe(
@@ -92,6 +92,9 @@ export const initDynamic = Effect.fn("DynamicTools.init")(function* () {
         ),
       )
   }
+})
 
-  log.info("registered dynamic tools", { count: matches.length })
+export const initDynamic = Effect.fn("DynamicTools.init")(function* () {
+  const runtime = yield* ToolRuntime
+  yield* syncDynamic(runtime)
 })

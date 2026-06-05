@@ -227,7 +227,7 @@ export const layer: Layer.Layer<
           }
         }
 
-        yield* initDynamic().pipe(Effect.provideService(ToolRuntime, runtime))
+        yield* initDynamic()
 
         yield* config.get()
         const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool

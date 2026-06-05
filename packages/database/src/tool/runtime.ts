@@ -241,18 +241,31 @@ export class ToolRuntime extends Context.Service<ToolRuntime, ToolRuntimeInterfa
 
         searchCatalog: Effect.fn("ToolRuntime.searchCatalog")(function* (query) {
           const q = query.toLowerCase()
+          const tokens = q.split(/\s+/).filter(Boolean)
           const results: ScoredSignature[] = []
           for (const instance of catalog.values()) {
             const sig = instance.signature
+            const name = sig.name.toLowerCase()
+            const description = sig.description.toLowerCase()
+            const inputKeys = Object.keys(sig.input).map((k) => k.toLowerCase())
+            const outputKeys = Object.keys(sig.output).map((k) => k.toLowerCase())
+
             let score = 0
-            if (sig.name.toLowerCase().includes(q)) score += 10
-            if (sig.description.toLowerCase().includes(q)) score += 5
-            for (const key of Object.keys(sig.input)) {
-              if (key.toLowerCase().includes(q)) score += 2
+
+            if (name.includes(q)) score += 20
+            if (description.includes(q)) score += 10
+
+            for (const token of tokens) {
+              if (name.includes(token)) score += 8
+              if (description.includes(token)) score += 4
+              for (const key of inputKeys) {
+                if (key.includes(token)) score += 2
+              }
+              for (const key of outputKeys) {
+                if (key.includes(token)) score += 1
+              }
             }
-            for (const key of Object.keys(sig.output)) {
-              if (key.toLowerCase().includes(q)) score += 1
-            }
+
             if (score > 0) results.push({ ...sig, score })
           }
           return results.sort((a, b) => b.score - a.score)

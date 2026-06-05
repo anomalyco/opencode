@@ -1,5 +1,6 @@
 import { ToolRuntime, ToolRuntimeError } from "@opencode-ai/database/tool/runtime"
 import { Effect, Schema } from "effect"
+import { syncDynamic } from "./dynamic"
 import * as Tool from "./tool"
 
 const Parameters = Schema.Struct({
@@ -34,13 +35,24 @@ export const CallTool = Tool.define(
             }
           }
 
-          const result = yield* runtime
-            .execute(params.name, parsed)
-            .pipe(
-              Effect.catchTag("ToolRuntimeError", (e: ToolRuntimeError) =>
-                Effect.succeed({ _error: e.message } as any),
-              ),
-            )
+          const tryExecute = () =>
+            runtime
+              .execute(params.name, parsed)
+              .pipe(
+                Effect.catchTag("ToolRuntimeError", (e: ToolRuntimeError) =>
+                  Effect.succeed({ _error: e.message } as any),
+                ),
+              )
+
+          let result = yield* tryExecute()
+
+          if (result && typeof result === "object" && "_error" in result) {
+            const msg = (result as any)._error as string
+            if (msg.includes("not found")) {
+              yield* syncDynamic(runtime)
+              result = yield* tryExecute()
+            }
+          }
 
           if ("_error" in result) {
             return {

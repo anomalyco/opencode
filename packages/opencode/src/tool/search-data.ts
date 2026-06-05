@@ -1,5 +1,6 @@
 import { ToolRuntime } from "@opencode-ai/database/tool/runtime"
 import { Effect, Schema } from "effect"
+import { syncDynamic } from "./dynamic"
 import * as Tool from "./tool"
 
 const Parameters = Schema.Struct({
@@ -23,6 +24,7 @@ export const SearchDataTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
+          yield* syncDynamic(runtime)
           const limit = params.limit ?? 10
           const results = yield* runtime.searchCatalog(params.query)
 

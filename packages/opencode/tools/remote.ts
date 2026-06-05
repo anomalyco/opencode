@@ -76,11 +76,11 @@ function ssh(input: {
       stderr: (result.stderr || "").trim(),
       exitCode: result.status ?? 1,
     }
-  } catch (error: any) {
+  } catch (error) {
     return {
       success: false,
       stdout: "",
-      stderr: error.message || String(error),
+      stderr: error instanceof Error ? error.message : String(error),
       exitCode: 1,
     }
   }
