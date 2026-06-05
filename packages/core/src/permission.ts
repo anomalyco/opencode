@@ -16,6 +16,7 @@ export { Effect, Rule, Ruleset } from "./permission/schema"
 type Effect = PermissionSchema.Effect
 type Rule = PermissionSchema.Rule
 type Ruleset = PermissionSchema.Ruleset
+const missingAgentPermissions: Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
 
 export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
   Schema.brand("PermissionV2.ID"),
@@ -161,7 +162,7 @@ export const layer = Layer.effect(
     const configured = EffectRuntime.fn("PermissionV2.configured")(function* (sessionID: SessionV2.ID) {
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionV2.NotFoundError({ sessionID })
-      return (yield* agents.get(AgentV2.ID.make(session.agent ?? "build")))?.permissions ?? []
+      return (yield* agents.resolve(session.agent))?.permissions ?? missingAgentPermissions
     })
 
     function denied(input: AssertInput, rules: Ruleset) {
