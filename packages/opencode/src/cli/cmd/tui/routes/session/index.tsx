@@ -197,6 +197,17 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
+  const descendants = createMemo(() => {
+    const rootID = session()?.parentID ?? session()?.id
+    if (!rootID) return []
+    const ids = new Set([rootID])
+    for (const id of ids) {
+      for (const s of sync.data.session) {
+        if (s.parentID === id) ids.add(s.id)
+      }
+    }
+    return sync.data.session.filter((x) => ids.has(x.id))
+  })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const foregroundTasks = createMemo(() =>
     messages().flatMap((message) =>
@@ -211,11 +222,11 @@ export function Session() {
   )
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.question[x.id] ?? [])
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
