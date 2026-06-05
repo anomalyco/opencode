@@ -58,7 +58,8 @@ export const Plugin = PluginV2.define({
 
     yield* agent.update((editor) => {
       const global = documents.flatMap((document) => document.info.permissions ?? [])
-      const configuredDefault = documents.findLast((document) => document.info.default_agent !== undefined)?.info.default_agent
+      const configuredDefault = documents.findLast((document) => document.info.default_agent !== undefined)?.info
+        .default_agent
       if (configuredDefault !== undefined) editor.default(AgentV2.ID.make(configuredDefault))
       for (const current of editor.list()) {
         editor.update(current.id, (agent) => agent.permissions.push(...global))

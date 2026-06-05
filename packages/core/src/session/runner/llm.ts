@@ -152,7 +152,9 @@ export const layer = Layer.effect(
       const context = yield* store.runnerContext(session.id, system.baselineSeq)
       const request = LLM.request({
         model,
-        system: [agent?.system, system.baseline].filter((part): part is string => part !== undefined && part.length > 0).map(SystemPart.make),
+        system: [agent?.system, system.baseline]
+          .filter((part): part is string => part !== undefined && part.length > 0)
+          .map(SystemPart.make),
         messages: toLLMMessages(context, model),
         tools: yield* tools.definitions(),
       })

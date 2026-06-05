@@ -787,7 +787,12 @@ describe("SessionRunnerLLM", () => {
           agent.mode = "primary"
         }),
       )
-      yield* db.update(SessionTable).set({ agent: "reviewer" }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+      yield* db
+        .update(SessionTable)
+        .set({ agent: "reviewer" })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
       const session = yield* SessionV2.Service
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
 
