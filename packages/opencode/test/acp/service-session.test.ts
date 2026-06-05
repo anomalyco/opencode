@@ -356,6 +356,98 @@ describe("ACP service sessions", () => {
     ])
   })
 
+  it("replays loaded apply_patch tool diffs", async () => {
+    const { service, updates } = makeService([
+      {
+        info: { id: "msg_assistant", sessionID: "ses_loaded", role: "assistant" },
+        parts: [
+          {
+            id: "part_patch",
+            sessionID: "ses_loaded",
+            messageID: "msg_assistant",
+            type: "tool",
+            callID: "call_patch",
+            tool: "apply_patch",
+            state: {
+              status: "completed",
+              input: {
+                patchText: "*** Begin Patch\n*** Update File: README.md\n@@\n-old\n+new\n*** End Patch",
+              },
+              output: "Success. Updated the following files:\nM README.md",
+              title: "README.md",
+              metadata: {
+                files: [
+                  {
+                    filePath: "/workspace/README.md",
+                    relativePath: "README.md",
+                    type: "update",
+                    before: "old\n",
+                    after: "new\n",
+                  },
+                ],
+              },
+              time: { start: 1, end: 2 },
+            },
+          },
+        ],
+      },
+    ])
+
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    expect(
+      updates
+        .map((item) => item.update)
+        .filter((item) => item.sessionUpdate === "tool_call" || item.sessionUpdate === "tool_call_update"),
+    ).toEqual([
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "call_patch",
+        title: "apply_patch",
+        kind: "edit",
+        status: "pending",
+        locations: [],
+        rawInput: {},
+      },
+      {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "call_patch",
+        status: "completed",
+        kind: "edit",
+        title: "README.md",
+        content: [
+          {
+            type: "content",
+            content: { type: "text", text: "Success. Updated the following files:\nM README.md" },
+          },
+          {
+            type: "diff",
+            path: "/workspace/README.md",
+            oldText: "old\n",
+            newText: "new\n",
+          },
+        ],
+        rawInput: {
+          patchText: "*** Begin Patch\n*** Update File: README.md\n@@\n-old\n+new\n*** End Patch",
+        },
+        rawOutput: {
+          output: "Success. Updated the following files:\nM README.md",
+          metadata: {
+            files: [
+              {
+                filePath: "/workspace/README.md",
+                relativePath: "README.md",
+                type: "update",
+                before: "old\n",
+                after: "new\n",
+              },
+            ],
+          },
+        },
+      },
+    ])
+  })
+
   it("lists sessions sorted by updated time with cursor support", async () => {
     const { service } = makeService()
     const first = await Effect.runPromise(service.listSessions({ cwd: "/workspace" }))
