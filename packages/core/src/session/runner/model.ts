@@ -128,10 +128,9 @@ export const locationLayer = Layer.effect(
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         yield* boot.wait()
-        const preferred = yield* catalog.model.default()
         const selected = session.model
           ? yield* catalog.model.get(session.model.providerID, session.model.id)
-          : (Option.getOrUndefined(preferred.pipe(Option.filter(supported))) ??
+          : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
             (yield* catalog.model.available()).find(supported))
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
         return yield* resolve(session, selected, yield* catalog.provider.get(selected.providerID))

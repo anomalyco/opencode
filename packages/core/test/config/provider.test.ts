@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
@@ -30,6 +30,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
             new Config.Document({
               type: "document",
               info: decode({
+                model: "custom/first",
                 providers: {
                   custom: {
                     name: "Configured",
@@ -59,11 +60,15 @@ describe("ConfigProviderPlugin.Plugin", () => {
             new Config.Document({
               type: "document",
               info: decode({
+                model: "custom/default",
                 providers: {
                   custom: {
                     api: { type: "aisdk", package: "custom-sdk", url: "https://example.test" },
                     request: request({ last: "last", shared: "last" }),
                     models: {
+                      default: {
+                        name: "Default",
+                      },
                       chat: {
                         api: { id: "api-chat" },
                         name: "Last",
@@ -106,6 +111,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const provider = yield* catalog.provider.get(providerID)
       const model = yield* catalog.model.get(providerID, modelID)
+      expect(Option.getOrUndefined(yield* catalog.model.default())?.id).toBe(ModelV2.ID.make("default"))
       expect(provider.name).toBe("Renamed")
       expect(provider.env).toEqual(["CUSTOM_API_KEY"])
       expect(provider.enabled).toEqual({ via: "custom", data: {} })

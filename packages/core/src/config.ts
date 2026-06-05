@@ -118,6 +118,12 @@ export class Directory extends Schema.Class<Directory>("Config.Directory")({
 
 export type Entry = Document | Directory
 
+export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
+  return entries
+    .filter((entry): entry is Document => entry.type === "document")
+    .findLast((entry) => entry.info[key] !== undefined)?.info[key]
+}
+
 export interface Interface {
   /** Returns location config documents and supplemental directories from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
