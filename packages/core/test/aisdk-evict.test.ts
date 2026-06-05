@@ -144,4 +144,25 @@ describe("AISDK.evict", () => {
       expect(result._tag).toBe("Success")
     }),
   )
+
+  it.effect("evict does not affect models whose providerID is a prefix of the target providerID", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
+      const sdkCalls: string[] = []
+      yield* plugin.add(pluginWithCounter(sdkCalls))
+
+      const shortProvider = model("provider", "model-1")
+      const longProvider = model("provider-a", "model-1")
+
+      yield* aisdk.language(shortProvider)
+      yield* aisdk.language(longProvider)
+      expect(sdkCalls).toHaveLength(2)
+
+      yield* aisdk.evict({ providerID: ProviderV2.ID.make("provider-a"), id: ModelV2.ID.make("model-1") })
+
+      yield* aisdk.language(shortProvider)
+      expect(sdkCalls).toHaveLength(2)
+    }),
+  )
 })

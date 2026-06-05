@@ -30,26 +30,83 @@ describe("ProviderError.isExpiredCredentials", () => {
     ).toBe(true)
   })
 
-  test("matches ExpiredTokenException in response body", () => {
+  test("matches ExpiredTokenException in error message", () => {
+    expect(
+      ProviderError.isExpiredCredentials(
+        expiredError({ message: "ExpiredTokenException: Token has expired" }),
+      ),
+    ).toBe(true)
+  })
+
+  test("matches ExpiredTokenException on 403", () => {
+    expect(
+      ProviderError.isExpiredCredentials(
+        expiredError({ message: "ExpiredTokenException", statusCode: 403 }),
+      ),
+    ).toBe(true)
+  })
+
+  test("matches ExpiredTokenException as structured __type field in responseBody (real SDK behavior)", () => {
     expect(
       ProviderError.isExpiredCredentials(
         expiredError({
-          message: "401",
+          message: "Unauthorized",
           responseBody: JSON.stringify({ __type: "ExpiredTokenException", message: "Token has expired" }),
+          statusCode: 401,
         }),
       ),
     ).toBe(true)
   })
 
-  test("matches InvalidClientTokenId in response body", () => {
+  test("matches ExpiredTokenException as structured __type field on 403", () => {
     expect(
       ProviderError.isExpiredCredentials(
         expiredError({
-          message: "403",
-          responseBody: JSON.stringify({ code: "InvalidClientTokenId", message: "The security token is invalid" }),
+          message: "Forbidden",
+          responseBody: JSON.stringify({ __type: "ExpiredTokenException", message: "Token has expired" }),
+          statusCode: 403,
         }),
       ),
     ).toBe(true)
+  })
+
+  test("does not match InvalidClientTokenId — structurally invalid credential, retry won't help", () => {
+    expect(
+      ProviderError.isExpiredCredentials(
+        expiredError({ message: "InvalidClientTokenId: The security token is invalid", statusCode: 403 }),
+      ),
+    ).toBe(false)
+  })
+
+  test("does not match InvalidClientTokenId in responseBody __type field", () => {
+    expect(
+      ProviderError.isExpiredCredentials(
+        expiredError({
+          message: "Forbidden",
+          responseBody: JSON.stringify({ __type: "InvalidClientTokenId" }),
+          statusCode: 403,
+        }),
+      ),
+    ).toBe(false)
+  })
+
+  test("does not match raw ExpiredTokenException string anywhere in responseBody — injection protection", () => {
+    expect(
+      ProviderError.isExpiredCredentials(
+        expiredError({
+          message: "Unauthorized",
+          responseBody: '{"error":"something about ExpiredTokenException in a message field"}',
+        }),
+      ),
+    ).toBe(false)
+  })
+
+  test("does not throw on malformed JSON in responseBody", () => {
+    expect(
+      ProviderError.isExpiredCredentials(
+        expiredError({ message: "Unauthorized", responseBody: "not json {{{{" }),
+      ),
+    ).toBe(false)
   })
 
   test("does not match a generic 401 without STS signals", () => {

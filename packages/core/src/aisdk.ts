@@ -131,17 +131,25 @@ export const layer = Layer.effect(
     const sdks = new Map<string, SDK>()
 
     function buildLanguageKey(model: ModelV2.Info) {
-      return `${model.providerID}/${model.id}/${model.request.variant ?? "default"}`
+      return `${model.providerID}\x00${model.id}\x00${model.request.variant ?? "default"}`
     }
 
     return Service.of({
       evict: Effect.fn("AISDK.evict")(function* (model) {
-        const langKey = `${model.providerID}/${model.id}/`
-        for (const key of languages.keys()) {
-          if (key.startsWith(langKey)) languages.delete(key)
+        // Language keys are `${providerID}/${modelID}/${variant}`. Use a separator-aware
+        // prefix so a providerID containing "/" cannot extend the match into a different
+        // model's subtree.
+        const langPrefix = `${model.providerID}\x00${model.id}\x00`
+        for (const key of [...languages.keys()]) {
+          if (key.startsWith(langPrefix)) languages.delete(key)
         }
-        for (const key of sdks.keys()) {
-          if (key.includes(`"providerID":"${model.providerID}"`)) sdks.delete(key)
+        // SDK keys are JSON. Parse and compare providerID by field equality to avoid
+        // injection via crafted providerID values. All models for a provider share the
+        // same STS credentials, so provider-wide SDK eviction is correct here.
+        for (const key of [...sdks.keys()]) {
+          try {
+            if ((JSON.parse(key) as { providerID?: string }).providerID === model.providerID) sdks.delete(key)
+          } catch {}
         }
       }),
       language: Effect.fn("AISDK.language")(function* (model) {

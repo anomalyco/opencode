@@ -185,20 +185,36 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
   }
 }
 
-// AWS STS credential expiry patterns — surfaced as 401/403 with these message signatures.
-// The security token error comes from Bedrock when STS-vended credentials have been cached
-// past their TTL by the AI SDK. The InvalidClientTokenId and ExpiredTokenException codes
-// are the canonical AWS error codes for the same condition.
-const EXPIRED_CREDENTIALS_PATTERNS = [
+// AWS STS token expiry patterns. The SDK puts the HTTP status text in error.message
+// ("Unauthorized") and the AWS error code in error.responseBody as a JSON __type field.
+// We check both, but responseBody is only checked via structured JSON field extraction —
+// not raw substring matching — so a server cannot inject arbitrary trigger strings into
+// a response body to force eviction+retry.
+//
+// InvalidClientTokenId is intentionally excluded: it signals a structurally bad or
+// unrecognized credential, not an expired one. Evicting and re-fetching won't help —
+// the same bad credential would be re-loaded. Only ExpiredTokenException (expired but
+// otherwise valid credential) benefits from cache eviction.
+const EXPIRED_CREDENTIAL_MESSAGE_PATTERNS = [
   /the security token included in the request is expired/i,
   /ExpiredTokenException/,
-  /InvalidClientTokenId/,
 ]
+
+function extractAwsErrorType(responseBody: string | undefined): string | undefined {
+  if (!responseBody) return undefined
+  try {
+    const parsed = JSON.parse(responseBody) as Record<string, unknown>
+    const type = parsed.__type ?? parsed.code
+    return typeof type === "string" ? type : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export function isExpiredCredentials(error: unknown): boolean {
   if (!(error instanceof APICallError)) return false
-  const msg = error.message + (error.responseBody ?? "")
-  return EXPIRED_CREDENTIALS_PATTERNS.some((p) => p.test(msg))
+  if (EXPIRED_CREDENTIAL_MESSAGE_PATTERNS.some((p) => p.test(error.message))) return true
+  return extractAwsErrorType(error.responseBody) === "ExpiredTokenException"
 }
 
 export * as ProviderError from "./error"
