@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit, Layer, Schema } from "effect"
+import { Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -97,6 +97,24 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("revalidates file identity before sampled classification", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, "image.png")
+        yield* Effect.promise(() => fs.writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47])))
+        const service = yield* FileSystem.Service
+        const target = yield* service.resolveRead({ path: RelativePath.make("image.png") })
+
+        yield* Effect.promise(() => fs.rename(file, path.join(directory, "original.png")))
+        yield* Effect.promise(() => fs.writeFile(file, Buffer.from([0xff, 0xd8, 0xff])))
+
+        expect(
+          Exit.isFailure(yield* service.readSampleResolved(target, FileSystem.READ_SAMPLE_BYTES).pipe(Effect.exit)),
+        ).toBe(true)
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("pages large UTF-8 text files by line with continuation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -130,6 +148,152 @@ describe("FileSystem", () => {
         })
       }).pipe(provide(directory)),
     ),
+  )
+
+  it.live("rejects paged text when a late NUL appears after the requested page", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, "late-binary.txt")
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            file,
+            Buffer.concat([Buffer.from("first\nsecond\n"), Buffer.alloc(80_000, 0x61), Buffer.from([0])]),
+          ),
+        )
+        const service = yield* FileSystem.Service
+        const target = yield* service.resolveRead({ path: RelativePath.make("late-binary.txt") })
+        expect(Exit.isFailure(yield* service.readToolResolved(target, { limit: 1 }).pipe(Effect.exit))).toBe(true)
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("rejects paged text when invalid UTF-8 appears near EOF", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, "invalid-utf8.txt")
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            file,
+            Buffer.concat([Buffer.from("first\nsecond\n"), Buffer.alloc(80_000, 0x61), Buffer.from([0xc3, 0x28])]),
+          ),
+        )
+        const service = yield* FileSystem.Service
+        const target = yield* service.resolveRead({ path: RelativePath.make("invalid-utf8.txt") })
+        expect(Exit.isFailure(yield* service.readToolResolved(target, { limit: 1 }).pipe(Effect.exit))).toBe(true)
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("rejects PDFs for direct, large, and paged reads", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const small = path.join(directory, "small.pdf")
+        const large = path.join(directory, "large.pdf")
+        yield* Effect.promise(() => fs.writeFile(small, "%PDF-1.7\nsmall"))
+        yield* Effect.promise(() =>
+          fs.writeFile(large, Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(80_000)])),
+        )
+        const service = yield* FileSystem.Service
+        const smallTarget = yield* service.resolveRead({ path: RelativePath.make("small.pdf") })
+        const largeTarget = yield* service.resolveRead({ path: RelativePath.make("large.pdf") })
+        expect(Exit.isFailure(yield* service.readToolResolved(smallTarget).pipe(Effect.exit))).toBe(true)
+        expect(Exit.isFailure(yield* service.readToolResolved(largeTarget).pipe(Effect.exit))).toBe(true)
+        expect(Exit.isFailure(yield* service.readToolResolved(largeTarget, { limit: 1 }).pipe(Effect.exit))).toBe(true)
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("rejects signature-bearing media beyond the ingestion cap before loading", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, "huge.png")
+        yield* Effect.promise(async () => {
+          const handle = await fs.open(file, "w")
+          try {
+            await handle.write(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), 0, 8, 0)
+            await handle.truncate(FileSystem.MAX_MEDIA_INGEST_BYTES + 1)
+          } finally {
+            await handle.close()
+          }
+        })
+        const service = yield* FileSystem.Service
+        const target = yield* service.resolveRead({ path: RelativePath.make("huge.png") })
+        const exit = yield* service.readToolResolved(target).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("Media exceeds")
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("never mixes a sampled image with replacement-path content", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, "race.png")
+        const moved = path.join(directory, "original.png")
+        const original = Buffer.concat([
+          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+          Buffer.alloc(4 * 1024 * 1024, 0x11),
+        ])
+        const replacement = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(1024, 0x22)])
+        yield* Effect.promise(() => fs.writeFile(file, original))
+        const service = yield* FileSystem.Service
+        const target = yield* service.resolveRead({ path: RelativePath.make("race.png") })
+        const reading = yield* service.readToolResolved(target).pipe(Effect.forkChild)
+        yield* Effect.promise(async () => {
+          await fs.rename(file, moved)
+          await fs.writeFile(file, replacement)
+        })
+        const exit = yield* Fiber.join(reading).pipe(Effect.exit)
+        if (Exit.isSuccess(exit)) {
+          expect(exit.value).toMatchObject({ type: "binary", mime: "image/png" })
+          if (exit.value.type === "binary") expect(exit.value.content).toBe(original.toString("base64"))
+        }
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("closes validated descriptors after successful and failed reads", () =>
+    withTmp((directory) => {
+      let active = 0
+      const filesystem = Layer.effect(
+        FSUtil.Service,
+        Effect.gen(function* () {
+          const service = yield* FSUtil.Service
+          return FSUtil.Service.of({
+            ...service,
+            open: (target, options) =>
+              Effect.acquireRelease(
+                service.open(target, options).pipe(Effect.tap(() => Effect.sync(() => active++))),
+                () => Effect.sync(() => active--),
+              ),
+          })
+        }),
+      ).pipe(Layer.provide(FSUtil.defaultLayer))
+      return Effect.gen(function* () {
+        const text = path.join(directory, "text.txt")
+        const binary = path.join(directory, "binary.pdf")
+        yield* Effect.promise(() => fs.writeFile(text, "hello"))
+        yield* Effect.promise(() => fs.writeFile(binary, "%PDF-1.7"))
+        const service = yield* FileSystem.Service
+        const before =
+          process.platform === "win32"
+            ? undefined
+            : yield* Effect.promise(() => fs.readdir("/dev/fd").then((entries) => entries.length))
+        for (let index = 0; index < 50; index++) {
+          yield* service.readToolResolved(yield* service.resolveRead({ path: RelativePath.make("text.txt") }))
+          yield* service
+            .readToolResolved(yield* service.resolveRead({ path: RelativePath.make("binary.pdf") }))
+            .pipe(Effect.exit)
+        }
+        expect(active).toBe(0)
+        if (before !== undefined) {
+          const after = yield* Effect.promise(() => fs.readdir("/dev/fd").then((entries) => entries.length))
+          expect(after).toBeLessThanOrEqual(before + 2)
+        }
+        yield* Effect.promise(() => fs.rename(text, text + ".moved"))
+        yield* Effect.promise(() => fs.rename(binary, binary + ".moved"))
+      }).pipe(provide(directory, inertReferences, filesystem))
+    }),
   )
 
   it.live("lists direct children with relative paths and resolved URIs", () =>

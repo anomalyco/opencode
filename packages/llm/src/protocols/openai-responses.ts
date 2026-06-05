@@ -304,10 +304,14 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
   part: LLMRequest["messages"][number]["content"][number],
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media" && part.mediaType.startsWith("image/")) {
-    return { type: "input_image" as const, image_url: ProviderShared.mediaDataUrl(part) }
+  if (part.type === "media") {
+    const media = yield* ProviderShared.validateMedia(
+      "OpenAI Responses",
+      part,
+      new Set<string>(ProviderShared.IMAGE_MIMES),
+    )
+    return { type: "input_image" as const, image_url: media.dataUrl }
   }
-  if (part.type === "media") return yield* invalid("OpenAI Responses user media content only supports images")
   return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
 })
 
@@ -317,12 +321,12 @@ const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultCon
   item: ToolResultContentPart,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  if (item.mediaType.startsWith("image/"))
-    return {
-      type: "input_image" as const,
-      image_url: ProviderShared.mediaDataUrl(item),
-    }
-  return yield* invalid(`OpenAI Responses tool-result media content only supports images, got ${item.mediaType}`)
+  const media = yield* ProviderShared.validateMedia(
+    "OpenAI Responses",
+    item,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
+  return { type: "input_image" as const, image_url: media.dataUrl }
 })
 
 const lowerToolResultOutput = Effect.fn("OpenAIResponses.lowerToolResultOutput")(function* (part: ToolResultPart) {

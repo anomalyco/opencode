@@ -350,7 +350,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           callID: event.id,
           ...result,
           outputPaths,
-          result: event.result,
+          ...(provider.executed ? { result: event.result } : {}),
           provider,
         })
         return

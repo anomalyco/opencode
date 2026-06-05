@@ -303,14 +303,17 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
 })
 
 const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: MediaPart) {
-  if (!part.mediaType.startsWith("image/"))
-    return yield* invalid(`Anthropic Messages user media content only supports images`)
+  const media = yield* ProviderShared.validateMedia(
+    "Anthropic Messages",
+    part,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
   return {
     type: "image" as const,
     source: {
       type: "base64" as const,
-      media_type: part.mediaType,
-      data: ProviderShared.mediaBase64(part),
+      media_type: media.mime,
+      data: media.base64,
     },
   } satisfies AnthropicImageBlock
 })
@@ -321,16 +324,19 @@ const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultC
   item: ToolResultContentPart,
 ) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
-  if (item.mediaType.startsWith("image/"))
-    return {
-      type: "image" as const,
-      source: {
-        type: "base64" as const,
-        media_type: item.mediaType,
-        data: ProviderShared.mediaBase64(item),
-      },
-    } satisfies AnthropicImageBlock
-  return yield* invalid(`Anthropic Messages tool-result media content only supports images, got ${item.mediaType}`)
+  const media = yield* ProviderShared.validateMedia(
+    "Anthropic Messages",
+    item,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
+  return {
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type: media.mime,
+      data: media.base64,
+    },
+  } satisfies AnthropicImageBlock
 })
 
 const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultContent")(function* (part: ToolResultPart) {

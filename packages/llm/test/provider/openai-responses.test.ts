@@ -1254,7 +1254,7 @@ describe("OpenAI Responses route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("OpenAI Responses user media content only supports images")
+      expect(error.message).toContain("OpenAI Responses does not support media type application/pdf")
     }),
   )
 

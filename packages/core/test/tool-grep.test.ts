@@ -34,7 +34,9 @@ const filesystem = Layer.succeed(
     resolveReadPath: () => Effect.die("unused"),
     resolveRead: () => Effect.die("unused"),
     readResolved: () => Effect.die("unused"),
+    readSampleResolved: () => Effect.die("unused"),
     readTextPageResolved: () => Effect.die("unused"),
+    readToolResolved: () => Effect.die("unused"),
     list: () => Effect.die("unused"),
     resolveRoot: (input = {}) =>
       Effect.succeed(

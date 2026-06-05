@@ -73,7 +73,7 @@ describeRecordedGoldenScenarios([
     prefix: "openai-chat",
     model: openAIChat,
     requires: ["OPENAI_API_KEY"],
-    scenarios: ["text", "tool-call", "tool-loop"],
+    scenarios: ["text", "tool-call", "tool-loop", { id: "image-tool-result", maxTokens: 40 }],
   },
   {
     name: "OpenAI Responses gpt-5.5",
@@ -123,7 +123,12 @@ describeRecordedGoldenScenarios([
     prefix: "gemini",
     model: gemini,
     requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
-    scenarios: [{ id: "text", maxTokens: 80 }, "tool-call", { id: "image", maxTokens: 160 }],
+    scenarios: [
+      { id: "text", maxTokens: 80 },
+      "tool-call",
+      { id: "image", maxTokens: 160 },
+      { id: "image-tool-result", maxTokens: 40 },
+    ],
   },
   {
     name: "xAI Grok 3 Mini",
