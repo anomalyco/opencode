@@ -109,13 +109,19 @@ export const layer = Layer.effectDiscard(
           const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
             effect.pipe(
               Effect.catchCause((cause) => {
-                const error = Cause.squash(cause)
+                const errors: unknown[] = []
+                Cause.forEach(cause, (error) => errors.push(error))
+                const firstError = errors[0]
+                if (firstError instanceof FileMutation.StaleContentError) {
+                  return Effect.fail(
+                    new ToolFailure({
+                      message: "File changed after permission approval. Read it again before editing.",
+                    }),
+                  )
+                }
+                const messages = errors.map((e) => String(e)).join("\n")
                 return Effect.fail(
-                  error instanceof FileMutation.StaleContentError
-                    ? new ToolFailure({
-                        message: "File changed after permission approval. Read it again before editing.",
-                      })
-                    : new ToolFailure({ message: `Unable to edit ${parameters.path}`, error }),
+                  new ToolFailure({ message: `Unable to edit ${parameters.path}:\n${messages}` }),
                 )
               }),
             )
