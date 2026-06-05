@@ -28,6 +28,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
 
@@ -71,6 +72,7 @@ const live: Layer.Layer<
   | EventV2Bridge.Service
   | LLMClientService
   | RuntimeFlags.Service
+  | AISDK.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -82,6 +84,7 @@ const live: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
+    const aisdk = yield* AISDK.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       yield* Effect.logInfo("stream", {
@@ -383,9 +386,12 @@ const live: Layer.Layer<
               Stream.catchCause((cause) => {
                 const err = Cause.squash(cause)
                 if (!ProviderError.isExpiredCredentials(err)) return Stream.failCause(cause)
+                if (ctrl.signal.aborted) return Stream.failCause(cause)
                 return Stream.unwrap(
                   Effect.gen(function* () {
-                    yield* provider.evictLanguage(input.model)
+                    yield* Effect.all([provider.evictLanguage(input.model), aisdk.evict(input.model)], {
+                      concurrency: "unbounded",
+                    })
                     const retried = yield* run({ ...input, abort: ctrl.signal })
                     return toAISDKStream(retried)
                   }),
@@ -416,6 +422,7 @@ export const defaultLayer = Layer.suspend(() =>
       LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer))),
     ),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(AISDK.defaultLayer),
   ),
 )
 

@@ -3,7 +3,7 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
-import { tool, type ModelMessage } from "ai"
+import { tool, type ModelMessage, APICallError } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -14,6 +14,7 @@ import { Auth } from "@/auth"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
+import { ProviderError } from "@/provider/error"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Plugin } from "@/plugin"
 
@@ -24,6 +25,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Permission } from "@/permission"
 import { LLMAISDK } from "@/session/llm/ai-sdk"
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { Session as SessionNs } from "@/session/session"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -83,6 +85,7 @@ function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, fl
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(executor, WebSocketExecutor.layer)))),
     Layer.provide(RuntimeFlags.layer(flags)),
+    Layer.provide(AISDK.defaultLayer),
   )
 }
 
@@ -1136,6 +1139,7 @@ describe("session.llm.stream", () => {
             Layer.provide(Plugin.defaultLayer),
             Layer.provide(failingNativeClient),
             Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: false })),
+            Layer.provide(AISDK.defaultLayer),
           ),
           {
             user: {
@@ -1928,5 +1932,140 @@ describe("session.llm.stream", () => {
         },
       }),
     },
+  )
+})
+
+describe("session.llm.expired-credentials-retry", () => {
+  const openaiFixture = { providerID: "openai", modelID: "gpt-5.2" }
+  const openaiConfig = () =>
+    openAIConfig(loadFixture(openaiFixture.providerID, openaiFixture.modelID).model, `${state.server!.url.origin}/v1`)
+
+  function expiredTokenResponse() {
+    return new Response(JSON.stringify({ __type: "ExpiredTokenException", message: "Token has expired" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  const modelID = ModelV2.ID.make(loadFixture(openaiFixture.providerID, openaiFixture.modelID).model.id)
+
+  function makeStreamInput(resolved: Provider.Model): LLM.StreamInput {
+    const sessionID = SessionID.make("session-expired-creds")
+    const agent: Agent.Info = {
+      name: "test",
+      mode: "primary",
+      options: {},
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    }
+    return {
+      user: {
+        id: MessageID.make("msg_user-expired-creds"),
+        sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: agent.name,
+        model: { providerID: ProviderV2.ID.make(openaiFixture.providerID), modelID: resolved.id },
+      },
+      sessionID,
+      model: resolved,
+      agent,
+      system: ["You are a helpful assistant."],
+      messages: [{ role: "user", content: "Hello" }],
+      tools: {},
+    }
+  }
+
+  it.instance(
+    "retries once on expired STS credentials and succeeds",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make(openaiFixture.providerID), modelID)
+        const apiPath = resolved.api.id.startsWith("gpt-") ? "/responses" : "/chat/completions"
+
+        const retrySuccessChunks = [
+          {
+            type: "response.created",
+            response: { id: "resp-retry", created_at: Math.floor(Date.now() / 1000), model: resolved.api.id, service_tier: null },
+          },
+          {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "message", id: "item-retry", status: "in_progress", role: "assistant", content: [] },
+          },
+          {
+            type: "response.content_part.added",
+            item_id: "item-retry",
+            output_index: 0,
+            content_index: 0,
+            part: { type: "output_text", text: "", annotations: [] },
+          },
+          {
+            type: "response.output_text.delta",
+            item_id: "item-retry",
+            delta: "Hello from retry",
+            logprobs: null,
+          },
+          {
+            type: "response.completed",
+            response: {
+              incomplete_details: null,
+              usage: { input_tokens: 1, input_tokens_details: null, output_tokens: 4, output_tokens_details: null },
+              service_tier: null,
+            },
+          },
+        ]
+
+        const firstRequest = waitRequest(apiPath, expiredTokenResponse())
+        const secondRequest = waitRequest(apiPath, createEventResponse(retrySuccessChunks, true))
+
+        yield* drain(makeStreamInput(resolved))
+
+        const first = yield* Effect.promise(() => Promise.race([firstRequest, timeout(5000)]))
+        const second = yield* Effect.promise(() => Promise.race([secondRequest, timeout(5000)]))
+
+        expect(first.url.pathname).toContain(apiPath)
+        expect(second.url.pathname).toContain(apiPath)
+      }),
+    { config: openaiConfig },
+  )
+
+  it.instance(
+    "does not retry on non-expired-credential errors",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make(openaiFixture.providerID), modelID)
+        const apiPath = resolved.api.id.startsWith("gpt-") ? "/responses" : "/chat/completions"
+
+        waitRequest(
+          apiPath,
+          new Response(JSON.stringify({ error: { message: "Not Found", type: "not_found" } }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+
+        const result = yield* drain(makeStreamInput(resolved)).pipe(Effect.exit)
+
+        expect(result._tag).toBe("Failure")
+        expect(state.queue.length).toBe(0)
+      }),
+    { config: openaiConfig },
+  )
+
+  it.instance(
+    "propagates error without looping when retry also gets expired credentials",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make(openaiFixture.providerID), modelID)
+        const apiPath = resolved.api.id.startsWith("gpt-") ? "/responses" : "/chat/completions"
+
+        waitRequest(apiPath, expiredTokenResponse())
+        waitRequest(apiPath, expiredTokenResponse())
+
+        const result = yield* drain(makeStreamInput(resolved)).pipe(Effect.exit)
+
+        expect(result._tag).toBe("Failure")
+      }),
+    { config: openaiConfig },
   )
 })

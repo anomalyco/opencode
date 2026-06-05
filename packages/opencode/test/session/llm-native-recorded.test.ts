@@ -10,6 +10,7 @@ import { Effect, Layer, Option, Schema, Stream } from "effect"
 import path from "node:path"
 import z from "zod"
 import { Auth } from "@/auth"
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { Config } from "@/config/config"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
@@ -303,6 +304,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(recordedClient),
       Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: true })),
+      Layer.provide(AISDK.defaultLayer),
     ),
   )
 }
