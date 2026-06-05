@@ -467,6 +467,7 @@ export const dict = {
 
   "error.page.title": "Something went wrong",
   "error.page.description": "An error occurred while loading the application.",
+  "error.page.description.localServerStartup": "An error occurred while starting the local server.",
   "error.page.details.label": "Error Details",
   "error.page.action.restart": "Restart",
   "error.page.action.report": "Report Error",
@@ -531,6 +532,8 @@ export const dict = {
   "home.projects": "Projects",
   "home.project.add": "Add project",
   "home.sessions.search.placeholder": "Search sessions",
+  "home.sessions.search.sessions": "Sessions",
+  "home.sessions.search.noResults": "No sessions found for {{query}}",
   "home.sessions.empty": "No sessions found",
   "home.sessions.empty.description": "Start a new session for this project",
   "home.sessions.group.today": "Today",

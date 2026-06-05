@@ -1,13 +1,19 @@
 import "./index.css"
 import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { geoEquirectangular, geoPath } from "d3-geo"
+import { scaleSqrt } from "d3-scale"
+import countryCodesSource from "i18n-iso-countries/codes.json?raw"
+import { feature, mesh } from "topojson-client"
+import countriesTopologySource from "world-atlas/countries-110m.json?raw"
 import ibmPlexMonoRegularLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2?url"
 import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2?url"
 import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
 import ibmPlexMonoBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Bold-Latin1.woff2?url"
-import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
 import {
   getStatsHomeData,
+  type CacheRatioEntry,
+  type CountryEntry,
   type LeaderboardEntry,
   type MarketDay,
   type StatsHomeData,
@@ -19,6 +25,18 @@ import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
+import type { GeometryCollection, Topology } from "topojson-specification"
+import {
+  applyThemePreference,
+  Footer,
+  getGitHubStars,
+  githubLink,
+  Header,
+  isThemePreference,
+  themeStorageKey,
+  type ThemePreference,
+} from "./stats-shell"
 
 const products = ["All Users", "Zen", "Go"] as const
 const tokenProducts = ["Zen", "Go"] as const
@@ -30,13 +48,11 @@ const rangeLabels: Record<UsageRange, string> = {
   "1M": "1 Month",
   "2M": "2 Months",
 }
-const headerLinks = [
-  { href: "#top-models", label: "Top Models" },
-  { href: "#leaderboard", label: "Leaderboard" },
-  { href: "#market-share", label: "Market Share" },
-  { href: "#token-cost", label: "Token Cost" },
-  { href: "#session-cost", label: "Session Cost" },
-] as const
+const statsHomeTitle = "OpenCode Stats"
+const statsHomeDescription = "OpenCode usage, market share, token cost, and session cost stats."
+const statsHomeFallbackUrl = "https://opencode.ai/stats/"
+const statsUnfurlPath = "banner.png"
+const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
 const usageColors = [
   "#ed6aff",
   "#a684ff",
@@ -51,10 +67,42 @@ const usageColors = [
   "#ff6467",
 ]
 const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
+const geoMapWidth = 960
+const geoMapHeight = 430
+const countryDisplayNames = new Intl.DisplayNames(["en"], { type: "region" })
 
 type UsageProduct = (typeof products)[number]
 type TokenProduct = (typeof tokenProducts)[number]
 type UsageRange = (typeof ranges)[number]
+type IsoCountryCode = readonly [string, string, string]
+type WorldCountryProperties = GeoJsonProperties & { name?: string }
+type WorldTopology = Topology<{ countries: GeometryCollection<WorldCountryProperties> }>
+
+const countryNumericIds = new Map(
+  (JSON.parse(countryCodesSource) as IsoCountryCode[]).map((country) => [country[0], country[2]] as const),
+)
+const worldTopology = JSON.parse(countriesTopologySource) as WorldTopology
+const worldCountryGeometries: GeometryCollection<WorldCountryProperties> = {
+  ...worldTopology.objects.countries,
+  geometries: worldTopology.objects.countries.geometries.filter((country) => String(country.id ?? "") !== "010"),
+}
+const worldCountries = feature<WorldCountryProperties>(worldTopology, worldCountryGeometries) as FeatureCollection<
+  GeometryObject,
+  WorldCountryProperties
+>
+const worldProjection = geoEquirectangular().fitExtent(
+  [
+    [10, 12],
+    [geoMapWidth - 10, geoMapHeight - 12],
+  ],
+  worldCountries,
+)
+const worldPath = geoPath(worldProjection)
+const worldCountryPaths = worldCountries.features.map((country) => ({
+  id: String(country.id ?? "").padStart(3, "0"),
+  path: worldPath(country) ?? "",
+}))
+const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
 const getData = query(async () => {
   "use server"
@@ -62,40 +110,83 @@ const getData = query(async () => {
 }, "getStatsHomeData")
 
 export default function StatsHome() {
-  getRequestEvent()?.response.headers.set(
-    "Cache-Control",
-    "public, max-age=60, s-maxage=300, stale-while-revalidate=86400",
+  const event = getRequestEvent()
+  event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
+  const statsHomeUrl = getStatsHomeUrl(
+    import.meta.env.BASE_URL,
+    event?.request.url ?? (typeof window === "undefined" ? statsHomeFallbackUrl : window.location.href),
   )
+  const statsUnfurlUrl = new URL(statsUnfurlPath, statsHomeUrl).toString()
   const data = createAsync(() => getData())
+  const githubStars = createAsync(() => getGitHubStars())
+  const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
+  const updateThemePreference = (preference: ThemePreference) => {
+    applyThemePreference(preference)
+    setThemePreference(preference)
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(themeStorageKey, preference)
+  }
+
+  onMount(() => {
+    if (typeof window === "undefined") return
+    const preference = window.localStorage.getItem(themeStorageKey)
+    const nextPreference = isThemePreference(preference) ? preference : "system"
+    applyThemePreference(nextPreference)
+    setThemePreference(nextPreference)
+  })
 
   return (
-    <main data-page="stats">
-      <Title>OpenCode Stats</Title>
-      <Meta name="description" content="OpenCode usage, market share, token cost, and session cost stats." />
+    <main data-page="stats" data-theme={themePreference()}>
+      <Title>{statsHomeTitle}</Title>
+      <Meta name="description" content={statsHomeDescription} />
+      <Link rel="canonical" href={statsHomeUrl} />
+      <Meta property="og:type" content="website" />
+      <Meta property="og:site_name" content="OpenCode" />
+      <Meta property="og:title" content={statsHomeTitle} />
+      <Meta property="og:description" content={statsHomeDescription} />
+      <Meta property="og:url" content={statsHomeUrl} />
+      <Meta property="og:image" content={statsUnfurlUrl} />
+      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:width" content="1200" />
+      <Meta property="og:image:height" content="630" />
+      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta name="twitter:card" content="summary_large_image" />
+      <Meta name="twitter:title" content={statsHomeTitle} />
+      <Meta name="twitter:description" content={statsHomeDescription} />
+      <Meta name="twitter:image" content={statsUnfurlUrl} />
+      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
       <Link rel="preload" href={ibmPlexMonoRegularLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoMediumLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoSemiBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
-      <Header />
+      <Header githubStars={githubStars() ?? githubLink.fallbackStars} />
       <div data-component="container">
         <div data-component="content">
           <Show when={data()} fallback={<StatsLoading />}>
             {(stats) => (
               <>
                 <Hero updatedAt={stats().updatedAt} />
-                <TopModelsSection data={stats().usage} />
-                <LeaderboardSection data={stats().leaderboard} />
-                <MarketShareSection data={stats().market} />
-                <TokenCostSection data={stats().tokenCost} />
+                <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
                 <SessionCostSection data={stats().sessionCost} />
+                <TokenCostSection data={stats().tokenCost} />
+                <CacheRatioSection data={stats().cacheRatio} />
+                <MarketShareSection data={stats().market} />
+                <GeoBreakdownSection data={stats().country} />
               </>
             )}
           </Show>
         </div>
-        <Footer />
+        <Footer themePreference={themePreference()} onThemePreferenceChange={updateThemePreference} />
       </div>
     </main>
   )
+}
+
+function getStatsHomeUrl(base: string, requestUrl: string) {
+  const url = new URL(base, requestUrl)
+  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/stats/"
+  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/stats/"
+  return url.toString()
 }
 
 function Hero(props: { updatedAt: string | null }) {
@@ -278,11 +369,13 @@ function formatUpdatedAtLabel(value: { date: string; time: string }) {
   return `${value.date}, ${value.time}`
 }
 
-function TopModelsSection(props: { data: StatsHomeData["usage"] }) {
-  const [product, setProduct] = createSignal<UsageProduct>("All Users")
-  const [range, setRange] = createSignal<UsageRange>("1W")
+function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: StatsHomeData["leaderboard"] }) {
+  const [product, setProduct] = createSignal<UsageProduct>("Go")
+  const [range, setRange] = createSignal<UsageRange>("2M")
   const [sheet, setSheet] = createSignal<"product" | "range">()
+  const [activeModel, setActiveModel] = createSignal<string>()
   const data = createMemo(() => props.data[product()][range()])
+  const leaderboard = createMemo(() => props.leaderboard[product()][range()])
 
   createEffect(() => {
     if (!sheet()) return
@@ -305,30 +398,43 @@ function TopModelsSection(props: { data: StatsHomeData["usage"] }) {
   return (
     <section id="top-models" data-section="top-models">
       <h2 data-slot="top-models-title">
-        <strong>Top models.</strong> <span>Usage of models across OpenCode.</span>
+        <strong>Top models.</strong> <span>Usage of models across OpenCode Go.</span>
       </h2>
-      <div data-slot="top-models-mobile-controls">
-        <MobileFilterButton
-          label="Product filter"
-          value={product()}
-          expanded={sheet() === "product"}
-          onClick={() => setSheet(sheet() === "product" ? undefined : "product")}
-        />
-        <MobileFilterButton
-          label="Date range"
-          value={range()}
-          expanded={sheet() === "range"}
-          onClick={() => setSheet(sheet() === "range" ? undefined : "range")}
-        />
-      </div>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
         fallback={<EmptyState title="No usage data" description="No model_stat rows matched this product and range." />}
       >
-        <TopModelsChart data={data()} range={range()} />
+        <TopModelsChart
+          data={data()}
+          range={range()}
+          activeModel={activeModel()}
+          onActiveModelChange={setActiveModel}
+        />
       </Show>
-      <div data-slot="chart-footer">
+      <Show
+        when={leaderboard().length > 0}
+        fallback={
+          <EmptyState title="No leaderboard data" description="No model_stat rows matched this product and range." />
+        }
+      >
+        <Leaderboard data={leaderboard()} activeModel={activeModel()} onActiveModelChange={setActiveModel} />
+      </Show>
+      <div data-slot="chart-footer" hidden>
         <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
+        <div data-slot="top-models-mobile-controls">
+          <MobileFilterButton
+            label="Product filter"
+            value={product()}
+            expanded={sheet() === "product"}
+            onClick={() => setSheet(sheet() === "product" ? undefined : "product")}
+          />
+          <MobileFilterButton
+            label="Date range"
+            value={range()}
+            expanded={sheet() === "range"}
+            onClick={() => setSheet(sheet() === "range" ? undefined : "range")}
+          />
+        </div>
       </div>
       <Show when={sheet()}>
         {(kind) => (
@@ -485,24 +591,41 @@ function FilterPills<T extends string>(props: {
   )
 }
 
-function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
+function TopModelsChart(props: {
+  data: UsagePoint[]
+  range: UsageRange
+  activeModel: string | undefined
+  onActiveModelChange: (model: string | undefined) => void
+}) {
+  let chartRef: HTMLDivElement | undefined
   const [activeIndex, setActiveIndex] = createSignal<number>()
-  const [activeSegment, setActiveSegment] = createSignal<number>()
   const maxTotal = createMemo(() => getTopModelsMaxTotal(props.data))
+  const segmentOrder = createMemo(() => getTopModelsSegmentOrder(props.data))
   const activePoint = createMemo(() => props.data[activeIndex() ?? -1])
+
+  createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
 
   return (
     <div
+      ref={chartRef}
       data-component="top-models-chart"
       data-range={props.range}
+      data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
       role="img"
       aria-label="Stacked top model usage chart"
+      style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        setActiveIndex(undefined)
+        props.onActiveModelChange(undefined)
+      }}
     >
       <div data-slot="top-models-axis" aria-hidden="true">
         <For each={props.data}>
           {(day, index) => (
             <div
               data-active={activeIndex() === index() ? "true" : undefined}
+              data-label-hidden={isColumnLabelHidden(index(), props.data.length) ? "true" : undefined}
               data-mobile-hidden={isTopModelsMobileAxisHidden(index(), props.data.length) ? "true" : undefined}
             >
               <span data-slot="axis-label">
@@ -516,7 +639,14 @@ function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
           )}
         </For>
       </div>
-      <div data-slot="top-models-bars">
+      <div
+        data-slot="top-models-bars"
+        onPointerLeave={(event) => {
+          if (event.pointerType === "touch") return
+          setActiveIndex(undefined)
+          props.onActiveModelChange(undefined)
+        }}
+      >
         <For each={props.data}>
           {(day, dayIndex) => (
             <div
@@ -530,60 +660,69 @@ function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
               onPointerDown={(event) => {
                 if (event.pointerType !== "touch") return
                 setActiveIndex(dayIndex())
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
-              onPointerEnter={() => {
+              onPointerEnter={(event) => {
                 setActiveIndex(dayIndex())
-                setActiveSegment(undefined)
+                if (isTopModelsBlankHover(event.currentTarget, event.clientY)) props.onActiveModelChange(undefined)
               }}
-              onPointerLeave={(event) => {
+              onPointerMove={(event) => {
                 if (event.pointerType === "touch") return
-                setActiveIndex(undefined)
-                setActiveSegment(undefined)
+                setActiveIndex(dayIndex())
+                if (isTopModelsBlankHover(event.currentTarget, event.clientY)) props.onActiveModelChange(undefined)
               }}
-              onClick={() => setActiveIndex(dayIndex())}
+              onClick={() => {
+                setActiveIndex(dayIndex())
+                props.onActiveModelChange(undefined)
+              }}
               onFocus={() => {
                 setActiveIndex(dayIndex())
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
               onBlur={() => {
                 setActiveIndex(undefined)
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" && event.key !== " ") return
                 event.preventDefault()
                 setActiveIndex(dayIndex())
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
             >
-              <div data-slot="top-models-stack" style={{ "grid-template-rows": getTopModelsSegmentRows(day) }}>
-                <For each={visibleTopModelsSegments(day)}>
+              <div
+                data-slot="top-models-stack"
+                style={{ "grid-template-rows": getTopModelsSegmentRows(day, segmentOrder()) }}
+              >
+                <For each={stackedTopModelsSegments(day, segmentOrder())}>
                   {(item) => (
                     <i
                       data-series={item.index}
-                      data-active={activeSegment() === item.index ? "true" : undefined}
+                      data-model={item.segment.model}
+                      data-active={props.activeModel === item.segment.model ? "true" : undefined}
                       style={{
                         background: getTopModelsSegmentColor(
+                          item.segment.model,
                           item.index,
+                          segmentOrder(),
                           activeIndex() !== undefined && activeIndex() !== dayIndex(),
-                          activeSegment(),
+                          props.activeModel,
                         ),
                       }}
                       onPointerEnter={(event) => {
                         event.stopPropagation()
                         setActiveIndex(dayIndex())
-                        setActiveSegment(item.index)
+                        props.onActiveModelChange(item.segment.model)
                       }}
                       onPointerDown={(event) => {
                         event.stopPropagation()
                         setActiveIndex(dayIndex())
-                        setActiveSegment(item.index)
+                        props.onActiveModelChange(item.segment.model)
                       }}
                       onClick={(event) => {
                         event.stopPropagation()
                         setActiveIndex(dayIndex())
-                        setActiveSegment(item.index)
+                        props.onActiveModelChange(item.segment.model)
                       }}
                     />
                   )}
@@ -601,13 +740,20 @@ function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
                     <For each={visibleTopModelsSegments(point())}>
                       {(item) => (
                         <p
-                          data-active={activeSegment() === item.index ? "true" : undefined}
+                          data-active={props.activeModel === item.segment.model ? "true" : undefined}
                           data-muted={
-                            activeSegment() !== undefined && activeSegment() !== item.index ? "true" : undefined
+                            props.activeModel !== undefined && props.activeModel !== item.segment.model
+                              ? "true"
+                              : undefined
                           }
                         >
                           <span data-slot="tooltip-label">
-                            <i style={{ background: usageColors[item.index] }} /> {item.segment.model}
+                            <i
+                              style={{
+                                background: getRankColor(item.segment.model, item.index, segmentOrder(), usageColors),
+                              }}
+                            />{" "}
+                            {item.segment.model}
                           </span>
                           <b>{formatTokens(item.segment.value)}</b>
                         </p>
@@ -624,6 +770,12 @@ function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
   )
 }
 
+function isTopModelsBlankHover(bar: HTMLElement, clientY: number) {
+  const stack = bar.querySelector<HTMLElement>('[data-slot="top-models-stack"]')
+  if (!stack) return true
+  return clientY < stack.getBoundingClientRect().top - 6
+}
+
 function getTopModelsBarHeight(total: number, max: number) {
   if (total <= 0) return 0
   return Math.max(2, Math.min(100, (total / max) * 100))
@@ -636,10 +788,10 @@ function getTopModelsMaxTotal(data: UsagePoint[]) {
   return max
 }
 
-function getTopModelsSegmentRows(point: UsagePoint) {
+function getTopModelsSegmentRows(point: UsagePoint, order: Map<string, number>) {
   const total = usageTotal(point)
   if (total <= 0) return ""
-  return visibleTopModelsSegments(point)
+  return stackedTopModelsSegments(point, order)
     .map((item) => `${(item.segment.value / total) * 100}%`)
     .join(" ")
 }
@@ -648,15 +800,52 @@ function visibleTopModelsSegments(point: UsagePoint) {
   return point.segments.map((segment, index) => ({ segment, index })).filter((item) => item.segment.value > 0)
 }
 
-function getTopModelsSegmentColor(index: number, muted: boolean, activeSegment: number | undefined) {
-  if (activeSegment !== undefined)
-    return activeSegment === index ? (usageColors[index] ?? "var(--stats-text)") : "var(--stats-layer-2)"
+function stackedTopModelsSegments(point: UsagePoint, order: Map<string, number>) {
+  return visibleTopModelsSegments(point)
+    .slice()
+    .sort((a, b) => (order.get(b.segment.model) ?? b.index) - (order.get(a.segment.model) ?? a.index))
+}
+
+function getTopModelsSegmentOrder(data: UsagePoint[]) {
+  return getRankOrder(
+    data.flatMap((point) =>
+      point.segments.map((segment, index) => ({ key: segment.model, value: segment.value, index })),
+    ),
+  )
+}
+
+function getTopModelsSegmentColor(
+  model: string,
+  index: number,
+  order: Map<string, number>,
+  muted: boolean,
+  activeModel: string | undefined,
+) {
+  if (activeModel !== undefined)
+    return activeModel === model ? getRankColor(model, index, order, usageColors) : "var(--stats-layer-2)"
   if (muted) return "var(--stats-layer-2)"
-  return usageColors[index] ?? "var(--stats-text)"
+  return getRankColor(model, index, order, usageColors)
 }
 
 function isTopModelsMobileAxisHidden(index: number, count: number) {
   return count > 7 && index % 2 === 1
+}
+
+function isColumnLabelHidden(index: number, count: number) {
+  if (count <= 20) return false
+  const interval = Math.ceil(count / 8)
+  return index !== count - 1 && index % interval !== 0
+}
+
+function isDenseColumnRange(range: UsageRange) {
+  return range === "1M" || range === "2M"
+}
+
+function scrollDenseChartToEnd(element: HTMLDivElement | undefined, range: UsageRange, count: number) {
+  if (!element || count <= 0 || !isDenseColumnRange(range) || typeof window === "undefined") return
+  window.requestAnimationFrame(() => {
+    element.scrollLeft = element.scrollWidth - element.clientWidth
+  })
 }
 
 function formatTopModelsMobileDate(label: string, range: UsageRange) {
@@ -673,50 +862,58 @@ function formatTokens(value: number) {
   return `${Math.round(value * 1000)}B`
 }
 
-function LeaderboardSection(props: { data: StatsHomeData["leaderboard"] }) {
-  const [product, setProduct] = createSignal<UsageProduct>("All Users")
-  const [range, setRange] = createSignal<UsageRange>("1W")
-  const data = createMemo(() => props.data[product()][range()])
-
-  return (
-    <section id="leaderboard" data-section="leaderboard">
-      <SectionTitle
-        title="Leaderboard"
-        description="Shown are the sum of prompt and completion tokens per model, including reasoning tokens."
-      />
-      <Show
-        when={data().length > 0}
-        fallback={
-          <EmptyState title="No leaderboard data" description="No model_stat rows matched this product and range." />
-        }
-      >
-        <Leaderboard data={data()} />
-      </Show>
-      <div data-slot="chart-footer">
-        <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
-      </div>
-    </section>
-  )
-}
-
-function Leaderboard(props: { data: LeaderboardEntry[] }) {
+function Leaderboard(props: {
+  data: LeaderboardEntry[]
+  activeModel: string | undefined
+  onActiveModelChange: (model: string | undefined) => void
+}) {
   const featured = createMemo(() => props.data.slice(0, 3))
   const columns = createMemo(() =>
     [0, 1, 2].map((index) => props.data.slice(3 + index * 5, 8 + index * 5)).filter((column) => column.length > 0),
   )
 
   return (
-    <div data-component="leaderboard" role="list" aria-label="Model token leaderboard">
+    <div id="leaderboard" data-component="leaderboard" role="list" aria-label="Model token leaderboard">
       <div data-slot="leaderboard-featured">
-        <For each={featured()}>{(entry) => <LeaderboardCard entry={entry} size="featured" />}</For>
+        <For each={featured()}>
+          {(entry) => (
+            <LeaderboardCard
+              entry={entry}
+              size="featured"
+              active={props.activeModel === entry.model}
+              onActiveModelChange={props.onActiveModelChange}
+            />
+          )}
+        </For>
       </div>
       <div data-slot="leaderboard-pattern" aria-hidden="true" />
       <div data-slot="leaderboard-compact">
         <For each={columns()}>
           {(column) => (
             <div data-slot="leaderboard-column">
-              <For each={column}>{(entry) => <LeaderboardCard entry={entry} size="compact" />}</For>
+              <For each={column}>
+                {(entry) => (
+                  <LeaderboardCard
+                    entry={entry}
+                    size="compact"
+                    active={props.activeModel === entry.model}
+                    onActiveModelChange={props.onActiveModelChange}
+                  />
+                )}
+              </For>
             </div>
+          )}
+        </For>
+      </div>
+      <div data-slot="leaderboard-mobile" aria-label="Scrollable model token leaderboard">
+        <For each={props.data}>
+          {(entry) => (
+            <LeaderboardCard
+              entry={entry}
+              size="featured"
+              active={props.activeModel === entry.model}
+              onActiveModelChange={props.onActiveModelChange}
+            />
           )}
         </For>
       </div>
@@ -724,13 +921,29 @@ function Leaderboard(props: { data: LeaderboardEntry[] }) {
   )
 }
 
-function LeaderboardCard(props: { entry: LeaderboardEntry; size: "featured" | "compact" }) {
+function LeaderboardCard(props: {
+  entry: LeaderboardEntry
+  size: "featured" | "compact"
+  active: boolean
+  onActiveModelChange: (model: string | undefined) => void
+}) {
   return (
-    <article
+    <a
       data-component="leader-card"
       data-size={props.size}
+      data-active={props.active ? "true" : undefined}
+      href={`${import.meta.env.BASE_URL}${modelSlug(props.entry.provider)}/${modelSlug(props.entry.model)}`}
       role="listitem"
+      tabIndex={0}
       aria-label={`${String(props.entry.rank).padStart(2, "0")} ${props.entry.model} by ${props.entry.author}`}
+      onPointerEnter={() => props.onActiveModelChange(props.entry.model)}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        props.onActiveModelChange(undefined)
+      }}
+      onFocus={() => props.onActiveModelChange(props.entry.model)}
+      onBlur={() => props.onActiveModelChange(undefined)}
+      onClick={() => props.onActiveModelChange(props.entry.model)}
     >
       <span data-slot="rank">{String(props.entry.rank).padStart(2, "0")}</span>
       <ProviderIcon data-slot="leader-watermark" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
@@ -749,7 +962,7 @@ function LeaderboardCard(props: { entry: LeaderboardEntry; size: "featured" | "c
           </div>
         </div>
       </div>
-    </article>
+    </a>
   )
 }
 
@@ -771,11 +984,12 @@ function formatChange(value: number) {
 }
 
 function MarketShareSection(props: { data: StatsHomeData["market"] }) {
-  const [range, setRange] = createSignal<UsageRange>("1W")
+  const [range, setRange] = createSignal<UsageRange>("2M")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const [activeAuthor, setActiveAuthor] = createSignal<string>()
   const [inspecting, setInspecting] = createSignal(false)
   const data = createMemo(() => props.data[range()])
+  const authorOrder = createMemo(() => getMarketAuthorOrder(data()))
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(data().length - 1, 0)))
   const activeDay = createMemo(() => data()[selectedIndex()])
 
@@ -789,7 +1003,7 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
         setInspecting(false)
       }}
     >
-      <SectionBridge label="LEADERBOARD" href="#leaderboard" />
+      <SectionBridge label="CACHE RATIO" href="#cache-ratio" />
       <SectionTitle title="Market Share" description="Compare token share by model author." />
       <Show
         when={activeDay()}
@@ -799,6 +1013,8 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
           <>
             <MarketShare
               data={data()}
+              range={range()}
+              authorOrder={authorOrder()}
               activeIndex={selectedIndex()}
               activeAuthor={activeAuthor()}
               inspecting={inspecting()}
@@ -813,6 +1029,7 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
             />
             <MarketShareList
               data={day().authors}
+              authorOrder={authorOrder()}
               activeAuthor={activeAuthor()}
               onActiveAuthorChange={(author) => {
                 setActiveAuthor(author)
@@ -827,17 +1044,19 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
           <span>[*]</span>
           <strong>{inspecting() ? formatMarketDate(activeDay()) : formatMarketRange(data())}</strong>
         </p>
-        <FilterPills
-          items={ranges}
-          selected={range()}
-          label="Date range"
-          variant="range"
-          onSelect={(item) => {
-            setRange(item)
-            setActiveAuthor(undefined)
-            setInspecting(false)
-          }}
-        />
+        <div hidden>
+          <FilterPills
+            items={ranges}
+            selected={range()}
+            label="Date range"
+            variant="range"
+            onSelect={(item) => {
+              setRange(item)
+              setActiveAuthor(undefined)
+              setInspecting(false)
+            }}
+          />
+        </div>
       </div>
     </section>
   )
@@ -845,15 +1064,24 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
 
 function MarketShare(props: {
   data: MarketDay[]
+  range: UsageRange
+  authorOrder: Map<string, number>
   activeIndex: number
   activeAuthor: string | undefined
   inspecting: boolean
   onActiveIndexChange: (index: number) => void
   onActiveAuthorChange: (author: string) => void
 }) {
+  let chartRef: HTMLDivElement | undefined
+
+  createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
+
   return (
     <div
+      ref={chartRef}
       data-component="market-share"
+      data-range={props.range}
+      data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
       role="img"
       aria-label="Market share by model author"
       style={{ "--market-count": props.data.length } as JSX.CSSProperties}
@@ -864,11 +1092,18 @@ function MarketShare(props: {
             <button
               type="button"
               data-active={props.inspecting && props.activeIndex === index() ? "true" : undefined}
+              data-label-hidden={isColumnLabelHidden(index(), props.data.length) ? "true" : undefined}
+              data-mobile-hidden={isMarketMobileLabelHidden(index(), props.data.length) ? "true" : undefined}
               onClick={() => props.onActiveIndexChange(index())}
               onPointerEnter={() => props.onActiveIndexChange(index())}
             >
-              <span>{formatTrillions(day.total)}</span>
-              <span>{day.date}</span>
+              <span data-slot="market-axis-label">
+                <span data-slot="market-total">{formatTrillions(day.total)}</span>
+                <span data-slot="market-date">
+                  <span data-slot="market-date-full">{day.date}</span>
+                  <span data-slot="market-date-mobile">{formatMarketMobileDate(day.date)}</span>
+                </span>
+              </span>
             </button>
           )}
         </For>
@@ -883,35 +1118,36 @@ function MarketShare(props: {
               onClick={() => props.onActiveIndexChange(index())}
               onPointerEnter={() => props.onActiveIndexChange(index())}
             >
-              <For each={day.authors}>
-                {(author, authorIndex) => (
+              <For each={stackedMarketAuthors(day, props.authorOrder)}>
+                {(item) => (
                   <span
-                    data-active={props.activeAuthor === author.author ? "true" : undefined}
+                    data-author={item.author.author}
+                    data-active={props.activeAuthor === item.author.author ? "true" : undefined}
                     data-muted={
-                      props.activeAuthor !== undefined && props.activeAuthor !== author.author ? "true" : undefined
+                      props.activeAuthor !== undefined && props.activeAuthor !== item.author.author ? "true" : undefined
                     }
                     style={{
                       "background-color": getMarketSegmentColor(
-                        author.author,
-                        marketColors[authorIndex()] ?? "var(--stats-text)",
+                        item.author.author,
+                        getRankColor(item.author.author, item.index, props.authorOrder, marketColors),
                         props.activeAuthor,
                       ),
-                      "flex-grow": author.share,
+                      "flex-grow": item.author.share,
                     }}
                     onPointerEnter={(event) => {
                       event.stopPropagation()
                       props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(author.author)
+                      props.onActiveAuthorChange(item.author.author)
                     }}
                     onPointerDown={(event) => {
                       event.stopPropagation()
                       props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(author.author)
+                      props.onActiveAuthorChange(item.author.author)
                     }}
                     onClick={(event) => {
                       event.stopPropagation()
                       props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(author.author)
+                      props.onActiveAuthorChange(item.author.author)
                     }}
                   />
                 )}
@@ -926,6 +1162,7 @@ function MarketShare(props: {
 
 function MarketShareList(props: {
   data: MarketDay["authors"]
+  authorOrder: Map<string, number>
   activeAuthor: string | undefined
   onActiveAuthorChange: (author: string) => void
 }) {
@@ -947,7 +1184,7 @@ function MarketShareList(props: {
             }}
           >
             <span>{String(index() + 1).padStart(2, "0")}</span>
-            <i style={{ background: marketColors[index()] }} />
+            <i style={{ background: getRankColor(item.author, index(), props.authorOrder, marketColors) }} />
             <strong>{item.author}</strong>
             <em>{formatTrillions(item.tokens)}</em>
             <b>{item.share.toFixed(1)}%</b>
@@ -958,10 +1195,227 @@ function MarketShareList(props: {
   )
 }
 
+function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
+  const [activeCountry, setActiveCountry] = createSignal<string>()
+  const data = createMemo(() => props.data["2M"])
+  const countryById = createMemo(
+    () =>
+      new Map(
+        data().flatMap((country) => {
+          const id = countryNumericId(country.country)
+          return id ? [[id, country] as const] : []
+        }),
+      ),
+  )
+  const maxTokens = createMemo(() => Math.max(0, ...data().map((country) => country.tokens)) || 1)
+  const topCountries = createMemo(() => data().slice(0, 15))
+  const active = createMemo(() => data().find((country) => country.country === activeCountry()) ?? data()[0])
+
+  return (
+    <section
+      id="geo-breakdown"
+      data-section="geo-breakdown"
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        setActiveCountry(undefined)
+      }}
+    >
+      <SectionBridge label="MARKET SHARE" href="#market-share" />
+      <SectionTitle title="Geo Breakdown" description="Tokens used by country." />
+      <Show
+        when={data().length > 0}
+        fallback={<EmptyState title="No geo data" description="No geo_stat rows matched this range." />}
+      >
+        <div data-component="geo-breakdown">
+          <div data-slot="geo-map-panel">
+            <GeoWorldMap
+              countryById={countryById()}
+              activeCountry={activeCountry()}
+              maxTokens={maxTokens()}
+              onActiveCountryChange={setActiveCountry}
+            />
+            <Show when={active()}>
+              {(country) => (
+                <div data-slot="geo-active-country">
+                  <span>#{String(country().rank).padStart(2, "0")}</span>
+                  <strong>{formatCountryName(country().country)}</strong>
+                  <p>
+                    <b>{formatGeoTokens(country().tokens)}</b>
+                    <em>{formatGeoShare(country().share)}</em>
+                  </p>
+                </div>
+              )}
+            </Show>
+          </div>
+          <GeoCountryList
+            data={topCountries()}
+            activeCountry={activeCountry()}
+            maxTokens={maxTokens()}
+            onActiveCountryChange={setActiveCountry}
+          />
+        </div>
+      </Show>
+    </section>
+  )
+}
+
+function GeoWorldMap(props: {
+  countryById: Map<string, CountryEntry>
+  activeCountry: string | undefined
+  maxTokens: number
+  onActiveCountryChange: (country: string | undefined) => void
+}) {
+  const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
+  const countryOpacity = (country: CountryEntry | undefined) => {
+    if (!country) return 0
+    const opacity = opacityScale()(country.tokens)
+    if (!props.activeCountry || props.activeCountry === country.country) return opacity
+    return Math.max(0.18, opacity * 0.36)
+  }
+
+  return (
+    <svg
+      data-component="geo-world-map"
+      viewBox={`0 0 ${geoMapWidth} ${geoMapHeight}`}
+      role="img"
+      aria-label="World map of token usage by country"
+    >
+      <title>Geo Breakdown map</title>
+      <g data-slot="geo-countries">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <path
+                d={country.path}
+                data-has-data={entry() ? "true" : undefined}
+                data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                aria-hidden="true"
+                onPointerEnter={() => {
+                  const item = entry()
+                  if (!item) return
+                  props.onActiveCountryChange(item.country)
+                }}
+                onClick={() => {
+                  const item = entry()
+                  if (!item) return
+                  props.onActiveCountryChange(item.country)
+                }}
+              />
+            )
+          }}
+        </For>
+      </g>
+      <path data-slot="geo-borders" d={worldBorderPath} aria-hidden="true" />
+    </svg>
+  )
+}
+
+function GeoCountryList(props: {
+  data: CountryEntry[]
+  activeCountry: string | undefined
+  maxTokens: number
+  onActiveCountryChange: (country: string | undefined) => void
+}) {
+  const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
+
+  return (
+    <ol data-component="geo-country-list">
+      <For each={props.data}>
+        {(country) => (
+          <li>
+            <button
+              type="button"
+              data-active={props.activeCountry === country.country ? "true" : undefined}
+              style={{ "--geo-row-opacity": String(opacityScale()(country.tokens)) } as JSX.CSSProperties}
+              aria-label={`${formatCountryName(country.country)} ${formatGeoTokens(country.tokens)} ${formatGeoShare(
+                country.share,
+              )}`}
+              onClick={() => props.onActiveCountryChange(country.country)}
+              onPointerEnter={() => props.onActiveCountryChange(country.country)}
+              onFocus={() => props.onActiveCountryChange(country.country)}
+            >
+              <span>{String(country.rank).padStart(2, "0")}</span>
+              <i />
+              <strong>{formatCountryName(country.country)}</strong>
+              <em>{formatGeoTokens(country.tokens)}</em>
+              <b>{formatGeoShare(country.share)}</b>
+            </button>
+          </li>
+        )}
+      </For>
+    </ol>
+  )
+}
+
+function countryNumericId(country: string) {
+  return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
+}
+
+function formatCountryName(country: string) {
+  const code = country.toUpperCase()
+  if (code === "ZZ") return "Unknown"
+  if (!countryNumericId(code)) return code
+  return countryDisplayNames.of(code) ?? code
+}
+
+function formatGeoTokens(value: number) {
+  if (value >= 1) return formatTrillions(value)
+  if (value >= 0.001) return `${Number((value * 1000).toFixed(value >= 0.01 ? 0 : 1))}B`
+  return `${Math.round(value * 1_000_000)}M`
+}
+
+function formatGeoShare(value: number) {
+  return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`
+}
+
 function getMarketSegmentColor(author: string, color: string, activeAuthor: string | undefined) {
   if (!activeAuthor) return color
   if (activeAuthor === author) return color
   return "var(--stats-bar-idle)"
+}
+
+function stackedMarketAuthors(day: MarketDay, order: Map<string, number>) {
+  return day.authors
+    .map((author, index) => ({ author, index }))
+    .slice()
+    .sort((a, b) => (order.get(b.author.author) ?? b.index) - (order.get(a.author.author) ?? a.index))
+}
+
+function getMarketAuthorOrder(data: MarketDay[]) {
+  return getRankOrder(
+    data.flatMap((day) => day.authors.map((author, index) => ({ key: author.author, value: author.tokens, index }))),
+  )
+}
+
+function getRankOrder(items: { key: string; value: number; index: number }[]) {
+  return new Map<string, number>(
+    Object.values(
+      items.reduce<Record<string, { key: string; value: number; index: number }>>((result, item) => {
+        result[item.key] = {
+          key: item.key,
+          value: (result[item.key]?.value ?? 0) + item.value,
+          index: Math.min(result[item.key]?.index ?? item.index, item.index),
+        }
+        return result
+      }, {}),
+    )
+      .toSorted((a, b) => b.value - a.value || a.index - b.index || a.key.localeCompare(b.key))
+      .map((item, index) => [item.key, index] as const),
+  )
+}
+
+function getRankColor(key: string, fallbackIndex: number, order: Map<string, number>, colors: readonly string[]) {
+  return colors[order.get(key) ?? fallbackIndex] ?? "var(--stats-text)"
+}
+
+function isMarketMobileLabelHidden(index: number, count: number) {
+  return count > 7 && index % 2 === 1
+}
+
+function formatMarketMobileDate(label: string) {
+  return marketDateParts(label).start
 }
 
 function formatTrillions(value: number) {
@@ -970,19 +1424,33 @@ function formatTrillions(value: number) {
 
 function formatMarketDate(day: MarketDay | undefined) {
   if (!day) return "No data"
-  return `${day.date} ${new Date().getFullYear()}`
+  return formatMarketDateLabel(day.date)
 }
 
 function formatMarketRange(data: MarketDay[]) {
   const first = data[0]?.date
   const last = data[data.length - 1]?.date
   if (!first || !last) return "No data"
+  const start = marketDateParts(first).start
+  const end = marketDateParts(last).end
+  if (start === end) return formatMarketDateLabel(start)
+  return `${start} ${new Date().getFullYear()} → ${end} ${new Date().getFullYear()}`
+}
+
+function formatMarketDateLabel(label: string) {
+  const parts = marketDateParts(label)
   const year = new Date().getFullYear()
-  return `${first} ${year} → ${last} ${year}`
+  if (parts.start === parts.end) return `${parts.start} ${year}`
+  return `${parts.start} ${year} → ${parts.end} ${year}`
+}
+
+function marketDateParts(label: string) {
+  const [start, end] = label.split(" - ")
+  return { start: start ?? label, end: end ?? start ?? label }
 }
 
 function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
-  const [product, setProduct] = createSignal<TokenProduct>("Zen")
+  const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const data = createMemo(() => props.data[product()])
   const visible = createMemo(() => data().slice(0, 13))
@@ -990,7 +1458,7 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
 
   return (
     <section id="token-cost" data-section="token-cost">
-      <SectionBridge label="MARKET SHARE" href="#market-share" />
+      <SectionBridge label="SESSION COST" href="#session-cost" />
       <SectionTitle title="Token Cost" description="Price per 1M tokens." />
       <Show
         when={visible().length > 0}
@@ -1000,7 +1468,7 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
       >
         <TokenCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
-      <div data-slot="token-footer">
+      <div data-slot="token-footer" hidden>
         <FilterPills
           items={tokenProducts}
           selected={product()}
@@ -1019,7 +1487,7 @@ function TokenCostChart(props: {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
 }) {
-  const max = createMemo(() => Math.max(1, ...props.data.map((item) => item.total)))
+  const max = createMemo(() => Math.max(0, ...props.data.map((item) => item.total)) || 1)
   const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
 
   return (
@@ -1061,21 +1529,133 @@ function TokenCostChart(props: {
   )
 }
 
+function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
+  const [product, setProduct] = createSignal<TokenProduct>("Go")
+  const [activeIndex, setActiveIndex] = createSignal(2)
+  const data = createMemo(() => props.data[product()])
+  const visible = createMemo(() => data().slice(0, 16))
+  const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
+
+  return (
+    <section id="cache-ratio" data-section="cache-ratio">
+      <SectionBridge label="TOKEN COST" href="#token-cost" />
+      <SectionTitle title="Cache Ratio" description="Share of input tokens served from cache." />
+      <Show
+        when={visible().length > 0}
+        fallback={
+          <EmptyState title="No cache ratio data" description="No input-token model_stat rows matched this product." />
+        }
+      >
+        <CacheRatioChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
+      </Show>
+      <div data-slot="token-footer" hidden>
+        <FilterPills
+          items={tokenProducts}
+          selected={product()}
+          label="Product filter"
+          variant="product"
+          onSelect={setProduct}
+        />
+        <LiveIndicator />
+      </div>
+    </section>
+  )
+}
+
+function CacheRatioChart(props: {
+  data: CacheRatioEntry[]
+  activeIndex: number
+  onActiveIndexChange: (index: number) => void
+}) {
+  const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
+
+  return (
+    <div data-component="cache-ratio" data-variant="marker">
+      <div data-slot="cache-ratio-heading" aria-hidden="true">
+        <strong>Ratio</strong>
+        <span>Model</span>
+        <b>0-100%</b>
+      </div>
+      <div data-slot="cache-ratio-rows">
+        <For each={props.data}>
+          {(item, index) => (
+            <button
+              type="button"
+              data-component="cache-ratio-row"
+              data-active={props.activeIndex === index() ? "true" : undefined}
+              onClick={() => props.onActiveIndexChange(index())}
+              onPointerEnter={() => props.onActiveIndexChange(index())}
+            >
+              <strong>{formatRatio(item.ratio)}</strong>
+              <span>{item.model}</span>
+              <CacheRatioMarker ratio={item.ratio} active={props.activeIndex === index()} />
+            </button>
+          )}
+        </For>
+      </div>
+      <Show when={active()}>
+        {(item) => (
+          <div
+            data-component="token-tooltip"
+            data-variant="cache-ratio"
+            style={{ top: `${props.activeIndex * 36 + 28}px` }}
+          >
+            <p>
+              <span>Cache Ratio</span>
+              <strong>{formatRatio(item().ratio)}</strong>
+            </p>
+            <p>
+              <span>Cached</span>
+              <strong>{formatBillions(item().cached)}</strong>
+            </p>
+            <p>
+              <span>Uncached</span>
+              <strong>{formatBillions(item().uncached)}</strong>
+            </p>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+function CacheRatioMarker(props: { ratio: number; active: boolean }) {
+  const fill = createMemo(() => Math.min(100, Math.max(0, props.ratio)))
+  return (
+    <i
+      data-component="cache-ratio-marker"
+      data-active={props.active ? "true" : undefined}
+      style={{ "--cache-ratio-fill": `${fill()}%` } as JSX.CSSProperties}
+    >
+      <em />
+    </i>
+  )
+}
+
+function formatRatio(value: number) {
+  return `${value.toFixed(value > 0 && value < 10 ? 1 : 0)}%`
+}
+
 function formatDollars(value: number) {
   return `$${value.toFixed(2)}`
 }
 
 function MetricBar(props: { value: number; max: number; active: boolean }) {
+  const fill = createMemo(() => Math.min(1, Math.max(props.value / props.max, props.value > 0 ? 0.03 : 0)))
   return (
-    <i data-component="metric-bar" data-active={props.active ? "true" : undefined}>
-      <b style={{ "flex-grow": Math.max(props.value / Math.max(props.max, 1), 0.05) }} />
+    <i
+      data-component="metric-bar"
+      data-active={props.active ? "true" : undefined}
+      style={{ "--metric-bar-fill": `${fill() * 100}%` } as JSX.CSSProperties}
+    >
+      <b />
       <em />
     </i>
   )
 }
 
 function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
-  const [product, setProduct] = createSignal<TokenProduct>("Zen")
+  const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const data = createMemo(() => props.data[product()])
   const visible = createMemo(() => data().slice(0, 16))
@@ -1083,7 +1663,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
 
   return (
     <section id="session-cost" data-section="session-cost">
-      <SectionBridge label="TOKEN COST" href="#token-cost" />
+      <SectionBridge label="TOP MODELS" href="#top-models" />
       <SectionTitle title="Session Cost" description="Average cost per session." />
       <Show
         when={visible().length > 0}
@@ -1096,7 +1676,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
       >
         <SessionCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
-      <div data-slot="token-footer">
+      <div data-slot="token-footer" hidden>
         <FilterPills
           items={tokenProducts}
           selected={product()}
@@ -1115,16 +1695,17 @@ function SessionCostChart(props: {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
 }) {
-  const maxCost = createMemo(() => Math.max(1, ...props.data.map((item) => item.cost)))
-  const maxTokens = createMemo(() => Math.max(1, ...props.data.map((item) => item.tokens)))
+  const maxCost = createMemo(() => Math.max(0, ...props.data.map((item) => item.cost)) || 1)
+  const maxTokens = createMemo(() => Math.max(0, ...props.data.map((item) => item.tokens)) || 1)
   const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
 
   return (
     <div data-component="session-cost">
       <div data-slot="session-heading">
-        <span />
+        <strong aria-hidden="true" />
+        <span aria-hidden="true" />
         <p>COST / SESSION</p>
-        <p>TOKENS / SESSIONS</p>
+        <p>TOKENS / SESSION</p>
       </div>
       <For each={props.data}>
         {(item, index) => (
@@ -1178,326 +1759,11 @@ function formatSessionCost(value: number) {
   return `$${value.toFixed(4)}`
 }
 
-function Header() {
-  const [menuOpen, setMenuOpen] = createSignal(false)
-  const [menuViewport, setMenuViewport] = createSignal(false)
-
-  createEffect(() => {
-    if (typeof window === "undefined") return
-    const media = window.matchMedia("(max-width: 74.999rem)")
-    const update = () => setMenuViewport(media.matches)
-    update()
-    media.addEventListener("change", update)
-    onCleanup(() => media.removeEventListener("change", update))
-  })
-
-  createEffect(() => {
-    if (!menuOpen()) return
-    if (!menuViewport()) return
-    if (typeof document === "undefined") return
-    const page = document.querySelector<HTMLElement>('[data-page="stats"]')
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
-    const htmlOverflow = document.documentElement.style.overflow
-    const pagePaddingRight = page?.style.paddingRight
-    const bodyOverflow = document.body.style.overflow
-    document.documentElement.style.overflow = "hidden"
-    if (scrollbarWidth > 0 && page) page.style.paddingRight = `${scrollbarWidth}px`
-    document.body.style.overflow = "hidden"
-    onCleanup(() => {
-      document.documentElement.style.overflow = htmlOverflow
-      if (page && pagePaddingRight !== undefined) page.style.paddingRight = pagePaddingRight
-      document.body.style.overflow = bodyOverflow
-    })
-  })
-
-  return (
-    <header data-component="top" data-menu-open={menuOpen() ? "true" : undefined}>
-      <div data-slot="header-bar">
-        <a data-slot="brand" href={import.meta.env.BASE_URL} aria-label="Stats home">
-          <StatsWordmark />
-        </a>
-        <nav data-component="section-nav" aria-label="Stats sections">
-          <ul>
-            <For each={headerLinks}>
-              {(link) => (
-                <li>
-                  <a href={link.href}>{link.label}</a>
-                </li>
-              )}
-            </For>
-          </ul>
-        </nav>
-        <div data-slot="header-actions">
-          <a
-            data-slot="header-button"
-            data-variant="neutral"
-            href="https://github.com/sst/opencode"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <strong>GitHub</strong>
-            <span>[150K]</span>
-          </a>
-          <a data-slot="header-button" data-variant="contrast" href="https://opencode.ai/">
-            <strong>Try OpenCode</strong>
-          </a>
-          <button
-            data-slot="menu-button"
-            type="button"
-            aria-controls="stats-mobile-nav"
-            aria-expanded={menuOpen() ? "true" : "false"}
-            aria-label={menuOpen() ? "Close navigation" : "Open navigation"}
-            onClick={() => setMenuOpen((value) => !value)}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <Show when={menuOpen()} fallback={<path d="M2 4.72H14M2 8.5H14M2 12.28H14" stroke="currentColor" />}>
-                <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
-              </Show>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <nav id="stats-mobile-nav" data-slot="mobile-menu" aria-label="Stats sections" hidden={!menuOpen()}>
-        <a
-          data-slot="mobile-menu-item"
-          data-variant="github"
-          href="https://github.com/sst/opencode"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <strong>GitHub</strong>
-          <span>[150K]</span>
-        </a>
-        <For each={headerLinks}>
-          {(link) => (
-            <a data-slot="mobile-menu-item" href={link.href} onClick={() => setMenuOpen(false)}>
-              {link.label}
-            </a>
-          )}
-        </For>
-      </nav>
-    </header>
-  )
-}
-
-function StatsWordmark() {
-  return (
-    <span data-slot="stats-wordmark" aria-hidden="true">
-      <StatsMark />
-      <svg data-slot="brand-label" width="51" height="14" viewBox="0 0 50.8509 14" fill="none">
-        <path
-          d="M46.2359 14C45.2276 14 44.3356 13.819 43.56 13.4571C42.7973 13.0822 42.138 12.5328 41.5822 11.8089L43.1722 10.277C43.56 10.807 44.0124 11.2142 44.5295 11.4986C45.0466 11.7701 45.6283 11.9058 46.2747 11.9058C47.7225 11.9058 48.4464 11.2465 48.4464 9.92798C48.4464 9.38504 48.3172 8.97138 48.0586 8.68698C47.8001 8.40259 47.3735 8.19575 46.7788 8.06648L45.596 7.8338C44.3679 7.57525 43.463 7.13573 42.8813 6.51524C42.2996 5.89474 42.0088 5.02862 42.0088 3.9169C42.0088 2.62419 42.3901 1.6482 43.1528 0.98892C43.9284 0.32964 45.0272 0 46.4492 0C47.4187 0 48.2461 0.161588 48.9312 0.484764C49.6293 0.795014 50.2239 1.28624 50.7151 1.95845L49.1251 3.45152C48.789 2.99908 48.4076 2.66297 47.9811 2.44321C47.5545 2.21053 47.0309 2.09418 46.4104 2.09418C45.7253 2.09418 45.2211 2.22992 44.898 2.50139C44.5748 2.77285 44.4132 3.21237 44.4132 3.81995C44.4132 4.3241 44.536 4.71191 44.7816 4.98338C45.0401 5.25485 45.4538 5.45522 46.0226 5.58449L47.2054 5.83656C47.8647 5.97876 48.4206 6.15328 48.873 6.36011C49.3384 6.56694 49.7133 6.82548 49.9977 7.13573C50.295 7.44598 50.5083 7.8144 50.6376 8.241C50.7798 8.65466 50.8509 9.14589 50.8509 9.71468C50.8509 11.1108 50.4501 12.1773 49.6486 12.9141C48.8601 13.638 47.7225 14 46.2359 14Z"
-          fill="currentColor"
-        />
-        <path
-          d="M36.9543 2.34643V13.7675H34.5305V2.34643H31.1371V0.232856H40.367V2.34643H36.9543Z"
-          fill="currentColor"
-        />
-        <path
-          d="M28.6196 13.7675L27.6695 10.2384H23.3066L22.3565 13.7675H20.0296L23.9853 0.232856H27.049L31.0047 13.7675H28.6196ZM26.0407 4.57635L25.6141 2.42399H25.3426L24.916 4.57635L23.8883 8.27995H27.0878L26.0407 4.57635Z"
-          fill="currentColor"
-        />
-        <path
-          d="M16.4849 2.34643V13.7675H14.0611V2.34643H10.6678V0.232856H19.8977V2.34643H16.4849Z"
-          fill="currentColor"
-        />
-        <path
-          d="M4.65374 14C3.64543 14 2.75346 13.819 1.97784 13.4571C1.21514 13.0822 0.555863 12.5328 0 11.8089L1.59003 10.277C1.97784 10.807 2.43029 11.2142 2.94737 11.4986C3.46445 11.7701 4.04617 11.9058 4.69252 11.9058C6.14035 11.9058 6.86427 11.2465 6.86427 9.92798C6.86427 9.38504 6.735 8.97138 6.47646 8.68698C6.21791 8.40259 5.79132 8.19575 5.19668 8.06648L4.01385 7.8338C2.78578 7.57525 1.88089 7.13573 1.29917 6.51524C0.717452 5.89474 0.426593 5.02862 0.426593 3.9169C0.426593 2.62419 0.807941 1.6482 1.57064 0.98892C2.34626 0.32964 3.44506 0 4.86704 0C5.83657 0 6.6639 0.161588 7.34903 0.484764C8.04709 0.795014 8.64174 1.28624 9.13297 1.95845L7.54294 3.45152C7.20683 2.99908 6.82549 2.66297 6.39889 2.44321C5.9723 2.21053 5.44875 2.09418 4.82826 2.09418C4.14312 2.09418 3.63897 2.22992 3.31579 2.50139C2.99261 2.77285 2.83103 3.21237 2.83103 3.81995C2.83103 4.3241 2.95383 4.71191 3.19945 4.98338C3.45799 5.25485 3.87165 5.45522 4.44044 5.58449L5.62327 5.83656C6.28255 5.97876 6.83841 6.15328 7.29086 6.36011C7.75623 6.56694 8.13112 6.82548 8.41551 7.13573C8.71284 7.44598 8.92613 7.8144 9.0554 8.241C9.1976 8.65466 9.2687 9.14589 9.2687 9.71468C9.2687 11.1108 8.86796 12.1773 8.06648 12.9141C7.27793 13.638 6.14035 14 4.65374 14Z"
-          fill="currentColor"
-        />
-      </svg>
-    </span>
-  )
-}
-
-function StatsMark() {
-  return (
-    <svg data-slot="brand-mark" width="19" height="24" viewBox="0 0 19 24" fill="none" aria-hidden="true">
-      <path opacity="0.2" d="M14.25 19.2H4.75V9.6H14.25V19.2Z" fill="currentColor" />
-      <path d="M14.25 4.8H4.75V19.2H14.25V4.8ZM19 24H0V0H19V24Z" fill="currentColor" />
-    </svg>
-  )
-}
-
-function OpenCodeMark() {
-  return (
-    <svg data-slot="opencode-mark" width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <path d="M40 40H0V0H40V40Z" fill="var(--stats-logo-bg)" />
-      <path d="M26 29H14V17H26V29Z" fill="var(--stats-logo-fill)" />
-      <path d="M26 11H14V29H26V11ZM32 35H8V5H32V35Z" fill="var(--stats-logo-stroke)" />
-    </svg>
-  )
-}
-
-function Footer() {
-  const [subscribeOpen, setSubscribeOpen] = createSignal(false)
-  const modelStats = [
-    { href: "#top-models", label: "Top Models" },
-    { href: "#leaderboard", label: "Leaderboard" },
-    { href: "#market-share", label: "Market Share" },
-    { href: "#token-cost", label: "Token Cost" },
-    { href: "#session-cost", label: "Session Cost" },
-  ]
-  const legal = [
-    { href: "https://opencode.ai/legal/terms-of-service", label: "Terms of service" },
-    { href: "https://opencode.ai/legal/privacy-policy", label: "Privacy policy" },
-  ]
-  const connect = [
-    { href: "mailto:hello@opencode.ai", label: "Contact us" },
-    { href: "https://opencode.ai/discord", label: "Community" },
-    { href: "https://x.com/opencode", label: "X" },
-    { href: "https://github.com/anomalyco/opencode", label: "GitHub" },
-    { href: "https://www.youtube.com/@anomaly-co", label: "YouTube" },
-  ]
-
-  return (
-    <footer data-component="footer">
-      <SectionBridge label="SESSION COST" href="#session-cost" />
-      <div data-slot="footer-grid">
-        <a data-slot="footer-mark" href="https://opencode.ai" aria-label="OpenCode home">
-          <OpenCodeMark />
-        </a>
-        <FooterColumn title="Model Stats" links={modelStats} />
-        <FooterColumn title="Legal" links={legal} />
-        <FooterColumn title="Connect" links={connect} />
-        <div data-slot="footer-column">
-          <h2>Newsletter</h2>
-          <p>Be the first to know about new releases.</p>
-          <button data-slot="subscribe-button" type="button" onClick={() => setSubscribeOpen(true)}>
-            Subscribe
-          </button>
-        </div>
-      </div>
-      <div data-slot="footer-pattern" aria-hidden="true" />
-      <div data-slot="footer-bottom">
-        <div>
-          <span>© 2026 Anomaly Innovations Inc.</span>
-          <span data-slot="status">All systems Operational</span>
-        </div>
-      </div>
-      <Show when={subscribeOpen()}>
-        <SubscribeModal onClose={() => setSubscribeOpen(false)} />
-      </Show>
-    </footer>
-  )
-}
-
-function SubscribeModal(props: { onClose: () => void }) {
-  const [status, setStatus] = createSignal<"idle" | "pending" | "success" | "error">("idle")
-  const [message, setMessage] = createSignal("")
-  let input: HTMLInputElement | undefined
-
-  onMount(() => {
-    if (typeof document === "undefined") return
-    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
-    const htmlOverflow = document.documentElement.style.overflow
-    const bodyOverflow = document.body.style.overflow
-    document.documentElement.style.overflow = "hidden"
-    document.body.style.overflow = "hidden"
-    const focusTimeout = window.setTimeout(() => input?.focus(), 0)
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") props.onClose()
-    }
-    document.addEventListener("keydown", onKeyDown)
-    onCleanup(() => {
-      window.clearTimeout(focusTimeout)
-      document.documentElement.style.overflow = htmlOverflow
-      document.body.style.overflow = bodyOverflow
-      document.removeEventListener("keydown", onKeyDown)
-      activeElement?.focus()
-    })
-  })
-
-  return (
-    <div data-component="subscribe-modal" role="dialog" aria-modal="true" aria-labelledby="subscribe-title">
-      <div data-slot="modal-scrim" aria-hidden="true" onClick={props.onClose} />
-      <div data-slot="modal-panel">
-        <div data-slot="modal-brand">
-          <img data-slot="modal-logo" src={opencodeWordmarkDark} alt="OpenCode" />
-          <button data-slot="modal-close" type="button" aria-label="Close newsletter signup" onClick={props.onClose}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
-            </svg>
-          </button>
-        </div>
-        <div data-slot="modal-body">
-          <div data-slot="modal-intro">
-            <h2 id="subscribe-title">OpenCode Newsletter</h2>
-            <p>
-              Be the first to know
-              <br />
-              about new releases.
-            </p>
-          </div>
-          <form
-            data-slot="subscribe-form"
-            method="post"
-            onSubmit={(event) => {
-              event.preventDefault()
-              setStatus("pending")
-              setMessage("")
-              fetch(`${import.meta.env.BASE_URL}api/newsletter`, {
-                method: "POST",
-                body: new FormData(event.currentTarget),
-              }).then(
-                async (response) => {
-                  if (response.ok) {
-                    event.currentTarget.reset()
-                    setStatus("success")
-                    return
-                  }
-                  setMessage(await newsletterErrorMessage(response))
-                  setStatus("error")
-                },
-                () => {
-                  setMessage("Failed to subscribe")
-                  setStatus("error")
-                },
-              )
-            }}
-          >
-            <input ref={input} type="email" name="email" placeholder="Email address" required />
-            <button type="submit" disabled={status() === "pending"}>
-              {status() === "pending" ? "Subscribing..." : "Subscribe"}
-            </button>
-          </form>
-          <div data-slot="subscribe-feedback" aria-live="polite">
-            <Show when={status() === "success"}>
-              <p data-state="success">You're subscribed.</p>
-            </Show>
-            <Show when={status() === "error"}>
-              <p data-state="error">{message()}</p>
-            </Show>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function newsletterErrorMessage(response: Response) {
-  return response.json().then(
-    (body: unknown) =>
-      body && typeof body === "object" && "error" in body && typeof body.error === "string"
-        ? body.error
-        : "Failed to subscribe",
-    () => "Failed to subscribe",
-  )
-}
-
-function FooterColumn(props: { title: string; links: { href: string; label: string }[] }) {
-  return (
-    <div data-slot="footer-column">
-      <h2>{props.title}</h2>
-      <nav aria-label={props.title}>
-        <For each={props.links}>
-          {(link) => (
-            <a href={link.href} target={link.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
-              {link.label}
-            </a>
-          )}
-        </For>
-      </nav>
-    </div>
-  )
+function modelSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-")
 }

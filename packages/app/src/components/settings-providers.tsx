@@ -2,7 +2,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -13,6 +13,7 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { headerRow, modelRow, type FormState } from "./dialog-custom-provider-form"
 import { SettingsList } from "./settings-list"
+import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
@@ -29,6 +30,14 @@ const PROVIDER_NOTES = [
 ] as const
 
 export const SettingsProviders: Component = () => {
+  return (
+    <SettingsServerScope>
+      <SettingsProvidersContent />
+    </SettingsServerScope>
+  )
+}
+
+const SettingsProvidersContent: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
@@ -152,8 +161,9 @@ export const SettingsProviders: Component = () => {
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-1 pt-6 pb-8 max-w-[720px]">
+        <div class="flex items-center justify-between gap-4 pt-6 pb-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
+          <SettingsServerPicker />
         </div>
       </div>
 
