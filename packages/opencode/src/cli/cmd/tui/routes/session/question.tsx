@@ -5,18 +5,24 @@ import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
+import { useSync } from "../../context/sync"
 import { SplitBorder } from "../../component/border"
 import { useTuiConfig } from "../../context/tui-config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { useToast } from "../../ui/toast"
+import { errorMessage } from "@/util/error"
 
 const QUESTION_MODE = "question"
 
 export function QuestionPrompt(props: { request: QuestionRequest; directory?: string }) {
   const sdk = useSDK()
+  const sync = useSync()
+  const toast = useToast()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const [submitting, setSubmitting] = createSignal(false)
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -45,23 +51,55 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
+  function handleStaleSubmitError(error: unknown) {
+    if (!isStaleQuestionSubmitError(error, props.request.id)) return false
+    sync.pending.dropQuestion(props.request.sessionID, props.request.id)
+    void sync.pending.refresh()
+    return true
+  }
+
+  async function submitQuestion(answers: QuestionAnswer[]) {
+    if (submitting()) return
+    setSubmitting(true)
+    try {
+      await sdk.client.question.reply({ requestID: props.request.id, directory: props.directory, answers }, { throwOnError: true })
+    } catch (error) {
+      if (handleStaleSubmitError(error)) return
+      toast.show({
+        title: "Failed to submit question",
+        message: errorMessage(error),
+        variant: "error",
+      })
+      setSubmitting(false)
+    }
+  }
+
+  async function rejectQuestion() {
+    if (submitting()) return
+    setSubmitting(true)
+    try {
+      await sdk.client.question.reject({ requestID: props.request.id, directory: props.directory }, { throwOnError: true })
+    } catch (error) {
+      if (handleStaleSubmitError(error)) return
+      toast.show({
+        title: "Failed to reject question",
+        message: errorMessage(error),
+        variant: "error",
+      })
+      setSubmitting(false)
+    }
+  }
+
   function submit() {
-    const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.client.question.reply({
-      requestID: props.request.id,
-      directory: props.directory,
-      answers,
-    })
+    void submitQuestion(questions().map((_, i) => store.answers[i] ?? []))
   }
 
   function reject() {
-    void sdk.client.question.reject({
-      requestID: props.request.id,
-      directory: props.directory,
-    })
+    void rejectQuestion()
   }
 
   function pick(answer: string, custom: boolean = false) {
+    if (submitting()) return
     const answers = [...store.answers]
     answers[store.tab] = [answer]
     setStore("answers", answers)
@@ -71,11 +109,8 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       setStore("custom", inputs)
     }
     if (single()) {
-      void sdk.client.question.reply({
-        requestID: props.request.id,
-        directory: props.directory,
-        answers: [[answer]],
-      })
+      void submitQuestion([[answer]])
+
       return
     }
     setStore("tab", store.tab + 1)
@@ -103,6 +138,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   }
 
   function selectOption() {
+    if (submitting()) return
     if (other()) {
       if (!multi()) {
         setStore("editing", true)
@@ -163,6 +199,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         desc: "Submit answer edit",
         group: "Question",
         cmd: () => {
+          if (submitting()) return
           const text = textarea?.plainText?.trim() ?? ""
           const prev = store.custom[store.tab]
 
@@ -382,11 +419,11 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                         </box>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
+                            {multi() ? `[${picked() ? "x" : " "}] ${opt.label}` : opt.label}
                           </text>
                         </box>
                         <Show when={!multi()}>
-                          <text fg={theme.success}>{picked() ? " ✓" : ""}</text>
+                          <text fg={theme.success}>{picked() ? " x" : ""}</text>
                         </Show>
                       </box>
 
@@ -414,12 +451,12 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                     </box>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                        {multi() ? `[${customPicked() ? "x" : " "}] Type your own answer` : "Type your own answer"}
                       </text>
                     </box>
 
                     <Show when={!multi()}>
-                      <text fg={theme.success}>{customPicked() ? " ✓" : ""}</text>
+                      <text fg={theme.success}>{customPicked() ? " x" : ""}</text>
                     </Show>
                   </box>
                   <Show when={store.editing}>
@@ -489,7 +526,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
             <text fg={theme.text}>
-              {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
+              {"tab"} <span style={{ fg: theme.textMuted }}>tab</span>
             </text>
           </Show>
           <Show when={!confirm()}>
@@ -511,4 +548,68 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       </box>
     </box>
   )
+}
+
+export function isStaleQuestionSubmitError(error: unknown, requestID: string) {
+  return isMatchingRequestError(error, requestID, ["QuestionNotFoundError"], ["Question request not found"])
+}
+
+function isMatchingRequestError(error: unknown, requestID: string, names: string[], messages: string[]) {
+  const extracted = extractError(error)
+  const errorRequestID = extracted.requestID
+  if (errorRequestID !== undefined && errorRequestID !== requestID) return false
+  if (extracted.name && names.includes(extracted.name)) return true
+  if (extracted.message && messages.some((message) => extracted.message?.includes(message))) return true
+  return false
+}
+
+function extractError(error: unknown): { name?: string; message?: string; requestID?: string } {
+  if (typeof error === "string") return { message: error, requestID: extractRequestID(error) }
+  if (!(typeof error === "object" && error !== null)) {
+    const message = String(error)
+    return { message, requestID: extractRequestID(message) }
+  }
+
+  const record = error as Record<string, unknown>
+  const cause = readRecord(record.cause)
+  const body = readRecord(record.body) ?? readRecord(cause?.body) ?? readRecord(record.data)
+  const bodyData = readRecord(body?.data)
+  const messages = [
+    readString(body?.message),
+    readString(bodyData?.message),
+    readString(record.message),
+    error instanceof Error ? error.message : undefined,
+  ].filter((message): message is string => Boolean(message))
+  const message = messages.join("\n") || undefined
+  return {
+    name:
+      readString(record._tag) ??
+      readString(record.name) ??
+      readString(body?._tag) ??
+      readString(body?.name) ??
+      readString(bodyData?._tag) ??
+      readString(bodyData?.name),
+    message,
+    requestID:
+      readString(record.requestID) ??
+      readString(body?.requestID) ??
+      readString(bodyData?.requestID) ??
+      readString(cause?.requestID) ??
+      messages.map(extractRequestID).find((id) => id !== undefined),
+  }
+}
+
+function extractRequestID(message: string | undefined) {
+  const match = message?.match(/(?:Question|Permission) request not found(?::|\s)+(\S+)/)
+  return match?.[1]
+}
+
+function readRecord(value: unknown) {
+  if (typeof value === "object" && value !== null) return value as Record<string, unknown>
+  return undefined
+}
+
+function readString(value: unknown) {
+  if (typeof value === "string" && value) return value
+  return undefined
 }

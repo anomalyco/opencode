@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
@@ -17,6 +17,8 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
+import { useToast } from "../../ui/toast"
+import { errorMessage } from "@/util/error"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -115,6 +117,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   const sdk = useSDK()
   const project = useProject()
   const sync = useSync()
+  const toast = useToast()
+  const [submitting, setSubmitting] = createSignal(false)
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
@@ -135,6 +139,37 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   })
 
   const { theme } = useTheme()
+
+  function handleStaleSubmitError(error: unknown) {
+    if (!isStalePermissionSubmitError(error, props.request.id)) return false
+    sync.pending.dropPermission(props.request.sessionID, props.request.id)
+    void sync.pending.refresh()
+    return true
+  }
+
+  async function reply(reply: "once" | "always" | "reject", message?: string) {
+    if (submitting()) return
+    setSubmitting(true)
+    try {
+      await sdk.client.permission.reply(
+        {
+          reply,
+          requestID: props.request.id,
+          message: message || undefined,
+          workspace: project.workspace.current(),
+        },
+        { throwOnError: true },
+      )
+    } catch (error) {
+      if (handleStaleSubmitError(error)) return
+      toast.show({
+        title: "Failed to submit permission",
+        message: errorMessage(error),
+        variant: "error",
+      })
+      setSubmitting(false)
+    }
+  }
 
   return (
     <Switch>
@@ -166,27 +201,19 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           options={{ confirm: "Confirm", cancel: "Cancel" }}
           escapeKey="cancel"
           onSelect={(option) => {
+            if (submitting()) return
             setStore("stage", "permission")
             if (option === "cancel") return
-            void sdk.client.permission.reply({
-              reply: "always",
-              requestID: props.request.id,
-              directory: props.directory,
-              workspace: project.workspace.current(),
-            })
+            void reply("always")
+
           }}
         />
       </Match>
       <Match when={store.stage === "reject"}>
         <RejectPrompt
           onConfirm={(message) => {
-            void sdk.client.permission.reply({
-              reply: "reject",
-              requestID: props.request.id,
-              directory: props.directory,
-              message: message || undefined,
-              workspace: project.workspace.current(),
-            })
+            if (submitting()) return
+            void reply("reject", message)
           }}
           onCancel={() => {
             setStore("stage", "permission")
@@ -203,7 +230,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = props.request.metadata?.filepath
               const filepath = typeof raw === "string" ? raw : ""
               return {
-                icon: "→",
+                icon: "->",
                 title: `Edit ${pathFormatter.format(filepath)}`,
                 body: <EditBody request={props.request} />,
               }
@@ -213,7 +240,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = data.filePath
               const filePath = typeof raw === "string" ? raw : ""
               return {
-                icon: "→",
+                icon: "->",
                 title: `Read ${pathFormatter.format(filePath)}`,
                 body: (
                   <Show when={filePath}>
@@ -228,7 +255,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "glob") {
               const pattern = typeof data.pattern === "string" ? data.pattern : ""
               return {
-                icon: "✱",
+                icon: "*",
                 title: `Glob "${pattern}"`,
                 body: (
                   <Show when={pattern}>
@@ -243,7 +270,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "grep") {
               const pattern = typeof data.pattern === "string" ? data.pattern : ""
               return {
-                icon: "✱",
+                icon: "*",
                 title: `Grep "${pattern}"`,
                 body: (
                   <Show when={pattern}>
@@ -259,7 +286,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = data.path
               const dir = typeof raw === "string" ? raw : ""
               return {
-                icon: "→",
+                icon: "->",
                 title: `List ${pathFormatter.format(dir)}`,
                 body: (
                   <Show when={dir}>
@@ -297,7 +324,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 body: (
                   <Show when={desc}>
                     <box paddingLeft={1}>
-                      <text fg={theme.text}>{"◉ " + desc}</text>
+                      <text fg={theme.text}>{"- " + desc}</text>
                     </box>
                   </Show>
                 ),
@@ -322,7 +349,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "websearch") {
               const query = typeof data.query === "string" ? data.query : ""
               return {
-                icon: "◈",
+                icon: "?",
                 title: `${webSearchProviderLabel(data.provider)} "${query}"`,
                 body: (
                   <Show when={query}>
@@ -347,7 +374,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const patterns = (props.request.patterns ?? []).filter((p): p is string => typeof p === "string")
 
               return {
-                icon: "←",
+                icon: "<-",
                 title: `Access external directory ${dir}`,
                 body: (
                   <Show when={patterns.length > 0}>
@@ -364,7 +391,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
             if (permission === "doom_loop") {
               return {
-                icon: "⟳",
+                icon: "loop",
                 title: "Continue after repeated failures",
                 body: (
                   <box paddingLeft={1}>
@@ -375,7 +402,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             }
 
             return {
-              icon: "⚙",
+              icon: "?",
               title: `Call tool ${permission}`,
               body: (
                 <box paddingLeft={1}>
@@ -390,7 +417,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           const header = () => (
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
-                <text fg={theme.warning}>{"△"}</text>
+                <text fg={theme.warning}>{"!"}</text>
                 <text fg={theme.text}>Permission required</text>
               </box>
               <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
@@ -411,6 +438,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
+                if (submitting()) return
                 if (option === "always") {
                   setStore("stage", "always")
                   return
@@ -420,20 +448,10 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                     setStore("stage", "reject")
                     return
                   }
-                  void sdk.client.permission.reply({
-                    reply: "reject",
-                    requestID: props.request.id,
-                    directory: props.directory,
-                    workspace: project.workspace.current(),
-                  })
+                  void reply("reject")
                   return
                 }
-                void sdk.client.permission.reply({
-                  reply: "once",
-                  requestID: props.request.id,
-                  directory: props.directory,
-                  workspace: project.workspace.current(),
-                })
+                void reply("once")
               }}
             />
           )
@@ -484,7 +502,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={theme.error}>{"△"}</text>
+          <text fg={theme.error}>{"!"}</text>
           <text fg={theme.text}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
@@ -524,6 +542,70 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
       </box>
     </box>
   )
+}
+
+export function isStalePermissionSubmitError(error: unknown, requestID: string) {
+  return isMatchingRequestError(error, requestID, ["PermissionNotFoundError"], ["Permission request not found"])
+}
+
+function isMatchingRequestError(error: unknown, requestID: string, names: string[], messages: string[]) {
+  const extracted = extractError(error)
+  const errorRequestID = extracted.requestID
+  if (errorRequestID !== undefined && errorRequestID !== requestID) return false
+  if (extracted.name && names.includes(extracted.name)) return true
+  if (extracted.message && messages.some((message) => extracted.message?.includes(message))) return true
+  return false
+}
+
+function extractError(error: unknown): { name?: string; message?: string; requestID?: string } {
+  if (typeof error === "string") return { message: error, requestID: extractRequestID(error) }
+  if (!(typeof error === "object" && error !== null)) {
+    const message = String(error)
+    return { message, requestID: extractRequestID(message) }
+  }
+
+  const record = error as Record<string, unknown>
+  const cause = readRecord(record.cause)
+  const body = readRecord(record.body) ?? readRecord(cause?.body) ?? readRecord(record.data)
+  const bodyData = readRecord(body?.data)
+  const messages = [
+    readString(body?.message),
+    readString(bodyData?.message),
+    readString(record.message),
+    error instanceof Error ? error.message : undefined,
+  ].filter((message): message is string => Boolean(message))
+  const message = messages.join("\n") || undefined
+  return {
+    name:
+      readString(record._tag) ??
+      readString(record.name) ??
+      readString(body?._tag) ??
+      readString(body?.name) ??
+      readString(bodyData?._tag) ??
+      readString(bodyData?.name),
+    message,
+    requestID:
+      readString(record.requestID) ??
+      readString(body?.requestID) ??
+      readString(bodyData?.requestID) ??
+      readString(cause?.requestID) ??
+      messages.map(extractRequestID).find((id) => id !== undefined),
+  }
+}
+
+function extractRequestID(message: string | undefined) {
+  const match = message?.match(/(?:Question|Permission) request not found(?::|\s)+(\S+)/)
+  return match?.[1]
+}
+
+function readRecord(value: unknown) {
+  if (typeof value === "object" && value !== null) return value as Record<string, unknown>
+  return undefined
+}
+
+function readString(value: unknown) {
+  if (typeof value === "string" && value) return value
+  return undefined
 }
 
 function Prompt<const T extends Record<string, string>>(props: {
@@ -655,7 +737,7 @@ function Prompt<const T extends Record<string, string>>(props: {
           when={props.header}
           fallback={
             <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
-              <text fg={theme.warning}>{"△"}</text>
+              <text fg={theme.warning}>{"!"}</text>
               <text fg={theme.text}>{props.title}</text>
             </box>
           }
@@ -705,7 +787,7 @@ function Prompt<const T extends Record<string, string>>(props: {
             </text>
           </Show>
           <text fg={theme.text}>
-            {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
+            {"up/down"} <span style={{ fg: theme.textMuted }}>select</span>
           </text>
           <text fg={theme.text}>
             enter <span style={{ fg: theme.textMuted }}>confirm</span>
