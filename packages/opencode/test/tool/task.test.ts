@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -88,19 +88,30 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   return { chat, assistant }
 })
 
-function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
+function stubOps(opts?: {
+  onPrompt?: (input: SessionPrompt.PromptInput) => void
+  text?: string
+  result?: (input: SessionPrompt.PromptInput) => SessionV1.WithParts
+}): TaskPromptOps {
   return {
     cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
       Effect.sync(() => {
         opts?.onPrompt?.(input)
-        return reply(input, opts?.text ?? "done")
+        return opts?.result?.(input) ?? reply(input, opts?.text ?? "done")
       }),
   }
 }
 
-function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithParts {
+function reply(
+  input: SessionPrompt.PromptInput,
+  text: string,
+  opts?: {
+    finish?: string
+    parts?: (messageID: MessageID, sessionID: SessionID) => SessionV1.Part[]
+  },
+): SessionV1.WithParts {
   const id = MessageID.ascending()
   return {
     info: {
@@ -116,9 +127,9 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
       modelID: input.model?.modelID ?? ref.modelID,
       providerID: input.model?.providerID ?? ref.providerID,
       time: { created: Date.now() },
-      finish: "stop",
+      finish: opts?.finish ?? "stop",
     },
-    parts: [
+    parts: opts?.parts?.(id, input.sessionID) ?? [
       {
         id: PartID.ascending(),
         messageID: id,
@@ -127,6 +138,38 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
         text,
       },
     ],
+  }
+}
+
+function textPart(messageID: MessageID, sessionID: SessionID, text: string): SessionV1.TextPart {
+  return {
+    id: PartID.ascending(),
+    messageID,
+    sessionID,
+    type: "text",
+    text,
+  }
+}
+
+function toolPart(messageID: MessageID, sessionID: SessionID): SessionV1.ToolPart {
+  return {
+    id: PartID.ascending(),
+    messageID,
+    sessionID,
+    type: "tool",
+    callID: "call_test",
+    tool: "read",
+    state: {
+      status: "completed",
+      input: { filePath: "src/file.ts" },
+      output: "file contents",
+      title: "src/file.ts",
+      metadata: {},
+      time: {
+        start: Date.now(),
+        end: Date.now(),
+      },
+    },
   }
 }
 
@@ -377,6 +420,152 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).not.toBe("ses_missing")
       expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
       expect(seen?.sessionID).toBe(result.metadata.sessionId)
+    }),
+  )
+
+  it.instance("execute returns the latest non-empty text output", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: stubOps({
+              result: (input) =>
+                reply(input, "unused", {
+                  parts: (messageID, sessionID) => [
+                    textPart(messageID, sessionID, "older text"),
+                    textPart(messageID, sessionID, "   "),
+                    textPart(messageID, sessionID, "latest text"),
+                  ],
+                }),
+            }),
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("latest text")
+      expect(result.output).not.toContain("older text")
+    }),
+  )
+
+  it.instance("execute returns a diagnostic when the child finishes with tool calls but no text", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: stubOps({
+              result: (input) => reply(input, "unused", { finish: "tool-calls", parts: () => [] }),
+            }),
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("Task completed with tool activity but no text output.")
+    }),
+  )
+
+  it.instance("execute returns a diagnostic when the child has tool parts but no text", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: stubOps({
+              result: (input) =>
+                reply(input, "unused", {
+                  parts: (messageID, sessionID) => [toolPart(messageID, sessionID)],
+                }),
+            }),
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("Task completed with tool activity but no text output.")
+    }),
+  )
+
+  it.instance("execute fails when the child has no text or tool evidence", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {
+              promptOps: stubOps({
+                result: (input) => reply(input, "unused", { parts: () => [] }),
+              }),
+            },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(Error)
+        if (error instanceof Error) expect(error.message).toContain("Task completed with no text output")
+      }
     }),
   )
 

@@ -39,6 +39,9 @@ const BACKGROUND_UPDATED = [
   "Do not poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
   "Work on non-overlapping tasks, or briefly tell the user what you sent and end your response.",
 ].join("\n")
+const TOOL_ONLY_OUTPUT = "Task completed with tool activity but no text output."
+const EMPTY_OUTPUT_ERROR =
+  "Task completed with no text output - model may have been rate-limited or returned an empty response"
 
 const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
@@ -59,6 +62,16 @@ export const Parameters = Schema.Struct({
     description: "Run the agent in the background. You will be notified when it completes.",
   }),
 })
+
+function serializeTaskOutput(result: SessionV1.WithParts) {
+  const text = result.parts.findLast(
+    (item): item is SessionV1.TextPart => item.type === "text" && item.text.trim() !== "",
+  )?.text
+  if (text !== undefined) return Effect.succeed(text)
+  if (result.info.role === "assistant" && result.info.finish === "tool-calls") return Effect.succeed(TOOL_ONLY_OUTPUT)
+  if (result.parts.some((item) => item.type === "tool")) return Effect.succeed(TOOL_ONLY_OUTPUT)
+  return Effect.fail(new Error(EMPTY_OUTPUT_ERROR))
+}
 
 function renderOutput(input: {
   sessionID: SessionID
@@ -188,7 +201,7 @@ export const TaskTool = Tool.define(
           },
           parts,
         })
-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+        return yield* serializeTaskOutput(result)
       })
 
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
