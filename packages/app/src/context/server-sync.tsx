@@ -1,17 +1,7 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import {
-  batch,
-  createContext,
-  createEffect,
-  getOwner,
-  onCleanup,
-  onMount,
-  type ParentProps,
-  untrack,
-  useContext,
-} from "solid-js"
+import { batch, getOwner, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
@@ -37,7 +27,6 @@ import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
-import { planReconnectRefresh } from "./global-sync/reconnect-refresh"
 import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
 import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
@@ -87,7 +76,7 @@ function makeQueryOptionsApi(serverSDK: () => OpencodeClient, sdkFor: (dir: Path
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContext(_serverSDK?: ServerSDK) {
+export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
   const serverSDK: ServerSDK = _serverSDK ?? useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
@@ -97,7 +86,6 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
-  const forceSessionRefresh = new Set<string>()
 
   const sdkFor = (directory: string) => {
     const key = directoryKey(directory)
@@ -149,7 +137,6 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
   let bootingRoot = false
   let eventFrame: number | undefined
   let eventTimer: ReturnType<typeof setTimeout> | undefined
-  let streamConnectedCount = 0
 
   onCleanup(() => {
     if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
@@ -239,7 +226,6 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
       const key = directoryKey(directory)
       queue.clear(key)
       sessionMeta.delete(key)
-      forceSessionRefresh.delete(key)
       sdkCache.delete(key)
       clearProviderRev(key)
       clearSessionPrefetchDirectory(key)
@@ -251,7 +237,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     },
   })
 
-  async function loadSessions(directory: string, options?: { force?: boolean }) {
+  async function loadSessions(directory: string) {
     const key = directoryKey(directory)
     const pending = sessionLoads.get(key)
     if (pending) return pending
@@ -259,7 +245,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     children.pin(key)
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(key)
-    if (meta && meta.limit >= store.limit && !options?.force) {
+    if (meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
         limit: store.limit,
         permission: store.permission,
@@ -333,7 +319,6 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     if (!key) return
     const pending = booting.get(key)
     if (pending) return pending
-    const refreshSessions = forceSessionRefresh.delete(key)
 
     children.pin(key)
     const promise = Promise.resolve().then(async () => {
@@ -354,7 +339,7 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
         store: child[0],
         setStore: child[1],
         vcsCache: cache,
-        loadSessions: (directory) => loadSessions(directory, { force: refreshSessions }),
+        loadSessions,
         translate: language.t,
         queryClient,
       })
@@ -368,59 +353,28 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
     return promise
   }
 
-  function refreshAfterReconnect(input: { forceSessions: boolean }) {
-    const plan = planReconnectRefresh({
-      directories: Object.keys(children.children),
-      forceSessions: input.forceSessions,
-      hasSessionMeta: (key) => sessionMeta.has(key),
-    })
-
-    if (plan.refreshGlobal) queue.refresh()
-
-    for (const key of plan.forceSessionDirectories) {
-      // server-sync only owns child stores that already exist. Route/layout
-      // state owns which projects are "opened", so reconnect resync refreshes
-      // currently materialized child stores without introducing route coupling.
-      forceSessionRefresh.add(key)
-    }
-
-    for (const directory of plan.bootstrapDirectories) {
-      queue.push(directory)
-    }
-
-    // Active session messages are owned by directory-sync contexts because that
-    // layer tracks pagination, optimistic writes, and the current session's
-    // loaded range. Reconnect safely refreshes session status through
-    // bootstrapDirectory(), but message-range resync should stay with that
-    // owner instead of duplicating partial message merge logic here.
-  }
-
   const unsub = serverSDK.event.listen((e) => {
     const directory = e.name
     const key = directoryKey(directory)
     const event = e.details
-    if (directory === "global" && event.type === "server.connected") streamConnectedCount += 1
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     if (directory === "global") {
-      if (event.type === "server.connected" || event.type === "global.disposed") {
-        if (!recent) {
-          refreshAfterReconnect({
-            forceSessions: event.type === "global.disposed" || streamConnectedCount > 1,
-          })
-        }
-        return
-      }
-
       applyGlobalEvent({
         event,
         project: globalStore.project,
         refresh: () => {
           if (recent) return
-          queue.refresh()
+          bootstrap.refetch()
         },
         setGlobalProject: setProjects,
       })
+      if (event.type === "server.connected" || event.type === "global.disposed") {
+        if (recent) return
+        for (const directory of Object.keys(children.children)) {
+          queue.push(directory)
+        }
+      }
       return
     }
 
@@ -512,6 +466,17 @@ export function createServerSyncContext(_serverSDK?: ServerSDK) {
   }
 }
 
+export function createServerSyncContext(_serverSDK?: ServerSDK) {
+  const inner = createServerSyncContextInner(_serverSDK)
+  return Object.assign(inner, {
+    createDirSyncContext: createRefCountMap(
+      (dir) => createDirSyncContext(dir, inner, _serverSDK),
+      (dir) => inner.disableMcp(dir),
+      directoryKey,
+    ),
+  })
+}
+
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
   init: (props: { server?: ServerConnection.Any }) => {
@@ -523,13 +488,7 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
     if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
     const ctx = global.createServerCtx(conn)
 
-    return Object.assign(ctx.sync, {
-      createDirSyncContext: createRefCountMap(
-        (dir) => createDirSyncContext(dir, ctx.sync),
-        (dir) => ctx.sync.disableMcp(dir),
-        directoryKey,
-      ),
-    })
+    return ctx.sync
   },
 })
 

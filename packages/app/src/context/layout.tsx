@@ -1,9 +1,11 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
+import { ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
@@ -12,8 +14,11 @@ import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+
+export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
+
 export type { ProjectAvatarVariant }
-import { useProjectView } from "./project-view"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_SIDEBAR_WIDTH = 344
@@ -50,16 +55,6 @@ type SessionTabs = {
   all: string[]
 }
 
-export type TitlebarSessionTab = {
-  dir: string
-  sessionId: string
-  href: string
-}
-
-type TitlebarTabs = {
-  all: TitlebarSessionTab[]
-}
-
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
@@ -78,42 +73,10 @@ export type LocalProject = Partial<Project> & { worktree: string; expanded: bool
 
 export type ReviewDiffStyle = "unified" | "split"
 
-export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
-  touch(key)
-  seed(key)
-  return key
-}
-
-export function createSessionKeyReader(sessionKey: string | Accessor<string>, ensure: (key: string) => void) {
-  const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
-  return () => {
-    const value = key()
-    ensure(value)
-    return value
-  }
-}
-
-export function pruneSessionKeys(input: {
-  keep?: string
-  max: number
-  used: Map<string, number>
-  view: string[]
-  tabs: string[]
-}) {
-  if (!input.keep) return []
-
-  const keys = new Set<string>([...input.view, ...input.tabs])
-  if (keys.size <= input.max) return []
-
-  const score = (key: string) => {
-    if (key === input.keep) return Number.MAX_SAFE_INTEGER
-    return input.used.get(key) ?? 0
-  }
-
-  return Array.from(keys)
-    .sort((a, b) => score(b) - score(a))
-    .slice(input.max)
-}
+export type LayoutRoute =
+  | { type: "home" }
+  | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
+  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
 
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
@@ -155,24 +118,19 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
-const normalizeTitlebarTabs = (all: readonly TitlebarSessionTab[]) => {
-  const seen = new Set<string>()
-  return all.flatMap((tab) => {
-    if (!tab.dir || !tab.sessionId || !tab.href) return []
-    if (seen.has(tab.href)) return []
-    seen.add(tab.href)
-    return [{ dir: tab.dir, sessionId: tab.sessionId, href: tab.href }]
-  })
-}
+const currentRoute = (pathname: string): LayoutRoute => {
+  const parts = pathname.split("/").filter(Boolean)
+  if (parts.length === 0) return { type: "home" }
 
-const sameTitlebarTabs = (a: readonly TitlebarSessionTab[] | undefined, b: readonly TitlebarSessionTab[] | undefined) => {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((tab, index) => {
-    const other = b[index]
-    return tab.dir === other?.dir && tab.sessionId === other.sessionId && tab.href === other.href
-  })
+  const dirBase64 = parts[0]
+  const dir = decode64(dirBase64)
+  if (!dir) return { type: "home" }
+
+  if (parts[1] !== "session") return { type: "home" }
+
+  const id = parts[2]
+  if (id) return { type: "session", dir, dirBase64, sessionId: id }
+  return { type: "dir-new-sesssion", dir, dirBase64 }
 }
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
@@ -180,8 +138,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
   init: () => {
     const globalSdk = useServerSDK()
     const serverSync = useServerSync()
-    const projectView = useProjectView()
+    const server = useServer()
     const platform = usePlatform()
+    const location = useLocation()
+    const route = createMemo(() => currentRoute(location.pathname))
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
@@ -251,42 +211,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return next
       })()
 
-      const titlebarTabs = value.titlebarTabs
-      const migratedTitlebarTabs = (() => {
-        if (!isRecord(titlebarTabs)) return titlebarTabs
-
-        let changed = false
-        const next = Object.fromEntries(
-          Object.entries(titlebarTabs).map(([key, tabs]) => {
-            if (!isRecord(tabs) || !Array.isArray(tabs.all)) {
-              changed = true
-              return [key, { all: [] }]
-            }
-
-            const current = tabs.all.flatMap((tab): TitlebarSessionTab[] => {
-              if (!isRecord(tab)) return []
-              if (typeof tab.dir !== "string") return []
-              if (typeof tab.sessionId !== "string") return []
-              if (typeof tab.href !== "string") return []
-              return [{ dir: tab.dir, sessionId: tab.sessionId, href: tab.href }]
-            })
-            const normalized = normalizeTitlebarTabs(current)
-            if (current.length !== tabs.all.length) changed = true
-            if (!sameTitlebarTabs(current, normalized)) changed = true
-            return [key, { all: normalized }]
-          }),
-        )
-
-        if (!changed) return titlebarTabs
-        return next
-      })()
-
       if (
         migratedSidebar === sidebar &&
         migratedReview === review &&
         migratedFileTree === fileTree &&
-        migratedSessionTabs === sessionTabs &&
-        migratedTitlebarTabs === titlebarTabs
+        migratedSessionTabs === sessionTabs
       ) {
         return value
       }
@@ -297,7 +226,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         review: migratedReview,
         fileTree: migratedFileTree,
         sessionTabs: migratedSessionTabs,
-        titlebarTabs: migratedTitlebarTabs,
       }
     }
 
@@ -331,7 +259,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: false,
         },
         sessionTabs: {} as Record<string, SessionTabs>,
-        titlebarTabs: {} as Record<string, TitlebarTabs>,
         sessionView: {} as Record<string, SessionView>,
         handoff: {
           tabs: undefined as TabHandoff | undefined,
@@ -511,7 +438,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     createEffect(() => {
-      const projects = projectView.projects.list()
+      const projects = server.projects.list()
       const seen = new Set(projects.map((project) => project.worktree))
 
       batch(() => {
@@ -519,19 +446,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const root = rootFor(project.worktree)
           if (root === project.worktree) continue
 
-          projectView.projects.close(project.worktree)
+          server.projects.close(project.worktree)
 
           if (!seen.has(root)) {
-            projectView.projects.open(root)
+            server.projects.open(root)
             seen.add(root)
           }
 
-          if (project.expanded) projectView.projects.expand(root)
+          if (project.expanded) server.projects.expand(root)
         }
       })
     })
 
-    const enriched = createMemo(() => projectView.projects.list().map(enrich))
+    const enriched = createMemo(() => server.projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()
       return projects.map((project) => {
@@ -605,7 +532,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         sessionTimer = window.setTimeout(() => {
           sessionTimer = undefined
           void Promise.all(
-            projectView.projects.list().map((project) => {
+            server.projects.list().map((project) => {
               return serverSync.project.loadSessions(project.worktree)
             }),
           )
@@ -619,6 +546,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     return {
+      route,
       ready,
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
@@ -634,27 +562,27 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           const root = rootFor(directory)
-          if (projectView.projects.list().find((x) => x.worktree === root)) return
+          if (server.projects.list().find((x) => x.worktree === root)) return
           void serverSync.project.loadSessions(root)
-          projectView.projects.open(root)
+          server.projects.open(root)
         },
         close(directory: string) {
-          projectView.projects.close(directory)
+          server.projects.close(directory)
         },
         expand(directory: string) {
-          projectView.projects.expand(directory)
+          server.projects.expand(directory)
         },
         collapse(directory: string) {
-          projectView.projects.collapse(directory)
+          server.projects.collapse(directory)
         },
         move(directory: string, toIndex: number) {
-          projectView.projects.move(directory, toIndex)
+          server.projects.move(directory, toIndex)
         },
         last() {
-          return projectView.projects.last()
+          return server.projects.last()
         },
         touch(directory: string) {
-          projectView.projects.touch(directory)
+          server.projects.touch(rootFor(directory))
         },
       },
       sidebar: {
@@ -1014,26 +942,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
                 opened.splice(to, 0, opened.splice(index, 1)[0])
               }),
             )
-          },
-        }
-      },
-      titlebarTabs(workspaceKey: string | Accessor<string | undefined>) {
-        const key = typeof workspaceKey === "function" ? workspaceKey : () => workspaceKey
-        const tabs = createMemo(() => {
-          const workspace = key()
-          if (!workspace) return { all: [] }
-          return store.titlebarTabs?.[workspace] ?? { all: [] }
-        })
-
-        return {
-          all: createMemo(() => tabs().all),
-          setAll(all: readonly TitlebarSessionTab[]) {
-            const workspace = key()
-            if (!workspace) return
-
-            const next = normalizeTitlebarTabs(all)
-            if (sameTitlebarTabs(store.titlebarTabs?.[workspace]?.all ?? [], next)) return
-            setStore("titlebarTabs", workspace, { all: next })
           },
         }
       },
