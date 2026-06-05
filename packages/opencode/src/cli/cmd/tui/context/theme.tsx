@@ -345,10 +345,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     onMount(() => {
-      void Promise.allSettled([
-        resolveSystemTheme(store.mode),
-        syncCustomThemes(),
-      ]).finally(() => {
+      void Promise.allSettled([resolveSystemTheme(store.mode), syncCustomThemes()]).finally(() => {
         setStore("ready", true)
       })
     })
@@ -791,7 +788,7 @@ export function createSyntaxStyleMemo(factory: () => SyntaxStyle) {
     retained.add(style)
     void renderer
       .idle()
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => {
         if (!retained.delete(style)) return
         style.destroy()

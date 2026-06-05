@@ -223,7 +223,7 @@ export class RunFooter implements FooterApi {
       onThemeRelease: (theme) => {
         void this.renderer
           .idle()
-          .catch(() => { })
+          .catch(() => {})
           .finally(() => this.destroyTheme(theme))
       },
     })
@@ -374,7 +374,7 @@ export class RunFooter implements FooterApi {
   public onClose(fn: () => void): () => void {
     if (this.isClosed) {
       fn()
-      return () => { }
+      return () => {}
     }
 
     this.closes.add(fn)
@@ -569,7 +569,7 @@ export class RunFooter implements FooterApi {
         return this.idle()
       }
 
-      await this.renderer.idle().catch(() => { })
+      await this.renderer.idle().catch(() => {})
     })
   }
 
@@ -819,7 +819,7 @@ export class RunFooter implements FooterApi {
           this.patch(patch)
         }
       })
-      .catch(() => { })
+      .catch(() => {})
   }
 
   private handleVariantSelect = (variant: string | undefined): void => {
@@ -861,7 +861,7 @@ export class RunFooter implements FooterApi {
           this.patch(patch)
         }
       })
-      .catch(() => { })
+      .catch(() => {})
   }
 
   private clearInterruptTimer(): void {
@@ -974,9 +974,11 @@ export class RunFooter implements FooterApi {
       this.themes.push(theme)
       this.setTheme(theme)
       this.renderer.setBackgroundColor(theme.background)
-      this.flushing = this.flushing.then(() => this.scrollback.setTheme(theme)).catch((error) => {
-        this.flushError = error
-      })
+      this.flushing = this.flushing
+        .then(() => this.scrollback.setTheme(theme))
+        .catch((error) => {
+          this.flushError = error
+        })
     })
   }
 
@@ -1006,7 +1008,7 @@ export class RunFooter implements FooterApi {
     this.renderer.clearPaletteCache()
     void this.renderer
       .getPalette({ size: 256 })
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => {
         this.paletteRefreshRunning = false
         if (!retry && !this.paletteRefreshQueued) {
