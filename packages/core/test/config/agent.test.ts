@@ -169,6 +169,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
       expect(reviewer.request).toEqual({
         headers: { first: "one", shared: "last", second: "two" },
         body: { enabled: true, profile: "review", retries: 2, effort: "high" },
+        generation: {},
+        options: {},
       })
     }),
   )
