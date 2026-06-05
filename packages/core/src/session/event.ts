@@ -435,21 +435,34 @@ export namespace Compaction {
 
   export const Delta = EventV2.define({
     type: "session.next.compaction.delta",
-    ...options,
     schema: {
       ...Base,
+      messageID: SessionMessageID.ID,
       text: Schema.String,
     },
   })
   export type Delta = typeof Delta.Type
 
-  export const Ended = EventV2.define({
+  // Retain the unpublished v1 decoder so stored beta events remain replayable.
+  export const EndedV1 = EventV2.define({
     type: "session.next.compaction.ended",
     ...options,
     schema: {
       ...Base,
       text: Schema.String,
       include: Schema.String.pipe(Schema.optional),
+    },
+  })
+
+  export const Ended = EventV2.define({
+    type: "session.next.compaction.ended",
+    sync: { aggregate: "sessionID", version: 2 },
+    schema: {
+      ...Base,
+      messageID: SessionMessageID.ID,
+      reason: Started.data.fields.reason,
+      text: Schema.String,
+      recent: Schema.String,
     },
   })
   export type Ended = typeof Ended.Type
@@ -482,10 +495,9 @@ const DurableDefinitions = [
   Reasoning.Ended,
   Retried,
   Compaction.Started,
-  Compaction.Delta,
   Compaction.Ended,
 ] as const
-const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta] as const
+const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta, Compaction.Delta] as const
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
 export type DurableEvent = typeof Durable.Type

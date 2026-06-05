@@ -172,7 +172,7 @@ export class Compaction extends Schema.Class<Compaction>("Session.Message.Compac
   type: Schema.Literal("compaction"),
   reason: SessionEvent.Compaction.Started.data.fields.reason,
   summary: Schema.String,
-  include: Schema.String.pipe(Schema.optional),
+  recent: Schema.String,
   ...Base,
 }) {}
 
