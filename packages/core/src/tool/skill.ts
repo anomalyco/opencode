@@ -52,7 +52,8 @@ export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>)
   ].join("\n")
 }
 
-const notFound = (name: string) => new ToolFailure({ message: `Unable to load skill ${name}` })
+const unableToLoad = (name: string, error?: unknown) =>
+  new ToolFailure({ message: `Unable to load skill ${name}`, error })
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -76,7 +77,7 @@ export const layer = Layer.effectDiscard(
           Effect.gen(function* () {
             const current = yield* skills.list()
             const skill = current.find((skill) => skill.name === parameters.name)
-            if (!skill) return yield* notFound(parameters.name)
+            if (!skill) return yield* unableToLoad(parameters.name)
             return yield* Effect.gen(function* () {
               yield* assertPermission({ action: name, resources: [skill.name], save: [skill.name] })
               const directory = path.dirname(skill.location)
@@ -96,13 +97,7 @@ export const layer = Layer.effectDiscard(
                 truncated: output.truncated,
                 ...(output.truncated ? { resource: output.resource } : {}),
               }
-            }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.fail(
-                  new ToolFailure({ message: `Unable to load skill ${parameters.name}`, error: Cause.squash(cause) }),
-                ),
-              ),
-            )
+            }).pipe(Effect.catchCause((cause) => Effect.fail(unableToLoad(parameters.name, Cause.squash(cause)))))
           }),
       }),
     )

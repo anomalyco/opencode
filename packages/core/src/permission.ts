@@ -33,8 +33,7 @@ export const Source = Schema.Union([
 ]).annotate({ identifier: "PermissionV2.Source" })
 export type Source = typeof Source.Type
 
-export const Request = Schema.Struct({
-  id: ID,
+const RequestFields = {
   sessionID: SessionV2.ID,
   agent: AgentV2.ID.pipe(Schema.optional),
   action: Schema.String,
@@ -42,6 +41,11 @@ export const Request = Schema.Struct({
   save: Schema.Array(Schema.String).pipe(Schema.optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   source: Source.pipe(Schema.optional),
+}
+
+export const Request = Schema.Struct({
+  id: ID,
+  ...RequestFields,
 }).annotate({ identifier: "PermissionV2.Request" })
 export type Request = typeof Request.Type
 
@@ -50,13 +54,7 @@ export type Reply = typeof Reply.Type
 
 export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
-  sessionID: SessionV2.ID,
-  agent: AgentV2.ID.pipe(Schema.optional),
-  action: Schema.String,
-  resources: Schema.Array(Schema.String),
-  save: Schema.Array(Schema.String).pipe(Schema.optional),
-  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
-  source: Source.pipe(Schema.optional),
+  ...RequestFields,
 }).annotate({ identifier: "PermissionV2.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
 

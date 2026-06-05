@@ -144,6 +144,20 @@ const find = Effect.fn("SessionContextEpoch.find")(function* (db: DatabaseServic
     .pipe(Effect.orDie)
 })
 
+const requireEffectiveAgent = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  agent: AgentV2.ID,
+) {
+  const selected = yield* db
+    .select({ agent: SessionTable.agent })
+    .from(SessionTable)
+    .where(eq(SessionTable.id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  if (!selected || AgentV2.effectiveID(selected.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+})
+
 export const requestReplacement = Effect.fn("SessionContextEpoch.requestReplacement")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
@@ -238,13 +252,7 @@ const replace = Effect.fnUntraced(function* (
     .transaction(
       () =>
         Effect.gen(function* () {
-          const selected = yield* db
-            .select({ agent: SessionTable.agent })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, sessionID))
-            .get()
-            .pipe(Effect.orDie)
-          if (!selected || AgentV2.effectiveID(selected.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+          yield* requireEffectiveAgent(db, sessionID, agent)
           const updated = yield* db
             .update(SessionContextEpochTable)
             .set({
@@ -281,13 +289,7 @@ const fence = Effect.fnUntraced(function* (
     .transaction(
       () =>
         Effect.gen(function* () {
-          const selected = yield* db
-            .select({ agent: SessionTable.agent })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, sessionID))
-            .get()
-            .pipe(Effect.orDie)
-          if (!selected || AgentV2.effectiveID(selected.agent) !== agent) return yield* Effect.die(new AgentMismatch())
+          yield* requireEffectiveAgent(db, sessionID, agent)
           const epoch = yield* db
             .select({ revision: SessionContextEpochTable.revision })
             .from(SessionContextEpochTable)
