@@ -471,8 +471,8 @@ const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
 }
 
-const compactionParts = (msgs: SessionLegacy.WithParts[]) =>
-  msgs.flatMap((msg) => msg.parts).filter((part): part is SessionLegacy.CompactionPart => part.type === "compaction")
+const compactionParts = (msgs: SessionV1.WithParts[]) =>
+  msgs.flatMap((msg) => msg.parts).filter((part): part is SessionV1.CompactionPart => part.type === "compaction")
 
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
   const session = yield* Session.Service
@@ -3621,3 +3621,4 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
