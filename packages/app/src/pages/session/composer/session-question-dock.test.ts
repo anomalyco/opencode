@@ -4,6 +4,7 @@ let questionAnswered: typeof import("./session-question-dock-helpers").questionA
 let questionAttachments: typeof import("./session-question-dock-helpers").questionAttachments
 let questionReply: typeof import("./session-question-dock-helpers").questionReply
 let questionRequestNotFound: typeof import("./session-question-dock-helpers").questionRequestNotFound
+let permissionRequestNotFound: typeof import("./session-question-dock-helpers").permissionRequestNotFound
 
 beforeAll(async () => {
   const mod = await import("./session-question-dock-helpers")
@@ -11,6 +12,7 @@ beforeAll(async () => {
   questionAttachments = mod.questionAttachments
   questionReply = mod.questionReply
   questionRequestNotFound = mod.questionRequestNotFound
+  permissionRequestNotFound = mod.permissionRequestNotFound
 })
 
 describe("session question dock helpers", () => {
@@ -118,5 +120,21 @@ describe("session question dock helpers", () => {
 
     expect(questionRequestNotFound(error, "que_1")).toBe(true)
     expect(questionRequestNotFound(error, "que_2")).toBe(false)
+  })
+
+  test("recognizes stale permission request errors as already handled", () => {
+    const error = new Error("Permission request not found: per_1", {
+      cause: {
+        body: {
+          _tag: "PermissionNotFoundError",
+          requestID: "per_1",
+          message: "Permission request not found: per_1",
+        },
+        status: 404,
+      },
+    })
+
+    expect(permissionRequestNotFound(error, "per_1")).toBe(true)
+    expect(permissionRequestNotFound(error, "per_2")).toBe(false)
   })
 })
