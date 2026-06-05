@@ -306,6 +306,111 @@ describe("doc", () => {
     })
   })
 
+  test("submit approval uses presence names over stored actor fallback", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        // Bob registered without a real name, so the stored row is a Guest fallback.
+        const bob = Doc.actorUpsert({ sessionID: session.id })
+
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          names: { [bob.actorID]: "Bob" },
+          prompt,
+        })
+
+        const stored = state.actors.find((actor) => actor.actorID === bob.actorID)
+        expect(stored?.name).toBe("Bob")
+        expect(stored?.name).not.toBe(bob.actorID)
+
+        stop()
+      },
+    })
+  })
+
+  test("submit approval fails when a participant disconnects past the grace period", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+
+        const aliceEvents: Doc.SubmitEvent[] = []
+        const stopAlice = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          peer: { send: (data) => aliceEvents.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+        let stopBob = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+        expect(state.status).toBe("pending")
+
+        // Bob drops but reconnects inside the 2s grace window — no failure.
+        stopBob()
+        expect(aliceEvents.some((event) => event.type === "left")).toBe(false)
+        stopBob = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+        await new Promise((resolve) => setTimeout(resolve, 2_200))
+        expect(aliceEvents.some((event) => event.type === "left")).toBe(false)
+        expect(Doc.submitActive({ sessionID: session.id, docID, actorID: alice.actorID })?.status).toBe("pending")
+
+        // Bob drops and stays gone past the grace window — submit fails as "left".
+        stopBob()
+        await new Promise((resolve) => setTimeout(resolve, 2_200))
+
+        const left = aliceEvents.find((event) => event.type === "left")
+        expect(left).toBeDefined()
+        expect(left?.state.status).toBe("left")
+        expect(left?.state.cancelledBy?.actorID).toBe(bob.actorID)
+        expect(left?.state.cancelledBy?.name).toBe("Bob")
+
+        // The submit is no longer active, so it can never be sent.
+        const active = Doc.submitActive({ sessionID: session.id, docID, actorID: alice.actorID })
+        expect(active).toBeUndefined()
+
+        stopAlice()
+      },
+    })
+  })
+
   test("submit approval clamps timeout and auto-approves initiator", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

@@ -17,9 +17,13 @@ type Props = {
   close: () => void
 }
 
-function role(actor: DocSubmitActor, state: DocSubmitState): "requester" | "agreed" | "rejected" | "timeout" | "pending" {
-  if (actor.actorID === state.actorID) return "requester"
+function role(
+  actor: DocSubmitActor,
+  state: DocSubmitState,
+): "requester" | "agreed" | "rejected" | "timeout" | "pending" | "left" {
   if (state.status === "cancelled" && actor.actorID === state.cancelledBy?.actorID) return "rejected"
+  if (state.status === "left" && actor.actorID === state.cancelledBy?.actorID) return "left"
+  if (actor.actorID === state.actorID) return "requester"
   if (actor.status === "approved") return "agreed"
   if (state.status === "expired") return "timeout"
   return "pending"
@@ -118,18 +122,20 @@ function WaitingBody(props: { state: DocSubmitState }) {
   )
 }
 
-function loserRole(actor: DocSubmitActor, state: DocSubmitState): "rejected" | "timeout" {
+function loserRole(actor: DocSubmitActor, state: DocSubmitState): "rejected" | "timeout" | "left" {
+  if (state.status === "left" && actor.actorID === state.cancelledBy?.actorID) return "left"
   if (state.status === "cancelled" && actor.actorID === state.cancelledBy?.actorID) return "rejected"
   return "timeout"
 }
 
 function FailureBody(props: { state: DocSubmitState; close: () => void }) {
   const env = useClientEnv()
+  const leaver = createMemo(() => (props.state.status === "left" ? props.state.cancelledBy : undefined))
   const losers = createMemo(() =>
     props.state.actors
       .filter((item) => {
         const r = role(item, props.state)
-        return r === "rejected" || r === "timeout"
+        return r === "rejected" || r === "timeout" || r === "left"
       })
       .map((item) => ({ item, role: loserRole(item, props.state) })),
   )
@@ -157,8 +163,19 @@ function FailureBody(props: { state: DocSubmitState; close: () => void }) {
           <div class="ds-failure__icon">
             <Icon name="close" size="large" />
           </div>
-          <h2 class="ds-headline ds-headline--failure">합의가 무산됐어요</h2>
-          <div class="ds-sub">캔버스를 수정한 뒤 다시 시도하세요</div>
+          <h2 class="ds-headline ds-headline--failure">{leaver() ? "전송에 실패했어요" : "합의가 무산됐어요"}</h2>
+          <div class="ds-sub">
+            <Show
+              when={leaver()}
+              fallback={<>캔버스를 수정한 뒤 다시 시도하세요</>}
+            >
+              {(actor) => (
+                <>
+                  <strong>{actor().name}</strong>님이 나가서 전송하지 못했어요
+                </>
+              )}
+            </Show>
+          </div>
           <Show when={losers().length > 0}>
             <div class="ds-pending-list">
               <div class="ds-pending-row ds-pending-row--outcome" classList={{ "ds-pending-row--large": large() }}>
@@ -199,7 +216,7 @@ export function DialogDocSubmit(props: Props) {
   const approved = () => actor()?.status === "approved"
   const failed = () => {
     const value = state()?.status
-    return value === "cancelled" || value === "expired"
+    return value === "cancelled" || value === "expired" || value === "left"
   }
 
   return (

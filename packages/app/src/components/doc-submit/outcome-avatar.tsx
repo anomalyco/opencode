@@ -2,7 +2,7 @@ import { Show } from "solid-js"
 import { avatarLabel } from "./avatar-label"
 import { actorColor } from "./actor-color"
 
-type Role = "requester" | "agreed" | "rejected" | "timeout"
+type Role = "requester" | "agreed" | "rejected" | "timeout" | "left"
 
 type Props = {
   name: string
@@ -45,6 +45,14 @@ const map: Record<
     chipFg: "rgba(255,255,255,0.6)",
     muted: true,
     glow: false,
+  },
+  left: {
+    ring: "var(--ds-safety)",
+    chip: "나감",
+    chipBg: "#ffffff",
+    chipFg: "#c44a00",
+    muted: false,
+    glow: true,
   },
 }
 

@@ -1603,8 +1603,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const docID = doc.docID()
       const actorID = doc.actorID()
       if (!docID || !actorID) return false
-      const ids = Array.from(new Set([actorID, ...doc.actors().map((item) => item.actorID)]))
+      const list = doc.actors()
+      const ids = Array.from(new Set([actorID, ...list.map((item) => item.actorID)]))
       if (ids.length <= 1) return false
+      const names: Record<string, string> = {}
+      for (const item of list) {
+        const name = item.name?.trim()
+        if (name && name !== item.actorID) names[item.actorID] = name
+      }
       try {
         const state = await startSubmit({
           baseUrl: sdk.url,
@@ -1613,6 +1619,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           docID,
           actorID,
           actorIDs: ids,
+          names,
           prompt: {
             messageID: input.messageID,
             agent: input.agent,

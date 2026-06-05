@@ -283,7 +283,7 @@ export namespace Doc {
   const MAX = 600_000
   const SubmitPrompt = SessionPrompt.PromptInput.omit({ sessionID: true })
   const SubmitActorStatus = z.enum(["pending", "approved"])
-  export const SubmitStatus = z.enum(["pending", "sent", "cancelled", "expired"]).meta({ ref: "DocSubmitStatus" })
+  export const SubmitStatus = z.enum(["pending", "sent", "cancelled", "expired", "left"]).meta({ ref: "DocSubmitStatus" })
   export type SubmitStatus = z.infer<typeof SubmitStatus>
 
   export const SubmitActorInfo = z
@@ -312,7 +312,7 @@ export namespace Doc {
 
   export const SubmitEvent = z
     .object({
-      type: z.enum(["created", "updated", "sent", "cancelled", "expired"]),
+      type: z.enum(["created", "updated", "sent", "cancelled", "expired", "left"]),
       state: SubmitState,
     })
     .meta({ ref: "DocSubmitEvent" })
@@ -323,6 +323,7 @@ export namespace Doc {
     docID: DocID.zod,
     actorID: ActorID.zod,
     actorIDs: ActorID.zod.array(),
+    names: z.record(z.string(), z.string()).optional(),
     prompt: SubmitPrompt,
     timeoutMs: z.number().optional(),
   })
@@ -340,8 +341,10 @@ export namespace Doc {
     send: (data: string) => void
   }
 
+  const LEAVE_GRACE = 2_000
   const peers = new Map<DocID, Set<SubmitPeer>>()
   const timers = new Map<SubmitID, ReturnType<typeof setTimeout>>()
+  const leaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   function clamp(input?: number) {
     if (input === undefined) return DEFAULT
@@ -475,14 +478,18 @@ export namespace Doc {
     )
   }
 
-  function actorNames(sessionID: SessionID, ids: ActorID[]) {
+  function actorNames(sessionID: SessionID, ids: ActorID[], names?: Record<string, string>) {
     const actors = Database.use((db) =>
       db.select().from(SessionActorTable).where(eq(SessionActorTable.session_id, sessionID)).all(),
     )
-    return ids.map((id) => ({
-      actorID: id,
-      name: actors.find((actor) => actor.actor_id === id)?.name ?? fallback(id),
-    }))
+    return ids.map((id) => {
+      const provided = names?.[id]?.trim()
+      if (provided) return { actorID: id, name: provided }
+      return {
+        actorID: id,
+        name: actors.find((actor) => actor.actor_id === id)?.name ?? fallback(id),
+      }
+    })
   }
 
   function targets(docID: DocID, actorID: ActorID, actorIDs: ActorID[]) {
@@ -517,7 +524,7 @@ export namespace Doc {
       db.insert(DocSubmitTable).values(submit).run()
       db.insert(DocSubmitActorTable)
         .values(
-          actorNames(input.sessionID, ids).map((actor) => ({
+          actorNames(input.sessionID, ids, input.names).map((actor) => ({
             submit_id: submit.id,
             actor_id: actor.actorID,
             name: actor.name,
@@ -609,6 +616,60 @@ export namespace Doc {
     return finished
   })
 
+  function leave(docID: DocID, actorID: ActorID) {
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(DocSubmitTable)
+        .where(and(eq(DocSubmitTable.doc_id, docID), eq(DocSubmitTable.status, "pending")))
+        .all(),
+    )
+    for (const row of rows) {
+      const next = expire(row)
+      if (next.status !== "pending") continue
+      const state = read(next)
+      if (!state.actors.some((item) => item.actorID === actorID)) continue
+      const item = Database.use((db) =>
+        db
+          .update(DocSubmitTable)
+          .set({ status: "left", cancelled_by: actorID, time_updated: Date.now() })
+          .where(eq(DocSubmitTable.id, next.id))
+          .returning()
+          .get(),
+      )
+      if (!item) continue
+      done(next.id)
+      cast("left", read(item))
+    }
+  }
+
+  function leaveKey(docID: DocID, actorID: ActorID) {
+    return `${docID}:${actorID}`
+  }
+
+  function cancelLeave(docID: DocID, actorID: ActorID) {
+    const key = leaveKey(docID, actorID)
+    const timer = leaveTimers.get(key)
+    if (!timer) return
+    clearTimeout(timer)
+    leaveTimers.delete(key)
+  }
+
+  function scheduleLeave(docID: DocID, actorID: ActorID) {
+    cancelLeave(docID, actorID)
+    const key = leaveKey(docID, actorID)
+    leaveTimers.set(
+      key,
+      setTimeout(() => {
+        leaveTimers.delete(key)
+        const set = peers.get(docID)
+        const online = set ? Array.from(set).some((item) => item.actorID === actorID) : false
+        if (online) return
+        leave(docID, actorID)
+      }, LEAVE_GRACE),
+    )
+  }
+
   export const submitActive = fn(
     z.object({
       sessionID: SessionID.zod,
@@ -632,10 +693,12 @@ export namespace Doc {
       const set = peers.get(input.docID) ?? new Set<SubmitPeer>()
       set.add(peer)
       peers.set(input.docID, set)
+      cancelLeave(input.docID, input.actorID)
       const state = active(input.sessionID, input.docID, input.actorID)
       if (state) peer.send(JSON.stringify({ type: "created", state } satisfies SubmitEvent))
       return () => {
         set.delete(peer)
+        if (!Array.from(set).some((item) => item.actorID === peer.actorID)) scheduleLeave(input.docID, peer.actorID)
         if (set.size === 0) peers.delete(input.docID)
       }
     },

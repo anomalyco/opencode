@@ -12,7 +12,7 @@ export type DocSubmitState = {
   sessionID: string
   docID: string
   actorID: string
-  status: "pending" | "sent" | "cancelled" | "expired"
+  status: "pending" | "sent" | "cancelled" | "expired" | "left"
   actors: DocSubmitActor[]
   cancelledBy?: DocSubmitActor
   timeoutMs: number
@@ -20,7 +20,7 @@ export type DocSubmitState = {
 }
 
 export type DocSubmitEvent = {
-  type: "created" | "updated" | "sent" | "cancelled" | "expired"
+  type: "created" | "updated" | "sent" | "cancelled" | "expired" | "left"
   state: DocSubmitState
 }
 
@@ -31,6 +31,7 @@ type StartInput = {
   docID: string
   actorID: string
   actorIDs: string[]
+  names?: Record<string, string>
   prompt: Pick<PromptApprovalInput, "messageID" | "agent" | "model" | "variant" | "parts">
   timeoutMs?: number
 }
@@ -74,6 +75,7 @@ export async function startSubmit(input: StartInput) {
     docID: input.docID,
     actorID: input.actorID,
     actorIDs: input.actorIDs,
+    names: input.names,
     prompt: input.prompt,
     timeoutMs: input.timeoutMs,
   })
@@ -90,7 +92,13 @@ const state = (value: unknown): DocSubmitState | undefined => {
   if (!value || typeof value !== "object") return
   const item = value as { status?: unknown; submitID?: unknown; actors?: unknown }
   if (typeof item.submitID !== "string") return
-  if (item.status !== "pending" && item.status !== "sent" && item.status !== "cancelled" && item.status !== "expired")
+  if (
+    item.status !== "pending" &&
+    item.status !== "sent" &&
+    item.status !== "cancelled" &&
+    item.status !== "expired" &&
+    item.status !== "left"
+  )
     return
   if (!Array.isArray(item.actors)) return
   return value as DocSubmitState
@@ -101,7 +109,14 @@ const parse = (data: string) => {
     const value = JSON.parse(data) as unknown
     if (!value || typeof value !== "object") return
     const type = (value as { type?: unknown }).type
-    if (type !== "created" && type !== "updated" && type !== "sent" && type !== "cancelled" && type !== "expired")
+    if (
+      type !== "created" &&
+      type !== "updated" &&
+      type !== "sent" &&
+      type !== "cancelled" &&
+      type !== "expired" &&
+      type !== "left"
+    )
       return
     const next = state((value as { state?: unknown }).state)
     if (!next) return
