@@ -1,10 +1,14 @@
-import { LLM, LLMClient, SystemPart } from "@opencode-ai/llm"
-import { DateTime, Effect, Layer } from "effect"
+import { LLM, LLMClient, LLMError, LLMEvent, SystemPart } from "@opencode-ai/llm"
+import { Cause, DateTime, Effect, FiberSet, Layer, Semaphore, Stream } from "effect"
 import { EventV2 } from "../../event"
+import { ModelV2 } from "../../model"
+import { ProviderV2 } from "../../provider"
+import { QuestionV2 } from "../../question"
 import { SessionSchema } from "../schema"
 import { SessionEvent } from "../event"
 import { SessionStore } from "../store"
 import { Service, StepLimitExceededError } from "./index"
+import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { ToolRegistry } from "../../tool/registry"
 import { SessionRunnerModel } from "./model"
@@ -12,7 +16,6 @@ import { Database } from "../../database/database"
 import { SessionInput } from "../input"
 import { SystemContextRegistry } from "../../system-context-registry"
 import { SessionContextEpoch } from "../context-epoch"
-import { SessionRunnerProviderTurn } from "./provider-turn"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -65,7 +68,7 @@ import { SessionRunnerProviderTurn } from "./provider-turn"
  *   - [ ] Coalesce streamed deltas and add covering projected-history indexes.
  *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
  *
- * Use `llm.stream(request)` for each provider turn. Keep activity continuation here.
+ * Use `llm.stream(request)` for each provider turn. Keep tool execution and activity continuation here.
  * Durable activity recovery remains a separate future slice with an explicit retry policy.
  *
  * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
@@ -75,6 +78,7 @@ import { SessionRunnerProviderTurn } from "./provider-turn"
 
 // QUESTION: Did this exist previously, or did we add this limit? Does it make sense?
 const MAX_STEPS = 25
+type Promotion = "steer" | "queue"
 
 export const layer = Layer.effect(
   Service,
@@ -86,7 +90,6 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const systemContext = yield* SystemContextRegistry.Service
     const db = (yield* Database.Service).db
-    const runProviderTurn = SessionRunnerProviderTurn.make({ events, llm, tools })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -115,13 +118,22 @@ export const layer = Layer.effect(
       }
     })
 
-    const prepareProviderTurn = Effect.fn("SessionRunner.prepareProviderTurn")(function* (
+    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, never>) =>
+      Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
+
+    // Match V1: dismissing a question halts the loop instead of becoming model-facing tool output.
+    const isQuestionRejected = (cause: Cause.Cause<unknown>) =>
+      cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
+
+    const runTurn = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
-      promotion: SessionInput.Delivery | undefined,
+      promotion: Promotion | undefined,
     ) {
       const session = yield* getSession(sessionID)
       const initialized = yield* SessionContextEpoch.initialize(db, systemContext, session.id, session.location)
       const model = yield* models.resolve(session)
+      const toolFibers = yield* FiberSet.make<void, never>()
+      let needsContinuation = false
       if (promotion) {
         const cutoff = yield* SessionInput.latestSeq(db, session.id)
         if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
@@ -132,27 +144,104 @@ export const layer = Layer.effect(
       }
       const system = initialized ?? (yield* SessionContextEpoch.prepare(db, events, systemContext, session.id, session.location))
       const context = yield* store.runnerContext(session.id, system.baselineSeq)
-      return {
+      const request = LLM.request({
+        model,
+        system: system.baseline.length > 0 ? [SystemPart.make(system.baseline)] : [],
+        messages: toLLMMessages(context, model),
+        tools: yield* tools.definitions(),
+      })
+      const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: session.agent ?? "build",
-        ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
-        request: LLM.request({
-          model,
-          system: system.baseline.length > 0 ? [SystemPart.make(system.baseline)] : [],
-          messages: toLLMMessages(context, model),
-          tools: yield* tools.definitions(),
+        model: {
+          id: ModelV2.ID.make(model.id),
+          providerID: ProviderV2.ID.make(model.provider),
+          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
+        },
+      })
+      const withPublication = Semaphore.makeUnsafe(1).withPermit
+      const publish = (event: LLMEvent) => withPublication(publisher.publish(event))
+      const providerStream = llm.stream(request).pipe(
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            yield* publish(event)
+            if (event.type !== "tool-call" || event.providerExecuted) return
+            needsContinuation = true
+            yield* tools.settle({ sessionID: session.id, call: event }).pipe(
+              Effect.catchCause((cause) => {
+                if (isQuestionRejected(cause)) return Effect.failCause(cause)
+                return Effect.succeed({
+                  result: { type: "error" as const, value: String(Cause.squash(cause)) },
+                  output: undefined,
+                })
+              }),
+              Effect.flatMap((settlement) =>
+                publish(
+                  LLMEvent.toolResult({
+                    id: event.id,
+                    name: event.name,
+                    result: settlement.result,
+                    output: settlement.output,
+                  }),
+                ),
+              ),
+              FiberSet.run(toolFibers),
+            )
+          }),
+        ),
+        Effect.ensuring(withPublication(publisher.flush())),
+      )
+
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const stream = yield* restore(providerStream).pipe(Effect.exit)
+          let llmFailure: LLMError | undefined
+          if (stream._tag === "Failure") {
+            for (const reason of stream.cause.reasons) {
+              if (!Cause.isFailReason(reason)) continue
+              if (reason.error instanceof LLMError) llmFailure = reason.error
+            }
+          }
+          if (llmFailure && !publisher.hasProviderError()) {
+            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+            yield* withPublication(
+              events.publish(SessionEvent.Step.Failed, {
+                sessionID: session.id,
+                timestamp: yield* DateTime.now,
+                assistantMessageID: yield* publisher.startAssistant(),
+                error: { type: "unknown", message: llmFailure.reason.message },
+              }),
+            )
+          }
+          const streamInterrupted = stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)
+          if (streamInterrupted) yield* FiberSet.clear(toolFibers)
+          const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
+          if (settled._tag === "Failure" && isQuestionRejected(settled.cause)) {
+            yield* FiberSet.clear(toolFibers)
+            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+            return yield* Effect.interrupt
+          }
+          if (streamInterrupted || (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))) {
+            if (!streamInterrupted) yield* FiberSet.clear(toolFibers)
+            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+          }
+          if (publisher.hasProviderError())
+            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+          if (stream._tag === "Success" && !publisher.hasProviderError())
+            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+          const attempt = stream._tag === "Failure" ? stream : settled
+          if (attempt._tag === "Failure") return yield* Effect.failCause(attempt.cause)
+          return !publisher.hasProviderError() && needsContinuation
         }),
-      }
-    })
+      )
+    }, Effect.scoped)
 
     const runActivity = Effect.fn("SessionRunner.runActivity")(function* (
       sessionID: SessionSchema.ID,
-      initialPromotion: SessionInput.Delivery | undefined,
+      initialPromotion: Promotion | undefined,
     ) {
-      let promotion = initialPromotion
       for (let step = 0; step < MAX_STEPS; step++) {
-        const needsContinuation = yield* prepareProviderTurn(sessionID, promotion).pipe(Effect.flatMap(runProviderTurn))
-        promotion = "steer"
+        const needsContinuation = yield* runTurn(sessionID, step === 0 ? initialPromotion : "steer")
         if (needsContinuation || (yield* SessionInput.hasPending(db, sessionID, "steer"))) continue
         return
       }
