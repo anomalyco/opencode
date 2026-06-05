@@ -35,12 +35,13 @@ export const makeReplayState = <T>(
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
         const used = yield* SynchronizedRef.get(position)
-        if (used === 0) return
+        if (used === 0) return yield* Effect.void
         const interactions = yield* load.pipe(Effect.orDie)
         if (used < interactions.length)
-          yield* Effect.die(
+          return yield* Effect.die(
             new Error(`Unused recorded interactions in ${name}: used ${used} of ${interactions.length}`),
           )
+        return yield* Effect.void
       }),
     )
 
