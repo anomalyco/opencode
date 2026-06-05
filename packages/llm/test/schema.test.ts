@@ -2,15 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as OpenAIResponses from "../src/protocols/openai-responses"
-import {
-  ContentPart,
-  LLMEvent,
-  LLMRequest,
-  Model,
-  ModelID,
-  ProviderID,
-  Usage,
-} from "../src/schema"
+import { ContentPart, LLMEvent, LLMRequest, Model, ModelID, ProviderID, Usage } from "../src/schema"
 import { ProviderShared } from "../src/protocols/shared"
 
 const model = new Model({

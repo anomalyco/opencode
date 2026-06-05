@@ -31,7 +31,8 @@ export const layer = Layer.effectDiscard(
         codec: Schema.toCodecJson(Files),
         load: Effect.succeed(value),
         baseline: render,
-        update: (_previous, current) => `These instructions replace all previously loaded ambient instructions.\n\n${render(current)}`,
+        update: (_previous, current) =>
+          `These instructions replace all previously loaded ambient instructions.\n\n${render(current)}`,
         removed: () => "Previously loaded instructions no longer apply.",
       })
 

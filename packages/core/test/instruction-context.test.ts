@@ -219,16 +219,17 @@ describe("InstructionContext", () => {
           Layer.succeed(
             Location.Service,
             Location.Service.of(
-              location(
-                { directory: AbsolutePath.make("/repo/") },
-                { projectDirectory: AbsolutePath.make("/repo") },
-              ),
+              location({ directory: AbsolutePath.make("/repo/") }, { projectDirectory: AbsolutePath.make("/repo") }),
             ),
           ),
         ),
       )
 
-      expect(observed).toEqual({ targets: ["AGENTS.md"], start: FSUtil.resolve("/repo"), stop: FSUtil.resolve("/repo") })
+      expect(observed).toEqual({
+        targets: ["AGENTS.md"],
+        start: FSUtil.resolve("/repo"),
+        stop: FSUtil.resolve("/repo"),
+      })
     }),
   )
 
@@ -284,10 +285,7 @@ describe("InstructionContext", () => {
           Layer.succeed(
             Location.Service,
             Location.Service.of(
-              location(
-                { directory: AbsolutePath.make("/outside") },
-                { projectDirectory: AbsolutePath.make("/repo") },
-              ),
+              location({ directory: AbsolutePath.make("/outside") }, { projectDirectory: AbsolutePath.make("/repo") }),
             ),
           ),
         ),

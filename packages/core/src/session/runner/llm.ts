@@ -144,7 +144,8 @@ export const layer = Layer.effect(
           yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
         }
       }
-      const system = initialized ?? (yield* SessionContextEpoch.prepare(db, events, systemContext, session.id, session.location))
+      const system =
+        initialized ?? (yield* SessionContextEpoch.prepare(db, events, systemContext, session.id, session.location))
       const context = yield* store.runnerContext(session.id, system.baselineSeq)
       const request = LLM.request({
         model,

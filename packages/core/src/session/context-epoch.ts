@@ -141,8 +141,15 @@ export const requestReplacement = Effect.fn("SessionContextEpoch.requestReplacem
     .pipe(Effect.orDie)
 })
 
-export const reset = Effect.fn("SessionContextEpoch.reset")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  yield* db.delete(SessionContextEpochTable).where(eq(SessionContextEpochTable.session_id, sessionID)).run().pipe(Effect.orDie)
+export const reset = Effect.fn("SessionContextEpoch.reset")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  yield* db
+    .delete(SessionContextEpochTable)
+    .where(eq(SessionContextEpochTable.session_id, sessionID))
+    .run()
+    .pipe(Effect.orDie)
 })
 
 const insert = Effect.fnUntraced(function* (
