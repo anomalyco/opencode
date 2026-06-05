@@ -151,7 +151,7 @@ export function runningToolUpdate(input: {
     toolCallId: input.toolCallId,
     status: "in_progress",
     kind: toToolKind(input.toolName),
-    title: input.state.title ?? input.toolName,
+    title: toolTitle(input.toolName, input.state.input, input.state.title ?? input.toolName),
     locations: toLocations(input.toolName, input.state.input),
     rawInput: input.state.input,
     ...(content ? { content } : {}),
@@ -167,7 +167,7 @@ export function duplicateRunningToolUpdate(input: {
     toolCallId: input.toolCallId,
     status: "in_progress",
     kind: toToolKind(input.toolName),
-    title: input.state.title ?? input.toolName,
+    title: toolTitle(input.toolName, input.state.input, input.state.title ?? input.toolName),
     locations: toLocations(input.toolName, input.state.input),
     rawInput: input.state.input,
   }
@@ -182,7 +182,7 @@ export function completedToolUpdate(input: {
     toolCallId: input.toolCallId,
     status: "completed",
     kind: toToolKind(input.toolName),
-    title: input.state.title,
+    title: toolTitle(input.toolName, input.state.input, input.state.title),
     content: completedToolContent(input.toolName, input.state),
     rawInput: input.state.input,
     rawOutput: completedToolRawOutput(input.state),
@@ -198,7 +198,7 @@ export function errorToolUpdate(input: {
     toolCallId: input.toolCallId,
     status: "failed",
     kind: toToolKind(input.toolName),
-    title: input.toolName,
+    title: toolTitle(input.toolName, input.state.input, input.toolName),
     rawInput: input.state.input,
     content: [
       {
@@ -300,6 +300,11 @@ function readDisplayText(metadata: unknown) {
     return info.entries.filter((item): item is string => typeof item === "string").join("\n")
   }
   return undefined
+}
+
+function toolTitle(toolName: string, input: ToolInput, fallback: string) {
+  if (toToolKind(toolName) !== "execute") return fallback
+  return stringValue(input.command) ?? fallback
 }
 
 function dataUrlImage(attachment: ToolAttachment) {

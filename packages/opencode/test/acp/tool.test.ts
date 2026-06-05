@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
+  completedToolUpdate,
   completedToolContent,
   completedToolRawOutput,
+  errorToolUpdate,
   extractImageAttachments,
   imageContents,
+  runningToolUpdate,
   shellOutputSnapshot,
   toLocations,
   toToolKind,
@@ -206,5 +209,82 @@ describe("acp tool conversion", () => {
     expect(shellOutputSnapshot({ metadata: { output: "line 1\nline 2" } })).toBe("line 1\nline 2")
     expect(shellOutputSnapshot({ metadata: { output: 42 } })).toBeUndefined()
     expect(shellOutputSnapshot({ metadata: undefined })).toBeUndefined()
+  })
+
+  test("uses shell command instead of description for execute tool titles", () => {
+    expect(
+      runningToolUpdate({
+        toolCallId: "call_1",
+        toolName: "bash",
+        state: {
+          status: "running",
+          input: {
+            command: "git show --stat",
+            description: "Shows latest commit file statistics",
+          },
+        },
+      }).title,
+    ).toBe("git show --stat")
+
+    expect(
+      completedToolUpdate({
+        toolCallId: "call_2",
+        toolName: "bash",
+        state: {
+          status: "completed",
+          input: {
+            command: "git show --name-only",
+            description: "Shows latest commit changed files",
+          },
+          output: "README.md",
+          title: "Shows latest commit changed files",
+        },
+      }).title,
+    ).toBe("git show --name-only")
+
+    expect(
+      errorToolUpdate({
+        toolCallId: "call_3",
+        toolName: "bash",
+        state: {
+          status: "error",
+          input: {
+            command: "git show --summary",
+            description: "Shows latest commit summary",
+          },
+          error: "failed",
+        },
+      }).title,
+    ).toBe("git show --summary")
+  })
+
+  test("falls back to existing execute tool title when command is missing", () => {
+    expect(
+      runningToolUpdate({
+        toolCallId: "call_1",
+        toolName: "bash",
+        state: {
+          status: "running",
+          input: {
+            description: "Shows latest commit summary",
+          },
+          title: "Shows latest commit summary",
+        },
+      }).title,
+    ).toBe("Shows latest commit summary")
+
+    expect(
+      errorToolUpdate({
+        toolCallId: "call_2",
+        toolName: "bash",
+        state: {
+          status: "error",
+          input: {
+            description: "Shows latest commit summary",
+          },
+          error: "failed",
+        },
+      }).title,
+    ).toBe("bash")
   })
 })
