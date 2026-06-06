@@ -30,8 +30,6 @@ export const SidebarContent = (props: {
   onOpenSettings: () => void
   helpLabel: Accessor<string>
   onOpenHelp: () => void
-  browserLabel: Accessor<string>
-  onOpenBrowser: () => void
   renderPanel: () => JSX.Element
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
@@ -85,15 +83,6 @@ export const SidebarContent = (props: {
                   size="large"
                   onClick={props.onOpenProject}
                   aria-label={typeof props.openProjectLabel === "string" ? props.openProjectLabel : undefined}
-                />
-              </Tooltip>
-              <Tooltip placement={placement()} value={props.browserLabel()}>
-                <IconButton
-                  icon="globe"
-                  variant="ghost"
-                  size="large"
-                  onClick={props.onOpenBrowser}
-                  aria-label={props.browserLabel()}
                 />
               </Tooltip>
             </div>

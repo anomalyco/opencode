@@ -2531,6 +2531,7 @@ export default function Layout(props: ParentProps) {
                     >
                       <BrowserView
                         url={browser.store.tabs[0]?.url ?? "https://google.com"}
+                        onClose={() => browser.closeBrowser()}
                         onBookmark={(title, url) => browser.addBookmark(title, url)}
                         onUrlChange={(url) => browser.store.tabs[0] && browser.navigateTo(browser.store.tabs[0].id, url)}
                         onTitleChange={(title) => browser.store.tabs[0] && browser.updateTitle(browser.store.tabs[0].id, title)}

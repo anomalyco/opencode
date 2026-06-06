@@ -1,10 +1,11 @@
 import { createSignal, onMount, Show } from "solid-js"
 import { IconButton } from "../icon-button"
-import { TextField } from "../text-field"
+import { IconV2 } from "../icon-v2"
 import "./browser-view.css"
 
 export interface BrowserViewProps {
   url: string
+  onClose?: () => void
   onUrlChange?: (url: string) => void
   onTitleChange?: (title: string) => void
   onBookmark?: (title: string, url: string) => void
@@ -60,22 +61,33 @@ export function BrowserView(props: BrowserViewProps) {
     <div class="browser-view">
       <div class="browser-toolbar">
         <div class="browser-nav-buttons">
-          <IconButton icon="arrow-left" variant="ghost" disabled={!canGoBack()} onClick={() => webview.goBack()} />
-          <IconButton icon="arrow-right" variant="ghost" disabled={!canGoForward()} onClick={() => webview.goForward()} />
-          <IconButton icon={isLoading() ? "close" : "refresh"} variant="ghost" onClick={() => (isLoading() ? webview.stop() : webview.reload())} />
+          <IconButton icon="arrow-left" variant="ghost" size="small" disabled={!canGoBack()} onClick={() => webview.goBack()} />
+          <IconButton icon="arrow-right" variant="ghost" size="small" disabled={!canGoForward()} onClick={() => webview.goForward()} />
+          <IconButton icon={isLoading() ? "close" : "refresh"} variant="ghost" size="small" onClick={() => (isLoading() ? webview.stop() : webview.reload())} />
         </div>
         <form class="browser-url-bar" onSubmit={handleNavigate}>
-          <TextField
-            value={currentUrl()}
-            onInput={(e) => setCurrentUrl(e.currentTarget.value)}
-            placeholder="Search or enter address"
-            classList={{ "is-loading": isLoading() }}
-          />
+          <div class="url-input-container">
+            <IconV2 name="lock" size={12} class="url-lock-icon" />
+            <input
+              type="text"
+              value={currentUrl()}
+              onInput={(e) => setCurrentUrl(e.currentTarget.value)}
+              placeholder="Search or enter address"
+              class="url-input"
+            />
+            <Show when={isLoading()}>
+              <div class="url-loading-spinner" />
+            </Show>
+          </div>
         </form>
         <div class="browser-actions">
-          <IconButton icon="star" variant="ghost" onClick={() => props.onBookmark?.(webview.getTitle(), webview.getURL())} />
-          <IconButton icon="chat" variant="ghost" onClick={handleSendSelection} tooltip="Send selection to Agent" />
-          <IconButton icon="share" variant="ghost" onClick={handleSharePage} tooltip="Share page with Agent" />
+          <IconButton icon="star" variant="ghost" size="small" onClick={() => props.onBookmark?.(webview.getTitle(), webview.getURL())} />
+          <IconButton icon="chat" variant="ghost" size="small" onClick={handleSendSelection} tooltip="Send selection to Agent" />
+          <IconButton icon="share" variant="ghost" size="small" onClick={handleSharePage} tooltip="Share page with Agent" />
+          <Show when={props.onClose}>
+            <div class="browser-divider" />
+            <IconButton icon="close" variant="ghost" size="small" onClick={() => props.onClose?.()} />
+          </Show>
         </div>
       </div>
       <div class="browser-content">
