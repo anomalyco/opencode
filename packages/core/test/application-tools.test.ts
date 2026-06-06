@@ -4,6 +4,7 @@ import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -11,7 +12,11 @@ const permission = Layer.mock(PermissionV2.Service, {
   assert: () => Effect.void,
 })
 const applications = ApplicationTools.layer
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
+const registry = ToolRegistry.layer.pipe(
+  Layer.provide(permission),
+  Layer.provide(applications),
+  Layer.provide(ToolOutputStore.defaultLayer),
+)
 const it = testEffect(Layer.mergeAll(applications, registry))
 
 const sessionID = SessionV2.ID.make("ses_application_tool")
@@ -32,6 +37,26 @@ const contextual = (contexts: Tool.Context[]) =>
   })
 
 describe("ApplicationTools", () => {
+  it.effect("filters an application tool by its name without adding execution authorization", () =>
+    Effect.gen(function* () {
+      const applications = yield* ApplicationTools.Service
+      const registry = yield* ToolRegistry.Service
+      const contexts: Tool.Context[] = []
+      yield* applications.attach({ application_context: contextual(contexts) })
+
+      expect(yield* registry.definitions([{ action: "application_context", resource: "*", effect: "deny" }])).toEqual(
+        [],
+      )
+      expect(
+        yield* registry.settle({
+          sessionID,
+          call: { type: "tool-call", id: "call-denied", name: "application_context", input: { query: "hello" } },
+        }),
+      ).toMatchObject({ result: { type: "content" } })
+      expect(contexts).toEqual([{ sessionID, id: "call-denied", name: "application_context" }])
+    }),
+  )
+
   it.effect("advertises and executes a scoped application tool with Session context", () =>
     Effect.gen(function* () {
       const applications = yield* ApplicationTools.Service
@@ -164,13 +189,18 @@ describe("ApplicationTools", () => {
       yield* transform((editor) =>
         editor.set("shared", {
           tool: location.definition,
+          permission: { action: "question", resource: "*" },
           execute: ({ parameters, sessionID, call }) =>
             location.execute(parameters, { sessionID, id: call.id, name: call.name }),
         }),
       )
       yield* applications.attach({ shared: contextual(applicationContexts) })
 
-      expect((yield* registry.definitions()).map((definition) => definition.name)).toEqual(["shared"])
+      expect(
+        (yield* registry.definitions([{ action: "question", resource: "*", effect: "deny" }])).map(
+          (definition) => definition.name,
+        ),
+      ).toEqual([])
       expect(
         yield* registry.settle({
           sessionID,
