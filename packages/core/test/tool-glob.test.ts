@@ -44,9 +44,7 @@ const filesystem = Layer.succeed(
         const relative = input.path ?? RelativePath.make(".")
         const resource = input.reference === undefined ? relative : `${input.reference}:${relative}`
         return new FileSystem.RootTarget({
-          absolute: `/project/${relative}`,
           real: `/project/${relative}`,
-          directory: "/project",
           root: "/project",
           resource,
           reference: input.reference,

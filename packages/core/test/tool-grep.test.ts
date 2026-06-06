@@ -36,9 +36,7 @@ const filesystem = Layer.succeed(
     resolveRoot: (input = {}) =>
       Effect.succeed(
         new FileSystem.RootTarget({
-          absolute: `/project/${input.path ?? "."}`,
           real: `/project/${input.path ?? "."}`,
-          directory: "/project",
           root: "/project",
           resource: input.reference === undefined ? (input.path ?? ".") : `${input.reference}:${input.path ?? "."}`,
           reference: input.reference,

@@ -24,14 +24,9 @@ export const MAX_LINE_PREVIEW_LENGTH = 2_000
 
 export const ResultLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_RESULT_LIMIT))
 
-const RootInput = {
-  path: Schema.String.pipe(Schema.optional),
-  reference: Schema.NonEmptyString.pipe(Schema.optional),
-}
-
 export const FilesInput = Schema.Struct({
   pattern: Schema.String,
-  ...RootInput,
+  ...FileSystem.ListInput.fields,
   limit: ResultLimit.pipe(Schema.optional),
 })
 export type FilesInput = typeof FilesInput.Type & { readonly signal?: AbortSignal }
@@ -39,7 +34,7 @@ export type FilesInput = typeof FilesInput.Type & { readonly signal?: AbortSigna
 export const GrepInput = Schema.Struct({
   pattern: Schema.String,
   include: Schema.String.pipe(Schema.optional),
-  ...RootInput,
+  ...FileSystem.ListInput.fields,
   limit: ResultLimit.pipe(Schema.optional),
 })
 export type GrepInput = typeof GrepInput.Type & { readonly signal?: AbortSignal }

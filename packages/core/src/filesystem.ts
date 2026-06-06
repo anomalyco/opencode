@@ -155,9 +155,7 @@ export class ListTarget extends Schema.Class<ListTarget>("FileSystem.ListTarget"
 
 /** Canonical root and permission resource for Location-scoped search. */
 export class RootTarget extends Schema.Class<RootTarget>("FileSystem.RootTarget")({
-  absolute: Schema.String,
   real: Schema.String,
-  directory: Schema.String,
   root: Schema.String,
   resource: Schema.String,
   reference: Schema.NonEmptyString.pipe(Schema.optional),
