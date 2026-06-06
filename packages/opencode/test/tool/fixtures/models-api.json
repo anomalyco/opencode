@@ -21724,7 +21724,7 @@
         "cost": {
           "input": 0.14,
           "output": 0.28,
-          "cache_read": 0.028
+          "cache_read": 0.0028
         }
       },
       "deepseek-reasoner": {
@@ -21753,13 +21753,13 @@
         "cost": {
           "input": 0.14,
           "output": 0.28,
-          "cache_read": 0.028
+          "cache_read": 0.0028
         }
       },
-      "deepseek-v4-flash": {
-        "id": "deepseek-v4-flash",
-        "name": "DeepSeek V4 Flash",
-        "family": "deepseek-flash",
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro",
+        "family": "deepseek-thinking",
         "attachment": false,
         "reasoning": true,
         "tool_call": true,
@@ -21781,9 +21781,9 @@
           "output": 384000
         },
         "cost": {
-          "input": 0.14,
-          "output": 0.28,
-          "cache_read": 0.028
+          "input": 0.435,
+          "output": 0.87,
+          "cache_read": 0.003625
         }
       },
       "deepseek-v4-pro": {
