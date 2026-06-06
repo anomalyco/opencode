@@ -113,17 +113,26 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
     })
   }
 
-  const refreshOpencodeCheck = async (distro: string, opts?: { signal?: AbortSignal }) => {
+  const checkOpencode = async (distro: string, opts?: { signal?: AbortSignal }) => {
     const resolved = await resolveWslOpencode(distro, opts)
     const version = resolved ? await readWslCommandVersion(resolved, distro, opts) : null
-    setOpencodeCheck(distro, opencodeCheck(distro, resolved, version, appVersion))
+    return opencodeCheck(distro, resolved, version, appVersion)
+  }
+
+  const refreshOpencodeCheck = async (distro: string, opts?: { signal?: AbortSignal }) => {
+    setOpencodeCheck(distro, await checkOpencode(distro, opts))
   }
 
   const refreshOpencodeCheckBackground = (id: string, distro: string) => {
-    void refreshOpencodeCheck(distro).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      logger?.error("wsl opencode check failed", { id, distro, message })
-    })
+    void checkOpencode(distro)
+      .then((check) => {
+        if (!state.servers.some((item) => item.config.id === id && item.config.distro === distro)) return
+        setOpencodeCheck(distro, check)
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        logger?.error("wsl opencode check failed", { id, distro, message })
+      })
   }
 
   const refreshOpencodeChecks = async () => {
