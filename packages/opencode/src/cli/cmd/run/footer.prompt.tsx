@@ -227,7 +227,7 @@ export function RunPromptBody(props: {
 
           props.onContentChange()
         })
-        .catch(() => {})
+        .catch(() => { })
     }, 0)
   }
 
@@ -414,7 +414,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const slashOptions = createMemo<SlashOption[]>(() => {
     const builtins = [
       { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
-      { kind: "slash", name: "exit", display: "/exit", description: "close direct mode" } satisfies SlashOption,
+      { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
     const hidden = new Set(builtins.map((item) => item.name))
     return [
@@ -696,14 +696,14 @@ export function createPromptState(input: PromptInput): PromptState {
     syncParts()
     draft = shell()
       ? {
-          text: area.plainText,
-          parts: structuredClone(parts),
-          mode: "shell",
-        }
+        text: area.plainText,
+        parts: structuredClone(parts),
+        mode: "shell",
+      }
       : {
-          text: area.plainText,
-          parts: structuredClone(parts),
-        }
+        text: area.plainText,
+        parts: structuredClone(parts),
+      }
   }
 
   const push = (value: RunPrompt) => {
