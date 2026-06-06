@@ -179,11 +179,51 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       // [RIN BYPASS] Always grant full access to all models without authentication.
-      // All models are available — no filtering by cost.
-      // This removes the paid model filtering that normally happens without auth.
+      // Plus: API key rotation and proxy rotation for bypassing server-side limits.
+
+      // Rotating API keys - uses random keys from a pool
+      const env = yield* dep.env()
+      const rinApiKeys = (env["RIN_API_KEYS"] || "public")
+        .split(",")
+        .map(k => k.trim())
+        .filter(Boolean)
+
+      // Pick a random key each time
+      const apiKey = rinApiKeys[Math.floor(Math.random() * rinApiKeys.length)]
+
+      // Proxy rotation - set RIN_PROXIES env var with comma-separated proxy URLs
+      const rinProxies = (env["RIN_PROXIES"] || "")
+        .split(",")
+        .map(k => k.trim())
+        .filter(Boolean)
+
+      const proxyUrl = rinProxies.length > 0
+        ? rinProxies[Math.floor(Math.random() * rinProxies.length)]
+        : undefined
+
+      const options: Record<string, any> = {}
+      if (apiKey !== "public") options.apiKey = apiKey
+      if (proxyUrl) options.baseURL = proxyUrl
+
+      // Generate random client ID to avoid tracking
+      const clientId = Array.from({ length: 8 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('')
+
       return {
         autoload: Object.keys(input.models).length > 0,
-        options: {},
+        options: {
+          ...options,
+          headers: {
+            "x-rin-client": clientId,
+            "x-rin-request": `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            "User-Agent": [
+              "Rin/1.0",
+              "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            ][Math.floor(Math.random() * 3)],
+          },
+        },
       }
     }),
     openai: () =>
