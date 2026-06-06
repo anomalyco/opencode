@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { computePromptTraits } from "../../../../src/cli/cmd/tui/component/prompt/traits"
+import { computePromptTraits } from "../../src/prompt/traits"
 
 describe("computePromptTraits", () => {
   test("normal mode without autocomplete only captures tab", () => {
@@ -16,14 +16,10 @@ describe("computePromptTraits", () => {
     expect(traits.status).toBeUndefined()
   })
 
-  test("shell mode does not write the keymap-owned suspend trait", () => {
-    const traits = computePromptTraits({ mode: "shell", autocompleteVisible: false })
-    expect(traits.suspend).toBeUndefined()
-  })
-
-  test("shell mode disables capture and labels the prompt", () => {
+  test("shell mode disables capture and labels the prompt without suspending", () => {
     const traits = computePromptTraits({ mode: "shell", autocompleteVisible: false })
     expect(traits.capture).toBeUndefined()
+    expect(traits.suspend).toBeUndefined()
     expect(traits.status).toBe("SHELL")
   })
 })

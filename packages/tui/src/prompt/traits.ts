@@ -12,13 +12,7 @@ export type PromptTraits = EditorTraits & {
   role: "prompt"
 }
 
-/**
- * Compute the textarea editor traits for the prompt.
- *
- * The OpenTUI managed textarea keymap owns `traits.suspend`. Prompt traits
- * only expose capture/status metadata so focus changes cannot unsuspend the
- * keymap-managed editor mappings.
- */
+/** The managed textarea keymap owns `suspend`; these traits only describe capture and status. */
 export function computePromptTraits(input: PromptTraitsInput): PromptTraits {
   const capture =
     input.mode === "normal"

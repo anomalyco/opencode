@@ -336,7 +336,14 @@ refactor(tui): separate config resolution from loading
 
 ## Section 6: Move SDK State, Routes, And Backend Operations
 
-Status: Pending.
+Status: Completed for the SDK/domain boundary. SDK, project, event, legacy sync,
+V2 sync, local model state, prompt persistence, and pure prompt helpers are now
+canonical in `@opencode-ai/tui`. Configured references resolve through the new
+generated `reference.list` SDK operation; prompt payloads rely on optional
+server-assigned IDs; local attachment reads use the package platform contract.
+Legacy route files remain in place until the plugin slot boundary and app-root
+move, but their only private dependencies are plugin presentation or local host
+adapters rather than OpenCode domain implementations.
 
 Make the SDK the only OpenCode domain boundary used by the TUI.
 
@@ -604,7 +611,7 @@ Compiled checks:
 - [x] Section 3: Remove backend tool implementation imports
 - [x] Section 4: Make runtime inputs explicit
 - [x] Section 5: Separate resolved TUI config from host config loading
-- [ ] Section 6: Move SDK state, routes, and backend operations
+- [x] Section 6: Move SDK state, routes, and backend operations
 - [ ] Section 7: Isolate plugin presentation from plugin loading
 - [ ] Section 8: Move the application root and renderer lifecycle
 - [ ] Section 9: Convert both CLIs to thin adapters

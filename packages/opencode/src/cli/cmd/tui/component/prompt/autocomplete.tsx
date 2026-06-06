@@ -19,9 +19,8 @@ import { Locale } from "@opencode-ai/tui/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
-import { Reference } from "@/reference/reference"
-import { ConfigReference } from "@/config/reference"
-import { displayCharAt, mentionTriggerIndex } from "@/cli/cmd/prompt-display"
+import type { ReferenceDescriptor } from "@opencode-ai/sdk/v2"
+import { displayCharAt, mentionTriggerIndex } from "@opencode-ai/tui/prompt/display"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -273,7 +272,7 @@ export function Autocomplete(props: {
     }
   }
 
-  function referencePromptText(reference: Reference.Resolved) {
+  function referencePromptText(reference: ReferenceDescriptor) {
     const problem = reference.kind === "invalid" ? reference.message : undefined
     return [
       `Referenced configured reference @${reference.name}.`,
@@ -289,12 +288,13 @@ export function Autocomplete(props: {
     ].join("\n")
   }
 
-  const references = createMemo(() =>
-    Reference.resolveAll({
-      references: ConfigReference.normalize(sync.data.config.reference ?? {}),
-      directory: sync.path.directory || environment.cwd,
-      worktree: sync.path.worktree || sync.path.directory || environment.cwd,
-    }),
+  const [references] = createResource(
+    () => project.workspace.current(),
+    async (workspace) => {
+      const result = await sdk.client.reference.list({ workspace })
+      return result.data ?? []
+    },
+    { initialValue: [] },
   )
 
   const referenceMatch = createMemo(() => {

@@ -1,5 +1,10 @@
 import type { Provider } from "@opencode-ai/sdk/v2"
 
+export function parse(value: string) {
+  const [providerID, ...modelID] = value.split("/")
+  return { providerID, modelID: modelID.join("/") }
+}
+
 export function index(list: Provider[] | undefined) {
   return new Map((list ?? []).map((item) => [item.id, item] as const))
 }

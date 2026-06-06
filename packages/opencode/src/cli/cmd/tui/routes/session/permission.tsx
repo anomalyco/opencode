@@ -1,4 +1,5 @@
 import { createStore } from "solid-js/store"
+import { dirname } from "node:path"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
@@ -8,8 +9,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "@opencode-ai/tui/ui/border"
 import { useSync } from "../../context/sync"
 import { useProject } from "../../context/project"
-import path from "path"
-import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import { filetype } from "@opencode-ai/tui/util/filetype"
 import { Locale } from "@opencode-ai/tui/util/locale"
 import { webSearchProviderLabel } from "@opencode-ai/tui/util/tool-display"
 import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
@@ -18,14 +18,6 @@ import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keyma
 import { usePathFormatter } from "../../context/path-format"
 
 type PermissionStage = "permission" | "always" | "reject"
-
-function filetype(input?: string) {
-  if (typeof input !== "string" || !input) return "none"
-  const ext = path.extname(input)
-  const language = LANGUAGE_EXTENSIONS[ext]
-  if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
-  return language
-}
 
 function EditBody(props: { request: PermissionRequest }) {
   const themeState = useTheme()
@@ -345,7 +337,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const filepath = typeof meta["filepath"] === "string" ? meta["filepath"] : undefined
               const pattern = props.request.patterns?.[0]
               const derived =
-                typeof pattern === "string" ? (pattern.includes("*") ? path.dirname(pattern) : pattern) : undefined
+                typeof pattern === "string" ? (pattern.includes("*") ? dirname(pattern) : pattern) : undefined
 
               const raw = parent ?? filepath ?? derived
               const dir = pathFormatter.format(raw)

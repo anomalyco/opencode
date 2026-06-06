@@ -14,7 +14,8 @@ import {
   useContext,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import path from "path"
+import path from "node:path"
+import { writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
@@ -33,6 +34,7 @@ import type {
   UserMessage,
   TextPart,
   ReasoningPart,
+  SessionStatus,
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@opencode-ai/tui/util/locale"
@@ -51,7 +53,7 @@ import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
-import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import { filetype } from "@opencode-ai/tui/util/filetype"
 import parsers from "../../../../../../parsers-config.ts"
 import * as Clipboard from "../../util/clipboard"
 import { errorMessage } from "@opencode-ai/tui/util/error"
@@ -61,21 +63,20 @@ import * as Editor from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
-import { Filesystem } from "@/util/filesystem"
+import { normalizePath } from "@opencode-ai/tui/util/path"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "@opencode-ai/tui/util/model"
 import { formatTranscript } from "@opencode-ai/tui/util/transcript"
 import { setPreLayoutSiblingMargin } from "@opencode-ai/tui/util/layout"
-import { UI } from "@/cli/ui.ts"
+import { sessionExitSummary } from "@opencode-ai/tui/util/presentation"
 import { useTuiConfig } from "../../context/tui-config"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
 import { collapseToolOutput } from "@opencode-ai/tui/util/collapse-tool-output"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
-import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "@opencode-ai/tui/util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
@@ -89,7 +90,9 @@ const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_don
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
 
-function goUpsellKeys(action: SessionRetry.Retryable["action"]) {
+type RetryAction = Extract<SessionStatus, { type: "retry" }>["action"]
+
+function goUpsellKeys(action: RetryAction) {
   if (!action) return
   if (!GO_UPSELL_PROVIDERS.has(action.provider)) return
   if (action.reason === "free_tier_limit") {
@@ -354,21 +357,7 @@ export function Session() {
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
-    const pad = (text: string) => text.padEnd(10, " ")
-    const weak = (text: string) => UI.Style.TEXT_DIM + pad(text) + UI.Style.TEXT_NORMAL
-    const logo = UI.logo("  ").split(/\r?\n/)
-    return exit.message.set(
-      [
-        `${logo[0] ?? ""}`,
-        `${logo[1] ?? ""}`,
-        `${logo[2] ?? ""}`,
-        `${logo[3] ?? ""}`,
-        ``,
-        `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
-        ``,
-      ].join("\n"),
-    )
+    return exit.message.set(sessionExitSummary({ title, sessionID: session()?.id }))
   })
 
   // Helper: Find next visible message boundary in direction
@@ -994,7 +983,7 @@ export function Session() {
             const filename = options.filename.trim()
             const filepath = path.join(exportDir, filename)
 
-            await Filesystem.write(filepath, transcript)
+            await writeFile(filepath, transcript)
 
             // Open with EDITOR if available
             const result = await Editor.open({
@@ -1006,7 +995,7 @@ export function Session() {
                 environment.cwd,
             })
             if (result !== undefined) {
-              await Filesystem.write(filepath, result)
+              await writeFile(filepath, result)
             }
 
             toast.show({ message: `Session exported to ${filename}`, variant: "success" })
@@ -2522,7 +2511,7 @@ function Skill(props: ToolProps) {
 function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
   const { theme } = useTheme()
   const errors = createMemo(() => {
-    const normalized = Filesystem.normalizePath(typeof props.filePath === "string" ? props.filePath : "")
+    const normalized = normalizePath(typeof props.filePath === "string" ? props.filePath : "")
     return parseDiagnostics(props.diagnostics, normalized)
   })
 
@@ -2637,12 +2626,4 @@ export function parseDiagnostics(value: unknown, filePath: string) {
       return [{ range: { start: { line, character } }, message }]
     })
     .slice(0, 3)
-}
-
-function filetype(input?: string) {
-  if (typeof input !== "string" || !input) return "none"
-  const ext = path.extname(input)
-  const language = LANGUAGE_EXTENSIONS[ext]
-  if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
-  return language
 }

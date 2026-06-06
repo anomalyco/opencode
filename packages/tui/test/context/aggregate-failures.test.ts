@@ -4,8 +4,7 @@
  * sibling endpoint's failure as an unhandled rejection.
  */
 import { describe, expect, test } from "bun:test"
-import { aggregateFailures } from "@/cli/cmd/tui/context/aggregate-failures"
-import { ConfigErrorV1 } from "@opencode-ai/core/v1/config/error"
+import { aggregateFailures } from "@opencode-ai/tui/context/aggregate-failures"
 
 describe("aggregateFailures", () => {
   test("returns null when every result is fulfilled", () => {
@@ -43,10 +42,13 @@ describe("aggregateFailures", () => {
   })
 
   test("formats structured config errors hidden inside SDK error causes", () => {
-    const configError = new ConfigErrorV1.InvalidError({
-      path: "/tmp/opencode.json",
-      issues: [{ message: "Expected object", path: ["provider", "anthropic", "options"] }],
-    })
+    const configError = {
+      name: "ConfigInvalidError",
+      data: {
+        path: "/tmp/opencode.json",
+        issues: [{ message: "Expected object", path: ["provider", "anthropic", "options"] }],
+      },
+    }
     const err = aggregateFailures([
       {
         name: "config.get",
@@ -54,7 +56,7 @@ describe("aggregateFailures", () => {
           status: "rejected",
           reason: new Error("ConfigInvalidError", {
             cause: {
-              body: configError.toObject(),
+              body: configError,
             },
           }),
         },

@@ -5,7 +5,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import * as Clipboard from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
-import { strip } from "@tui/component/prompt/part"
+import { stripPromptPartIDs as strip } from "@opencode-ai/tui/prompt/part"
 
 export function DialogMessage(props: {
   messageID: string

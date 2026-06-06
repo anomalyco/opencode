@@ -4,9 +4,9 @@ import { onMount } from "solid-js"
 import { ArgsProvider } from "../../../../src/cli/cmd/tui/context/args"
 import { createExit, ExitProvider } from "../../../../src/cli/cmd/tui/context/exit"
 import { KVProvider, useKV } from "../../../../src/cli/cmd/tui/context/kv"
-import { ProjectProvider, useProject } from "../../../../src/cli/cmd/tui/context/project"
-import { SDKProvider } from "../../../../src/cli/cmd/tui/context/sdk"
-import { SyncProvider, useSync } from "../../../../src/cli/cmd/tui/context/sync"
+import { ProjectProvider, useProject } from "@opencode-ai/tui/context/project"
+import { SDKProvider } from "@opencode-ai/tui/context/sdk"
+import { SyncProvider, useSync } from "@opencode-ai/tui/context/sync"
 import { createEventSource, createFetch, type FetchHandler, directory } from "../../../fixture/tui-sdk"
 import { TestTuiEnvironmentProvider } from "../../../fixture/tui-environment"
 export { createEventSource, createFetch, directory, eventSource, json, worktree } from "../../../fixture/tui-sdk"
@@ -50,9 +50,9 @@ export async function mount(override?: FetchHandler, state?: string) {
           <KVProvider>
             <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
               <ProjectProvider>
-                <SyncProvider>
+                <SyncFixtureProvider>
                   <Probe />
-                </SyncProvider>
+                </SyncFixtureProvider>
               </ProjectProvider>
             </SDKProvider>
           </KVProvider>
@@ -64,4 +64,12 @@ export async function mount(override?: FetchHandler, state?: string) {
   await ready
   await wait(() => sync.status === "complete")
   return { app, emit: events.emit, kv, project, sync, session: calls.session }
+}
+
+function SyncFixtureProvider(props: { children: import("solid-js").JSX.Element }) {
+  return (
+    <SyncProvider kv={useKV()} logger={{ error() {} }}>
+      {props.children}
+    </SyncProvider>
+  )
 }

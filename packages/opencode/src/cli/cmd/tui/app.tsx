@@ -17,6 +17,7 @@ import {
   batch,
   Show,
   on,
+  type ParentProps,
 } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import semver from "semver"
@@ -28,6 +29,7 @@ import {
   type TuiBuildInfo,
   type TuiEnvironment,
 } from "@opencode-ai/tui/runtime"
+import { TuiPlatformProvider } from "@opencode-ai/tui/platform"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { ErrorComponent } from "@tui/component/error-component"
@@ -60,10 +62,10 @@ import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { createExit, ExitProvider, useExit, type Exit } from "./context/exit"
-import { Session as SessionApi } from "@/session/session"
+import { isDefaultTitle } from "@opencode-ai/tui/util/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
-import { Provider } from "@/provider/provider"
+import * as Model from "@opencode-ai/tui/util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -74,6 +76,7 @@ import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
 import { createTuiAttention } from "@/cli/cmd/tui/attention"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { Log } from "@opencode-ai/core/util/log"
 import { CommandPaletteDialog } from "./component/command-palette"
 import {
   COMMAND_PALETTE_COMMAND,
@@ -86,6 +89,7 @@ import {
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { createLegacyTuiPlatform } from "./platform"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -243,66 +247,88 @@ async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefa
         )}
       >
         <TuiEnvironmentProvider value={input.environment}>
-          <TuiBuildInfoProvider value={input.build}>
-            <OpencodeKeymapProvider keymap={input.keymap}>
-              <ArgsProvider {...input.args}>
-                <ExitProvider exit={input.exit}>
-                  <KVProvider>
-                    <ToastProvider>
-                      <RouteProvider
-                        initialRoute={
-                          input.args.continue
-                            ? {
-                                type: "session",
-                                sessionID: "dummy",
-                              }
-                            : undefined
-                        }
-                      >
-                        <TuiConfigProvider config={input.config}>
-                          <SDKProvider
-                            url={input.url}
-                            directory={input.directory}
-                            fetch={input.fetch}
-                            headers={input.headers}
-                            events={input.events}
-                          >
-                            <ProjectProvider>
-                              <SyncProvider>
-                                <SyncProviderV2>
-                                  <ThemeProvider mode={mode}>
-                                    <LocalProvider>
-                                      <PromptStashProvider>
-                                        <DialogProvider>
-                                          <FrecencyProvider>
-                                            <PromptHistoryProvider>
-                                              <PromptRefProvider>
-                                                <EditorContextProvider>
-                                                  <App onSnapshot={input.onSnapshot} />
-                                                </EditorContextProvider>
-                                              </PromptRefProvider>
-                                            </PromptHistoryProvider>
-                                          </FrecencyProvider>
-                                        </DialogProvider>
-                                      </PromptStashProvider>
-                                    </LocalProvider>
-                                  </ThemeProvider>
-                                </SyncProviderV2>
-                              </SyncProvider>
-                            </ProjectProvider>
-                          </SDKProvider>
-                        </TuiConfigProvider>
-                      </RouteProvider>
-                    </ToastProvider>
-                  </KVProvider>
-                </ExitProvider>
-              </ArgsProvider>
-            </OpencodeKeymapProvider>
-          </TuiBuildInfoProvider>
+          <TuiPlatformProvider value={createLegacyTuiPlatform(renderer)}>
+            <TuiBuildInfoProvider value={input.build}>
+              <OpencodeKeymapProvider keymap={input.keymap}>
+                <ArgsProvider {...input.args}>
+                  <ExitProvider exit={input.exit}>
+                    <KVProvider>
+                      <ToastProvider>
+                        <RouteProvider
+                          initialRoute={
+                            input.args.continue
+                              ? {
+                                  type: "session",
+                                  sessionID: "dummy",
+                                }
+                              : undefined
+                          }
+                        >
+                          <TuiConfigProvider config={input.config}>
+                            <SDKProvider
+                              url={input.url}
+                              directory={input.directory}
+                              fetch={input.fetch}
+                              headers={input.headers}
+                              events={input.events}
+                            >
+                              <ProjectProvider>
+                                <LegacySyncProvider>
+                                  <SyncProviderV2>
+                                    <ThemeProvider mode={mode}>
+                                      <LocalBridge>
+                                        <PromptStashProvider>
+                                          <DialogProvider>
+                                            <FrecencyProvider>
+                                              <PromptHistoryProvider>
+                                                <PromptRefProvider>
+                                                  <EditorContextProvider>
+                                                    <App onSnapshot={input.onSnapshot} />
+                                                  </EditorContextProvider>
+                                                </PromptRefProvider>
+                                              </PromptHistoryProvider>
+                                            </FrecencyProvider>
+                                          </DialogProvider>
+                                        </PromptStashProvider>
+                                      </LocalBridge>
+                                    </ThemeProvider>
+                                  </SyncProviderV2>
+                                </LegacySyncProvider>
+                              </ProjectProvider>
+                            </SDKProvider>
+                          </TuiConfigProvider>
+                        </RouteProvider>
+                      </ToastProvider>
+                    </KVProvider>
+                  </ExitProvider>
+                </ArgsProvider>
+              </OpencodeKeymapProvider>
+            </TuiBuildInfoProvider>
+          </TuiPlatformProvider>
         </TuiEnvironmentProvider>
       </ErrorBoundary>
     )
   }, renderer)
+}
+
+function LegacySyncProvider(props: ParentProps) {
+  const kv = useKV()
+  return (
+    <SyncProvider kv={kv} logger={Log.Default}>
+      {props.children}
+    </SyncProvider>
+  )
+}
+
+function LocalBridge(props: ParentProps) {
+  const theme = useTheme()
+  const toast = useToast()
+  const route = useRoute()
+  return (
+    <LocalProvider theme={theme.theme} toast={toast} route={route}>
+      {props.children}
+    </LocalProvider>
+  )
 }
 
 function createTuiLifecycle(input: {
@@ -481,7 +507,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
-      if (!session || SessionApi.isDefaultTitle(session.title)) {
+      if (!session || isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
         return
       }
@@ -501,7 +527,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
-        const { providerID, modelID } = Provider.parseModel(args.model)
+        const { providerID, modelID } = Model.parse(args.model)
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",

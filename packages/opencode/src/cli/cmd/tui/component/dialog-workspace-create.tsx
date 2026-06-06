@@ -1,4 +1,4 @@
-import type { Workspace } from "@opencode-ai/sdk/v2"
+import type { ExperimentalWorkspaceAdapterListResponse, Workspace } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useSync } from "@tui/context/sync"
@@ -11,11 +11,7 @@ import { useToast } from "../ui/toast"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
 
-type Adapter = {
-  type: string
-  name: string
-  description: string
-}
+type Adapter = ExperimentalWorkspaceAdapterListResponse[number]
 
 export type WorkspaceSelection =
   | {
@@ -59,11 +55,10 @@ async function loadWorkspaceAdapters(input: {
   toast: ReturnType<typeof useToast>
 }) {
   const dir = input.sync.path.directory || input.sdk.directory
-  const url = new URL("/experimental/workspace/adapter", input.sdk.url)
-  if (dir) url.searchParams.set("directory", dir)
   try {
-    const response = await input.sdk.fetch(url)
-    return (await response.json()) as Adapter[]
+    const response = await input.sdk.client.experimental.workspace.adapter.list({ directory: dir })
+    if (response.error) throw response.error
+    return response.data
   } catch (err) {
     input.toast.show({
       title: "Failed to load workspace adapters",

@@ -13,11 +13,11 @@ import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, S
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
-import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder, SplitBorder } from "@opencode-ai/tui/ui/border"
 import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
+import { useTuiPlatform } from "@opencode-ai/tui/platform"
 import { Spinner } from "@tui/component/spinner"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -25,12 +25,11 @@ import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "@tui/context/editor"
-import { MessageID, PartID } from "@/session/schema"
-import { promptOffsetWidth } from "@/cli/cmd/prompt-display"
+import { promptOffsetWidth } from "@opencode-ai/tui/prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "./history"
-import { computePromptTraits } from "./traits"
-import { assign, expandPastedTextPlaceholders, expandTrackedPastedText } from "./part"
+import { computePromptTraits } from "@opencode-ai/tui/prompt/traits"
+import { expandPastedTextPlaceholders, expandTrackedPastedText } from "@opencode-ai/tui/prompt/part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -40,7 +39,6 @@ import { useExit } from "../../context/exit"
 import * as Clipboard from "../../util/clipboard"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
-import { iife } from "@/util/iife"
 import { Locale } from "@opencode-ai/tui/util/locale"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { formatDuration } from "@opencode-ai/tui/util/format"
@@ -58,6 +56,7 @@ import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, u
 import { useTuiConfig } from "../../context/tui-config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
+import { readLocalAttachment } from "./local-attachment"
 
 export type PromptProps = {
   sessionID?: string
@@ -72,6 +71,17 @@ export type PromptProps = {
     normal?: string[]
     shell?: string[]
   }
+}
+
+function pastedFilepath(value: string, platform: string) {
+  const raw = value.replace(/^['"]+|['"]+$/g, "")
+  if (raw.startsWith("file://")) {
+    try {
+      return fileURLToPath(raw)
+    } catch {}
+  }
+  if (platform === "win32") return raw
+  return raw.replace(/\\(.)/g, "$1")
 }
 
 export type PromptRef = {
@@ -137,6 +147,7 @@ export function Prompt(props: PromptProps) {
   const local = useLocal()
   const args = useArgs()
   const environment = useTuiEnvironment()
+  const platform = useTuiPlatform()
   const sdk = useSDK()
   const editor = useEditorContext()
   const route = useRoute()
@@ -972,12 +983,7 @@ export function Prompt(props: PromptProps) {
     let finishMoveProgress = false
     if (sessionID == null) {
       const selectedWorkspace = workspace.selection()
-      const workspaceID = iife(() => {
-        if (!selectedWorkspace) return undefined
-        if (selectedWorkspace.type === "none") return undefined
-        if (selectedWorkspace.type === "existing") return selectedWorkspace.workspaceID
-        return undefined
-      })
+      const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
 
       const directory = await move.getDirectory(store.prompt.input)
       if (move.pending() && !directory) return false
@@ -1009,7 +1015,6 @@ export function Prompt(props: PromptProps) {
       sessionID = res.data.id
     }
 
-    const messageID = MessageID.ascending()
     const inputText = expandTrackedPastedText(
       store.prompt.input,
       input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
@@ -1030,7 +1035,6 @@ export function Prompt(props: PromptProps) {
       editorSelection && editor.labelState() === "pending"
         ? [
             {
-              id: PartID.ascending(),
               type: "text" as const,
               text: formatEditorContext(editorSelection),
               synthetic: true,
@@ -1058,11 +1062,7 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
-      iife(() => {
-        const firstLine = inputText.split("\n")[0]
-        const command = firstLine.split(" ")[0].slice(1)
-        return sync.data.command.some((x) => x.name === command)
-      })
+      sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
     ) {
       move.startSubmit()
       // Parse command from first line, preserve multi-line content in arguments
@@ -1078,14 +1078,8 @@ export function Prompt(props: PromptProps) {
         arguments: args,
         agent: agent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        messageID,
         variant,
-        parts: nonTextParts
-          .filter((x) => x.type === "file")
-          .map((x) => ({
-            id: PartID.ascending(),
-            ...x,
-          })),
+        parts: nonTextParts.filter((x) => x.type === "file"),
       })
     } else {
       move.startSubmit()
@@ -1093,18 +1087,16 @@ export function Prompt(props: PromptProps) {
         .prompt({
           sessionID,
           ...selectedModel,
-          messageID,
           agent: agent.name,
           model: selectedModel,
           variant,
           parts: [
             ...editorParts,
             {
-              id: PartID.ascending(),
               type: "text",
               text: inputText,
             },
-            ...nonTextParts.map(assign),
+            ...nonTextParts,
           ],
         })
         .catch(() => {})
@@ -1175,43 +1167,24 @@ export function Prompt(props: PromptProps) {
   async function pasteInputText(text: string) {
     const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     const pastedContent = normalizedText.trim()
-    const filepath = iife(() => {
-      const raw = pastedContent.replace(/^['"]+|['"]+$/g, "")
-      if (raw.startsWith("file://")) {
-        try {
-          return fileURLToPath(raw)
-        } catch {}
-      }
-      if (environment.platform === "win32") return raw
-      return raw.replace(/\\(.)/g, "$1")
-    })
+    const filepath = pastedFilepath(pastedContent, environment.platform)
     const isUrl = /^(https?):\/\//.test(filepath)
     if (!isUrl) {
-      try {
-        const mime = await Filesystem.mimeType(filepath)
-        const filename = path.basename(filepath)
-        if (mime === "image/svg+xml") {
-          const content = await Filesystem.readText(filepath).catch(() => {})
-          if (content) {
-            pasteText(content, `[SVG: ${filename ?? "image"}]`)
-            return
-          }
-        }
-        if (mime.startsWith("image/") || mime === "application/pdf") {
-          const content = await Filesystem.readArrayBuffer(filepath)
-            .then((buffer) => Buffer.from(buffer).toString("base64"))
-            .catch(() => {})
-          if (content) {
-            await pasteAttachment({
-              filename,
-              filepath,
-              mime,
-              content,
-            })
-            return
-          }
-        }
-      } catch {}
+      const attachment = await readLocalAttachment(platform.files, filepath)
+      const filename = path.basename(filepath)
+      if (attachment?.type === "text") {
+        pasteText(attachment.content, `[SVG: ${filename ?? "image"}]`)
+        return
+      }
+      if (attachment?.type === "binary") {
+        await pasteAttachment({
+          filename,
+          filepath,
+          mime: attachment.mime,
+          content: Buffer.from(attachment.content).toString("base64"),
+        })
+        return
+      }
     }
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1

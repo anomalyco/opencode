@@ -1,7 +1,6 @@
 import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
-import { Filesystem } from "@/util/filesystem"
+import { readJson, writeJsonAtomic } from "@opencode-ai/tui/util/persistence"
 import { Flock } from "@opencode-ai/core/util/flock"
-import { rename, rm } from "fs/promises"
 import { createSignal, type Setter } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -18,19 +17,8 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
     // Queue same-process writes so rapid updates persist in order.
     let write = Promise.resolve()
 
-    // Write to a temp file first so kv.json is only replaced once the JSON is complete, avoiding partial writes if shutdown interrupts persistence.
-    function writeSnapshot(snapshot: Record<string, any>) {
-      const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
-      return Filesystem.writeJson(tempPath, snapshot)
-        .then(() => rename(tempPath, filePath))
-        .catch(async (error) => {
-          await rm(tempPath, { force: true }).catch(() => undefined)
-          throw error
-        })
-    }
-
     // Read under the same lock used for writes because kv.json is shared across processes.
-    Flock.withLock(lock, () => Filesystem.readJson<Record<string, any>>(filePath))
+    Flock.withLock(lock, () => readJson<Record<string, any>>(filePath))
       .then((x) => {
         setStore(x)
       })
@@ -66,7 +54,7 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
         setStore(key, value)
         const snapshot = structuredClone(unwrap(store))
         write = write
-          .then(() => Flock.withLock(lock, () => writeSnapshot(snapshot)))
+          .then(() => Flock.withLock(lock, () => writeJsonAtomic(filePath, snapshot)))
           .catch((error) => {
             console.error("Failed to write KV state", { filePath, error })
           })
