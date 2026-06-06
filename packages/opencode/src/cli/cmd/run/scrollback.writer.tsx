@@ -337,7 +337,7 @@ export function spacerWriter(): ScrollbackWriter {
 export function turnSummaryWriter(input: { agent: string; model: string; duration: string; theme: RunTheme }) {
   return createScrollbackWriter(
     () => (
-      <box width="100%" height={1} paddingLeft={1}>
+      <box width="100%" height={1}>
         <text wrapMode="none" truncate>
           <span style={{ fg: input.theme.footer.highlight }}>▣ </span>
           <span style={{ fg: input.theme.footer.text }}>{input.agent}</span>

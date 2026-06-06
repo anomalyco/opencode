@@ -125,6 +125,7 @@ export function RunFooterMenu(props: {
   paddingLeft?: number
   paddingRight?: number
   grouped?: boolean
+  background?: boolean
 }) {
   const limit = () => props.limit ?? FOOTER_MENU_ROWS
   const border = () => props.border ?? true
@@ -208,11 +209,15 @@ export function RunFooterMenu(props: {
       id={props.id ?? "run-direct-footer-menu"}
       width="100%"
       height={props.rows()}
-      backgroundColor={transparent}
+      backgroundColor={props.background ? props.theme().shade : transparent}
       flexDirection="column"
     >
       {rows().length === 0 ? (
-        <box paddingRight={0} flexDirection="row" backgroundColor={transparent}>
+        <box
+          paddingRight={0}
+          flexDirection="row"
+          backgroundColor={props.background ? props.theme().shade : transparent}
+        >
           {border() ? (
             <text fg={props.theme().border} wrapMode="none">
               ┃
@@ -223,7 +228,7 @@ export function RunFooterMenu(props: {
             flexShrink={1}
             paddingLeft={props.paddingLeft ?? 1}
             paddingRight={props.paddingRight ?? 0}
-            backgroundColor={props.theme().surface}
+            backgroundColor={props.background ? props.theme().shade : transparent}
           >
             <text fg={props.theme().muted} wrapMode="none" truncate>
               {props.empty ?? "No matching items"}
@@ -247,54 +252,57 @@ export function RunFooterMenu(props: {
           }
 
           const active = () => row.index === props.selected()
-          const inset = () => (active() ? 1 : 0)
           return (
-            <box paddingRight={0} flexDirection="row" backgroundColor={transparent}>
+            <box
+              paddingRight={0}
+              flexDirection="row"
+              backgroundColor={active() ? props.theme().selected : props.background ? props.theme().shade : transparent}
+            >
               {border() ? (
-                <text fg={active() ? props.theme().highlight : props.theme().border} wrapMode="none">
-                  ┃
+                <text
+                  fg={props.theme().highlight}
+                  bg={active() ? props.theme().selected : props.background ? props.theme().shade : transparent}
+                  wrapMode="none"
+                >
+                  {active() ? "▌" : " "}
                 </text>
               ) : undefined}
               <box
                 flexGrow={1}
                 flexShrink={1}
-                paddingLeft={inset()}
-                paddingRight={inset()}
-                backgroundColor={props.theme().surface}
+                paddingLeft={props.paddingLeft ?? 1}
+                paddingRight={props.paddingRight ?? 0}
+                backgroundColor={
+                  active() ? props.theme().selected : props.background ? props.theme().shade : transparent
+                }
               >
-                <box
-                  flexGrow={1}
-                  flexShrink={1}
-                  paddingLeft={Math.max(0, (props.paddingLeft ?? 1) - inset())}
-                  paddingRight={Math.max(0, (props.paddingRight ?? 0) - inset())}
-                  backgroundColor={active() ? props.theme().highlight : props.theme().surface}
-                >
-                  <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
+                <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
+                  <text
+                    fg={active() ? props.theme().selectedText : props.theme().text}
+                    attributes={active() ? TextAttributes.BOLD : undefined}
+                    wrapMode="none"
+                    truncate
+                    flexGrow={1}
+                  >
+                    {row.item.display}
+                    {row.item.description ? (
+                      <span style={{ fg: active() ? props.theme().selectedText : props.theme().muted }}>
+                        {descriptionPad(row.item)}
+                        {row.item.description}
+                      </span>
+                    ) : undefined}
+                  </text>
+                  {row.item.footer ? (
                     <text
-                      fg={active() ? props.theme().surface : props.theme().text}
+                      fg={active() ? props.theme().selectedText : props.theme().muted}
+                      attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                       truncate
-                      flexGrow={1}
+                      flexShrink={0}
                     >
-                      {row.item.display}
-                      {row.item.description ? (
-                        <span style={{ fg: active() ? props.theme().surface : props.theme().muted }}>
-                          {descriptionPad(row.item)}
-                          {row.item.description}
-                        </span>
-                      ) : undefined}
+                      {row.item.footer}
                     </text>
-                    {row.item.footer ? (
-                      <text
-                        fg={active() ? props.theme().surface : props.theme().muted}
-                        wrapMode="none"
-                        truncate
-                        flexShrink={0}
-                      >
-                        {row.item.footer}
-                      </text>
-                    ) : undefined}
-                  </box>
+                  ) : undefined}
                 </box>
               </box>
             </box>

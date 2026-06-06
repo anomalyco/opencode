@@ -25,6 +25,8 @@ export type RunSplashTheme = {
 
 export type RunFooterTheme = {
   highlight: ColorInput
+  selected: ColorInput
+  selectedText: ColorInput
   warning: ColorInput
   success: ColorInput
   error: ColorInput
@@ -455,6 +457,8 @@ function map(
     background: theme.background,
     footer: {
       highlight: theme.primary,
+      selected: theme.backgroundElement,
+      selectedText: theme.selectedListItemText,
       warning: theme.warning,
       success: theme.success,
       error: theme.error,
@@ -532,6 +536,8 @@ export const RUN_THEME_FALLBACK: RunTheme = {
   background: RGBA.fromValues(0, 0, 0, 0),
   footer: {
     highlight: seed.highlight,
+    selected: seed.text,
+    selectedText: seed.panel,
     warning: seed.warning,
     success: seed.success,
     error: seed.error,

@@ -203,7 +203,9 @@ function PanelShell(props: {
   inputRef: (input: InputRenderable) => void
   onQuery: (query: string) => void
   children: JSX.Element
+  dark?: boolean
 }) {
+  const background = () => (props.dark ? props.theme().shade : props.theme().surface)
   return (
     <box id={props.id} width="100%" flexDirection="column" backgroundColor="transparent" flexShrink={0}>
       <box
@@ -215,7 +217,7 @@ function PanelShell(props: {
         customBorderChars={PANEL_BORDER}
         flexShrink={0}
       >
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
+        <box height={1} flexShrink={0} backgroundColor={background()} />
         <box
           width="100%"
           height={1}
@@ -224,7 +226,7 @@ function PanelShell(props: {
           flexDirection="row"
           gap={1}
           flexShrink={0}
-          backgroundColor={props.theme().surface}
+          backgroundColor={background()}
         >
           <text fg={props.theme().text} attributes={TextAttributes.BOLD} wrapMode="none" flexShrink={0}>
             {props.title}
@@ -239,18 +241,18 @@ function PanelShell(props: {
             esc
           </text>
         </box>
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
+        <box height={1} flexShrink={0} backgroundColor={background()} />
         <box
           width="100%"
           height={1}
           paddingLeft={PANEL_PAD}
           paddingRight={PANEL_PAD}
           flexShrink={0}
-          backgroundColor={props.theme().surface}
+          backgroundColor={background()}
         >
           <input
             width="100%"
-            focusedBackgroundColor={props.theme().surface}
+            focusedBackgroundColor={background()}
             focusedTextColor={props.theme().text}
             placeholder={props.placeholder}
             placeholderColor={props.theme().muted}
@@ -267,8 +269,8 @@ function PanelShell(props: {
             }}
           />
         </box>
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
-        <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={props.theme().surface}>
+        <box height={1} flexShrink={0} backgroundColor={background()} />
+        <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={background()}>
           {props.children}
         </box>
       </box>
@@ -286,7 +288,7 @@ function PanelShell(props: {
           width="100%"
           height={1}
           border={["bottom"]}
-          borderColor={props.theme().surface}
+          borderColor={background()}
           backgroundColor="transparent"
           customBorderChars={HALF_BLOCK_BORDER}
         />
@@ -471,6 +473,7 @@ export function RunCommandMenuBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
     >
       <RunFooterMenu
         id="run-direct-footer-command-list"
@@ -485,6 +488,7 @@ export function RunCommandMenuBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={!query().trim()}
+        background
       />
     </PanelShell>
   )
