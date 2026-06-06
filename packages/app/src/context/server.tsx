@@ -145,7 +145,7 @@ export function resolveServerList(input: {
 }
 
 export namespace ServerConnection {
-  type Base = { displayName?: string }
+  type Base = { displayName?: string; label?: string }
 
   export type HttpBase = {
     url: string
@@ -204,6 +204,18 @@ export namespace ServerConnection {
   export const Key = { make: (v: string) => v as Key }
 
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
+  export const local = (conn?: Any) =>
+    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
+}
+
+export function nextServerAfterRemoval(
+  servers: ServerConnection.Any[],
+  removed: ServerConnection.Key,
+  fallback: ServerConnection.Key,
+) {
+  const remaining = servers.filter((server) => ServerConnection.key(server) !== removed)
+  const next = remaining.find((server) => ServerConnection.key(server) === fallback) ?? remaining[0]
+  return next ? ServerConnection.key(next) : fallback
 }
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
@@ -257,13 +269,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function remove(key: ServerConnection.Key) {
+      const next = nextServerAfterRemoval(allServers(), key, props.defaultServer)
       const list = store.list.filter((x) => url(x) !== key)
       batch(() => {
         setStore("list", list)
-        if (state.active === key) {
-          const next = list[0]
-          setState("active", next ? ServerConnection.Key.make(url(next)) : props.defaultServer)
-        }
+        if (state.active === key) setState("active", next)
       })
     }
 
@@ -282,10 +292,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
-    const isLocal = createMemo(() => {
-      const c = current()
-      return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))
-    })
+    const isLocal = createMemo(() => ServerConnection.local(current()))
 
     return {
       ready: isReady,

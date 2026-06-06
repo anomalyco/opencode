@@ -1,4 +1,18 @@
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
+export type {
+  WslDistroProbe,
+  WslInstalledDistro,
+  WslJob,
+  WslOnlineDistro,
+  WslOpencodeCheck,
+  WslRuntimeCheck,
+  WslServerConfig,
+  WslServerItem,
+  WslServerRuntime,
+  WslServersEvent,
+  WslServersState,
+} from "@opencode-ai/app/wsl/types"
 
 export type ServerReadyData = {
   url: string
@@ -6,7 +20,7 @@ export type ServerReadyData = {
   password: string | null
 }
 
-export type WslConfig = { enabled: boolean }
+export type WslServersAPI = WslServersPlatform
 
 export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
@@ -28,17 +42,15 @@ export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: () => Promise<ServerReadyData>
+  wslServers: WslServersAPI
   getWindowConfig: () => Promise<WindowConfig>
   consumeInitialDeepLinks: () => Promise<string[]>
   getDefaultServerUrl: () => Promise<string | null>
   setDefaultServerUrl: (url: string | null) => Promise<void>
-  getWslConfig: () => Promise<WslConfig>
-  setWslConfig: (config: WslConfig) => Promise<void>
   getDisplayBackend: () => Promise<LinuxDisplayBackend | null>
   setDisplayBackend: (backend: LinuxDisplayBackend | null) => Promise<void>
   parseMarkdownCommand: (markdown: string) => Promise<string>
   checkAppExists: (appName: string) => Promise<boolean>
-  wslPath: (path: string, mode: "windows" | "linux" | null) => Promise<string>
   resolveAppPath: (appName: string) => Promise<string | null>
   storeGet: (name: string, key: string) => Promise<string | null>
   storeSet: (name: string, key: string, value: string) => Promise<void>
