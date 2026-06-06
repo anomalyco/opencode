@@ -78,8 +78,11 @@ export const uiHandlers = HttpApiBuilder.group(InstanceHttpApi, "ui", (handlers)
       )
     })
 
-    const closeProject = Effect.fn("UiHttpApi.closeProject")(function* (ctx: { params: { projectID: ProjectV2.ID } }) {
-      return yield* svc.closeProject(ctx.params.projectID)
+    const closeProject = Effect.fn("UiHttpApi.closeProject")(function* (ctx: {
+      params: { projectID: ProjectV2.ID }
+      query: { directory?: string }
+    }) {
+      return yield* svc.closeProject(ctx.params.projectID, ctx.query.directory)
     })
 
     const setLastProject = Effect.fn("UiHttpApi.setLastProject")(function* (ctx: { payload: LastProjectInput }) {
