@@ -1,6 +1,6 @@
 import type { BorderSides, ColorInput } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
-import { useTheme } from "@tui/context/theme"
+import { useTheme } from "../../context/theme"
 import { createContext, Show, splitProps, useContext } from "solid-js"
 
 export type Axis = "x" | "y"

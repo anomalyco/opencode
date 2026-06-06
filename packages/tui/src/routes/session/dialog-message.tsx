@@ -1,11 +1,11 @@
 import { createMemo } from "solid-js"
-import { useSync } from "@tui/context/sync"
-import { DialogSelect } from "@tui/ui/dialog-select"
-import { useSDK } from "@tui/context/sdk"
-import { useRoute } from "@tui/context/route"
+import { useSync } from "../../context/sync"
+import { DialogSelect } from "../../ui/dialog-select"
+import { useSDK } from "../../context/sdk"
+import { useRoute } from "../../context/route"
 import { useTuiPlatform } from "../../platform"
-import type { PromptInfo } from "@tui/component/prompt/history"
-import { stripPromptPartIDs as strip } from "@opencode-ai/tui/prompt/part"
+import type { PromptInfo } from "../../component/prompt/history"
+import { stripPromptPartIDs as strip } from "../../prompt/part"
 
 export function DialogMessage(props: {
   messageID: string

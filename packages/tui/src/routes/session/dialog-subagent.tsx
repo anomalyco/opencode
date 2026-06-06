@@ -1,5 +1,5 @@
-import { DialogSelect } from "@tui/ui/dialog-select"
-import { useRoute } from "@tui/context/route"
+import { DialogSelect } from "../../ui/dialog-select"
+import { useRoute } from "../../context/route"
 
 export function DialogSubagent(props: { sessionID: string }) {
   const route = useRoute()

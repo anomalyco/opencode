@@ -1,4 +1,4 @@
-import type { PlatformFiles } from "@opencode-ai/tui/platform"
+import type { PlatformFiles } from "../../platform"
 
 export type LocalAttachment =
   | Readonly<{ type: "text"; mime: "image/svg+xml"; content: string }>

@@ -1,10 +1,10 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
-import { useTheme } from "@tui/context/theme"
+import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
-import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
+import { useTuiEnvironment } from "../runtime"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useOptionalTuiPlatform } from "../platform"
 

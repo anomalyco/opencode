@@ -1,7 +1,7 @@
 import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import type { PromptInfo } from "../prompt/history"
-import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
+import { useTuiEnvironment } from "../runtime"
 
 export type HomeRoute = {
   type: "home"

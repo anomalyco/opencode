@@ -1,4 +1,4 @@
-import { useTheme } from "@tui/context/theme"
+import { useTheme } from "../context/theme"
 
 export type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 

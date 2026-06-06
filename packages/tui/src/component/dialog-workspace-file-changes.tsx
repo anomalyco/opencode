@@ -3,11 +3,11 @@ import { useKeyboard } from "@opentui/solid"
 import type { VcsFileStatus } from "@opencode-ai/sdk/v2"
 import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Locale } from "@opencode-ai/tui/util/locale"
+import { Locale } from "../util/locale"
 import { useTheme } from "../context/theme"
 import { useTuiConfig } from "../config"
 import { useDialog, type DialogContext } from "../ui/dialog"
-import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
+import { getScrollAcceleration } from "../util/scroll"
 
 const options = ["no", "yes"] as const
 

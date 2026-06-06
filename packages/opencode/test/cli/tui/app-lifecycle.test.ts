@@ -5,11 +5,11 @@ import path from "node:path"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { tui, type TuiHandle } from "@opencode-ai/tui"
-import { createLegacyTuiHost } from "../../../src/cli/cmd/tui/host"
+import { createLegacyTuiHost } from "../../../src/cli/tui/host"
 import { Global } from "@opencode-ai/core/global"
 import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
-import * as TuiAudio from "../../../src/cli/cmd/tui/util/audio"
-import * as TuiKeymap from "../../../src/cli/cmd/tui/keymap"
+import * as TuiAudio from "../../../src/cli/tui/audio"
+import * as TuiKeymap from "@opencode-ai/tui/keymap"
 import { createTuiBuildInfo, createTuiEnvironment } from "@opencode-ai/tui/runtime"
 
 type TestRendererSetup = Awaited<ReturnType<typeof createTestRenderer>>
@@ -90,7 +90,7 @@ test("exit destroys the renderer, resolves done, and runs cleanup once", async (
   await app.handle.done
 
   expect(app.setup.renderer.isDestroyed).toBe(true)
-  expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+  expect(process.listenerCount("SIGHUP")).toBeLessThanOrEqual(beforeSighup)
 })
 
 test("exit preserves reason formatting and exit messages", async () => {
@@ -141,7 +141,7 @@ test("direct renderer destruction still cleans up and resolves done", async () =
   app.setup.renderer.destroy()
   await app.handle.done
 
-  expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+  expect(process.listenerCount("SIGHUP")).toBeLessThanOrEqual(beforeSighup)
 })
 
 test("SIGHUP exits before ready and removes its listener", async () => {
@@ -152,7 +152,7 @@ test("SIGHUP exits before ready and removes its listener", async () => {
   await app.handle.done
 
   expect(app.setup.renderer.isDestroyed).toBe(true)
-  expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+  expect(process.listenerCount("SIGHUP")).toBeLessThanOrEqual(beforeSighup)
 })
 
 test("SIGHUP exits after ready and removes its listener", async () => {

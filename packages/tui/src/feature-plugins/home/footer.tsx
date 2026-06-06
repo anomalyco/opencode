@@ -1,7 +1,7 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Match, Show, Switch } from "solid-js"
-import { abbreviateHome, useTuiEnvironment } from "@opencode-ai/tui/runtime"
+import { abbreviateHome, useTuiEnvironment } from "../../runtime"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
 
 const id = "internal:home-footer"

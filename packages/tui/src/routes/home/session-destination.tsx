@@ -8,7 +8,7 @@ import {
   type Setter,
 } from "solid-js"
 import { useSync } from "../../context/sync"
-import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
+import { useTuiEnvironment } from "../../runtime"
 
 export type HomeSessionDestination = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
 

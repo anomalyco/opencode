@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js"
-import { useLocal } from "@tui/context/local"
-import { DialogSelect } from "@tui/ui/dialog-select"
-import { useDialog } from "@tui/ui/dialog"
+import { useLocal } from "../context/local"
+import { DialogSelect } from "../ui/dialog-select"
+import { useDialog } from "../ui/dialog"
 
 export function DialogAgent() {
   const local = useLocal()

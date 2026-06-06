@@ -1,5 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2"
-import { Locale } from "@opencode-ai/tui/util/locale"
+import { Locale } from "../../util/locale"
 
 export function relativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp

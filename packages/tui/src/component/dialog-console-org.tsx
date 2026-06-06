@@ -1,9 +1,9 @@
 import { createResource, createMemo } from "solid-js"
-import { DialogSelect } from "@tui/ui/dialog-select"
-import { useSDK } from "@tui/context/sdk"
-import { useDialog } from "@tui/ui/dialog"
-import { useToast } from "@tui/ui/toast"
-import { useTheme } from "@tui/context/theme"
+import { DialogSelect } from "../ui/dialog-select"
+import { useSDK } from "../context/sdk"
+import { useDialog } from "../ui/dialog"
+import { useToast } from "../ui/toast"
+import { useTheme } from "../context/theme"
 import type { ExperimentalConsoleListOrgsResponse } from "@opencode-ai/sdk/v2"
 
 type OrgOption = ExperimentalConsoleListOrgsResponse["orgs"][number]

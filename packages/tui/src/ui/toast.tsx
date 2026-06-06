@@ -1,8 +1,8 @@
 import { createContext, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useTheme } from "@tui/context/theme"
+import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
-import { SplitBorder } from "@opencode-ai/tui/ui/border"
+import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
 export type ToastOptions = {
   title?: string

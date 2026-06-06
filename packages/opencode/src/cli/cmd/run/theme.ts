@@ -590,7 +590,7 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
       : (renderer.themeMode ?? mode(RGBA.fromHex(bg)))
     const theme = resolveTheme(generateSystem(colors, pick), pick)
     const indexed = indexedPalette(colors, 256)
-    const shared = await import("../tui/context/theme")
+    const shared = await import("@opencode-ai/tui/context/theme")
     const syntaxTheme: SharedSyntaxTheme = {
       ...theme,
       _hasSelectedListItemText: true,

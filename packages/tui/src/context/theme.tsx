@@ -18,7 +18,7 @@ import {
   tint,
   upsertTheme,
   type ThemeJson,
-} from "@opencode-ai/tui/theme"
+} from "../theme"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -43,7 +43,7 @@ export {
   type Theme,
   type ThemeJson,
   type SyntaxStyleOverrides,
-} from "@opencode-ai/tui/theme"
+} from "../theme"
 
 const THEME_REFRESH_DELAYS = [250, 1000] as const
 

@@ -33,7 +33,7 @@ import {
   useBindings,
   useKeymapSelector,
   type OpenTuiKeymap,
-} from "@/cli/cmd/tui/keymap"
+} from "@opencode-ai/tui/keymap"
 import type {
   FooterPromptRoute,
   FooterQueuedPrompt,

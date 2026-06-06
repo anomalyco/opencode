@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
-import { Locale } from "@opencode-ai/tui/util/locale"
+import { Locale } from "../util/locale"
 import { useBindings } from "../keymap"
 
 export type DialogConfirmProps = {

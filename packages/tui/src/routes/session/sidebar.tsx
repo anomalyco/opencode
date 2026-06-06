@@ -1,12 +1,12 @@
-import { useProject } from "@tui/context/project"
-import { useSync } from "@tui/context/sync"
+import { useProject } from "../../context/project"
+import { useSync } from "../../context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../config"
-import { useTuiBuildInfo } from "@opencode-ai/tui/runtime"
-import { usePluginRuntime } from "@opencode-ai/tui/plugin/runtime"
+import { useTuiBuildInfo } from "../../runtime"
+import { usePluginRuntime } from "../../plugin/runtime"
 
-import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
+import { getScrollAcceleration } from "../../util/scroll"
 import { WorkspaceLabel } from "../../component/workspace-label"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {

@@ -1,11 +1,11 @@
 import { createMemo, createSignal } from "solid-js"
-import { useLocal } from "@tui/context/local"
-import { useSync } from "@tui/context/sync"
+import { useLocal } from "../context/local"
+import { useSync } from "../context/sync"
 import { map, pipe, entries, sortBy } from "remeda"
-import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "../ui/dialog-select"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import { useSDK } from "@tui/context/sdk"
+import { useSDK } from "../context/sdk"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()

@@ -523,7 +523,11 @@ refactor(cli): share tui package across command hosts
 
 ## Section 10: Remove Compatibility Paths And Finish Ownership
 
-Status: Pending.
+Status: Completed. Package source imports are self-contained, package exports
+are narrowed to active host contracts, package-owned tests and snapshots live
+under `packages/tui`, and the obsolete compatibility tree has been removed.
+Legacy command, worker, config, plugin-loader, process, editor, audio, and event
+adapters now live in explicit host-owned locations outside `src/cli/cmd/tui/`.
 
 Delete migration scaffolding only after both hosts consume the package.
 
@@ -631,7 +635,7 @@ Compiled checks:
 - [x] Section 7: Isolate plugin presentation from plugin loading
 - [x] Section 8: Move the application root and renderer lifecycle
 - [x] Section 9: Convert both CLIs to thin adapters
-- [ ] Section 10: Remove compatibility paths and finish ownership
+- [x] Section 10: Remove compatibility paths and finish ownership
 
 Update each section's status and this checklist in the same commit that completes
 the section.

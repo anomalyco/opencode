@@ -1,8 +1,8 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, For, type Accessor } from "solid-js"
-import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
+import { DEFAULT_THEMES, useTheme } from "../../context/theme"
 import { useCommandShortcut } from "../../keymap"
-import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
+import { useTuiEnvironment } from "../../runtime"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
 

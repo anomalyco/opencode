@@ -7,7 +7,7 @@
 // none block each other.
 import { Context, Effect, Layer } from "effect"
 import { resolve } from "@opencode-ai/tui/config"
-import { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import { TuiConfig } from "@/config/tui"
 import { makeRuntime } from "@/effect/run-service"
 import { reusePendingTask } from "./runtime.shared"
 import { resolveSession, sessionHistory } from "./session.shared"

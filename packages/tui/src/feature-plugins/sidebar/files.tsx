@@ -1,7 +1,7 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, For, Show, createSignal } from "solid-js"
-import { Locale } from "@opencode-ai/tui/util/locale"
+import { Locale } from "../../util/locale"
 
 const id = "internal:sidebar-files"
 

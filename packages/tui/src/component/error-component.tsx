@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
+import { getScrollAcceleration } from "../util/scroll"
 import { useTuiPlatform } from "../platform"
 
 export function ErrorComponent(props: {

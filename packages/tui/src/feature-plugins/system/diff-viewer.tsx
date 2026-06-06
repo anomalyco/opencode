@@ -9,15 +9,15 @@ import {
   type ScrollBoxRenderable,
 } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
-import { useBindings, useCommandShortcut } from "@tui/keymap"
-import { useTheme } from "@tui/context/theme"
+import { useBindings, useCommandShortcut } from "../../keymap"
+import { useTheme } from "../../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
-import { DialogSelect } from "@tui/ui/dialog-select"
-import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
+import { DialogSelect } from "../../ui/dialog-select"
+import { getScrollAcceleration } from "../../util/scroll"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,

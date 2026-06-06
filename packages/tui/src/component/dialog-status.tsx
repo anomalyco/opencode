@@ -1,8 +1,8 @@
 import { TextAttributes } from "@opentui/core"
 import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
-import { useDialog } from "@tui/ui/dialog"
-import { useSync } from "@tui/context/sync"
+import { useDialog } from "../ui/dialog"
+import { useSync } from "../context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}

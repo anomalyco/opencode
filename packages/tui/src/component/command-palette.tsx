@@ -1,6 +1,6 @@
 import { createMemo } from "solid-js"
-import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
-import { type DialogContext } from "@tui/ui/dialog"
+import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
+import { type DialogContext } from "../ui/dialog"
 import {
   COMMAND_PALETTE_COMMAND,
   formatKeyBindings,
