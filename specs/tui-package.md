@@ -155,7 +155,11 @@ feat(tui): add standalone package skeleton
 
 ## Section 2: Move Presentation Utilities And Leaf UI
 
-Status: Pending.
+Status: Completed. Presentation utilities, bundled themes and their pure theme
+engine, keybinding/keymap mechanics, and low-coupling border, link, and spinner
+primitives now live in `@opencode-ai/tui`. The legacy host consumes explicit
+package exports and retains only integration wrappers or compatibility
+re-exports where backend and process concerns have not moved yet.
 
 Move low-coupling code first so subsequent team changes land in the new package
 without waiting for the application root migration.
@@ -580,7 +584,7 @@ Compiled checks:
 ## Progress Tracking
 
 - [x] Section 1: Create the package skeleton
-- [ ] Section 2: Move presentation utilities and leaf UI
+- [x] Section 2: Move presentation utilities and leaf UI
 - [ ] Section 3: Remove backend tool implementation imports
 - [ ] Section 4: Make runtime inputs explicit
 - [ ] Section 5: Separate resolved TUI config from host config loading

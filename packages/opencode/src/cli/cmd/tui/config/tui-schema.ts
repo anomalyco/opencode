@@ -1,7 +1,7 @@
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { TuiKeybind } from "./keybind"
 import { Schema } from "effect"
-import { isRecord } from "@/util/record"
+import { isRecord } from "@opencode-ai/tui/util/record"
 import { Filesystem } from "@/util/filesystem"
 import { TuiAttentionSoundNames, type TuiAttentionSoundName } from "@opencode-ai/plugin/tui"
 

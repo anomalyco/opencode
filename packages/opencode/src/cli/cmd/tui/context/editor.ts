@@ -4,7 +4,7 @@ import path from "node:path"
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Option, Schema, SchemaGetter } from "effect"
-import { isRecord } from "@/util/record"
+import { isRecord } from "@opencode-ai/tui/util/record"
 import { createSimpleContext } from "./helper"
 import { isZedTerminal, resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 

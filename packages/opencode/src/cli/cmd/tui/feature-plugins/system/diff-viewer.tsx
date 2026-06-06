@@ -17,7 +17,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Match, onC
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "@tui/ui/dialog-select"
-import { getScrollAcceleration } from "@tui/util/scroll"
+import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,

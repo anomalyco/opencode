@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
-import { errorMessage } from "@/util/error"
+import { errorMessage } from "@opencode-ai/tui/util/error"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"

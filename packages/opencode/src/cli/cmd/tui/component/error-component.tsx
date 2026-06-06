@@ -3,7 +3,7 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import { createSignal } from "solid-js"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { getScrollAcceleration } from "../util/scroll"
+import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
 
 export function ErrorComponent(props: {
   error: Error

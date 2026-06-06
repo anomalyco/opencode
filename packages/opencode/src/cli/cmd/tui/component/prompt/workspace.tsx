@@ -4,7 +4,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useToast } from "@tui/ui/toast"
-import { errorMessage } from "@/util/error"
+import { errorMessage } from "@opencode-ai/tui/util/error"
 import {
   confirmWorkspaceFileChanges,
   openWorkspaceSelect,

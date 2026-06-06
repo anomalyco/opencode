@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { getRevertDiffFiles } from "../../../src/cli/cmd/tui/util/revert-diff"
+import { getRevertDiffFiles } from "../../src/util/revert-diff"
 
 describe("revert diff", () => {
   test("prefers the actual file path over /dev/null for added and deleted files", () => {

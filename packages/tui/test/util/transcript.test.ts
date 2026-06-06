@@ -4,7 +4,7 @@ import {
   formatMessage,
   formatPart,
   formatTranscript,
-} from "../../../src/cli/cmd/tui/util/transcript"
+} from "../../src/util/transcript"
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 
 const providers: Provider[] = [

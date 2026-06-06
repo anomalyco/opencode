@@ -10,11 +10,37 @@
     "typecheck": "tsgo --noEmit"
   },
   "exports": {
-    ".": "./src/index.tsx"
+    ".": "./src/index.tsx",
+    "./keybind": "./src/keybind.ts",
+    "./keymap": "./src/keymap.tsx",
+    "./theme": "./src/theme/index.ts",
+    "./util/collapse-tool-output": "./src/util/collapse-tool-output.ts",
+    "./util/error": "./src/util/error.ts",
+    "./util/format": "./src/util/format.ts",
+    "./util/layout": "./src/util/layout.ts",
+    "./util/locale": "./src/util/locale.ts",
+    "./util/model": "./src/util/model.ts",
+    "./util/provider-origin": "./src/util/provider-origin.ts",
+    "./util/record": "./src/util/record.ts",
+    "./util/revert-diff": "./src/util/revert-diff.ts",
+    "./util/scroll": "./src/util/scroll.ts",
+    "./util/signal": "./src/util/signal.ts",
+    "./util/transcript": "./src/util/transcript.ts",
+    "./ui/border": "./src/ui/border.ts",
+    "./ui/link": "./src/ui/link.tsx",
+    "./ui/spinner": "./src/ui/spinner.ts"
   },
   "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
     "@opentui/core": "catalog:",
-    "@opentui/solid": "catalog:"
+    "@opentui/keymap": "catalog:",
+    "@opentui/solid": "catalog:",
+    "@solid-primitives/scheduled": "1.5.2",
+    "diff": "catalog:",
+    "effect": "catalog:",
+    "open": "10.1.2",
+    "opentui-spinner": "catalog:",
+    "solid-js": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

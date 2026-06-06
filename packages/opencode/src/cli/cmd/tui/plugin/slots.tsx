@@ -1,6 +1,6 @@
 import type { TuiPluginApi, TuiSlotContext, TuiSlotMap, TuiSlotProps } from "@opencode-ai/plugin/tui"
 import { createSlot, createSolidSlotRegistry, type JSX, type SolidPlugin } from "@opentui/solid"
-import { isRecord } from "@/util/record"
+import { isRecord } from "@opencode-ai/tui/util/record"
 
 type RuntimeSlotMap = TuiSlotMap<Record<string, object>>
 

@@ -6,7 +6,7 @@ import type { Message, Part, Session as SdkSession } from "@opencode-ai/sdk/v2"
 import { useTheme } from "@tui/context/theme"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
-import { Locale } from "@/util/locale"
+import { Locale } from "@opencode-ai/tui/util/locale"
 import { Spinner } from "@tui/component/spinner"
 import { extractMessageMarkdown, extractMessageText, relativeTime } from "./util"
 

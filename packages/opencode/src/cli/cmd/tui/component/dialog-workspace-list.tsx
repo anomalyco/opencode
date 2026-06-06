@@ -7,7 +7,7 @@ import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { createMemo, createSignal, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { errorMessage } from "@/util/error"
+import { errorMessage } from "@opencode-ai/tui/util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 

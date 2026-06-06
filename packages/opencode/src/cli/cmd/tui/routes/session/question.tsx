@@ -5,7 +5,7 @@ import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
-import { SplitBorder } from "../../component/border"
+import { SplitBorder } from "@opencode-ai/tui/ui/border"
 import { useTuiConfig } from "../../context/tui-config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 

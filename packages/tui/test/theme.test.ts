@@ -1,14 +1,10 @@
 import { expect, test } from "bun:test"
 import type { TerminalColors } from "@opentui/core"
-
-const { DEFAULT_THEMES, allThemes, addTheme, hasTheme, resolveTheme, terminalMode } = await import(
-  "../../../src/cli/cmd/tui/context/theme"
-)
+import { DEFAULT_THEMES, addTheme, allThemes, hasTheme, resolveTheme, terminalMode } from "../src/theme"
 
 test("addTheme writes into module theme store", () => {
   const name = `plugin-theme-${Date.now()}`
   expect(addTheme(name, DEFAULT_THEMES.opencode)).toBe(true)
-
   expect(allThemes()[name]).toBeDefined()
 })
 
@@ -21,8 +17,6 @@ test("addTheme keeps first theme for duplicate names", () => {
 
   expect(addTheme(name, one)).toBe(true)
   expect(addTheme(name, two)).toBe(false)
-
-  expect(allThemes()[name]).toBeDefined()
   expect(allThemes()[name]!.theme.primary).toBe("#101010")
 })
 
@@ -41,13 +35,8 @@ test("hasTheme checks theme presence", () => {
 
 test("resolveTheme rejects circular color refs", () => {
   const item = structuredClone(DEFAULT_THEMES.opencode)
-  item.defs = {
-    ...item.defs,
-    one: "two",
-    two: "one",
-  }
+  item.defs = { ...item.defs, one: "two", two: "one" }
   item.theme.primary = "one"
-
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
 })
 

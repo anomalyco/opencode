@@ -3,7 +3,7 @@ import open from "open"
 import { createSignal } from "solid-js"
 import { selectedForeground, useTheme } from "@tui/context/theme"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
-import { Link } from "@tui/ui/link"
+import { Link } from "@opencode-ai/tui/ui/link"
 import { BgPulse } from "./bg-pulse"
 import { useBindings } from "../keymap"
 

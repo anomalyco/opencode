@@ -18,8 +18,8 @@ import {
   type WorkspaceSelection,
   warpWorkspaceSession,
 } from "@tui/component/dialog-workspace-create"
-import { createDebouncedSignal } from "@tui/util/signal"
-import { errorMessage } from "@/util/error"
+import { createDebouncedSignal } from "@opencode-ai/tui/util/signal"
+import { errorMessage } from "@opencode-ai/tui/util/error"
 import { SessionPreviewPane, createLeadingTrailingSignal } from "./preview-pane"
 import { relativeTime } from "./util"
 

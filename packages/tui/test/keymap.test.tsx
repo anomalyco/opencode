@@ -1,15 +1,27 @@
 /** @jsxImportSource @opentui/solid */
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
+import { createBindingLookup } from "@opentui/keymap/extras"
 import { testRender, useRenderer } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
-import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+import { TuiKeybind } from "../src/keybind"
 import {
   getOpencodeModeStack,
   OPENCODE_BASE_MODE,
   OpencodeKeymapProvider,
   registerOpencodeKeymap,
-} from "@/cli/cmd/tui/keymap"
+} from "../src/keymap"
+
+function createResolvedKeymapConfig(input: TuiKeybind.KeybindOverrides = {}) {
+  const keybinds = TuiKeybind.parse(input)
+  return {
+    keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
+      commandMap: TuiKeybind.CommandMap,
+      bindingDefaults: TuiKeybind.bindingDefaults(),
+    }),
+    leader_timeout: 2000,
+  }
+}
 
 test("legacy page key aliases compile as page keys", async () => {
   const sequences: Record<string, string[][]> = {}
@@ -17,11 +29,9 @@ test("legacy page key aliases compile as page keys", async () => {
   function Harness() {
     const renderer = useRenderer()
     const keymap = createDefaultOpenTuiKeymap(renderer)
-    const config = createTuiResolvedConfig({
-      keybinds: {
-        messages_page_up: "pgup",
-        messages_page_down: "pgdown",
-      },
+    const config = createResolvedKeymapConfig({
+      messages_page_up: "pgup",
+      messages_page_down: "pgdown",
     })
     const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
     const offLayer = keymap.registerLayer({
@@ -64,7 +74,7 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
   function Harness() {
     const renderer = useRenderer()
     const keymap = createDefaultOpenTuiKeymap(renderer)
-    const config = createTuiResolvedConfig()
+    const config = createResolvedKeymapConfig()
     const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
     const offGlobal = keymap.registerLayer({
       commands: [

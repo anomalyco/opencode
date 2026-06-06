@@ -6,7 +6,7 @@ import { useTuiConfig } from "../../context/tui-config"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
-import { getScrollAcceleration } from "../../util/scroll"
+import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
 import { WorkspaceLabel } from "../../component/workspace-label"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {

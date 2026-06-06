@@ -1,7 +1,7 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { errorMessage } from "@/util/error"
+import { errorMessage } from "@opencode-ai/tui/util/error"
 import { validateSession } from "./validate-session"
 import { ServerAuth } from "@/server/auth"
 
