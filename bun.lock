@@ -95,8 +95,11 @@
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "@opencode-ai/server": "workspace:*",
+        "@opentui/core": "catalog:",
+        "@opentui/solid": "catalog:",
         "@parcel/watcher": "2.5.1",
         "effect": "catalog:",
+        "solid-js": "catalog:",
       },
       "devDependencies": {
         "@opencode-ai/script": "workspace:*",
