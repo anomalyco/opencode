@@ -303,7 +303,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
       Layer.provide(provider),
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(recordedClient),
-      Layer.provide(RuntimeFlags.layer({ nativeLlm: true })),
+      Layer.provide(RuntimeFlags.layer({ nativeLlm: true, webSockets: false })),
     ),
   )
 }

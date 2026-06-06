@@ -243,6 +243,7 @@ const live: Layer.Layer<
           providerOptions: prepared.params.options,
           headers: prepared.headers,
           abort: input.abort,
+          webSockets: flags.webSockets,
         })
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected").pipe(

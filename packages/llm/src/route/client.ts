@@ -368,7 +368,10 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request)
-      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime)
+      const requestRuntime: TransportRuntime = request.http?.fetch
+        ? { ...runtime, fetch: request.http.fetch }
+        : runtime
+      return compiled.route.streamPrepared(compiled.prepared, compiled.request, requestRuntime)
     }),
   )
 
