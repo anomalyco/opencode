@@ -139,7 +139,12 @@ function footerLabels(input: Pick<RunInput, "agent" | "model" | "variant">): Foo
 
 function directoryLabel(directory: string) {
   const resolved = path.resolve(directory)
-  const display = resolved === Global.Path.home ? "~" : resolved.replace(`${Global.Path.home}${path.sep}`, `~${path.sep}`)
+  const display =
+    resolved === Global.Path.home
+      ? "~"
+      : resolved.startsWith(`${Global.Path.home}${path.sep}`)
+        ? resolved.replace(Global.Path.home, "~")
+        : resolved
   return `directory: ${display.replaceAll("\\", "/")}`
 }
 
@@ -366,6 +371,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
                 }),
                 theme: footer.currentTheme().splash,
                 showSession: splash.showSession,
+                detail: directoryLabel(input.directory),
               }),
             )
             renderer.requestRender()
