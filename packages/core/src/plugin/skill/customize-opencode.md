@@ -303,7 +303,7 @@ Special object-shaped (not callbacks): `tool: { my_tool: { ... } }`,
       "type": "remote",
       "url": "https://...",
       "enabled": true,
-      "headers": { "Authorization": "Bearer ${GITHUB_TOKEN}" }
+      "headers": { "Authorization": "Bearer {env:GITHUB_TOKEN}" }
     },
     "old-server": { "enabled": false }
   }
@@ -311,7 +311,9 @@ Special object-shaped (not callbacks): `tool: { my_tool: { ... } }`,
 ```
 
 `command` is an array of strings. `type` is required. Use `enabled: false` to
-disable a server inherited from a parent config.
+disable a server inherited from a parent config. String values such as header
+tokens support `{env:VAR}` interpolation (and `{file:path}`); the shell-style
+`${VAR}` is not substituted.
 
 ## Permissions
 
