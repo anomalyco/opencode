@@ -118,7 +118,9 @@ the application root.
 
 ## Section 1: Create The Package Skeleton
 
-Status: Pending.
+Status: Completed. The private `@opencode-ai/tui` workspace package now has an
+independent OpenTUI Solid JSX configuration, narrow root export, package-local
+alias, and in-memory render smoke test. Neither CLI consumes the package yet.
 
 Create `packages/tui` without moving the application root yet.
 
@@ -577,7 +579,7 @@ Compiled checks:
 
 ## Progress Tracking
 
-- [ ] Section 1: Create the package skeleton
+- [x] Section 1: Create the package skeleton
 - [ ] Section 2: Move presentation utilities and leaf UI
 - [ ] Section 3: Remove backend tool implementation imports
 - [ ] Section 4: Make runtime inputs explicit
