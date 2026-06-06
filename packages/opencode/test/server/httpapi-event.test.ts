@@ -1,7 +1,9 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer, Queue, Schema, Stream } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
+import { EventV2 } from "@opencode-ai/core/event"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
+import { GlobalBus } from "../../src/bus/global"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -88,6 +90,33 @@ describe("event HttpApi", () => {
         const { reader } = yield* openEventStream(directory)
         expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
 
+        const created = yield* requestInDirectory("/session", directory, { method: "POST" })
+        expect(created.status).toBe(200)
+        expect(yield* readEvent(reader)).toMatchObject({ type: "session.created" })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "does not deliver events from other directories",
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const { reader } = yield* openEventStream(directory)
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected" })
+
+        // Emit a global event with a different directory — it should not
+        // appear in the stream because the listener filters by directory.
+        GlobalBus.emit("event", {
+          directory: "/some/other/directory",
+          payload: {
+            id: EventV2.ID.create(),
+            type: "session.created",
+            properties: {},
+          },
+        })
+
+        // Create a session in the correct directory — this should arrive.
         const created = yield* requestInDirectory("/session", directory, { method: "POST" })
         expect(created.status).toBe(200)
         expect(yield* readEvent(reader)).toMatchObject({ type: "session.created" })

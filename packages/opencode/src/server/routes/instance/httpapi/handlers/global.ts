@@ -41,7 +41,7 @@ function eventResponse() {
       Effect.sync(() => GlobalBus.on("event", handler)),
       () => Effect.sync(() => GlobalBus.off("event", handler)),
     )
-  })
+  }).pipe(Stream.buffer({ capacity: 256, strategy: "sliding" }))
   const heartbeat = Stream.tick("10 seconds").pipe(
     Stream.drop(1),
     Stream.map(() => ({ payload: { id: EventV2.ID.create(), type: "server.heartbeat", properties: {} } })),
