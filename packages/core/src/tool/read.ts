@@ -134,18 +134,18 @@ export const layer = Layer.effectDiscard(
                 const bytes = Buffer.byteLength(base64, "utf-8")
                 if (width <= limits.maxWidth && height <= limits.maxHeight && bytes <= limits.maxBase64Bytes)
                   return new FileSystem.BinaryContent({ type: "binary", content: base64, encoding: "base64", mime })
-                if (!limits.autoResize)
-                  return yield* Effect.die(
-                    new ImageSizeError(
-                      resolved.resource,
-                      width,
-                      height,
-                      bytes,
-                      limits.maxWidth,
-                      limits.maxHeight,
-                      limits.maxBase64Bytes,
-                    ),
+                if (!limits.autoResize) {
+                  const err = new ImageSizeError(
+                    resolved.resource,
+                    width,
+                    height,
+                    bytes,
+                    limits.maxWidth,
+                    limits.maxHeight,
+                    limits.maxBase64Bytes,
                   )
+                  return yield* new ToolFailure({ message: err.message, error: err })
+                }
                 const scale = Math.min(1, limits.maxWidth / width, limits.maxHeight / height)
                 const sizes = Array.from({ length: 32 }).reduce<Array<{ width: number; height: number }>>((acc) => {
                   const previous = acc.at(-1) ?? {
@@ -184,22 +184,24 @@ export const layer = Layer.effectDiscard(
                     resized.free()
                   }
                 }
-                return yield* Effect.die(
-                  new ImageSizeError(
-                    resolved.resource,
-                    width,
-                    height,
-                    bytes,
-                    limits.maxWidth,
-                    limits.maxHeight,
-                    limits.maxBase64Bytes,
-                  ),
+                const err = new ImageSizeError(
+                  resolved.resource,
+                  width,
+                  height,
+                  bytes,
+                  limits.maxWidth,
+                  limits.maxHeight,
+                  limits.maxBase64Bytes,
                 )
+                return yield* new ToolFailure({ message: err.message, error: err })
               } finally {
                 decoded.free()
               }
             }
-            if (content.type === "binary") return yield* Effect.die(new FileSystem.BinaryFileError(resolved.resource))
+            if (content.type === "binary") {
+              const err = new FileSystem.BinaryFileError(resolved.resource)
+              return yield* new ToolFailure({ message: err.message, error: err })
+            }
             return content
           }).pipe(
             Effect.catchCause((cause) =>
