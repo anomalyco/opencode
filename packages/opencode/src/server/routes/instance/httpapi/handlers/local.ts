@@ -198,7 +198,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
     })
 
     const disconnect = Effect.fn("LocalHttpApi.disconnect")(function* (ctx) {
-      const { providerID } = ctx.pathParams
+      const { providerID } = ctx.params
       const global = yield* configSvc.getGlobal()
       const providers = { ...(global.provider ?? {}) }
       delete providers[providerID]
@@ -207,20 +207,20 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
     })
 
     const setModelCtxSize = Effect.fn("LocalHttpApi.setModelCtxSize")(function* (ctx) {
-      const { providerID, modelID } = ctx.pathParams
+      const { providerID, modelID } = ctx.params
       const { ctx_size } = ctx.payload
       const config = yield* configSvc.get()
       const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
       if (!baseURL) return false
       const url = `${normalizeControlBaseURL(baseURL)}/api/config/models/${encodeURIComponent(modelID)}`
-      const res = yield* Effect.promise(() =>
+      const ok = yield* Effect.tryPromise(() =>
         fetch(url, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ctx_size }),
-        }),
-      )
-      return res.ok
+        }).then((r) => r.ok),
+      ).pipe(Effect.orElseSucceed(() => false))
+      return ok
     })
 
     return handlers

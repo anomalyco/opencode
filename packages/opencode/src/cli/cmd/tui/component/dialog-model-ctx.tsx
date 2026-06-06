@@ -11,7 +11,11 @@ import type { ResourceSnapshot } from "@/local/llama-skein/gen/types.gen"
 // Below this, MCP tools + system prompt fill the window before meaningful work starts.
 const MIN_WORKFLOW_CTX = 65536
 
-const PRESETS = [16384, 32768, 65536, 131072, 262144, 524288, 1048576]
+const PRESETS = [
+  8192, 12288, 16384, 24576, 32768, 49152,
+  65536, 98304, 131072, 196608, 262144,
+  393216, 524288, 786432, 1048576,
+]
 
 function fmtCtxK(n: number): string {
   if (n >= 1024 && n % 1024 === 0) return `${n / 1024}k`

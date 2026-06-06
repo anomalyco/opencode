@@ -59,69 +59,94 @@ function normalizeBaseURL(url: string): string {
   return url.replace(/\/+$/, "").replace(/\/v1$/, "")
 }
 
-// Token context usage bar: accent fill for used, muted for free.
-function CtxBar(props: { percent: number; theme: any; onClick?: () => void }) {
+// Token context usage bar with max label at end: ████████░░░░░░ 128k
+function CtxBar(props: { percent: number; maxLabel: string; theme: any; onClick?: () => void }) {
   const used = Math.max(1, Math.min(BAR_WIDTH, Math.round((props.percent / 100) * BAR_WIDTH)))
+  const t = props.theme
   return (
     <text onMouseUp={props.onClick}>
-      <span style={{ fg: props.theme.accent }}>{"█".repeat(used)}</span>
-      <span style={{ fg: props.theme.textMuted }}>{"░".repeat(BAR_WIDTH - used)}</span>
+      <span style={{ fg: t.accent }}>{"█".repeat(used)}</span>
+      <span style={{ fg: t.textMuted }}>{"░".repeat(BAR_WIDTH - used)}</span>
+      {"  "}<span style={{ fg: t.textMuted }}>{props.maxLabel}</span>
     </text>
   )
 }
 
-// VRAM/memory bar with four segments when full data is available:
+// VRAM/memory bar with total at end and four labelled segments when full data available:
 //   amber █  model weights (fixed)
-//   cyan  █  KV active — portion of KV cache populated by current tokens
-//   cyan  ░  KV headroom — KV allocated but still empty (room left in ctx window)
+//   cyan  █  ctx active — KV cache used by current tokens
+//   cyan  ░  ctx headroom — KV allocated but empty (room left before hitting ctx_size)
 //   gray  ░  free VRAM — beyond the KV allocation (use this to grow ctx_size)
 //
-// Falls back to three segments (model | full-KV | free) when token count is
+// Falls back to three segments (model | full-ctx | free) when token count is
 // unknown, or two segments (used | free) when no loaded_model data.
-function MemBar(props: { mem: MemSnapshot; theme: any; tokenPercent?: number | null }) {
+//
+// Returns both the bar element and a labelled text breakdown for rendering below.
+function MemBarContent(props: { mem: MemSnapshot; theme: any; tokenPercent?: number | null }) {
   const m = props.mem
   const t = props.theme
   const total = m.totalMb || 1
+  const totalLabel = `${fmtGB(m.totalMb)} GB`
   const hasBreakdown = m.modelMb > 0
 
   if (hasBreakdown) {
     const modelChars = Math.max(1, Math.round((m.modelMb / total) * BAR_WIDTH))
     const remaining = BAR_WIDTH - modelChars
-    const kvTotalChars = Math.max(0, Math.min(remaining, Math.round((m.kvEstMb / total) * BAR_WIDTH)))
+    const ctxTotalChars = Math.max(0, Math.min(remaining, Math.round((m.kvEstMb / total) * BAR_WIDTH)))
+    const freeCharsBase = remaining - ctxTotalChars
 
-    // Split KV into active (tokens in use) vs headroom (allocated but empty).
     const pct = props.tokenPercent
-    if (pct !== null && pct !== undefined && kvTotalChars > 0) {
-      const kvActiveChars = Math.max(0, Math.min(kvTotalChars, Math.round((pct / 100) * kvTotalChars)))
-      const kvHeadroomChars = kvTotalChars - kvActiveChars
-      const freeChars = remaining - kvTotalChars
-      return (
+    let bar
+    if (pct !== null && pct !== undefined && ctxTotalChars > 0) {
+      const ctxActiveChars = Math.max(0, Math.min(ctxTotalChars, Math.round((pct / 100) * ctxTotalChars)))
+      const ctxHeadroomChars = ctxTotalChars - ctxActiveChars
+      bar = (
         <text>
           <span style={{ fg: t.warning }}>{"█".repeat(modelChars)}</span>
-          <span style={{ fg: t.accent }}>{"█".repeat(kvActiveChars)}</span>
-          <span style={{ fg: t.accent }}>{"░".repeat(kvHeadroomChars)}</span>
-          <span style={{ fg: t.textMuted }}>{"░".repeat(Math.max(0, freeChars))}</span>
+          <span style={{ fg: t.accent }}>{"█".repeat(ctxActiveChars)}</span>
+          <span style={{ fg: t.accent }}>{"░".repeat(ctxHeadroomChars)}</span>
+          <span style={{ fg: t.textMuted }}>{"░".repeat(Math.max(0, freeCharsBase))}</span>
+          {"  "}<span style={{ fg: t.textMuted }}>{totalLabel}</span>
+        </text>
+      )
+    } else {
+      bar = (
+        <text>
+          <span style={{ fg: t.warning }}>{"█".repeat(modelChars)}</span>
+          <span style={{ fg: t.accent }}>{"▓".repeat(ctxTotalChars)}</span>
+          <span style={{ fg: t.textMuted }}>{"░".repeat(Math.max(0, freeCharsBase))}</span>
+          {"  "}<span style={{ fg: t.textMuted }}>{totalLabel}</span>
         </text>
       )
     }
 
-    // No token percent — show full KV block as before.
-    const freeChars = remaining - kvTotalChars
-    return (
-      <text>
-        <span style={{ fg: t.warning }}>{"█".repeat(modelChars)}</span>
-        <span style={{ fg: t.accent }}>{"▓".repeat(kvTotalChars)}</span>
-        <span style={{ fg: t.textMuted }}>{"░".repeat(Math.max(0, freeChars))}</span>
+    // Labelled breakdown: "mod 15.7 · ctx 5.1 · 3.6 free"
+    const legend = (
+      <text fg={t.textMuted}>
+        <span style={{ fg: t.warning }}>mod</span>{" "}{fmtGB(m.modelMb)}
+        {"  ·  "}
+        <span style={{ fg: t.accent }}>ctx</span>{" "}{fmtGB(m.kvEstMb)}
+        {"  ·  "}
+        {fmtGB(m.freeMb)}{" free"}
       </text>
     )
+    return <>{bar}{legend}</>
   }
 
+  // No model breakdown — simple used/free bar.
   const usedChars = Math.max(1, Math.min(BAR_WIDTH, Math.round((m.usedMb / total) * BAR_WIDTH)))
   return (
-    <text>
-      <span style={{ fg: t.warning }}>{"█".repeat(usedChars)}</span>
-      <span style={{ fg: t.textMuted }}>{"░".repeat(BAR_WIDTH - usedChars)}</span>
-    </text>
+    <>
+      <text>
+        <span style={{ fg: t.warning }}>{"█".repeat(usedChars)}</span>
+        <span style={{ fg: t.textMuted }}>{"░".repeat(BAR_WIDTH - usedChars)}</span>
+        {"  "}<span style={{ fg: t.textMuted }}>{totalLabel}</span>
+      </text>
+      <text fg={t.textMuted}>
+        {fmtGB(m.usedMb)} used{"  ·  "}
+        <span style={{ fg: t.accent }}>{fmtGB(m.freeMb)} free</span>
+      </text>
+    </>
   )
 }
 
@@ -199,7 +224,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       >
         Tokens
       </text>
-      <text fg={theme().textMuted}>
+      <text fg={theme().textMuted} onMouseUp={canOpenDialog() ? openCtxDialog : undefined}>
         {state().tokens.toLocaleString()}
         <Show when={state().ctxWindow}>
           {" / "}
@@ -214,6 +239,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <Show when={state().percent !== null}>
         <CtxBar
           percent={state().percent!}
+          maxLabel={state().ctxWindow ?? ""}
           theme={theme()}
           onClick={canOpenDialog() ? openCtxDialog : undefined}
         />
@@ -224,25 +250,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         {(m) => (
           <>
             <text fg={theme().text} bold>{m().label}</text>
-            <MemBar mem={m()} theme={theme()} tokenPercent={state().percent} />
-            <Show
-              when={m().modelMb > 0}
-              fallback={
-                <text fg={theme().textMuted}>
-                  {fmtGB(m().usedMb)}/{fmtGB(m().totalMb)} GB
-                  {" · "}
-                  <span style={{ fg: theme().accent }}>{fmtGB(m().freeMb)} free</span>
-                </text>
-              }
-            >
-              <text fg={theme().textMuted}>
-                <span style={{ fg: theme().warning }}>{fmtGB(m().modelMb)}</span>
-                {" · "}
-                <span style={{ fg: theme().accent }}>{fmtGB(m().kvEstMb)}</span>
-                {" · "}
-                {fmtGB(m().freeMb)} GB
-              </text>
-            </Show>
+            <MemBarContent mem={m()} theme={theme()} tokenPercent={state().percent} />
           </>
         )}
       </Show>
