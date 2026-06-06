@@ -460,7 +460,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    input.onRows(clamp(area.virtualLineCount || 1) + popup())
+    input.onRows(clamp(Math.max(area.lineCount, area.virtualLineCount)) + popup())
   }
 
   const scheduleRows = () => {
@@ -1067,7 +1067,11 @@ export function createPromptState(input: PromptInput): PromptState {
     ]),
   }))
 
-  const onKeyDown = (_event: KeyEvent) => {}
+  const onKeyDown = (event: KeyEvent) => {
+    if (input.state().phase === "idle" && event.name.toLowerCase() === "escape") {
+      input.onInputClear()
+    }
+  }
 
   const submitPrompt = (next: RunPrompt) => {
     if (!area || area.isDestroyed) {
@@ -1195,6 +1199,7 @@ export function createPromptState(input: PromptInput): PromptState {
     submitText,
     onKeyDown,
     onContentChange: () => {
+      input.onInputClear()
       syncDraft()
       refresh()
       scheduleRows()

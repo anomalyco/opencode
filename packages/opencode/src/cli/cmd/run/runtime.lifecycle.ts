@@ -30,7 +30,7 @@ import type {
 } from "./types"
 import { formatModelLabel } from "./variant.shared"
 
-const FOOTER_HEIGHT = 7
+const FOOTER_HEIGHT = 4
 
 type SplashState = {
   entry: boolean
@@ -278,6 +278,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
             },
             async () => {
               process.off("SIGINT", sigint)
+              let wroteExit = false
 
               try {
                 await footer.idle().catch(() => {})
@@ -286,7 +287,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
                 if (!renderer.isDestroyed && show) {
                   const sessionID = next.sessionID || input.getSessionID?.() || input.sessionID
                   const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history)
-                  queueSplash(
+                  wroteExit = queueSplash(
                     renderer,
                     state,
                     "exit",
@@ -306,6 +307,9 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
                 footer.destroy()
                 unregisterKeymap?.()
                 shutdown(renderer)
+                if (!wroteExit) {
+                  process.stdout.write("\n")
+                }
                 source.cleanup?.()
               }
             },

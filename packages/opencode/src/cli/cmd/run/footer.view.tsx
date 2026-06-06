@@ -235,14 +235,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         props.tuiConfig,
       ) ?? "",
   )
-  const newlineShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap.getCommandBindings({ visibility: "registered", commands: ["input.newline"] }).get("input.newline")?.[0]
-          ?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
   const hints = createMemo(() => hintFlags(term().width))
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
@@ -251,6 +243,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const duration = createMemo(() => props.state().duration)
   const usage = createMemo(() => props.state().usage)
   const interruptKey = createMemo(() => interrupt() || clearShortcut() || "ctrl+c")
+  const interruptLabel = createMemo(() => (interruptKey() === "escape" ? "esc" : interruptKey()))
   const runTheme = createMemo(() => props.theme())
   const theme = createMemo(() => runTheme().footer)
   const block = createMemo(() => runTheme().block)
@@ -377,7 +370,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return "EXIT"
     }
 
-    return shell() ? "SHELL" : "ASK"
+    return shell() ? "SHELL" : "BUILD"
   })
   const modeColor = createMemo(() => {
     if (exiting()) {
@@ -396,7 +389,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     if (busy()) {
-      return stateStatus() || "Working"
+      return armed() ? "again to interrupt" : "interrupt"
     }
 
     if (stateStatus().length > 0) {
@@ -427,28 +420,17 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return items.join(" · ")
   })
-  const modelText = createMemo(() => {
+  const modelStatus = createMemo(() => {
     const current = props.currentModel()
     if (!prompt() || shell() || !current) {
-      return ""
-    }
-
-    const provider = model().provider
-    const items = [model().model]
-    if (props.currentVariant()) {
-      items.push(props.currentVariant()!)
-    }
-    if (hints().command && provider) {
-      items.push(provider)
-    }
-    return items.join(" · ")
-  })
-  const expandHint = createMemo(() => {
-    if (!prompt() || busy() || exiting() || shell() || !hints().newline) {
       return
     }
 
-    return newlineShortcut() || "ctrl+j"
+    return {
+      model: model().model,
+      variant: props.currentVariant(),
+      provider: hints().command ? model().provider : undefined,
+    }
   })
   const statusColor = createMemo(() => {
     if (exiting()) {
@@ -468,13 +450,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   const actionHint = createMemo(() => {
     if (exiting()) {
       return
-    }
-
-    if (busy()) {
-      return {
-        key: interruptKey(),
-        label: armed() ? "again to interrupt" : "interrupt",
-      }
     }
 
     if (!prompt()) {
@@ -663,6 +638,10 @@ export function RunFooterView(props: RunFooterViewProps) {
       gap={0}
       padding={0}
     >
+      <Show when={panel()}>
+        <box id="run-direct-footer-panel-spacer" width="100%" height={1} flexShrink={0} backgroundColor="transparent" />
+      </Show>
+
       <Show
         when={inspecting()}
         fallback={
@@ -679,9 +658,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                     panel() || prompt()
                       ? undefined
                       : {
-                          ...EMPTY_BORDER,
-                          vertical: "█",
-                        }
+                        ...EMPTY_BORDER,
+                        vertical: "█",
+                      }
                   }
                 >
                   <box
@@ -821,7 +800,7 @@ export function RunFooterView(props: RunFooterViewProps) {
               />
             </Show>
 
-            <Show when={!panel()}>
+            <Show when={!panel() && !menu()}>
               <box
                 id="run-direct-footer-statusline"
                 width="100%"
@@ -867,7 +846,10 @@ export function RunFooterView(props: RunFooterViewProps) {
                     flexGrow={1}
                     flexShrink={1}
                   >
-                    {statusText()}
+                    <Show when={busy() && !exiting()} fallback={statusText()}>
+                      <span style={{ fg: armed() ? statusColor() : theme().muted }}>{interruptLabel()} </span>
+                      {statusText()}
+                    </Show>
                   </text>
                 </box>
 
@@ -885,32 +867,27 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </box>
                 </Show>
 
-                <Show when={hints().command && modelText().length > 0}>
-                  <box
-                    id="run-direct-footer-statusline-model"
-                    paddingLeft={1}
-                    paddingRight={1}
-                    backgroundColor={theme().shade}
-                    flexShrink={0}
-                  >
-                    <text fg={theme().text} wrapMode="none" truncate>
-                      {modelText()}
-                    </text>
-                  </box>
-                </Show>
-
-                <Show when={expandHint()}>
-                  {(key) => (
+                <Show when={hints().command && modelStatus()}>
+                  {(info) => (
                     <box
-                      id="run-direct-footer-statusline-expand"
+                      id="run-direct-footer-statusline-model"
                       paddingLeft={1}
                       paddingRight={1}
-                      backgroundColor={theme().line}
+                      backgroundColor={theme().shade}
                       flexShrink={0}
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <span style={{ fg: theme().highlight }}>{key()}</span>{" "}
-                        <span style={{ fg: theme().muted }}>expand</span>
+                        {info().model}
+                        <Show when={info().provider}>
+                          {(provider) => <span style={{ fg: theme().muted }}> {provider()}</span>}
+                        </Show>
+                        <Show when={info().variant}>
+                          {(variant) => (
+                            <>
+                              <span style={{ fg: theme().warning, bold: true }}> {variant()}</span>
+                            </>
+                          )}
+                        </Show>
                       </text>
                     </box>
                   )}
