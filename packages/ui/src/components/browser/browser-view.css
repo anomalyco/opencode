@@ -1,0 +1,97 @@
+.browser-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--v2-background-bg-layer-01);
+  overflow: hidden;
+}
+
+.browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--v2-background-bg-deep);
+  border-bottom: 1px solid var(--v2-border-border-layer-01);
+}
+
+.browser-nav-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.browser-url-bar {
+  flex: 1;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.url-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--v2-background-bg-layer-02);
+  border: 1px solid var(--v2-border-border-layer-01);
+  border-radius: 6px;
+  padding: 0 8px;
+  height: 28px;
+  transition: border-color 0.2s;
+}
+
+.url-input-container:focus-within {
+  border-color: var(--v2-border-border-accent);
+  background: var(--v2-background-bg-layer-01);
+}
+
+.url-lock-icon {
+  color: var(--v2-text-text-muted);
+  margin-right: 8px;
+}
+
+.url-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--v2-text-text-base);
+  font-size: 12px;
+  outline: none;
+  width: 100%;
+}
+
+.url-loading-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--v2-border-border-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.browser-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.browser-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--v2-border-border-layer-01);
+  margin: 0 4px;
+}
+
+.browser-content {
+  flex: 1;
+  position: relative;
+  background: white;
+}
+
+webview {
+  display: flex;
+  flex: 1;
+}

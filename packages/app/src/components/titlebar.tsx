@@ -22,6 +22,7 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 
 import { getProjectAvatarVariant, LayoutRoute, useLayout, type LocalProject } from "@/context/layout"
+import { useBrowser } from "@/context/browser"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -141,6 +142,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       onInstall: () => props.update?.install(),
     }
   })
+  const browser = useBrowser()
+
   const v2RightState = createMemo<TitlebarV2RightState>(() => ({
     update: updateState(),
   }))
@@ -481,16 +484,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   </div>
                 </div>
                 <Show when={!(creating() && params.dir)}>
-                  <IconButtonV2
-                    type="button"
-                    variant="ghost-muted"
-                    size="large"
-                    class="shrink-0"
-                    icon={<IconV2 name="plus" />}
-                    as="a"
-                    href={newSessionHref()}
-                    aria-label={language.t("command.session.new")}
-                  />
+                  <div class="flex items-center gap-1.5">
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="shrink-0"
+                      icon={<IconV2 name="globe" />}
+                      onClick={() => browser.toggleBrowser()}
+                      state={browser.store.isOpen ? "pressed" : undefined}
+                      aria-label={language.t("sidebar.browser") ?? "Browser"}
+                    />
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="shrink-0"
+                      icon={<IconV2 name="plus" />}
+                      as="a"
+                      href={newSessionHref()}
+                      aria-label={language.t("command.session.new")}
+                    />
+                  </div>
                 </Show>
                 <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
@@ -621,6 +636,16 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             disabled={!canForward()}
                             onClick={forward}
                             aria-label={language.t("common.goForward")}
+                          />
+                        </Tooltip>
+                        <Tooltip placement="bottom" value={language.t("sidebar.browser") ?? "Browser"} openDelay={2000}>
+                          <Button
+                            variant="ghost"
+                            icon="globe"
+                            class="titlebar-icon w-8 h-6 p-0 box-border ml-1"
+                            onClick={() => browser.toggleBrowser()}
+                            aria-label={language.t("sidebar.browser") ?? "Browser"}
+                            aria-pressed={browser.store.isOpen}
                           />
                         </Tooltip>
                       </div>

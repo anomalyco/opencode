@@ -13,6 +13,7 @@ import { TodoWriteTool } from "./todowrite"
 import { WebFetchTool } from "./webfetch"
 import { WebSearchTool } from "./websearch"
 import { WriteTool } from "./write"
+import { BrowserTool } from "./browser"
 
 /**
  * Composes only the shipped Location-scoped built-in tool contributions.
@@ -40,4 +41,5 @@ export const locationLayer = Layer.mergeAll(
   WebFetchTool.layer,
   WebSearchTool.layer.pipe(Layer.provide(WebSearchTool.defaultConfigLayer)),
   WriteTool.layer,
+  BrowserTool.layer,
 )
