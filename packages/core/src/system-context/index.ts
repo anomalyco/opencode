@@ -1,4 +1,4 @@
-export * as SystemContext from "./system-context"
+export * as SystemContext from "./index"
 
 import { Effect, Option, Schema } from "effect"
 

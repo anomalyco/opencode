@@ -53,15 +53,15 @@ export const toModelOutput = (output: Success) => {
 
 const definition = Tool.make({
   description:
-    "Search file contents by regular expression within the active Location or a named project reference. Use a relative path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise relative file resources, line numbers, and bounded line previews.",
+    "Search file contents by regular expression within the active Location, a named project reference, or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
   parameters: Parameters,
   success: LocationSearch.GrepResult,
   toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
 })
 
 /**
- * Location-scoped grep leaf. FileSystem selects a canonical root for
- * permission metadata; LocationSearch owns containment and ripgrep execution.
+ * Location-scoped grep leaf. FileSystem supplies canonical permission metadata;
+ * LocationSearch resolves the current root and owns containment and ripgrep execution.
  *
  * TODO: Revisit root-specific search permission resources if named-reference policy needs independent allow/deny rules.
  */
@@ -89,7 +89,7 @@ export const layer = Layer.effectDiscard(
                 limit: parameters.limit,
               },
             })
-            return yield* search.grep(parameters, root)
+            return yield* search.grep(parameters)
           }).pipe(
             Effect.catchCause((cause) => {
               const error = Cause.squash(cause)

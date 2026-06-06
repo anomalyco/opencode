@@ -24,14 +24,9 @@ export const MAX_LINE_PREVIEW_LENGTH = 2_000
 
 export const ResultLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_RESULT_LIMIT))
 
-const RootInput = {
-  path: RelativePath.pipe(Schema.optional),
-  reference: Schema.NonEmptyString.pipe(Schema.optional),
-}
-
 export const FilesInput = Schema.Struct({
   pattern: Schema.String,
-  ...RootInput,
+  ...FileSystem.ListInput.fields,
   limit: ResultLimit.pipe(Schema.optional),
 })
 export type FilesInput = typeof FilesInput.Type & { readonly signal?: AbortSignal }
@@ -39,7 +34,7 @@ export type FilesInput = typeof FilesInput.Type & { readonly signal?: AbortSigna
 export const GrepInput = Schema.Struct({
   pattern: Schema.String,
   include: Schema.String.pipe(Schema.optional),
-  ...RootInput,
+  ...FileSystem.ListInput.fields,
   limit: ResultLimit.pipe(Schema.optional),
 })
 export type GrepInput = typeof GrepInput.Type & { readonly signal?: AbortSignal }
@@ -82,11 +77,8 @@ export class GrepResult extends Schema.Class<GrepResult>("LocationSearch.GrepRes
 }) {}
 
 export interface Interface {
-  readonly files: (input: FilesInput, root?: FileSystem.RootTarget) => Effect.Effect<FilesResult, Ripgrep.Error>
-  readonly grep: (
-    input: GrepInput,
-    root?: FileSystem.RootTarget,
-  ) => Effect.Effect<GrepResult, Ripgrep.Error | Ripgrep.InvalidPatternError>
+  readonly files: (input: FilesInput) => Effect.Effect<FilesResult, Ripgrep.Error>
+  readonly grep: (input: GrepInput) => Effect.Effect<GrepResult, Ripgrep.Error | Ripgrep.InvalidPatternError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/LocationSearch") {}
@@ -123,8 +115,8 @@ export const layer = Layer.effect(
     })
 
     return Service.of({
-      files: Effect.fn("LocationSearch.files")(function* (input, approvedRoot) {
-        const root = yield* filesystem.revalidateRoot(approvedRoot ?? (yield* filesystem.resolveRoot(input)))
+      files: Effect.fn("LocationSearch.files")(function* (input) {
+        const root = yield* filesystem.resolveRoot(input)
         if (root.type !== "directory")
           return yield* Effect.die(new globalThis.Error("Files search path must be a directory"))
         const result = yield* ripgrep.files({
@@ -145,8 +137,8 @@ export const layer = Layer.effect(
           partial: result.partial || items.length !== result.items.length,
         })
       }),
-      grep: Effect.fn("LocationSearch.grep")(function* (input, approvedRoot) {
-        const root = yield* filesystem.revalidateRoot(approvedRoot ?? (yield* filesystem.resolveRoot(input)))
+      grep: Effect.fn("LocationSearch.grep")(function* (input) {
+        const root = yield* filesystem.resolveRoot(input)
         const cwd = root.type === "directory" ? root.real : path.dirname(root.real)
         const result = yield* ripgrep.grep({
           cwd,

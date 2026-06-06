@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { For } from "solid-js"
+import { createSignal, For, Show } from "solid-js"
+import type { ScrollBoxRenderable } from "@opentui/core"
 import { testRender, type JSX } from "@opentui/solid"
 import {
   formatCompletedSubagentDetail,
@@ -127,10 +128,29 @@ function LoadedReadBeforeSubagentFixture() {
   )
 }
 
+function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: ScrollBoxRenderable) => void }) {
+  return (
+    <scrollbox ref={props.scroll} stickyScroll={true} stickyStart="bottom" height={3} width={72}>
+      <box height={1}>
+        <text>First row</text>
+      </box>
+      <box height={1}>
+        <text>Second row</text>
+      </box>
+      <Show when={props.separated}>
+        <box id="text-before-tool">
+          <text>Assistant text</text>
+        </box>
+      </Show>
+      <InlineToolRow icon="→" complete={true} pending="">
+        Read src/cli/cmd/tui/routes/session/index.tsx
+      </InlineToolRow>
+    </scrollbox>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
-  await testSetup.renderOnce()
-  await Bun.sleep(25)
   await testSetup.renderOnce()
 
   return testSetup
@@ -182,5 +202,31 @@ describe("TUI inline tool wrapping", () => {
 
   test("separates a subagent group after an expanded read", async () => {
     expect(await renderFrame(() => <LoadedReadBeforeSubagentFixture />, { width: 72, height: 8 })).toMatchSnapshot()
+  })
+
+  test("updates sticky-bottom geometry when a text separator mounts and unmounts", async () => {
+    const [separated, setSeparated] = createSignal(false)
+    let scroll: ScrollBoxRenderable | undefined
+    testSetup = await testRender(
+      () => <StickyScrollFixture separated={separated()} scroll={(value) => (scroll = value)} />,
+      {
+        width: 72,
+        height: 3,
+      },
+    )
+
+    await testSetup.renderOnce()
+    expect(scroll?.scrollHeight).toBe(3)
+    expect(scroll?.scrollTop).toBe(Math.max(0, scroll!.scrollHeight - scroll!.viewport.height))
+
+    setSeparated(true)
+    await testSetup.renderOnce()
+    expect(scroll?.scrollHeight).toBe(5)
+    expect(scroll?.scrollTop).toBe(Math.max(0, scroll!.scrollHeight - scroll!.viewport.height))
+
+    setSeparated(false)
+    await testSetup.renderOnce()
+    expect(scroll?.scrollHeight).toBe(3)
+    expect(scroll?.scrollTop).toBe(Math.max(0, scroll!.scrollHeight - scroll!.viewport.height))
   })
 })

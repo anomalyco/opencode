@@ -348,7 +348,7 @@ Behavior affecting long-running conversations and context management.
 | ------------ | ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
 | `compaction` | Automatic compaction, pruning, and context reserve settings | redesign | Group retained verbatim history under `keep` and rename context headroom to `buffer`. |
 
-Retain the compaction capability but redesign the less clear limits. `keep.turns` is the maximum number of recent user turns to preserve verbatim after compaction, and `keep.tokens` is the token budget for those retained turns. `buffer` is the token headroom reserved so automatic compaction triggers before the input window is exhausted.
+Retain the compaction capability but redesign the less clear limits. `keep.tokens` is the token budget for recent history serialized into the textual compaction checkpoint. `buffer` is the token headroom reserved so automatic compaction triggers before the input window is exhausted.
 
 ```jsonc
 {
@@ -356,7 +356,6 @@ Retain the compaction capability but redesign the less clear limits. `keep.turns
     "auto": true,
     "prune": true,
     "keep": {
-      "turns": 2,
       "tokens": 2000,
     },
     "buffer": 10000,

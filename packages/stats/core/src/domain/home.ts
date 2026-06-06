@@ -194,7 +194,7 @@ function buildStatsHomeData(
     leaderboard: createUsageProductRecord((product) =>
       createRangeRecord((range) => buildLeaderboard(normalized, product, getWindow(range, earliest, latest))),
     ),
-    market: createRangeRecord((range) => buildMarketShare(providers, range, getWindow(range, earliest, latest))),
+    market: createRangeRecord((range) => buildMarketShare(providers, "Go", range, getWindow(range, earliest, latest))),
     tokenCost: createTokenProductRecord((product) =>
       buildTokenCost(normalized, product, getWindow("1W", earliest, latest)),
     ),
@@ -378,9 +378,9 @@ function buildLeaderboard(rows: StatMetricRow[], product: UsageProduct, window: 
     }))
 }
 
-function buildMarketShare(rows: ProviderMetricRow[], range: UsageRange, window: DateWindow) {
+function buildMarketShare(rows: ProviderMetricRow[], product: UsageProduct, range: UsageRange, window: DateWindow) {
   return createBuckets(window, range).flatMap((bucket) => {
-    const total = aggregateByProvider(rowsForProduct(rows, "All Users", bucket.start, bucket.end)).toSorted(
+    const total = aggregateByProvider(rowsForProduct(rows, product, bucket.start, bucket.end)).toSorted(
       (a, b) => b.tokens - a.tokens,
     )
     const totalTokens = total.reduce((sum, item) => sum + item.tokens, 0)

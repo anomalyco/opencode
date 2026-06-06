@@ -22,21 +22,16 @@ export const Success = Schema.Struct({
   directory: Schema.String,
   output: Schema.String,
   truncated: Schema.Boolean,
-  resource: ToolOutputStore.Resource.pipe(Schema.optional),
+  outputPath: Schema.String.pipe(Schema.optional),
 })
 
-export const description = (skills: ReadonlyArray<SkillV2.Info>) =>
-  [
-    "Load a specialized skill when the task at hand matches one of the available skills listed below.",
-    "",
-    "Use this tool to inject the skill's instructions and resources into the current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc. in the same directory as the skill.",
-    "",
-    "The skill name must match one of the available skills listed below:",
-    "",
-    ...(skills.length
-      ? skills.map((skill) => `- **${skill.name}**: ${skill.description ?? "No description provided."}`)
-      : ["No skills are currently available."]),
-  ].join("\n")
+export const description = [
+  "Load a specialized skill when the task at hand matches one of the available skills in the system context.",
+  "",
+  "Use this tool to inject the skill's instructions and resources into the current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc. in the same directory as the skill.",
+  "",
+  "The skill name must match one of the available skills in the system context.",
+].join("\n")
 
 export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>) => {
   const directory = path.dirname(skill.location)
@@ -57,10 +52,8 @@ export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>)
   ].join("\n")
 }
 
-const notFound = (name: string, skills: ReadonlyArray<SkillV2.Info>) =>
-  new ToolFailure({
-    message: `Skill "${name}" not found. Available skills: ${skills.map((skill) => skill.name).join(", ") || "none"}`,
-  })
+const unableToLoad = (name: string, error?: unknown) =>
+  new ToolFailure({ message: `Unable to load skill ${name}`, error })
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -70,9 +63,8 @@ export const layer = Layer.effectDiscard(
     const skills = yield* SkillV2.Service
     const resources = yield* ToolOutputStore.Service
     yield* boot.wait()
-    const available = yield* skills.list()
     const definition = Tool.make({
-      description: description(available),
+      description,
       parameters: Parameters,
       success: Success,
       toModelOutput: ({ output }) => [toolText({ type: "text", text: output.output })],
@@ -81,18 +73,22 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
+        outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),
         execute: ({ parameters, sessionID, call, assertPermission }) =>
           Effect.gen(function* () {
             const current = yield* skills.list()
             const skill = current.find((skill) => skill.name === parameters.name)
-            if (!skill) return yield* notFound(parameters.name, current)
+            if (!skill) return yield* unableToLoad(parameters.name)
             return yield* Effect.gen(function* () {
               yield* assertPermission({ action: name, resources: [skill.name], save: [skill.name] })
               const directory = path.dirname(skill.location)
-              const files = (yield* fs.glob("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
-                .filter((file) => path.basename(file) !== "SKILL.md")
-                .toSorted()
-                .slice(0, FILE_LIMIT)
+              const files =
+                path.basename(skill.location) === "SKILL.md"
+                  ? (yield* fs.glob("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
+                      .filter((file) => path.basename(file) !== "SKILL.md")
+                      .toSorted()
+                      .slice(0, FILE_LIMIT)
+                  : []
               const output = yield* resources.truncate({
                 sessionID,
                 toolCallID: call.id,
@@ -103,15 +99,9 @@ export const layer = Layer.effectDiscard(
                 directory,
                 output: output.content,
                 truncated: output.truncated,
-                ...(output.truncated ? { resource: output.resource } : {}),
+                ...(output.truncated ? { outputPath: output.outputPath } : {}),
               }
-            }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.fail(
-                  new ToolFailure({ message: `Unable to load skill ${parameters.name}`, error: Cause.squash(cause) }),
-                ),
-              ),
-            )
+            }).pipe(Effect.catchCause((cause) => Effect.fail(unableToLoad(parameters.name, Cause.squash(cause)))))
           }),
       }),
     )
