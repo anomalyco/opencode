@@ -14,15 +14,12 @@ const assertions: PermissionV2.AssertInput[] = []
 const reads: FileSystem.ReadInput[] = []
 const samples: number[] = []
 const textPageInputs: FileSystem.TextPageInput[] = []
-const pages: FileSystem.ListTarget[] = []
+const pages: FileSystem.ListPageInput[] = []
 const pageInputs: Pick<FileSystem.ListPageInput, "offset" | "limit">[] = []
-let resolvedInput: FileSystem.ReadInput | undefined
 let resolveFailure: unknown
 let listResolveFailure: unknown = new Error("not a directory")
-let listReal = "/project/src"
 let size = 5
 let real = "/project/README.md"
-let afterApproval = () => {}
 let readContent: FileSystem.Content = new FileSystem.TextContent({
   type: "text",
   content: "hello",
@@ -37,77 +34,27 @@ const filesystem = Layer.succeed(
     read: () => Effect.die("unused"),
     resolveReadPath: (input) =>
       resolveFailure === undefined
-        ? Effect.succeed({
-            type: "file" as const,
-            target: new FileSystem.ReadTarget({
-              real,
+        ? Effect.succeed(
+            new FileSystem.ReadPath({
+              type: "file",
               resource: input.reference === undefined ? input.path : `${input.reference}:${input.path}`,
-              size,
-              dev: 1,
             }),
-          })
+          )
         : listResolveFailure === undefined
-          ? Effect.succeed({
-              type: "directory" as const,
-              target: new FileSystem.ListTarget({
-                absolute: `/project/${input.path ?? "."}`,
-                real: listReal,
-                directory: "/project",
-                root: "/project",
-                resource: input.path ?? ".",
-              }),
-            })
+          ? Effect.succeed(new FileSystem.ReadPath({ type: "directory", resource: input.path ?? "." }))
           : Effect.die(resolveFailure),
-    resolveRead: (input) =>
-      Effect.sync(() => {
-        resolvedInput = input
-      }).pipe(
-        Effect.andThen(
-          resolveFailure === undefined
-            ? Effect.succeed(
-                new FileSystem.ReadTarget({
-                  real,
-                  resource: input.reference === undefined ? input.path : `${input.reference}:${input.path}`,
-                  size,
-                  dev: 1,
-                }),
-              )
-            : Effect.die(resolveFailure),
-        ),
-      ),
-    readResolved: () =>
-      readFailure === undefined
-        ? Effect.sync(() => {
-            reads.push({ path: RelativePath.make("README.md") })
-            return readContent
-          })
-        : Effect.die(readFailure),
-    readSampleResolved: (_target, maximumBytes) =>
-      Effect.sync(() => {
-        samples.push(maximumBytes)
-        return sample.slice(0, maximumBytes)
-      }),
-    readTextPageResolved: (_target, page = {}) =>
-      readFailure === undefined
-        ? Effect.sync(() => {
-            textPageInputs.push(page)
-            return new FileSystem.TextPage({
-              type: "text-page",
-              content: "hello",
-              mime: "text/plain",
-              offset: page.offset ?? 1,
-              truncated: true,
-              next: (page.offset ?? 1) + 1,
-            })
-          })
-        : Effect.die(readFailure),
-    readToolResolved: (_target, page = {}) => {
+    readTool: (input, page = {}) => {
       samples.push(FileSystem.READ_SAMPLE_BYTES)
       if (readFailure !== undefined) return Effect.die(readFailure)
       if (sample[0] === 0x89 && sample[1] === 0x50 && sample[2] === 0x4e && sample[3] === 0x47)
         return Effect.succeed(
           readContent.type === "binary"
-            ? new FileSystem.BinaryContent({ ...readContent, mime: "image/png" })
+            ? new FileSystem.BinaryContent({
+                type: "binary",
+                content: readContent.content,
+                encoding: "base64",
+                mime: "image/png",
+              })
             : readContent,
         )
       if (FileSystem.isBinary(real.split("/").at(-1) ?? real, sample))
@@ -125,30 +72,23 @@ const filesystem = Layer.succeed(
           })
         })
       return Effect.sync(() => {
-        reads.push({ path: RelativePath.make("README.md") })
+        reads.push(input)
         return readContent
       })
     },
     resolveRoot: () => Effect.die("unused"),
     revalidateRoot: Effect.succeed,
     list: () => Effect.die("unused"),
-    resolveList: (input = {}) =>
-      listResolveFailure === undefined
-        ? Effect.succeed(
-            new FileSystem.ListTarget({
-              absolute: `/project/${input.path ?? "."}`,
-              real: listReal,
-              directory: "/project",
-              root: "/project",
-              resource: input.path ?? ".",
-            }),
-          )
-        : Effect.die(listResolveFailure),
+    resolveList: () => Effect.die("unused"),
     listResolved: () => Effect.die("unused"),
-    listPage: () => Effect.die("unused"),
-    listPageResolved: (target, page = {}) =>
+    listPage: (input = {}) =>
       Effect.sync(() => {
-        pages.push(target)
+        pages.push(input)
+        pageInputs.push({ offset: input.offset, limit: input.limit })
+        return new FileSystem.ListPage({ entries: [], truncated: false })
+      }),
+    listPageResolved: (_target, page = {}) =>
+      Effect.sync(() => {
         pageInputs.push(page)
         return new FileSystem.ListPage({ entries: [], truncated: false })
       }),
@@ -164,7 +104,6 @@ const permission = Layer.succeed(
     assert: (input) =>
       Effect.sync(() => {
         assertions.push(input)
-        if (allow) afterApproval()
       }).pipe(Effect.andThen(allow ? Effect.void : Effect.fail(new PermissionV2.DeniedError({ rules: [] })))),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
@@ -194,12 +133,10 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/README.md"
-      afterApproval = () => {}
       readContent = new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
       sample = new TextEncoder().encode("hello")
       readFailure = undefined
       configEntries = []
-      resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
       expect(yield* registry.definitions()).toMatchObject([{ name: "read" }])
@@ -224,7 +161,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = Buffer.from(png, "base64").length
       real = "/project/pixel.png"
-      afterApproval = () => {}
       sample = Buffer.from(png, "base64")
       readContent = new FileSystem.BinaryContent({
         type: "binary",
@@ -271,7 +207,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = 8
       real = "/project/truncated.png"
-      afterApproval = () => {}
       sample = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
       readContent = new FileSystem.BinaryContent({
         type: "binary",
@@ -303,7 +238,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = Buffer.from(base64, "base64").length
       real = "/project/wide.png"
-      afterApproval = () => {}
       sample = Buffer.from(base64, "base64")
       readContent = new FileSystem.BinaryContent({
         type: "binary",
@@ -344,7 +278,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = Buffer.from(base64, "base64").length
       real = "/project/wide.png"
-      afterApproval = () => {}
       sample = Buffer.from(base64, "base64")
       readContent = new FileSystem.BinaryContent({
         type: "binary",
@@ -387,7 +320,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = Buffer.from(png, "base64").length
       real = "/project/pixel.png"
-      afterApproval = () => {}
       sample = Buffer.from(png, "base64")
       readContent = new FileSystem.BinaryContent({
         type: "binary",
@@ -425,7 +357,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = Buffer.from(png, "base64").length
       real = "/project/pixel.bin"
-      afterApproval = () => {}
       sample = Buffer.from(png, "base64")
       readContent = new FileSystem.BinaryContent({
         type: "binary",
@@ -459,7 +390,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = FileSystem.MAX_READ_BYTES + 1
       real = "/project/archive.dat"
-      afterApproval = () => {}
       sample = new Uint8Array([0, 1, 2, 3])
       readFailure = undefined
       const registry = yield* ToolRegistry.Service
@@ -490,8 +420,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/README.md"
-      afterApproval = () => {}
-      resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -512,8 +440,6 @@ describe("ReadTool", () => {
       allow = true
       resolveFailure = new Error("Path is not a file")
       listResolveFailure = undefined
-      listReal = "/project/src"
-      afterApproval = () => {}
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -538,36 +464,12 @@ describe("ReadTool", () => {
       allow = false
       resolveFailure = new Error("Path is not a file")
       listResolveFailure = undefined
-      listReal = "/project/src"
-      afterApproval = () => {}
       const registry = yield* ToolRegistry.Service
 
       expect(
         yield* registry.execute({
           sessionID,
           call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
-        }),
-      ).toEqual({ type: "error", value: "Unable to read src" })
-      expect(pages).toEqual([])
-    }),
-  )
-
-  it.effect("does not list when the directory changes after permission approval", () =>
-    Effect.gen(function* () {
-      pages.length = 0
-      allow = true
-      resolveFailure = new Error("Path is not a file")
-      listResolveFailure = undefined
-      listReal = "/project/src"
-      afterApproval = () => {
-        listReal = "/outside/src"
-      }
-      const registry = yield* ToolRegistry.Service
-
-      expect(
-        yield* registry.execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-read-directory-swapped", name: "read", input: { path: "src" } },
         }),
       ).toEqual({ type: "error", value: "Unable to read src" })
       expect(pages).toEqual([])
@@ -583,8 +485,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/README.md"
-      afterApproval = () => {}
-      resolvedInput = undefined
       const registry = yield* ToolRegistry.Service
 
       yield* registry.execute({
@@ -601,7 +501,6 @@ describe("ReadTool", () => {
       allow = true
       reads.length = 0
       real = "/project/README.md"
-      afterApproval = () => {}
       const registry = yield* ToolRegistry.Service
 
       resolveFailure = new Error("missing")
@@ -625,7 +524,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = FileSystem.MAX_READ_BYTES + 1
       real = "/project/large.txt"
-      afterApproval = () => {}
       sample = new TextEncoder().encode("hello")
       readFailure = undefined
       const registry = yield* ToolRegistry.Service
@@ -648,30 +546,6 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("preserves safe read limit errors", () =>
-    Effect.gen(function* () {
-      allow = true
-      resolveFailure = undefined
-      listResolveFailure = new Error("not a directory")
-      size = 5
-      real = "/project/changed.txt"
-      afterApproval = () => {}
-      sample = new TextEncoder().encode("hello")
-      readFailure = new FileSystem.ReadLimitError("changed.txt", FileSystem.MAX_READ_BYTES)
-      const registry = yield* ToolRegistry.Service
-
-      expect(
-        yield* registry.execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-read-limit", name: "read", input: { path: "changed.txt" } },
-        }),
-      ).toEqual({
-        type: "error",
-        value: `File exceeds ${FileSystem.MAX_READ_BYTES} byte read limit: changed.txt`,
-      })
-    }),
-  )
-
   it.effect("preserves binary errors discovered after the sample", () =>
     Effect.gen(function* () {
       allow = true
@@ -679,7 +553,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = FileSystem.MAX_READ_BYTES + 1
       real = "/project/late-binary"
-      afterApproval = () => {}
       sample = new TextEncoder().encode("text prefix")
       readFailure = new FileSystem.BinaryFileError("late-binary")
       const registry = yield* ToolRegistry.Service
@@ -700,7 +573,6 @@ describe("ReadTool", () => {
       listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/late-binary"
-      afterApproval = () => {}
       sample = new TextEncoder().encode("text prefix")
       readFailure = undefined
       readContent = new FileSystem.BinaryContent({
@@ -717,31 +589,6 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-direct-binary", name: "read", input: { path: "late-binary" } },
         }),
       ).toEqual({ type: "error", value: "Cannot read binary file: late-binary" })
-    }),
-  )
-
-  it.effect("does not read when the file changes after permission approval", () =>
-    Effect.gen(function* () {
-      assertions.length = 0
-      reads.length = 0
-      allow = true
-      resolveFailure = undefined
-      listResolveFailure = new Error("not a directory")
-      size = 5
-      real = "/project/README.md"
-      sample = new TextEncoder().encode("hello")
-      readFailure = undefined
-      afterApproval = () => {
-        real = "/outside/README.md"
-      }
-      const registry = yield* ToolRegistry.Service
-      expect(
-        yield* registry.execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-swapped", name: "read", input: { path: "README.md" } },
-        }),
-      ).toEqual({ type: "error", value: "Unable to read README.md" })
-      expect(reads).toEqual([])
     }),
   )
 })

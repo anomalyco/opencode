@@ -91,33 +91,20 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
-        execute: ({ parameters, sessionID, assertPermission }) => {
+        execute: ({ parameters, assertPermission }) => {
           const input = parameters
           return Effect.gen(function* () {
             const resolved = yield* filesystem.resolveReadPath(input)
             if (resolved.type === "directory") {
-              const { offset, limit } = input
-              const target = resolved.target
-              yield* assertPermission({ action: name, resources: [target.resource], save: ["*"] })
-              const final = yield* filesystem.resolveReadPath(input)
-              if (
-                final.type !== "directory" ||
-                final.target.resource !== target.resource ||
-                final.target.real !== target.real
-              )
-                return yield* Effect.die(new Error("Directory changed after permission approval"))
-              return yield* filesystem.listPageResolved(final.target, { offset, limit })
+              yield* assertPermission({ action: name, resources: [resolved.resource], save: ["*"] })
+              return yield* filesystem.listPage(input)
             }
-            const target = resolved.target
             yield* assertPermission({
               action: name,
-              resources: [target.resource],
+              resources: [resolved.resource],
               save: ["*"],
             })
-            const final = yield* filesystem.resolveReadPath(input)
-            if (final.type !== "file" || final.target.resource !== target.resource || final.target.real !== target.real)
-              return yield* Effect.die(new Error("File changed after permission approval"))
-            const content = yield* filesystem.readToolResolved(final.target, {
+            const content = yield* filesystem.readTool(input, {
               offset: input.offset,
               limit: input.limit,
             })
@@ -139,7 +126,7 @@ export const layer = Layer.effectDiscard(
               const photon = yield* loadPhoton
               const decoded = yield* Effect.try({
                 try: () => photon.PhotonImage.new_from_byteslice(Buffer.from(base64, "base64")),
-                catch: () => new ImageDecodeError(final.target.resource),
+                catch: () => new ImageDecodeError(resolved.resource),
               })
               try {
                 const width = decoded.get_width()
@@ -150,7 +137,7 @@ export const layer = Layer.effectDiscard(
                 if (!limits.autoResize)
                   return yield* Effect.die(
                     new ImageSizeError(
-                      final.target.resource,
+                      resolved.resource,
                       width,
                       height,
                       bytes,
@@ -199,7 +186,7 @@ export const layer = Layer.effectDiscard(
                 }
                 return yield* Effect.die(
                   new ImageSizeError(
-                    final.target.resource,
+                    resolved.resource,
                     width,
                     height,
                     bytes,
@@ -212,8 +199,7 @@ export const layer = Layer.effectDiscard(
                 decoded.free()
               }
             }
-            if (content.type === "binary")
-              return yield* Effect.die(new FileSystem.BinaryFileError(final.target.resource))
+            if (content.type === "binary") return yield* Effect.die(new FileSystem.BinaryFileError(resolved.resource))
             return content
           }).pipe(
             Effect.catchCause((cause) =>
@@ -221,7 +207,6 @@ export const layer = Layer.effectDiscard(
                 const error = Cause.squash(cause)
                 const message =
                   error instanceof FileSystem.BinaryFileError ||
-                  error instanceof FileSystem.ReadLimitError ||
                   error instanceof FileSystem.MediaIngestLimitError ||
                   error instanceof ImageDecodeError ||
                   error instanceof ImageSizeError
