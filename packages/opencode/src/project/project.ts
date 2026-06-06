@@ -10,7 +10,8 @@ import { which } from "@opencode-ai/core/util/which"
 import { Command } from "@/command"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer, Scope, Context, Stream, Types, Schema } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess } from "effect/unstable/process"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -138,7 +139,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const proc = yield* AppProcess.Service
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const spawner = yield* ChildProcessSpawner
     const projectV2 = yield* ProjectV2.Service
     const projectCopy = yield* ProjectCopy.Service
     const events = yield* EventV2Bridge.Service

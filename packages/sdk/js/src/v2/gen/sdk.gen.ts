@@ -92,6 +92,16 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
+  LocalConnectErrors,
+  LocalConnectPayload,
+  LocalConnectResponses,
+  LocalCtxSizePayload,
+  LocalDisconnectErrors,
+  LocalDisconnectResponses,
+  LocalModelSetCtxSizeErrors,
+  LocalModelSetCtxSizeResponses,
+  LocalScanErrors,
+  LocalScanResponses,
   LspStatusErrors,
   LspStatusResponses,
   McpAddErrors,
@@ -5769,6 +5779,144 @@ export class V2 extends HeyApiClient {
   }
 }
 
+export class LocalModel extends HeyApiClient {
+  /**
+   * Set model context window size
+   *
+   * Patch the ctx_size for a model on a llama-swap backend.
+   */
+  public setCtxSize<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      localCtxSizePayload?: LocalCtxSizePayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localCtxSizePayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<LocalModelSetCtxSizeResponses, LocalModelSetCtxSizeErrors, ThrowOnError>({
+      url: "/local/model/{providerID}/{modelID}/ctx-size",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Local extends HeyApiClient {
+  /**
+   * Scan for local providers
+   *
+   * Browse the local network via mDNS for llama-swap instances and probe each for its model list.
+   */
+  public scan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [{ args: [{ in: "query", key: "directory" }, { in: "query", key: "workspace" }] }],
+    )
+    return (options?.client ?? this.client).get<LocalScanResponses, LocalScanErrors, ThrowOnError>({
+      url: "/local/scan",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add local provider to config
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      localConnectPayload?: LocalConnectPayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localConnectPayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LocalConnectResponses, LocalConnectErrors, ThrowOnError>({
+      url: "/local/connect",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove local provider from config
+   */
+  public disconnect<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<LocalDisconnectResponses, LocalDisconnectErrors, ThrowOnError>({
+      url: "/local/connect/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _model?: LocalModel
+  get model(): LocalModel {
+    return (this._model ??= new LocalModel({ client: this.client }))
+  }
+}
+
 export class OpencodeClient extends HeyApiClient {
   public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
 
@@ -5910,5 +6058,10 @@ export class OpencodeClient extends HeyApiClient {
   private _v2?: V2
   get v2(): V2 {
     return (this._v2 ??= new V2({ client: this.client }))
+  }
+
+  private _local?: Local
+  get local(): Local {
+    return (this._local ??= new Local({ client: this.client }))
   }
 }

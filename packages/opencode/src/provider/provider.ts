@@ -26,7 +26,7 @@ import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
-import { FileSystem as AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
@@ -1311,7 +1311,7 @@ function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enabl
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const config = yield* Config.Service
     const auth = yield* Auth.Service
     const env = yield* Env.Service
@@ -2023,7 +2023,7 @@ export const layer = Layer.effect(
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(Env.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Auth.defaultLayer),

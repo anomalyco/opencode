@@ -6,7 +6,9 @@ import type { BriefBead } from "@/beads/beads"
 import { Mapping, type MappingFile } from "@/beads/mapping"
 import { InstanceState } from "@/effect/instance-state"
 import { which } from "@/util/which"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess } from "effect/unstable/process"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
 
@@ -27,7 +29,7 @@ const OPCODE_TO_BEADS_PRIORITY: Record<string, number> = {
 
 function execBd(args: string[]): Effect.Effect<{ code: number; text: string; stderr: string }> {
   return Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const spawner = yield* ChildProcessSpawner
     const handle = yield* spawner.spawn(
       ChildProcess.make("bd", args, {
         cwd: process.cwd(),
@@ -41,7 +43,10 @@ function execBd(args: string[]): Effect.Effect<{ code: number; text: string; std
     )
     const code = yield* handle.exitCode
     return { code: Number(code), text, stderr }
-  }).pipe(Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" }))) as Effect.Effect<
+  }).pipe(
+    Effect.provide(CrossSpawnSpawner.defaultLayer),
+    Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" })),
+  ) as Effect.Effect<
     { code: number; text: string; stderr: string },
     never,
     never

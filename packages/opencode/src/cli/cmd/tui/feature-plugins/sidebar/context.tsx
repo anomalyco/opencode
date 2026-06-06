@@ -6,6 +6,7 @@ import { DialogModelCtx } from "../../component/dialog-model-ctx"
 import { createClient, createConfig } from "@/local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
 import type { ResourceSnapshot } from "@/local/llama-skein/gen/types.gen"
+import { TextAttributes } from "@opentui/core"
 
 const id = "internal:sidebar-context"
 
@@ -218,7 +219,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         when={state().isLocal}
         fallback={
           <>
-            <text fg={theme().text} bold>Cost</text>
+            <text fg={theme().text} attributes={TextAttributes.BOLD}>Cost</text>
             <text fg={theme().textMuted}>{money.format(cost())} spent</text>
           </>
         }
@@ -226,7 +227,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         <Show when={mem()}>
           {(m) => (
             <>
-              <text fg={theme().text} bold>{m().label}</text>
+              <text fg={theme().text} attributes={TextAttributes.BOLD}>{m().label}</text>
               <Bar
                 segs={vramSegs(m(), state().percent, theme())}
                 percent={Math.round((m().usedMb / (m().totalMb || 1)) * 100)}

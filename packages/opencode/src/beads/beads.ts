@@ -1,6 +1,8 @@
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { which } from "@/util/which"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess } from "effect/unstable/process"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Stream as StreamModule } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
 
@@ -43,7 +45,7 @@ export interface BeadsClient {
 
 function execBd(args: string[]): Effect.Effect<{ code: number; text: string; stderr: string }> {
   return Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const spawner = yield* ChildProcessSpawner
     const handle = yield* spawner.spawn(
       ChildProcess.make("bd", args, {
         cwd: process.cwd(),
@@ -57,7 +59,10 @@ function execBd(args: string[]): Effect.Effect<{ code: number; text: string; std
     )
     const code = yield* handle.exitCode
     return { code: Number(code), text, stderr }
-  }).pipe(Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" }))) as Effect.Effect<
+  }).pipe(
+    Effect.provide(CrossSpawnSpawner.defaultLayer),
+    Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" })),
+  ) as Effect.Effect<
     { code: number; text: string; stderr: string },
     never,
     never
