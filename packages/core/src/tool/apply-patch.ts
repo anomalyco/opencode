@@ -41,22 +41,22 @@ const definition = Tool.make({
   toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
 })
 
-type Planned = { readonly hunk: Patch.Hunk; readonly plan: LocationMutation.Plan }
+type Planned = { readonly hunk: Patch.Hunk; readonly target: LocationMutation.Target }
 type Prepared =
   | {
       readonly type: "add"
       readonly hunk: Extract<Patch.Hunk, { readonly type: "add" }>
-      readonly plan: LocationMutation.Plan
+      readonly target: LocationMutation.Target
     }
   | {
       readonly type: "delete"
       readonly hunk: Extract<Patch.Hunk, { readonly type: "delete" }>
-      readonly plan: LocationMutation.Plan
+      readonly target: LocationMutation.Target
     }
   | {
       readonly type: "update"
       readonly hunk: Extract<Patch.Hunk, { readonly type: "update" }>
-      readonly plan: LocationMutation.Plan
+      readonly target: LocationMutation.Target
       readonly source: Uint8Array
       readonly content: string
     }
@@ -92,10 +92,10 @@ export const layer = Layer.effectDiscard(
 
             const planned: Planned[] = []
             for (const hunk of hunks)
-              planned.push({ hunk, plan: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
+              planned.push({ hunk, target: yield* mutation.resolve({ path: hunk.path, kind: "file" }) })
             const externalDirectories = new Map<string, LocationMutation.ExternalDirectoryAuthorization>()
-            for (const { plan } of planned) {
-              const external = plan.target.externalDirectory
+            for (const { target } of planned) {
+              const external = target.externalDirectory
               if (external) externalDirectories.set(external.resource, external)
             }
             for (const external of externalDirectories.values()) {
@@ -103,23 +103,21 @@ export const layer = Layer.effectDiscard(
             }
             yield* assertPermission({
               action: "edit",
-              resources: [...new Set(planned.map(({ plan }) => plan.target.resource))],
+              resources: [...new Set(planned.map(({ target }) => target.resource))],
               save: ["*"],
             })
 
             const prepared: Prepared[] = []
-            for (const { hunk, plan } of planned) {
+            for (const { hunk, target } of planned) {
               if (hunk.type === "add") {
-                const target = yield* mutation.revalidate(plan)
                 if (target.exists) return yield* fail(hunk.path, new Error("Target file already exists"))
-                prepared.push({ type: hunk.type, hunk, plan })
+                prepared.push({ type: hunk.type, hunk, target })
                 continue
               }
-              const target = yield* mutation.revalidate(plan)
               if (!target.exists || target.type !== "File")
                 return yield* fail(hunk.path, new Error("Target file does not exist"))
               if (hunk.type === "delete") {
-                prepared.push({ type: hunk.type, hunk, plan })
+                prepared.push({ type: hunk.type, hunk, target })
                 continue
               }
               const source = yield* fs.readFile(target.canonical)
@@ -128,7 +126,13 @@ export const layer = Layer.effectDiscard(
                 hunk.chunks,
                 new TextDecoder("utf-8", { ignoreBOM: true }).decode(source),
               )
-              prepared.push({ type: hunk.type, hunk, plan, source, content: Patch.joinBom(update.content, update.bom) })
+              prepared.push({
+                type: hunk.type,
+                hunk,
+                target,
+                source,
+                content: Patch.joinBom(update.content, update.bom),
+              })
             }
 
             yield* Effect.uninterruptible(
@@ -138,7 +142,7 @@ export const layer = Layer.effectDiscard(
                   Effect.gen(function* () {
                     if (change.type === "add") {
                       const result = yield* files.create({
-                        plan: change.plan,
+                        target: change.target,
                         content:
                           change.hunk.contents.endsWith("\n") || change.hunk.contents === ""
                             ? change.hunk.contents
@@ -148,12 +152,12 @@ export const layer = Layer.effectDiscard(
                       return
                     }
                     if (change.type === "delete") {
-                      const result = yield* files.remove({ plan: change.plan })
+                      const result = yield* files.remove({ target: change.target })
                       applied.push({ type: change.type, resource: result.resource, target: result.target })
                       return
                     }
                     const result = yield* files.writeIfUnchanged({
-                      plan: change.plan,
+                      target: change.target,
                       expected: change.source,
                       content: change.content,
                     })
