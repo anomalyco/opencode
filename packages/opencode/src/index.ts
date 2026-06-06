@@ -143,6 +143,7 @@ const cli = yargs(args)
     ) {
       if (err) throw err
       cli.showHelp(show)
+      if (msg) UI.error(msg)
     }
     if (err) throw err
     process.exit(1)
