@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Base dark theme ---- */
+@layer base {
+  body {
+    @apply bg-oc-bg text-oc-text antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * {
+    @apply border-oc-border;
+  }
+}
+
+/* ---- Custom scrollbar ---- */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #333;
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #555;
+  }
+}
+
+/* ---- Blinking cursor animation ---- */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: "▌";
+  animation: blink 1s step-end infinite;
+  color: #3b82f6;
+  font-weight: normal;
+}
+
+/* ---- Code block styles ---- */
+.code-block {
+  @apply bg-oc-bg rounded-md border border-oc-border overflow-hidden my-2;
+}
+
+.code-block-header {
+  @apply flex items-center justify-between px-3 py-1.5 bg-oc-surface border-b border-oc-border text-xs text-oc-muted;
+}
+
+.code-block-content {
+  @apply p-3 overflow-x-auto text-sm;
+}
+
+.code-block-content pre {
+  @apply m-0;
+}
+
+.code-block-content code {
+  @apply text-sm leading-relaxed;
+}
+
+/* Inline code */
+code:not(pre code) {
+  @apply bg-oc-surface text-oc-accent px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+/* ---- Markdown content styles ---- */
+.markdown-content {
+  @apply text-oc-text leading-relaxed;
+}
+
+.markdown-content p {
+  @apply my-2;
+}
+
+.markdown-content p:first-child {
+  @apply mt-0;
+}
+
+.markdown-content p:last-child {
+  @apply mb-0;
+}
+
+.markdown-content h1 {
+  @apply text-xl font-bold my-4 text-oc-text;
+}
+
+.markdown-content h2 {
+  @apply text-lg font-bold my-3 text-oc-text;
+}
+
+.markdown-content h3 {
+  @apply text-base font-bold my-2 text-oc-text;
+}
+
+.markdown-content ul {
+  @apply list-disc pl-6 my-2;
+}
+
+.markdown-content ol {
+  @apply list-decimal pl-6 my-2;
+}
+
+.markdown-content li {
+  @apply my-0.5;
+}
+
+.markdown-content blockquote {
+  @apply border-l-2 border-oc-accent pl-4 my-2 text-oc-muted italic;
+}
+
+.markdown-content hr {
+  @apply border-oc-border my-4;
+}
+
+.markdown-content a {
+  @apply text-oc-accent hover:underline;
+}
+
+.markdown-content table {
+  @apply w-full border-collapse my-2;
+}
+
+.markdown-content th {
+  @apply border border-oc-border px-3 py-1.5 bg-oc-surface text-left text-sm font-semibold;
+}
+
+.markdown-content td {
+  @apply border border-oc-border px-3 py-1.5 text-sm;
+}
+
+.markdown-content img {
+  @apply max-w-full rounded my-2;
+}
+
+/* ---- Pulse animation for active indicators ---- */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ---- Spinner animation ---- */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin 1.5s linear infinite;
+}
