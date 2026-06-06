@@ -1,5 +1,5 @@
-import { NodeFileSystem } from "@effect/platform-node"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Database } from "@opencode-ai/core/database/database"
@@ -35,10 +35,15 @@ const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
-const cassette = HttpRecorder.cassetteLayer("session-runner/openai-chat-streams-text", {
-  directory: path.resolve(import.meta.dir, "fixtures/recordings"),
-  mode: process.env.RECORD === "true" ? "record" : "replay",
-}).pipe(Layer.provide(NodeFileSystem.layer))
+const cassette =
+  process.env.RECORD === "true"
+    ? HttpRecorderInternal.cassetteLayer("session-runner/openai-chat-streams-text", {
+        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
+        mode: "record",
+      })
+    : HttpRecorder.http("session-runner/openai-chat-streams-text", {
+        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
+      })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
 const permission = Layer.succeed(
