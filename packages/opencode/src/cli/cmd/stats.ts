@@ -191,14 +191,19 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
               }
             }
             sessionModelUsage[modelKey].messages++
-            sessionModelUsage[modelKey].cost += message.info.cost || 0
 
-            if (message.info.tokens) {
-              sessionModelUsage[modelKey].tokens.input += message.info.tokens.input || 0
-              sessionModelUsage[modelKey].tokens.output +=
-                (message.info.tokens.output || 0) + (message.info.tokens.reasoning || 0)
-              sessionModelUsage[modelKey].tokens.cache.read += message.info.tokens.cache?.read || 0
-              sessionModelUsage[modelKey].tokens.cache.write += message.info.tokens.cache?.write || 0
+            // Derive per-model cost and tokens from the message's step-finish parts rather than
+            // message.info, which is copied verbatim onto forked sessions. Forked sessions zero out
+            // their cloned step-finish parts, so deriving from parts keeps the per-model breakdown
+            // from double-counting pre-fork usage. For non-forked sessions the sum of a message's
+            // step-finish parts equals message.info by construction (issue #31032).
+            for (const part of message.parts) {
+              if (part.type !== "step-finish") continue
+              sessionModelUsage[modelKey].cost += part.cost || 0
+              sessionModelUsage[modelKey].tokens.input += part.tokens.input || 0
+              sessionModelUsage[modelKey].tokens.output += (part.tokens.output || 0) + (part.tokens.reasoning || 0)
+              sessionModelUsage[modelKey].tokens.cache.read += part.tokens.cache?.read || 0
+              sessionModelUsage[modelKey].tokens.cache.write += part.tokens.cache?.write || 0
             }
           }
 

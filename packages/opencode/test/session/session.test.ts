@@ -236,7 +236,7 @@ describe("Session", () => {
     }),
   )
 
-  it.instance("does not carry pre-fork cost into the forked session", () =>
+  it.instance("does not carry pre-fork cost into the forked session or its step-finish parts", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
       const created = yield* Effect.acquireRelease(session.create({ title: "with-cost" }), (info) =>
@@ -273,6 +273,26 @@ describe("Session", () => {
       )
       const forkedInfo = yield* session.get(forked.id)
       expect(forkedInfo.cost).toBe(0)
+
+      // `stats --models` derives per-model cost/tokens from step-finish parts, so the cloned
+      // step-finish parts on the fork must carry zero usage to avoid double-counting pre-fork
+      // spend in the per-model breakdown (issue #31032).
+      const forkedMessages = yield* session.messages({ sessionID: forked.id })
+      const forkedStepFinish = forkedMessages.flatMap((message) =>
+        message.parts.filter((part) => part.type === "step-finish"),
+      )
+      expect(forkedStepFinish).toHaveLength(1)
+      for (const part of forkedStepFinish) {
+        expect(part.cost).toBe(0)
+        expect(part.tokens).toEqual({ input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } })
+      }
+
+      const parentMessages = yield* session.messages({ sessionID: created.id })
+      const parentStepFinish = parentMessages.flatMap((message) =>
+        message.parts.filter((part) => part.type === "step-finish"),
+      )
+      expect(parentStepFinish).toHaveLength(1)
+      expect(parentStepFinish[0]!.cost).toBe(0.005)
     }),
   )
 
