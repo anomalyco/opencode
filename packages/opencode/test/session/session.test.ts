@@ -236,6 +236,46 @@ describe("Session", () => {
     }),
   )
 
+  it.instance("does not carry pre-fork cost into the forked session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "with-cost" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      const messageID = MessageID.ascending()
+      yield* session.updateMessage({
+        id: messageID,
+        sessionID: created.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "user",
+        model: { providerID: "test", modelID: "test" },
+        tools: {},
+        mode: "",
+      } as unknown as SessionV1.Info)
+
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID,
+        sessionID: created.id,
+        type: "step-finish" as const,
+        reason: "stop",
+        cost: 0.005,
+        tokens: { total: 1500, input: 500, output: 800, reasoning: 200, cache: { read: 100, write: 50 } },
+      })
+
+      const parent = yield* session.get(created.id)
+      expect(parent.cost).toBe(0.005)
+
+      const forked = yield* Effect.acquireRelease(session.fork({ sessionID: created.id }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const forkedInfo = yield* session.get(forked.id)
+      expect(forkedInfo.cost).toBe(0)
+    }),
+  )
+
   it.instance("omits metadata when not provided", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service

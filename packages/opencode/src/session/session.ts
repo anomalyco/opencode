@@ -767,6 +767,13 @@ export const layer: Layer.Layer<
           if (p.type === "compaction" && p.tail_start_id) {
             p.tail_start_id = idMap.get(p.tail_start_id)
           }
+          // Pre-fork history is shared context, not new spend for the fork. Zero out
+          // the usage on cloned step-finish parts so the projector does not re-count
+          // the parent's cost/tokens against the forked session (issue #31032).
+          if (p.type === "step-finish") {
+            p.cost = 0
+            p.tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+          }
           yield* updatePart(p)
         }
       }
