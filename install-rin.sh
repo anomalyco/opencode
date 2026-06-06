@@ -161,9 +161,6 @@ ensure_path() {
         mkdir -p "$link_dir"
     fi
     ln -sf "$BIN_DIR/rin" "$link_dir/rin" 2>/dev/null || true
-        echo -e "${Y}▸${N} Added to ${B}$config${N}"
-        echo -e "${Y}▸${N} Run: ${B}source $config${N}"
-    fi
 }
 
 # =============================================================================
