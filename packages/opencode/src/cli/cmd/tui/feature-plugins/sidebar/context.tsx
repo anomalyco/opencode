@@ -70,8 +70,15 @@ function CtxBar(props: { percent: number; theme: any; onClick?: () => void }) {
   )
 }
 
-// VRAM/memory bar: three segments when model info available, two otherwise.
-function MemBar(props: { mem: MemSnapshot; theme: any }) {
+// VRAM/memory bar with four segments when full data is available:
+//   amber █  model weights (fixed)
+//   cyan  █  KV active — portion of KV cache populated by current tokens
+//   cyan  ░  KV headroom — KV allocated but still empty (room left in ctx window)
+//   gray  ░  free VRAM — beyond the KV allocation (use this to grow ctx_size)
+//
+// Falls back to three segments (model | full-KV | free) when token count is
+// unknown, or two segments (used | free) when no loaded_model data.
+function MemBar(props: { mem: MemSnapshot; theme: any; tokenPercent?: number | null }) {
   const m = props.mem
   const t = props.theme
   const total = m.totalMb || 1
@@ -79,12 +86,31 @@ function MemBar(props: { mem: MemSnapshot; theme: any }) {
 
   if (hasBreakdown) {
     const modelChars = Math.max(1, Math.round((m.modelMb / total) * BAR_WIDTH))
-    const kvChars = Math.max(0, Math.min(BAR_WIDTH - modelChars, Math.round((m.kvEstMb / total) * BAR_WIDTH)))
-    const freeChars = BAR_WIDTH - modelChars - kvChars
+    const remaining = BAR_WIDTH - modelChars
+    const kvTotalChars = Math.max(0, Math.min(remaining, Math.round((m.kvEstMb / total) * BAR_WIDTH)))
+
+    // Split KV into active (tokens in use) vs headroom (allocated but empty).
+    const pct = props.tokenPercent
+    if (pct !== null && pct !== undefined && kvTotalChars > 0) {
+      const kvActiveChars = Math.max(0, Math.min(kvTotalChars, Math.round((pct / 100) * kvTotalChars)))
+      const kvHeadroomChars = kvTotalChars - kvActiveChars
+      const freeChars = remaining - kvTotalChars
+      return (
+        <text>
+          <span style={{ fg: t.warning }}>{"█".repeat(modelChars)}</span>
+          <span style={{ fg: t.accent }}>{"█".repeat(kvActiveChars)}</span>
+          <span style={{ fg: t.accent }}>{"░".repeat(kvHeadroomChars)}</span>
+          <span style={{ fg: t.textMuted }}>{"░".repeat(Math.max(0, freeChars))}</span>
+        </text>
+      )
+    }
+
+    // No token percent — show full KV block as before.
+    const freeChars = remaining - kvTotalChars
     return (
       <text>
         <span style={{ fg: t.warning }}>{"█".repeat(modelChars)}</span>
-        <span style={{ fg: t.accent }}>{"▓".repeat(kvChars)}</span>
+        <span style={{ fg: t.accent }}>{"▓".repeat(kvTotalChars)}</span>
         <span style={{ fg: t.textMuted }}>{"░".repeat(Math.max(0, freeChars))}</span>
       </text>
     )
@@ -198,7 +224,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         {(m) => (
           <>
             <text fg={theme().text} bold>{m().label}</text>
-            <MemBar mem={m()} theme={theme()} />
+            <MemBar mem={m()} theme={theme()} tokenPercent={state().percent} />
             <Show
               when={m().modelMb > 0}
               fallback={
