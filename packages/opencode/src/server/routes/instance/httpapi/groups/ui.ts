@@ -6,11 +6,21 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "e
 import { InvalidRequestError, ProjectNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
+} from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const projectViewRoot = "/ui/project-view"
 const settingsRoot = "/ui/settings"
+const DirectoryScopedProjectViewQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  // Opened-project rows are keyed by directory because non-git folders share
+  // the global project id. Keep this explicit for update/close routes.
+  directory: Schema.optional(Schema.String),
+})
 
 export const UiApi = HttpApi.make("ui")
   .add(
@@ -52,7 +62,7 @@ export const UiApi = HttpApi.make("ui")
         ),
         HttpApiEndpoint.patch("updateOpenProject", `${projectViewRoot}/open-projects/:projectID`, {
           params: { projectID: ProjectV2.ID },
-          query: WorkspaceRoutingQuery,
+          query: DirectoryScopedProjectViewQuery,
           payload: UiProjectView.UpdateOpenProjectInput,
           success: described(UiProjectView.Info, "Updated UI project view"),
           error: [HttpApiError.BadRequest, ProjectNotFoundError],
@@ -65,7 +75,7 @@ export const UiApi = HttpApi.make("ui")
         ),
         HttpApiEndpoint.delete("closeProject", `${projectViewRoot}/open-projects/:projectID`, {
           params: { projectID: ProjectV2.ID },
-          query: WorkspaceRoutingQuery,
+          query: DirectoryScopedProjectViewQuery,
           success: described(UiProjectView.Info, "Updated UI project view"),
         }).annotateMerge(
           OpenApi.annotations({

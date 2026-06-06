@@ -5,6 +5,7 @@ import {
   projectViewEntryForDirectory,
   projectViewProjectDisplayName,
   projectViewResolvedEntryFromOpenResult,
+  projectViewWithLastProjectFromServer,
   pruneProjectViewDirectoryAliases,
   shouldOpenProjectViewDirectory,
   shouldTouchProjectViewDirectory,
@@ -168,6 +169,20 @@ describe("project-view helpers", () => {
         position: 0,
       }),
     ).toBeUndefined()
+  })
+
+  test("merges last-project responses without replacing opened projects", () => {
+    const current = viewWithOpenedProject({ project: project("/"), directory: "/mnt/data/current" })
+    const server = {
+      ...viewWithOpenedProject({ project: project("/"), directory: "/mnt/data/stale" }),
+      lastProject: project("/"),
+      lastProjectDirectory: "/mnt/data/current",
+    }
+
+    const merged = projectViewWithLastProjectFromServer(current, server)
+
+    expect(merged.projects).toEqual(current.projects)
+    expect(merged.lastProjectDirectory).toBe("/mnt/data/current")
   })
 })
 

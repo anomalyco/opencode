@@ -24,7 +24,7 @@ export const UiOpenProjectTable = sqliteTable(
     expanded: integer({ mode: "boolean" }).notNull(),
     ...Timestamps,
   },
-  (table) => [primaryKey({ columns: [table.view_id, table.project_id] }), unique().on(table.view_id, table.position)],
+  (table) => [primaryKey({ columns: [table.view_id, table.directory] }), unique().on(table.view_id, table.position)],
 )
 
 export const UiProjectViewLastProjectTable = sqliteTable("ui_project_view_last_project", {

@@ -20,6 +20,7 @@
 import { Effect } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
 import { TestLLMServer } from "../../lib/llm-server"
+import { mkdir } from "fs/promises"
 import path from "path"
 import { array, boolean, check, isRecord, message, object, stable } from "./assertions"
 import { controlledPtyInput, http, route } from "./dsl"
@@ -480,6 +481,30 @@ const scenarios: Scenario[] = [
           check(
             touched.body.lastProjectDirectory === ctx.directory,
             "last project sync should preserve opened directory",
+          )
+
+          const secondDirectory = path.join(ctx.directory, "second-open-project")
+          yield* Effect.promise(() => mkdir(secondDirectory, { recursive: true }))
+          const second = yield* ctx.api({
+            method: "POST",
+            path: "/ui/project-view/open-projects",
+            headers: ctx.headers(),
+            body: { directory: secondDirectory, position: 1 },
+          })
+          check(second.status === 200, "second non-git project open should succeed")
+          const entries = projectViewProjects(second.body).map(projectViewEntry)
+          check(entries.length === 2, "non-git opened projects should coexist by directory")
+          check(
+            entries.some((item) => item.entry.directory === ctx.directory),
+            "first non-git opened directory should remain open",
+          )
+          check(
+            entries.some((item) => item.entry.directory === secondDirectory),
+            "second non-git opened directory should be added",
+          )
+          check(
+            entries.every((item) => item.project.id === project.id),
+            "coexisting non-git opened projects may share the global project id",
           )
         }),
       "status",

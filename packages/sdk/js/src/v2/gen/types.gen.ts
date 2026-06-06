@@ -2715,6 +2715,7 @@ export type UiProjectView = {
 export type UiProjectViewReplaceOpenProjectsInput = {
   projects: Array<{
     projectID: string
+    directory?: string
     expanded?: boolean
   }>
 }
@@ -2727,6 +2728,7 @@ export type UiProjectViewOpenProjectInput = {
 }
 
 export type UiProjectViewUpdateOpenProjectInput = {
+  directory?: string
   expanded?: boolean
   position?: number
 }

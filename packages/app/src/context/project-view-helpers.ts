@@ -100,6 +100,18 @@ export function projectViewProjectDisplayName(
   return undefined
 }
 
+export function projectViewWithLastProjectFromServer(
+  current: UiProjectView,
+  server: UiProjectView | undefined,
+): UiProjectView {
+  if (!server) return current
+  return {
+    ...current,
+    lastProject: server.lastProject,
+    lastProjectDirectory: server.lastProjectDirectory,
+  }
+}
+
 function projectViewEntryForKey(view: UiProjectView | undefined, key: string) {
   return (view?.projects ?? []).find(
     (entry) => projectViewDirectoryKey(entry.directory ?? entry.project.worktree) === key,

@@ -41,6 +41,7 @@ export const ReplaceOpenProjectsInput = Schema.Struct({
   projects: Schema.Array(
     Schema.Struct({
       projectID: ProjectV2.ID,
+      directory: optionalOmitUndefined(Schema.String),
       expanded: optionalOmitUndefined(Schema.Boolean),
     }),
   ),
@@ -56,6 +57,7 @@ export const OpenProjectInput = Schema.Struct({
 export type OpenProjectInput = Schema.Schema.Type<typeof OpenProjectInput>
 
 export const UpdateOpenProjectInput = Schema.Struct({
+  directory: optionalOmitUndefined(Schema.String),
   expanded: optionalOmitUndefined(Schema.Boolean),
   position: optionalOmitUndefined(NonNegativeInt),
 }).annotate({ identifier: "UiProjectViewUpdateOpenProjectInput" })
@@ -91,7 +93,7 @@ export interface Interface {
     projectID: ProjectV2.ID,
     input: UpdateOpenProjectInput,
   ) => Effect.Effect<Info, ProjectNotFoundError>
-  readonly closeProject: (projectID: ProjectV2.ID) => Effect.Effect<Info>
+  readonly closeProject: (projectID: ProjectV2.ID, directory?: string) => Effect.Effect<Info>
   readonly setLastProject: (
     input: LastProjectInput,
   ) => Effect.Effect<Info, InvalidProjectRefError | ProjectNotFoundError>
@@ -102,6 +104,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ui
 type Db = Database.Interface["db"]
 type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0]
 type DatabaseLike = Db | Transaction
+type ReplaceOpenProjectsRow = ReplaceOpenProjectsInput["projects"][number]
+
+function replaceOpenProjectsInputKey(row: ReplaceOpenProjectsRow) {
+  if (row.directory) return `directory:${FSUtil.resolve(row.directory)}`
+  return `project:${row.projectID}`
+}
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -180,9 +189,15 @@ export const layer = Layer.effect(
           .select()
           .from(UiOpenProjectTable)
           .where(eq(UiOpenProjectTable.view_id, defaultViewID))
+          .orderBy(asc(UiOpenProjectTable.position))
           .all()
           .pipe(Effect.orDie)
-        const previous = new Map(oldRows.map((row) => [row.project_id, row]))
+        const previousByDirectory = new Map(oldRows.map((row) => [row.directory, row]))
+        const previousByProjectID = new Map<ProjectV2.ID, (typeof oldRows)[number]>()
+        for (const row of oldRows) {
+          if (previousByProjectID.has(row.project_id)) continue
+          previousByProjectID.set(row.project_id, row)
+        }
         const existing = yield* (rows.length === 0
           ? Effect.succeed([])
           : d
@@ -201,10 +216,11 @@ export const layer = Layer.effect(
           const missing = rows.find((row) => !existingByID.has(row.projectID))
           if (missing) return yield* new ProjectNotFoundError({ projectID: missing.projectID })
         }
-        const resolvedRows = rows.map((row) => ({
-          ...row,
-          directory: row.directory ?? previous.get(row.projectID)?.directory ?? existingByID.get(row.projectID)?.worktree ?? "",
-        }))
+        const resolvedRows = rows.map((row) => {
+          const directory = row.directory ?? previousByProjectID.get(row.projectID)?.directory ?? existingByID.get(row.projectID)?.worktree
+          if (!directory) throw new Error(`Unable to resolve opened project directory: ${row.projectID}`)
+          return { ...row, directory: FSUtil.resolve(directory) }
+        })
         yield* d
           .delete(UiOpenProjectTable)
           .where(eq(UiOpenProjectTable.view_id, defaultViewID))
@@ -221,7 +237,10 @@ export const layer = Layer.effect(
                 directory: row.directory,
                 position,
                 expanded: row.expanded,
-                time_created: previous.get(row.projectID)?.time_created ?? now,
+                time_created:
+                  previousByDirectory.get(row.directory)?.time_created ??
+                  previousByProjectID.get(row.projectID)?.time_created ??
+                  now,
                 time_updated: now,
               })),
             )
@@ -233,9 +252,12 @@ export const layer = Layer.effect(
       input: ReplaceOpenProjectsInput,
     ) {
       const duplicate = input.projects.find(
-        (row, index) => input.projects.findIndex((item) => item.projectID === row.projectID) !== index,
+        (row, index) =>
+          input.projects.findIndex((item) => replaceOpenProjectsInputKey(item) === replaceOpenProjectsInputKey(row)) !==
+          index,
       )
-      if (duplicate) return yield* new InvalidProjectRefError({ message: `Duplicate projectID: ${duplicate.projectID}` })
+      if (duplicate)
+        return yield* new InvalidProjectRefError({ message: `Duplicate opened project: ${duplicate.directory ?? duplicate.projectID}` })
       const result = yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
@@ -245,24 +267,45 @@ export const layer = Layer.effect(
               .where(eq(UiOpenProjectTable.view_id, defaultViewID))
               .all()
               .pipe(Effect.orDie)
-            const expanded = new Map(previous.map((row) => [row.project_id, row.expanded]))
+            const expandedByDirectory = new Map(previous.map((row) => [row.directory, row.expanded]))
+            const expandedByProjectID = new Map<ProjectV2.ID, boolean>()
+            for (const row of previous) {
+              if (expandedByProjectID.has(row.project_id)) continue
+              expandedByProjectID.set(row.project_id, row.expanded)
+            }
             yield* replaceRows(
               tx,
               input.projects.map((row) => ({
                 projectID: row.projectID,
-                expanded: row.expanded ?? expanded.get(row.projectID) ?? true,
+                directory: row.directory,
+                expanded:
+                  row.expanded ??
+                  (row.directory ? expandedByDirectory.get(FSUtil.resolve(row.directory)) : undefined) ??
+                  expandedByProjectID.get(row.projectID) ??
+                  true,
               })),
             )
-            const removedProjectIDs = previous
-              .filter((row) => !input.projects.some((project) => project.projectID === row.project_id))
-              .map((row) => row.project_id)
-            if (removedProjectIDs.length > 0)
+            const nextDirectories = new Set(
+              input.projects.flatMap((project) => {
+                if (project.directory) return [FSUtil.resolve(project.directory)]
+                const previousRow = previous.find((row) => row.project_id === project.projectID)
+                return previousRow ? [previousRow.directory] : []
+              }),
+            )
+            const removedRows = previous.filter((row) => {
+              if (nextDirectories.has(row.directory)) return false
+              return true
+            })
+            if (removedRows.length > 0)
               yield* tx
                 .delete(UiProjectViewLastProjectTable)
                 .where(
                   and(
                     eq(UiProjectViewLastProjectTable.view_id, defaultViewID),
-                    inArray(UiProjectViewLastProjectTable.project_id, removedProjectIDs),
+                    inArray(
+                      UiProjectViewLastProjectTable.directory,
+                      removedRows.map((row) => row.directory),
+                    ),
                   ),
                 )
                 .run()
@@ -294,8 +337,8 @@ export const layer = Layer.effect(
               .orderBy(asc(UiOpenProjectTable.position))
               .all()
               .pipe(Effect.orDie)
-            const existing = current.find((row) => row.project_id === projectID)
-            const without = current.filter((row) => row.project_id !== projectID)
+            const existing = current.find((row) => row.directory === ref.directory)
+            const without = current.filter((row) => row.directory !== ref.directory)
             const position = Math.min(input.position ?? without.length, without.length)
             const next = without.toSpliced(position, 0, {
               view_id: defaultViewID,
@@ -332,9 +375,12 @@ export const layer = Layer.effect(
               .orderBy(asc(UiOpenProjectTable.position))
               .all()
               .pipe(Effect.orDie)
-            const existing = current.find((row) => row.project_id === projectID)
+            const directory = input.directory ? FSUtil.resolve(input.directory) : undefined
+            const existing = directory
+              ? current.find((row) => row.project_id === projectID && row.directory === directory)
+              : current.find((row) => row.project_id === projectID)
             if (!existing) return yield* new ProjectNotFoundError({ projectID })
-            const without = current.filter((row) => row.project_id !== projectID)
+            const without = current.filter((row) => row.directory !== existing.directory)
             const position = input.position === undefined ? existing.position : Math.min(input.position, without.length)
             const next = without.toSpliced(position, 0, { ...existing, expanded: input.expanded ?? existing.expanded })
             yield* replaceRows(
@@ -349,7 +395,7 @@ export const layer = Layer.effect(
       return result
     })
 
-    const closeProject = Effect.fn("UiProjectView.closeProject")(function* (projectID: ProjectV2.ID) {
+    const closeProject = Effect.fn("UiProjectView.closeProject")(function* (projectID: ProjectV2.ID, directory?: string) {
       const result = yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
@@ -360,19 +406,30 @@ export const layer = Layer.effect(
               .orderBy(asc(UiOpenProjectTable.position))
               .all()
               .pipe(Effect.orDie)
+            const resolvedDirectory = directory ? FSUtil.resolve(directory) : undefined
             yield* replaceRows(
               tx,
               current
-                .filter((row) => row.project_id !== projectID)
+                .filter((row) =>
+                  resolvedDirectory
+                    ? row.project_id !== projectID || row.directory !== resolvedDirectory
+                    : row.project_id !== projectID,
+                )
                 .map((row) => ({ projectID: row.project_id, expanded: row.expanded, directory: row.directory })),
             )
             yield* tx
               .delete(UiProjectViewLastProjectTable)
               .where(
-                and(
-                  eq(UiProjectViewLastProjectTable.view_id, defaultViewID),
-                  eq(UiProjectViewLastProjectTable.project_id, projectID),
-                ),
+                resolvedDirectory
+                  ? and(
+                      eq(UiProjectViewLastProjectTable.view_id, defaultViewID),
+                      eq(UiProjectViewLastProjectTable.project_id, projectID),
+                      eq(UiProjectViewLastProjectTable.directory, resolvedDirectory),
+                    )
+                  : and(
+                      eq(UiProjectViewLastProjectTable.view_id, defaultViewID),
+                      eq(UiProjectViewLastProjectTable.project_id, projectID),
+                    ),
               )
               .run()
               .pipe(Effect.orDie)
