@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import path from "path"
 import { mkdir } from "fs/promises"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import type { DiffRenderable, Renderable, ScrollBoxRenderable } from "@opentui/core"
+import type { Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { Global } from "@opencode-ai/core/global"
 import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
@@ -68,8 +68,6 @@ test("brackets navigate diff hunks", async () => {
     await viewer.app.waitFor(() => Boolean(findRenderable(viewer.app.renderer.root, "diff-viewer-patches")))
     await viewer.app.flush()
     const scroll = findRenderable(viewer.app.renderer.root, "diff-viewer-patches") as ScrollBoxRenderable
-    const diff = findRenderable(viewer.app.renderer.root, "diff-viewer-patch-0") as DiffRenderable
-    expect(diff.getHunkRowOffsets()).toEqual([0, 4, 8])
     const initial = scroll.scrollTop
 
     expect(TuiKeybind.defaultValue("diff_next_hunk")).toBe("]")

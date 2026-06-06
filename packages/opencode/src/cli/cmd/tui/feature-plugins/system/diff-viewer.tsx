@@ -281,11 +281,14 @@ function DiffViewer(props: { api: TuiPluginApi }) {
         const node = diffNodeByFileIndex.get(entry.fileIndex)
         if (!node || node.isDestroyed) return []
         const contentY = patchScroll.scrollTop + node.y - patchScroll.viewport.y
-        return node.getHunkRowOffsets().map((row, hunkIndex) => ({
-          fileIndex: entry.fileIndex,
-          hunkIndex,
-          contentY: contentY + row,
-        }))
+        return node.diff
+          .split("\n")
+          .flatMap((line, row) => (line.startsWith("@@") ? [row] : []))
+          .map((row, hunkIndex) => ({
+            fileIndex: entry.fileIndex,
+            hunkIndex,
+            contentY: contentY + row,
+          }))
       })
       .sort((left, right) => left.contentY - right.contentY)
     const selected = selectedHunk()
