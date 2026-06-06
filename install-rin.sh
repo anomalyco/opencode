@@ -30,9 +30,10 @@ N="\033[0m"
 # =============================================================================
 banner() {
     echo -e "${R}"
-    echo -e "  █▀▀█ █ █ █  █▀▀▀ █▀▀█ █  "
-    echo -e "  █  █ █_▀_█  █    █  █ █  "
-    echo -e "  ▀▀▀▀ ▀   ▀  ▀▀▀▀ ▀▀▀▀ ▀  "
+    echo -e " ___ ___ _  _     _   ___ "
+    echo -e "| _ \\_ _| \\| |   /_\\ |_ _|"
+    echo -e "|   /| || .' |  / _ \\ | | "
+    echo -e "|_|_\\___|_|\\_| /_/ \\_\\___|"
     echo -e "${N}"
     echo -e "${G}  Rin AI${N} — Unrestricted. Unlimited. Unstoppable."
     echo ""
@@ -128,22 +129,29 @@ install_rin() {
         return
     fi
 
-    # Extract binary
-    tar -xzf /tmp/rin.tar.gz -C "$bin_dir" 2>/dev/null || {
-        # If tar.gz contains a single binary file
-        mkdir -p /tmp/rin_extract
-        tar -xzf /tmp/rin.tar.gz -C /tmp/rin_extract
-        find /tmp/rin_extract -type f -executable | head -1 | while read f; do
-            cp "$f" "$bin_dir/rin"
-        done
-        rm -rf /tmp/rin_extract
-    }
-    chmod +x "$bin_dir/rin" 2>/dev/null || true
-    rm -f /tmp/rin.tar.gz
+    # Extract binary (whatever name it has inside the tar)
+    mkdir -p /tmp/rin_extract
+    tar -xzf /tmp/rin.tar.gz -C /tmp/rin_extract 2>/dev/null
+    # Find the binary file (first executable or rin-* file)
+    local extracted
+    extracted=$(find /tmp/rin_extract -type f -executable 2>/dev/null | head -1)
+    if [ -z "$extracted" ]; then
+        extracted=$(find /tmp/rin_extract -type f 2>/dev/null | head -1)
+    fi
+    if [ -n "$extracted" ]; then
+        cp "$extracted" "$bin_dir/rin"
+        chmod +x "$bin_dir/rin"
+        echo -e "${G}✓${N} Binary extracted: $(basename "$extracted") → rin"
+    else
+        echo -e "${RED}✖ No binary found in archive${N}"
+        rm -rf /tmp/rin_extract /tmp/rin.tar.gz
+        exit 1
+    fi
+    rm -rf /tmp/rin_extract /tmp/rin.tar.gz
 
-    # Check binary works
+    # Verify binary works
     if [ -f "$bin_dir/rin" ] && $bin_dir/rin --version &>/dev/null; then
-        echo -e "${G}✓${N} Binary installed successfully"
+        echo -e "${G}✓${N} Rin binary verified ✓"
     else
         echo -e "${Y}▸${N} Binary not working, building from source..."
         install_from_source "$install_dir" "$bin_dir"
