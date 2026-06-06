@@ -8,8 +8,10 @@
 //
 // Also wires SIGINT so Ctrl-c clears a live prompt draft first, then falls
 // back to the usual two-press exit sequence through RunFooter.requestExit().
+import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
+import { Global } from "@opencode-ai/core/global"
 import { Session as SessionApi } from "@/session/session"
 import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
 import * as Locale from "@/util/locale"
@@ -135,6 +137,12 @@ function footerLabels(input: Pick<RunInput, "agent" | "model" | "variant">): Foo
   }
 }
 
+function directoryLabel(directory: string) {
+  const resolved = path.resolve(directory)
+  const display = resolved === Global.Path.home ? "~" : resolved.replace(`${Global.Path.home}${path.sep}`, `~${path.sep}`)
+  return `directory: ${display.replaceAll("\\", "/")}`
+}
+
 function queueSplash(
   renderer: Pick<CliRenderer, "writeToScrollback" | "requestRender">,
   state: SplashState,
@@ -205,6 +213,11 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           title: splash.title,
           session_id: input.sessionID,
         })
+        const labels = footerLabels({
+          agent: input.agent,
+          model: input.model,
+          variant: input.variant,
+        })
         const footerTask = import("./footer")
         const wrote = queueSplash(
           renderer,
@@ -214,17 +227,13 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
             ...meta,
             theme: theme.splash,
             showSession: splash.showSession,
+            detail: directoryLabel(input.directory),
           }),
         )
         await renderer.idle().catch(() => {})
 
         const { RunFooter } = await footerTask
 
-        const labels = footerLabels({
-          agent: input.agent,
-          model: input.model,
-          variant: input.variant,
-        })
         const footer = new RunFooter(renderer, {
           directory: input.directory,
           findFiles: input.findFiles,
