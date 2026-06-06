@@ -208,6 +208,31 @@ describe("LLMClient tools", () => {
     }),
   )
 
+  it.effect("can retain model media while redacting duplicated structured payloads", () =>
+    Effect.gen(function* () {
+      const image = Tool.make({
+        description: "Return an image.",
+        parameters: Schema.Struct({}),
+        success: Schema.Struct({ mime: Schema.String, data: Schema.String }),
+        execute: () => Effect.succeed({ mime: "image/png", data: "AAECAw==" }),
+        toStructuredOutput: (output) => ({ mime: output.mime }),
+        toModelOutput: ({ output }) => [
+          { type: "file", source: { type: "data", data: output.data }, mime: output.mime },
+        ],
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { image },
+        LLMEvent.toolCall({ id: "call_image", name: "image", input: {} }),
+      )
+
+      expect(dispatched.output).toEqual({
+        structured: { mime: "image/png" },
+        content: [{ type: "file", source: { type: "data", data: "AAECAw==" }, mime: "image/png" }],
+      })
+    }),
+  )
+
   it.effect("models canonical tool files with explicit data, url, and file sources", () =>
     Effect.sync(() => {
       const decode = Schema.decodeUnknownSync(ToolContent)

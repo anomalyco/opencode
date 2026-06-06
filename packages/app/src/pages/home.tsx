@@ -47,7 +47,7 @@ import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
 
-const HOME_SESSION_LIMIT = 15
+const HOME_SESSION_LIMIT = 64
 const HOME_ROW_LAYOUT =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
 const HOME_ROW_BASE = `${HOME_ROW_LAYOUT} border-0`
@@ -166,7 +166,11 @@ function HomeDesign() {
   const sessionLoad = useQuery(() => ({
     queryKey: ["home", "sessions", state.selection.server, ...projectDirectories()] as const,
     queryFn: async () => {
-      await Promise.all(projectDirectories().map((directory) => focusedSync().project.loadSessions(directory)))
+      await Promise.all(
+        projectDirectories().map((directory) =>
+          focusedSync().project.loadSessions(directory, { limit: HOME_SESSION_LIMIT }),
+        ),
+      )
       return null
     },
   }))
@@ -339,7 +343,7 @@ function HomeDesign() {
   }
 
   return (
-    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 bg-v2-background-bg-base self-stretch flex-1">
+    <div class="rounded-[10px] shadow-[var(--v2-elevation-raised)] m-2 min-h-0 lg:overflow-hidden bg-v2-background-bg-base self-stretch flex-1">
       <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
         <HomeProjectColumn
           projects={projects()}
@@ -365,7 +369,10 @@ function HomeDesign() {
           language={language}
         />
 
-        <section class="min-w-0 flex-1 flex flex-col pt-12" aria-label={language.t("sidebar.project.recentSessions")}>
+        <section
+          class="min-h-0 min-w-0 flex-1 flex flex-col pt-12"
+          aria-label={language.t("sidebar.project.recentSessions")}
+        >
           <HomeSessionSearch
             value={state.search}
             placeholder={language.t("home.sessions.search.placeholder")}
@@ -543,7 +550,16 @@ function HomeServerRow(props: {
         <div class="flex size-4 shrink-0 items-center justify-center">
           <ServerHealthIndicator health={props.health} />
         </div>
-        <span class={HOME_PROJECT_NAV_LABEL}>{props.server.displayName ?? new URL(props.server.http.url).host}</span>
+        <span class="flex min-w-0 items-center gap-1">
+          <span class={HOME_PROJECT_NAV_LABEL}>{props.server.displayName ?? new URL(props.server.http.url).host}</span>
+          <Show when={props.server.label}>
+            {(label) => (
+              <span class="shrink-0 rounded-[3px] border border-v2-border-border-base px-1 py-0.5 text-[9px] leading-none text-v2-text-text-muted">
+                {label()}
+              </span>
+            )}
+          </Show>
+        </span>
       </button>
       <div
         class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"

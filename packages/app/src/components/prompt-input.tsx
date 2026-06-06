@@ -52,6 +52,7 @@ import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
+import { serverAttachmentFile } from "./prompt-input/server-attachment"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -465,7 +466,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
-  const pick = () => fileInputRef?.click()
+  const pick = () => {
+    if (server.isLocal()) {
+      fileInputRef?.click()
+      return
+    }
+    void import("@/components/dialog-select-file").then((module) =>
+      dialog.show(() => (
+        <module.DialogSelectFile
+          mode="files"
+          onSelectFile={(path) => {
+            void sdk.client.v2.fs
+              .read({ path })
+              .then((response) => response.data?.data)
+              .then((data) => data && addAttachments([serverAttachmentFile(path, data)]))
+          }}
+        />
+      )),
+    )
+  }
 
   const setMode = (mode: "normal" | "shell") => {
     setStore("mode", mode)

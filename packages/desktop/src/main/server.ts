@@ -2,11 +2,9 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
-import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
+import { DEFAULT_SERVER_URL_KEY } from "./constants"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
-
-export type WslConfig = { enabled: boolean }
 
 export type HealthCheck = { wait: Promise<void> }
 
@@ -40,15 +38,6 @@ export function setDefaultServerUrl(url: string | null) {
   }
 
   getStore().delete(DEFAULT_SERVER_URL_KEY)
-}
-
-export function getWslConfig(): WslConfig {
-  const value = getStore().get(WSL_ENABLED_KEY)
-  return { enabled: typeof value === "boolean" ? value : false }
-}
-
-export function setWslConfig(config: WslConfig) {
-  getStore().set(WSL_ENABLED_KEY, config.enabled)
 }
 
 export function preferAppEnv(userDataPath: string) {

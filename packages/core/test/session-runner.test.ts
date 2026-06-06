@@ -2812,11 +2812,51 @@ describe("SessionRunnerLLM", () => {
       yield* Effect.yieldNow
 
       expect(requests).toHaveLength(2)
+      expect(requests.map((request) => request.providerOptions?.openai?.promptCacheKey)).toEqual([
+        sessionID,
+        otherSessionID,
+      ])
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       yield* Fiber.join(second)
       streamGate = undefined
       streamStarted = undefined
+    }),
+  )
+
+  it.effect("bounds external session prompt cache keys", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const externalSessionID = SessionV2.ID.fromExternal({
+        namespace: "discord",
+        key: "thread-one",
+      })
+      const otherExternalSessionID = SessionV2.ID.fromExternal({
+        namespace: "discord",
+        key: "thread-two",
+      })
+      yield* insertSession(externalSessionID)
+      yield* insertSession(otherExternalSessionID)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({
+        sessionID: externalSessionID,
+        prompt: new Prompt({ text: "Run external session" }),
+        resume: false,
+      })
+      yield* session.prompt({
+        sessionID: otherExternalSessionID,
+        prompt: new Prompt({ text: "Run other external session" }),
+        resume: false,
+      })
+
+      requests.length = 0
+      yield* session.resume(externalSessionID)
+      yield* session.resume(otherExternalSessionID)
+
+      const keys = requests.map((request) => request.providerOptions?.openai?.promptCacheKey)
+      expect(keys).toEqual([externalSessionID.slice(4), otherExternalSessionID.slice(4)])
+      expect(keys.every((key) => typeof key === "string" && key.length === 64)).toBe(true)
+      expect(keys[0]).not.toBe(keys[1])
     }),
   )
 
