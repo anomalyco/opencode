@@ -171,7 +171,12 @@ export const layer = Layer.effectDiscard(
               }
             }
 
-            const compact = compactOutput(result.stdout.toString("utf8"), result.stderr.toString("utf8"))
+            // Windows console output is typically UTF-16LE (cmd.exe / PowerShell
+            // default), while POSIX shells emit UTF-8. Decoding with the wrong
+            // encoding turns CJK / extended-ASCII output into mojibake and the
+            // AI cannot diagnose compiler errors (#30869).
+            const encoding = process.platform === "win32" ? "utf16le" : "utf8"
+            const compact = compactOutput(result.stdout.toString(encoding), result.stderr.toString(encoding))
             const notice = captureNotice(result.stdoutTruncated, result.stderrTruncated)
             const truncated = yield* resources.truncate({
               sessionID,
