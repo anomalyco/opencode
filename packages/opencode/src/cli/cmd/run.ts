@@ -1,3 +1,4 @@
+import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 // CLI entry point for `opencode run`.
 //
 // Handles three modes:
@@ -17,16 +18,12 @@ import { pathToFileURL } from "url"
 import { Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { ServerAuth } from "@/server/auth"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
-import { Agent } from "@/agent/agent"
-import { Permission } from "@/permission"
+import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
-const runtimeTask = import("./run/runtime")
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
 function pick(value: string | undefined): ModelInput | undefined {
@@ -80,6 +77,10 @@ function block(info: Inline, output?: string) {
   if (!output?.trim()) return
   UI.println(output)
   UI.empty()
+}
+
+function formatRunError(error: unknown) {
+  return FormatError(error) ?? FormatUnknownError(error)
 }
 
 async function tool(part: ToolPart) {
@@ -212,6 +213,15 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "show thinking blocks",
       })
+      .option("replay", {
+        type: "boolean",
+        default: true,
+        describe: "replay interactive session history on resume and after resize (use --no-replay to disable)",
+      })
+      .option("replay-limit", {
+        type: "number",
+        describe: "cap visible interactive replay to the newest N messages",
+      })
       .option("interactive", {
         alias: ["i"],
         type: "boolean",
@@ -229,7 +239,13 @@ export const RunCommand = effectCmd({
         describe: "enable direct interactive demo slash commands; pass one as the message to run it immediately",
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
+    const { Agent } = yield* Effect.promise(() => import("@/agent/agent"))
+    const { RuntimeFlags } = yield* Effect.promise(() => import("@/effect/runtime-flags"))
+    const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
+    const { ServerAuth } = yield* Effect.promise(() => import("@/server/auth"))
     const agentSvc = yield* Agent.Service
+    const flags = yield* RuntimeFlags.Service
+    const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -261,6 +277,17 @@ export const RunCommand = effectCmd({
         die("--interactive cannot be used with --format json")
       }
 
+      if (args["replay-limit"] !== undefined && !args.interactive) {
+        die("--replay-limit requires --interactive")
+      }
+
+      if (
+        args["replay-limit"] !== undefined &&
+        (!Number.isInteger(args["replay-limit"]) || args["replay-limit"] <= 0)
+      ) {
+        die("--replay-limit must be a positive integer")
+      }
+
       if (args.interactive && !process.stdout.isTTY) {
         die("--interactive requires a TTY stdout")
       }
@@ -272,6 +299,8 @@ export const RunCommand = effectCmd({
           dieInteractive(error)
         }
       }
+
+      const replay = args.replay || args["replay-limit"] !== undefined
 
       const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
       const directory = (() => {
@@ -333,7 +362,7 @@ export const RunCommand = effectCmd({
         process.exit(1)
       }
 
-      const rules: Permission.Ruleset = args.interactive
+      const rules: PermissionV1.Ruleset = args.interactive
         ? []
         : [
             {
@@ -424,7 +453,7 @@ export const RunCommand = effectCmd({
         const name = title()
         const result = await sdk.session.create({
           title: name,
-          permission: rules,
+          permission: [...rules],
         })
         const id = result.data?.id
         if (!id) {
@@ -441,7 +470,7 @@ export const RunCommand = effectCmd({
       async function share(sdk: OpencodeClient, sessionID: string) {
         const cfg = await sdk.config.get()
         if (!cfg.data) return
-        if (cfg.data.share !== "auto" && !Flag.OPENCODE_AUTO_SHARE && !args.share) return
+        if (cfg.data.share !== "auto" && !flags.autoShare && !args.share) return
         const res = await sdk.session.share({ sessionID }).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
@@ -467,7 +496,7 @@ export const RunCommand = effectCmd({
                 variant: input.variant,
               }
             : undefined,
-          permission: rules,
+          permission: [...rules],
         })
         const id = result.data?.id
         if (!id) {
@@ -502,7 +531,9 @@ export const RunCommand = effectCmd({
         if (!args.agent) return undefined
         const name = args.agent
 
-        const entry = await Effect.runPromise(agentSvc.get(name))
+        const entry = await Effect.runPromise(
+          agentSvc.get(name).pipe(Effect.provideService(InstanceRef, localInstance)),
+        )
         if (!entry) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
@@ -719,6 +750,7 @@ export const RunCommand = effectCmd({
               }
             }
           }
+          return error
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
         const client = args.attach ? attachSDK(cwd) : sdk
@@ -736,7 +768,7 @@ export const RunCommand = effectCmd({
           })
 
           if (args.command) {
-            await client.session.command({
+            const result = await client.session.command({
               sessionID,
               agent,
               model: args.model,
@@ -744,22 +776,30 @@ export const RunCommand = effectCmd({
               arguments: message,
               variant: args.variant,
             })
+            if (result.error) {
+              if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+              process.exitCode = 1
+            }
             return
           }
 
           const model = pick(args.model)
-          await client.session.prompt({
+          const result = await client.session.prompt({
             sessionID,
             agent,
             model,
             variant: args.variant,
             parts: [...files, { type: "text", text: message }],
           })
+          if (result.error) {
+            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+            process.exitCode = 1
+          }
           return
         }
 
         const model = pick(args.model)
-        const { runInteractiveMode } = await runtimeTask
+        const { runInteractiveMode } = await import("./run/runtime")
         try {
           await runInteractiveMode({
             sdk: client,
@@ -767,6 +807,8 @@ export const RunCommand = effectCmd({
             sessionID,
             sessionTitle: sess.title,
             resume: Boolean(args.session || args.continue) && !args.fork,
+            replay,
+            replayLimit: args["replay-limit"],
             agent,
             model,
             variant: args.variant,
@@ -774,6 +816,7 @@ export const RunCommand = effectCmd({
             initialInput,
             createSession: createFreshSession,
             thinking,
+            backgroundSubagents: flags.experimentalBackgroundSubagents,
             demo: args.demo,
           })
         } catch (error) {
@@ -784,7 +827,7 @@ export const RunCommand = effectCmd({
 
       if (args.interactive && !args.attach && !args.session && !args.continue) {
         const model = pick(args.model)
-        const { runInteractiveLocalMode } = await runtimeTask
+        const { runInteractiveLocalMode } = await import("./run/runtime")
         const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
           const { Server } = await import("@/server/server")
           const request = new Request(input, init)
@@ -802,9 +845,12 @@ export const RunCommand = effectCmd({
             agent: args.agent,
             model,
             variant: args.variant,
+            replay,
+            replayLimit: args["replay-limit"],
             files,
             initialInput,
             thinking,
+            backgroundSubagents: flags.experimentalBackgroundSubagents,
             demo: args.demo,
           })
         } catch (error) {

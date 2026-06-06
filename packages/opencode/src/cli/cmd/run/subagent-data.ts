@@ -83,6 +83,7 @@ export function sameSubagentTab(a: FooterSubagentTab | undefined, b: FooterSubag
     a.label === b.label &&
     a.description === b.description &&
     a.status === b.status &&
+    a.background === b.background &&
     a.title === b.title &&
     a.toolCalls === b.toolCalls &&
     a.lastUpdatedAt === b.lastUpdatedAt
@@ -303,6 +304,7 @@ function taskTab(part: ToolPart, sessionID: string): FooterSubagentTab {
     label,
     description,
     status,
+    background: metadata(part, "background") === true,
     title: stateTitle(part),
     toolCalls: num(metadata(part, "toolcalls")) ?? num(metadata(part, "toolCalls")) ?? num(metadata(part, "calls")),
     lastUpdatedAt: stateUpdatedAt(part),
@@ -420,9 +422,26 @@ function ensureBlockerTab(
   title: string | undefined,
   kind: "permission" | "question",
 ) {
-  if (data.tabs.has(sessionID)) {
+  const current = data.tabs.get(sessionID)
+  if (current) {
     ensureDetail(data, sessionID)
-    return false
+    if (current.status !== "running") {
+      return false
+    }
+
+    const next = {
+      ...current,
+      description: kind === "permission" ? "Pending permission" : "Pending question",
+      status: "running" as const,
+      title: current.title ?? title,
+      lastUpdatedAt: Date.now(),
+    }
+    if (sameSubagentTab(current, next)) {
+      return false
+    }
+
+    data.tabs.set(sessionID, next)
+    return true
   }
 
   data.tabs.set(sessionID, {

@@ -1,5 +1,5 @@
 import { Effect, JsonSchema, Schema } from "effect"
-import { LLMClient, modelLimits, modelRef, type ModelRefInput } from "./route/client"
+import { LLMClient } from "./route/client"
 import {
   GenerationOptions,
   HttpOptions,
@@ -9,16 +9,16 @@ import {
   LLMRequest,
   LLMResponse,
   Message,
+  type ModelInput as SchemaModelInput,
   SystemPart,
   ToolChoice,
   ToolDefinition,
   type ContentPart,
-  ToolCallPart,
   ToolResultPart,
 } from "./schema"
-import { make as makeTool, type ToolSchema } from "./tool"
+import { make as makeTool, toDefinitions, type ToolSchema } from "./tool"
 
-export type ModelInput = ModelRefInput
+export type ModelInput = SchemaModelInput
 
 export type MessageInput = Message.Input
 
@@ -42,39 +42,9 @@ export type RequestInput = Omit<
   readonly http?: HttpOptions.Input
 }
 
-export const limits = modelLimits
-
-export const text = Message.text
-
-export const system = SystemPart.make
-
-export const message = Message.make
-
-export const user = Message.user
-
-export const assistant = Message.assistant
-
-export const model = modelRef
-
-export const toolDefinition = ToolDefinition.make
-
-export const toolCall = ToolCallPart.make
-
-export const toolResult = ToolResultPart.make
-
-export const toolMessage = Message.tool
-
-export const toolChoiceName = ToolChoice.named
-
-export const toolChoice = ToolChoice.make
-
-export const generation = GenerationOptions.make
-
 export const generate = LLMClient.generate
 
 export const stream = LLMClient.stream
-
-export const stepCountIs = LLMClient.stepCountIs
 
 export const requestInput = (input: LLMRequest): RequestInput => ({
   ...LLMRequest.input(input),
@@ -95,10 +65,10 @@ export const request = (input: RequestInput) => {
   return new LLMRequest({
     ...rest,
     system: SystemPart.content(requestSystem),
-    messages: [...(messages?.map(message) ?? []), ...(prompt === undefined ? [] : [user(prompt)])],
-    tools: tools?.map(toolDefinition) ?? [],
-    toolChoice: requestToolChoice ? toolChoice(requestToolChoice) : undefined,
-    generation: requestGeneration === undefined ? undefined : generation(requestGeneration),
+    messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
+    tools: tools?.map(ToolDefinition.make) ?? [],
+    toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
+    generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
     providerOptions: requestProviderOptions,
     http: requestHttp === undefined ? undefined : HttpOptions.make(requestHttp),
   })
@@ -143,13 +113,10 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
 ) {
   const baseRequest = request(options)
   const generateRequest = LLMRequest.update(baseRequest, {
+    tools: toDefinitions({ [GENERATE_OBJECT_TOOL_NAME]: tool }),
     toolChoice: ToolChoice.named(GENERATE_OBJECT_TOOL_NAME),
   })
-  const response = yield* LLMClient.generate({
-    request: generateRequest,
-    tools: { [GENERATE_OBJECT_TOOL_NAME]: tool },
-    toolExecution: "none",
-  })
+  const response = yield* LLMClient.generate(generateRequest)
   const call = response.toolCalls.find(
     (event) => LLMEvent.is.toolCall(event) && event.name === GENERATE_OBJECT_TOOL_NAME,
   )

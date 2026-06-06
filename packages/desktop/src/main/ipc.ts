@@ -1,17 +1,12 @@
 import { execFile } from "node:child_process"
-import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
+import { BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
+import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
-import type {
-  InitStep,
-  ServerReadyData,
-  SqliteMigrationProgress,
-  TitlebarTheme,
-  WindowConfig,
-  WslConfig,
-} from "../preload/types"
+import type { FatalRendererError, ServerReadyData, TitlebarTheme, WindowConfig } from "../preload/types"
+import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { getStore } from "./store"
-import { setTitlebar, updateTitlebar } from "./windows"
+import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -20,55 +15,49 @@ const pickerFilters = (ext?: string[]) => {
 
 type Deps = {
   killSidecar: () => Promise<void> | void
-  awaitInitialization: (sendStep: (step: InitStep) => void) => Promise<ServerReadyData>
+  relaunch: () => void
+  awaitInitialization: () => Promise<ServerReadyData>
   getWindowConfig: () => Promise<WindowConfig> | WindowConfig
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
   getDefaultServerUrl: () => Promise<string | null> | string | null
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
-  getWslConfig: () => Promise<WslConfig>
-  setWslConfig: (config: WslConfig) => Promise<void> | void
   getDisplayBackend: () => Promise<string | null>
   setDisplayBackend: (backend: string | null) => Promise<void> | void
   parseMarkdown: (markdown: string) => Promise<string> | string
   checkAppExists: (appName: string) => Promise<boolean> | boolean
-  wslPath: (path: string, mode: "windows" | "linux" | null) => Promise<string>
   resolveAppPath: (appName: string) => Promise<string | null>
-  loadingWindowComplete: () => void
   runUpdater: (alertOnFail: boolean) => Promise<void> | void
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void> | void
   setBackgroundColor: (color: string) => void
+  exportDebugLogs: () => Promise<string>
+  recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
 }
 
 export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
-  ipcMain.handle("await-initialization", (event: IpcMainInvokeEvent) => {
-    const send = (step: InitStep) => event.sender.send("init-step", step)
-    return deps.awaitInitialization(send)
-  })
+  ipcMain.handle("await-initialization", () => deps.awaitInitialization())
   ipcMain.handle("get-window-config", () => deps.getWindowConfig())
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
   ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
     deps.setDefaultServerUrl(url),
   )
-  ipcMain.handle("get-wsl-config", () => deps.getWslConfig())
-  ipcMain.handle("set-wsl-config", (_event: IpcMainInvokeEvent, config: WslConfig) => deps.setWslConfig(config))
   ipcMain.handle("get-display-backend", () => deps.getDisplayBackend())
   ipcMain.handle("set-display-backend", (_event: IpcMainInvokeEvent, backend: string | null) =>
     deps.setDisplayBackend(backend),
   )
   ipcMain.handle("parse-markdown", (_event: IpcMainInvokeEvent, markdown: string) => deps.parseMarkdown(markdown))
   ipcMain.handle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
-  ipcMain.handle("wsl-path", (_event: IpcMainInvokeEvent, path: string, mode: "windows" | "linux" | null) =>
-    deps.wslPath(path, mode),
-  )
   ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
-  ipcMain.on("loading-window-complete", () => deps.loadingWindowComplete())
   ipcMain.handle("run-updater", (_event: IpcMainInvokeEvent, alertOnFail: boolean) => deps.runUpdater(alertOnFail))
   ipcMain.handle("check-update", () => deps.checkUpdate())
   ipcMain.handle("install-update", () => deps.installUpdate())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
+  ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
+  ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
+    deps.recordFatalRendererError(error),
+  )
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
       const store = getStore(name)
@@ -182,8 +171,7 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   ipcMain.on("relaunch", () => {
-    app.relaunch()
-    app.exit(0)
+    deps.relaunch()
   })
 
   ipcMain.handle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())
@@ -193,15 +181,18 @@ export function registerIpcHandlers(deps: Deps) {
     if (!win) return
     updateTitlebar(win)
   })
+  ipcMain.handle("get-pinch-zoom-enabled", () => getPinchZoomEnabled())
+  ipcMain.handle("set-pinch-zoom-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
+    setPinchZoomEnabled(enabled)
+  })
   ipcMain.handle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     setTitlebar(win, theme)
   })
-}
-
-export function sendSqliteMigrationProgress(win: BrowserWindow, progress: SqliteMigrationProgress) {
-  win.webContents.send("sqlite-migration-progress", progress)
+  ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
+    runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action)
+  })
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {

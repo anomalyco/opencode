@@ -3,22 +3,21 @@ import { Effect, Layer } from "effect"
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
-import { Instance } from "../../src/project/instance"
 import { LSP } from "@/lsp/lsp"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Bus } from "../../src/bus"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Format } from "../../src/format"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { disposeAllInstances, provideTmpdirInstance, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-write-session"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -34,8 +33,8 @@ afterEach(async () => {
 const it = testEffect(
   Layer.mergeAll(
     LSP.defaultLayer,
-    AppFileSystem.defaultLayer,
-    Bus.layer,
+    FSUtil.defaultLayer,
+    EventV2Bridge.defaultLayer,
     Format.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Truncate.defaultLayer,

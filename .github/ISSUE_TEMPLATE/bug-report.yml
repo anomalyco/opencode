@@ -1,5 +1,5 @@
 name: Bug report
-description: Report an issue that should be fixed
+description: Report an issue that should be fixed (avoid pasting giant AI generated summaries or your issue may be closed/ignored)
 body:
   - type: textarea
     id: description

@@ -17,6 +17,7 @@ import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Keymap from "../keymap"
+import { createCommandShim } from "./command-shim"
 
 type RouteEntry = {
   key: symbol
@@ -39,6 +40,7 @@ type Input = {
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
+  attention: TuiPluginApi["attention"]
 }
 
 function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
@@ -146,8 +148,13 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       count() {
         return sync.data.session.length
       },
+      get(sessionID) {
+        return sync.session.get(sessionID)
+      },
       diff(sessionID) {
-        return sync.data.session_diff[sessionID] ?? []
+        return (sync.data.session_diff[sessionID] ?? []).flatMap((item) =>
+          item.file === undefined ? [] : [{ ...item, file: item.file }],
+        )
       },
       todo(sessionID) {
         return sync.data.todo[sessionID] ?? []
@@ -200,6 +207,9 @@ export function createTuiApi(input: Input): TuiPluginApi {
   }
   return {
     app: appApi(),
+    attention: input.attention,
+    // Keep deprecated `api.command` working for v1 plugins; remove in v2.
+    command: createCommandShim(input.keymap, input.dialog, input.tuiConfig.keybinds),
     keys: {
       formatSequence(parts) {
         return Keymap.formatKeySequence(parts, input.tuiConfig)
@@ -209,6 +219,14 @@ export function createTuiApi(input: Input): TuiPluginApi {
       },
     },
     keymap: input.keymap,
+    mode: {
+      current() {
+        return Keymap.getOpencodeModeStack(input.keymap).current()
+      },
+      push(mode) {
+        return Keymap.getOpencodeModeStack(input.keymap).push(mode)
+      },
+    },
     route: {
       register(list) {
         return routeRegister(input.routes, list, input.bump)
@@ -259,7 +277,6 @@ export function createTuiApi(input: Input): TuiPluginApi {
         return (
           <Prompt
             sessionID={props.sessionID}
-            workspaceID={props.workspaceID}
             visible={props.visible}
             disabled={props.disabled}
             onSubmit={props.onSubmit}

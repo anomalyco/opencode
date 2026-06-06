@@ -1,17 +1,25 @@
-import { Pty } from "@/pty"
-import { PtyTicket } from "@/pty/ticket"
-import { PtyID } from "@/pty/schema"
+import { Pty } from "@opencode-ai/core/pty"
+import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { PtyID } from "@opencode-ai/core/pty/schema"
+import { PTY_CONNECT_TICKET_QUERY } from "@/server/shared/pty-ticket"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "../middleware/authorization"
+import { Authorization, PtyConnectAuthorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
-import { ApiNotFoundError } from "../errors"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
+} from "../middleware/workspace-routing"
+import { PtyForbiddenError, PtyNotFoundError } from "../errors"
 import { described } from "./metadata"
 
 const root = "/pty"
 export const Params = Schema.Struct({ ptyID: PtyID })
-export const CursorQuery = Schema.Struct({ cursor: Schema.optional(Schema.String) })
+export const CursorQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  cursor: Schema.optional(Schema.String),
+})
 export const ShellItem = Schema.Struct({
   path: Schema.String,
   name: Schema.String,
@@ -34,6 +42,7 @@ export const PtyApi = HttpApi.make("pty")
     HttpApiGroup.make("pty")
       .add(
         HttpApiEndpoint.get("shells", PtyPaths.shells, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(ShellItem), "List of shells"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -43,6 +52,7 @@ export const PtyApi = HttpApi.make("pty")
           }),
         ),
         HttpApiEndpoint.get("list", PtyPaths.list, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Pty.Info), "List of sessions"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -52,6 +62,7 @@ export const PtyApi = HttpApi.make("pty")
           }),
         ),
         HttpApiEndpoint.post("create", PtyPaths.create, {
+          query: WorkspaceRoutingQuery,
           payload: Pty.CreateInput,
           success: described(Pty.Info, "Created session"),
           error: HttpApiError.BadRequest,
@@ -64,8 +75,9 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.get("get", PtyPaths.get, {
           params: { ptyID: PtyID },
+          query: WorkspaceRoutingQuery,
           success: described(Pty.Info, "Session info"),
-          error: ApiNotFoundError,
+          error: PtyNotFoundError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.get",
@@ -75,9 +87,10 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.put("update", PtyPaths.update, {
           params: { ptyID: PtyID },
+          query: WorkspaceRoutingQuery,
           payload: Pty.UpdateInput,
           success: described(Pty.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [PtyNotFoundError, HttpApiError.BadRequest],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.update",
@@ -87,8 +100,9 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.delete("remove", PtyPaths.remove, {
           params: { ptyID: PtyID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Session removed"),
-          error: ApiNotFoundError,
+          error: PtyNotFoundError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.remove",
@@ -98,8 +112,9 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.post("connectToken", PtyPaths.connectToken, {
           params: { ptyID: PtyID },
+          query: WorkspaceRoutingQuery,
           success: described(PtyTicket.ConnectToken, "WebSocket connect token"),
-          error: [HttpApiError.Forbidden, ApiNotFoundError],
+          error: [PtyForbiddenError, PtyNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.connectToken",
@@ -124,6 +139,8 @@ export const PtyApi = HttpApi.make("pty")
 export const PtyConnectApi = HttpApi.make("pty-connect").add(
   HttpApiGroup.make("pty-connect")
     .add(
+      // Decode PTY connection query fields in the raw handler after checking
+      // existence, preserving the established empty-404 response ordering.
       HttpApiEndpoint.get("connect", PtyPaths.connect, {
         params: Params,
         success: described(Schema.Boolean, "Connected session"),
@@ -134,8 +151,22 @@ export const PtyConnectApi = HttpApi.make("pty-connect").add(
           summary: "Connect to PTY session",
           description:
             "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.",
+          transform: (operation) => ({
+            ...operation,
+            parameters: [
+              ...(operation.parameters ?? []),
+              ...["directory", "workspace", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
+                in: "query",
+                name,
+                schema: { type: "string" },
+              })),
+            ],
+          }),
         }),
       ),
     )
-    .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." })),
+    .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." }))
+    .middleware(InstanceContextMiddleware)
+    .middleware(WorkspaceRoutingMiddleware)
+    .middleware(PtyConnectAuthorization),
 )

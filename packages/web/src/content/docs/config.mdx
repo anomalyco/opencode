@@ -116,7 +116,7 @@ For project-specific TUI settings, add `tui.json` alongside it.
 Place project specific config in the root of your project.
 :::
 
-When OpenCode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
+When OpenCode starts up, it first looks for a config file in the current directory, then traverses up to the nearest Git directory.
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
@@ -273,11 +273,19 @@ Use a dedicated `tui.json` (or `tui.jsonc`) file for TUI-specific settings.
     "enabled": true
   },
   "diff_style": "auto",
-  "mouse": true
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4
+  }
 }
 ```
 
 Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.
+
+Set `attention.enabled` to turn on TUI desktop notifications and sounds. See [TUI attention](/docs/tui#attention).
 
 Legacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and automatically migrated when possible.
 
@@ -382,6 +390,58 @@ Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
 - `setCacheKey` - Ensure a cache key is always set for designated provider.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
+
+---
+
+### Policies
+
+Use the `experimental.policies` option to allow or deny OpenCode actions on configured resources. Currently, policies can control which providers OpenCode may use.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+[Learn more about policies here](/docs/policies).
+
+---
+
+### Image attachments
+
+OpenCode normalizes image attachments before sending them to the model. By default, images are resized when they exceed `2000x2000` pixels or `5242880` base64 bytes.
+
+Configure image attachment limits with the `attachment.image` option:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "attachment": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880
+    }
+  }
+}
+```
+
+- `auto_resize` - Resize images that exceed the configured limits before provider requests. Set to `false` to reject oversized images instead.
+- `max_width` - Maximum image width in pixels before resizing or rejection.
+- `max_height` - Maximum image height in pixels before resizing or rejection.
+- `max_base64_bytes` - Maximum encoded image payload size. This is the base64 payload size, not the original file size.
+
+If an image still cannot fit after resizing, OpenCode omits oversized tool-result images or fails oversized user-provided images with an image size error.
 
 ---
 
@@ -669,15 +729,15 @@ You can control context compaction behavior through the `compaction` option.
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - Automatically compact the session when context is full (default: `true`).
-- `prune` - Remove old tool outputs to save tokens (default: `true`).
-- `reserved` - Token buffer for compaction. Leaves enough window to avoid overflow during compaction
+- `prune` - Remove old tool outputs to save tokens (default: `false`). Set to `true` to enable pruning.
+- `reserved` - Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
 
 ---
 

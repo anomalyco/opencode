@@ -1,6 +1,7 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "@/permission"
-import { PermissionID } from "@/permission/schema"
-import { ModelID, ProviderID } from "@/provider/schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -10,23 +11,24 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
-import { Schema, SchemaGetter, Struct } from "effect"
+import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
-import { ApiNotFoundError } from "../errors"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
+} from "../middleware/workspace-routing"
+import { ApiNotFoundError, PermissionNotFoundError, SessionBusyError } from "../errors"
 import { described } from "./metadata"
+import { QueryBoolean } from "./query"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const root = "/session"
-const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
-  Schema.decodeTo(Schema.Boolean, {
-    decode: SchemaGetter.transform((value) => value === "true"),
-    encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
-  }),
-)
 export const ListQuery = Schema.Struct({
-  directory: Schema.optional(Schema.String),
+  ...WorkspaceRoutingQueryFields,
   scope: Schema.optional(Schema.Literals(["project"])),
   path: Schema.optional(Schema.String),
   roots: Schema.optional(QueryBoolean),
@@ -34,15 +36,20 @@ export const ListQuery = Schema.Struct({
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
 })
-export const DiffQuery = Schema.Struct(Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]))
+export const DiffQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  ...Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]),
+})
 export const MessagesQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
   before: Schema.optional(Schema.String),
 })
 export const StatusMap = Schema.Record(Schema.String, SessionStatus.Info)
 export const UpdatePayload = Schema.Struct({
   title: Schema.optional(Schema.String),
-  permission: Schema.optional(Permission.Ruleset),
+  metadata: Schema.optional(Session.Metadata),
+  permission: Schema.optional(PermissionV1.Ruleset),
   time: Schema.optional(
     Schema.Struct({
       archived: Schema.optional(Session.ArchivedTimestamp),
@@ -51,13 +58,13 @@ export const UpdatePayload = Schema.Struct({
 })
 export const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"]))
 export const InitPayload = Schema.Struct({
-  modelID: ModelID,
-  providerID: ProviderID,
+  modelID: ModelV2.ID,
+  providerID: ProviderV2.ID,
   messageID: MessageID,
 })
 export const SummarizePayload = Schema.Struct({
-  providerID: ProviderID,
-  modelID: ModelID,
+  providerID: ProviderV2.ID,
+  modelID: ModelV2.ID,
   auto: Schema.optional(Schema.Boolean),
 })
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))
@@ -65,7 +72,7 @@ export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInp
 export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
 export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
 export const PermissionResponsePayload = Schema.Struct({
-  response: Permission.Reply,
+  response: PermissionV1.Reply,
 })
 
 export const SessionPaths = {
@@ -112,6 +119,7 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.get("status", SessionPaths.status, {
+          query: WorkspaceRoutingQuery,
           success: described(StatusMap, "Get session status"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
@@ -123,6 +131,7 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("get", SessionPaths.get, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           success: described(Session.Info, "Get session"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
@@ -134,8 +143,9 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("children", SessionPaths.children, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Session.Info), "List of children"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.children",
@@ -145,8 +155,9 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("todo", SessionPaths.todo, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Todo.Info), "Todo list"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.todo",
@@ -168,7 +179,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("messages", SessionPaths.messages, {
           params: { sessionID: SessionID },
           query: MessagesQuery,
-          success: described(Schema.Array(MessageV2.WithParts), "List of messages"),
+          success: described(Schema.Array(SessionV1.WithParts), "List of messages"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -179,7 +190,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("message", SessionPaths.message, {
           params: { sessionID: SessionID, messageID: MessageID },
-          success: described(MessageV2.WithParts, "Message"),
+          query: WorkspaceRoutingQuery,
+          success: described(SessionV1.WithParts, "Message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -189,6 +201,7 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.post("create", SessionPaths.create, {
+          query: WorkspaceRoutingQuery,
           payload: [HttpApiSchema.NoContent, Session.CreateInput],
           success: described(Session.Info, "Successfully created session"),
           error: HttpApiError.BadRequest,
@@ -201,6 +214,7 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("remove", SessionPaths.remove, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Successfully deleted session"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
@@ -212,6 +226,7 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.patch("update", SessionPaths.update, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           payload: UpdatePayload,
           success: described(Session.Info, "Successfully updated session"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
@@ -224,9 +239,10 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("fork", SessionPaths.fork, {
           params: { sessionID: SessionID },
-          payload: ForkPayload,
+          query: WorkspaceRoutingQuery,
+          payload: [HttpApiSchema.NoContent, ForkPayload],
           success: described(Session.Info, "200"),
-          error: ApiNotFoundError,
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.fork",
@@ -236,8 +252,9 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("abort", SessionPaths.abort, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Aborted session"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.abort",
@@ -247,9 +264,10 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("init", SessionPaths.init, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           payload: InitPayload,
           success: described(Schema.Boolean, "200"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.init",
@@ -260,8 +278,9 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("share", SessionPaths.share, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           success: described(Session.Info, "Successfully shared session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.InternalServerError, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.share",
@@ -271,8 +290,9 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("unshare", SessionPaths.share, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           success: described(Session.Info, "Successfully unshared session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.InternalServerError, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.unshare",
@@ -282,6 +302,7 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("summarize", SessionPaths.summarize, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           payload: SummarizePayload,
           success: described(Schema.Boolean, "Summarized session"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
@@ -294,9 +315,10 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("prompt", SessionPaths.prompt, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           payload: PromptPayload,
-          success: described(MessageV2.WithParts, "Created message"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          success: described(SessionV1.WithParts, "Created message"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.prompt",
@@ -306,9 +328,10 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("promptAsync", SessionPaths.promptAsync, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           payload: PromptPayload,
           success: described(HttpApiSchema.NoContent, "Prompt accepted"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.prompt_async",
@@ -319,9 +342,10 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("command", SessionPaths.command, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           payload: CommandPayload,
-          success: described(MessageV2.WithParts, "Created message"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          success: described(SessionV1.WithParts, "Created message"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.command",
@@ -331,9 +355,10 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("shell", SessionPaths.shell, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           payload: ShellPayload,
-          success: described(MessageV2.WithParts, "Created message"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          success: described(SessionV1.WithParts, "Created message"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.shell",
@@ -343,9 +368,10 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("revert", SessionPaths.revert, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           payload: RevertPayload,
           success: described(Session.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.revert",
@@ -356,8 +382,9 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("unrevert", SessionPaths.unrevert, {
           params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
           success: described(Session.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.unrevert",
@@ -366,10 +393,11 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.post("permissionRespond", SessionPaths.permissions, {
-          params: { sessionID: SessionID, permissionID: PermissionID },
+          params: { sessionID: SessionID, permissionID: PermissionV1.ID },
+          query: WorkspaceRoutingQuery,
           payload: PermissionResponsePayload,
           success: described(Schema.Boolean, "Permission processed successfully"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, PermissionNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.respond",
@@ -380,8 +408,9 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("deleteMessage", SessionPaths.deleteMessage, {
           params: { sessionID: SessionID, messageID: MessageID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Successfully deleted message"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.deleteMessage",
@@ -392,8 +421,9 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("deletePart", SessionPaths.deletePart, {
           params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Successfully deleted part"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "part.delete",
@@ -402,9 +432,10 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.patch("updatePart", SessionPaths.updatePart, {
           params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
-          payload: MessageV2.Part,
-          success: described(MessageV2.Part, "Successfully updated part"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          query: WorkspaceRoutingQuery,
+          payload: SessionV1.Part,
+          success: described(SessionV1.Part, "Successfully updated part"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "part.update",

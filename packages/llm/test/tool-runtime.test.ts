@@ -1,21 +1,32 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMRequest, LLMResponse } from "../src"
-import { LLMClient } from "../src/route"
+import {
+  GenerationOptions,
+  LLM,
+  LLMEvent,
+  LLMRequest,
+  LLMResponse,
+  ToolChoice,
+  ToolContent,
+  ToolOutput,
+  toolFileSourceFromUri,
+  toDefinitions,
+} from "../src"
+import { Auth, LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
-import { tool, ToolFailure } from "../src/tool"
+import * as OpenAIResponses from "../src/protocols/openai-responses"
+import { Tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
+import { ToolRuntime } from "../src/tool-runtime"
 import { it } from "./lib/effect"
 import * as TestToolRuntime from "./lib/tool-runtime"
 import { dynamicResponse, scriptedResponses } from "./lib/http"
 import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
 
-const model = OpenAIChat.model({
-  id: "gpt-4o-mini",
-  baseURL: "https://api.openai.test/v1/",
-  headers: { authorization: "Bearer test" },
-})
+const model = OpenAIChat.route
+  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+  .model({ id: "gpt-4o-mini" })
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
@@ -24,19 +35,21 @@ const baseRequest = LLM.request({
   model,
   prompt: "Use the tool.",
 })
+const weatherFailureCause = new Error("weather lookup denied")
 
-const get_weather = tool({
+const get_weather = Tool.make({
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.gen(function* () {
-      if (city === "FAIL") return yield* new ToolFailure({ message: `Weather lookup failed for ${city}` })
+      if (city === "FAIL")
+        return yield* new ToolFailure({ message: `Weather lookup failed for ${city}`, error: weatherFailureCause })
       return { temperature: 22, condition: "sunny" }
     }),
 })
 
-const schema_only_weather = tool({
+const schema_only_weather = Tool.make({
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -78,29 +91,33 @@ describe("LLMClient tools", () => {
 
       yield* TestToolRuntime.runTools({
         request: LLMRequest.update(baseRequest, {
-          generation: LLM.generation({ maxTokens: 50 }),
-          toolChoice: LLM.toolChoice("auto"),
+          generation: GenerationOptions.make({ maxTokens: 50 }),
+          toolChoice: ToolChoice.make("auto"),
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
-      const second = bodies[1] as {
-        readonly messages?: ReadonlyArray<Record<string, unknown>>
-        readonly tools?: ReadonlyArray<unknown>
-        readonly tool_choice?: unknown
-        readonly max_tokens?: unknown
-      }
+      const second = bodies[1]
+      if (!second || typeof second !== "object") throw new Error("Expected second request body")
+      const messages = Reflect.get(second, "messages")
+      const tools = Reflect.get(second, "tools")
 
-      expect(second.max_tokens).toBe(50)
-      expect(second.tool_choice).toBe("auto")
-      expect(second.tools).toHaveLength(1)
-      expect(second.messages?.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
-      expect(second.messages?.[1]).toMatchObject({
+      expect(Reflect.get(second, "max_tokens")).toBe(50)
+      expect(Reflect.get(second, "tool_choice")).toBe("auto")
+      expect(tools).toHaveLength(1)
+      expect(
+        Array.isArray(messages)
+          ? messages.map((message) =>
+              message && typeof message === "object" ? Reflect.get(message, "role") : undefined,
+            )
+          : undefined,
+      ).toEqual(["user", "assistant", "tool"])
+      expect(Array.isArray(messages) ? messages[1] : undefined).toMatchObject({
         role: "assistant",
         content: null,
         tool_calls: [{ id: "call_1", type: "function", function: { name: "get_weather" } }],
       })
-      expect(second.messages?.[2]).toMatchObject({
+      expect(Array.isArray(messages) ? messages[2] : undefined).toMatchObject({
         role: "tool",
         tool_call_id: "call_1",
         content: '{"temperature":22,"condition":"sunny"}',
@@ -129,8 +146,269 @@ describe("LLMClient tools", () => {
         name: "get_weather",
         result: { type: "json", value: { temperature: 22, condition: "sunny" } },
       })
-      expect(events.at(-1)?.type).toBe("request-finish")
+      expect(events.at(-1)?.type).toBe("finish")
       expect(LLMResponse.text({ events })).toBe("It's sunny in Paris.")
+    }),
+  )
+
+  it.effect("projects encoded typed tool success into canonical model content", () =>
+    Effect.gen(function* () {
+      const calls: unknown[] = []
+      const projected = Tool.make({
+        description: "Project an encoded success.",
+        parameters: Schema.Struct({ prefix: Schema.String }),
+        success: Schema.Struct({ count: Schema.NumberFromString }),
+        execute: () => Effect.succeed({ count: 2 }),
+        toModelOutput: (input) => {
+          calls.push(input)
+          return [{ type: "text", text: `${input.parameters.prefix}:${input.output.count}` }]
+        },
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { projected },
+        LLMEvent.toolCall({ id: "call_projected", name: "projected", input: { prefix: "count" } }),
+      )
+
+      expect(calls).toEqual([{ callID: "call_projected", parameters: { prefix: "count" }, output: { count: "2" } }])
+      expect(dispatched.result).toEqual({ type: "text", value: "count:2" })
+      expect(dispatched.output).toEqual({ structured: { count: "2" }, content: [{ type: "text", text: "count:2" }] })
+      expect(dispatched.events).toEqual([
+        LLMEvent.toolResult({
+          id: "call_projected",
+          name: "projected",
+          result: { type: "text", value: "count:2" },
+          output: { structured: { count: "2" }, content: [{ type: "text", text: "count:2" }] },
+        }),
+      ])
+    }),
+  )
+
+  it.effect("uses the narrow default projection for encoded typed success", () =>
+    Effect.gen(function* () {
+      const text = Tool.make({
+        description: "Return text.",
+        parameters: Schema.Struct({}),
+        success: Schema.String,
+        execute: () => Effect.succeed("hello"),
+      })
+      const json = Tool.make({
+        description: "Return JSON.",
+        parameters: Schema.Struct({}),
+        success: Schema.Struct({ ok: Schema.Boolean }),
+        execute: () => Effect.succeed({ ok: true }),
+      })
+
+      expect(
+        (yield* ToolRuntime.dispatch({ text }, LLMEvent.toolCall({ id: "call_text", name: "text", input: {} }))).output,
+      ).toEqual({ structured: "hello", content: [{ type: "text", text: "hello" }] })
+      expect(
+        (yield* ToolRuntime.dispatch({ json }, LLMEvent.toolCall({ id: "call_json", name: "json", input: {} }))).output,
+      ).toEqual({ structured: { ok: true }, content: [] })
+    }),
+  )
+
+  it.effect("can retain model media while redacting duplicated structured payloads", () =>
+    Effect.gen(function* () {
+      const image = Tool.make({
+        description: "Return an image.",
+        parameters: Schema.Struct({}),
+        success: Schema.Struct({ mime: Schema.String, data: Schema.String }),
+        execute: () => Effect.succeed({ mime: "image/png", data: "AAECAw==" }),
+        toStructuredOutput: (output) => ({ mime: output.mime }),
+        toModelOutput: ({ output }) => [
+          { type: "file", source: { type: "data", data: output.data }, mime: output.mime },
+        ],
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { image },
+        LLMEvent.toolCall({ id: "call_image", name: "image", input: {} }),
+      )
+
+      expect(dispatched.output).toEqual({
+        structured: { mime: "image/png" },
+        content: [{ type: "file", source: { type: "data", data: "AAECAw==" }, mime: "image/png" }],
+      })
+    }),
+  )
+
+  it.effect("models canonical tool files with explicit data, url, and file sources", () =>
+    Effect.sync(() => {
+      const decode = Schema.decodeUnknownSync(ToolContent)
+
+      expect(decode({ type: "file", source: { type: "data", data: "AAAA" }, mime: "image/png" })).toEqual({
+        type: "file",
+        source: { type: "data", data: "AAAA" },
+        mime: "image/png",
+      })
+      expect(
+        decode({ type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" }),
+      ).toEqual({
+        type: "file",
+        source: { type: "url", url: "https://example.test/image.png" },
+        mime: "image/png",
+      })
+      expect(
+        decode({ type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" }),
+      ).toEqual({
+        type: "file",
+        source: { type: "file", uri: "file:///tmp/image.png" },
+        mime: "image/png",
+      })
+    }),
+  )
+
+  it.effect("converts canonical data files deliberately and rejects unmaterialized sources", () =>
+    Effect.sync(() => {
+      expect(
+        ToolOutput.toResultValue(
+          ToolOutput.make({}, [{ type: "file", source: { type: "data", data: "AAAA" }, mime: "image/png" }]),
+        ),
+      ).toEqual({ type: "content", value: [{ type: "media", mediaType: "image/png", data: "AAAA" }] })
+      expect(
+        ToolOutput.toResultValue(
+          ToolOutput.make({}, [
+            { type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" },
+          ]),
+        ),
+      ).toEqual({
+        type: "error",
+        value: 'Tool file source "url" must be materialized to inline data before provider conversion',
+      })
+      expect(
+        ToolOutput.toResultValue(
+          ToolOutput.make({}, [
+            { type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" },
+          ]),
+        ),
+      ).toEqual({
+        type: "error",
+        value: 'Tool file source "file" must be materialized to inline data before provider conversion',
+      })
+      expect(toolFileSourceFromUri("data:image/png;base64,AAAA")).toEqual({ type: "data", data: "AAAA" })
+      expect(toolFileSourceFromUri("https://example.test/image.png")).toEqual({
+        type: "url",
+        url: "https://example.test/image.png",
+      })
+      expect(toolFileSourceFromUri("file:///tmp/image.png")).toEqual({ type: "file", uri: "file:///tmp/image.png" })
+      expect(() => toolFileSourceFromUri("opaque-value")).toThrow("Unsupported tool file URI")
+      expect(() =>
+        ToolOutput.fromResultValue({
+          type: "content",
+          value: [{ type: "media", mediaType: "image/png", data: "https://example.test/image.png" }],
+        }),
+      ).toThrow("Legacy tool-result media must contain raw base64 bytes or a base64 data URI")
+    }),
+  )
+
+  it.effect("settles projected url files as materialization errors", () =>
+    Effect.gen(function* () {
+      const remote = Tool.make({
+        description: "Return a remote file.",
+        parameters: Schema.Struct({}),
+        success: Schema.Struct({ ok: Schema.Boolean }),
+        execute: () => Effect.succeed({ ok: true }),
+        toModelOutput: () => [
+          { type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" },
+        ],
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { remote },
+        LLMEvent.toolCall({ id: "call_remote", name: "remote", input: {} }),
+      )
+
+      expect(dispatched.output).toBeUndefined()
+      expect(dispatched.result).toEqual({
+        type: "error",
+        value: 'Tool file source "url" must be materialized to inline data before provider conversion',
+      })
+      expect(dispatched.events.map((event) => event.type)).toEqual(["tool-error", "tool-result"])
+    }),
+  )
+
+  it.effect("derives typed output schemas and preserves dynamic output schemas", () =>
+    Effect.sync(() => {
+      const [typed] = toDefinitions({ get_weather })
+      const schema = { type: "object", properties: { result: { type: "string" } } } as const
+      const [dynamic] = toDefinitions({
+        dynamic: Tool.make({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
+      })
+
+      expect(typed?.outputSchema).toMatchObject({
+        type: "object",
+        properties: { condition: { type: "string" } },
+        required: ["temperature", "condition"],
+        additionalProperties: false,
+      })
+      expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
+      expect(dynamic?.outputSchema).toEqual(schema)
+    }),
+  )
+
+  it.effect("preserves content tool results from dynamic tools", () =>
+    Effect.gen(function* () {
+      const screenshot = Tool.make({
+        description: "Capture a screenshot.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () =>
+          Effect.succeed({
+            type: "content" as const,
+            value: [
+              { type: "text" as const, text: "Screenshot captured." },
+              { type: "media" as const, mediaType: "image/png", data: "AAAA" },
+            ],
+          }),
+      })
+
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { screenshot }, maxSteps: 1 }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([sseEvents(toolCallChunk("call_1", "screenshot", "{}"), finishChunk("tool_calls"))]),
+          ),
+        ),
+      )
+
+      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
+        type: "tool-result",
+        id: "call_1",
+        name: "screenshot",
+        result: {
+          type: "content",
+          value: [
+            { type: "text", text: "Screenshot captured." },
+            { type: "media", mediaType: "image/png", data: "AAAA" },
+          ],
+        },
+      })
+    }),
+  )
+
+  it.effect("does not mistake dynamic tool output fields for dispatcher state", () =>
+    Effect.gen(function* () {
+      const callerOwned = { type: "json" as const, value: { ok: true }, events: ["caller-owned"] }
+      const eventful = Tool.make({
+        description: "Return an events field.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () => Effect.succeed(callerOwned),
+      })
+
+      const dispatched = yield* ToolRuntime.dispatch(
+        { eventful },
+        LLMEvent.toolCall({ id: "call_1", name: "eventful", input: {} }),
+      )
+
+      expect(dispatched.result).toEqual(callerOwned)
+      expect(dispatched.events).toEqual([
+        LLMEvent.toolResult({
+          id: "call_1",
+          name: "eventful",
+          result: callerOwned,
+          output: { structured: { ok: true }, content: [] },
+        }),
+      ])
     }),
   )
 
@@ -142,14 +420,43 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* LLMClient.stream({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather }, maxSteps: 1 }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
       )
 
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
       expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
+    }),
+  )
+
+  it.effect("passes tool call context to execute", () =>
+    Effect.gen(function* () {
+      let context: ToolExecuteContext | undefined
+      const contextual = Tool.make({
+        description: "Capture tool context.",
+        parameters: Schema.Struct({ value: Schema.String }),
+        success: Schema.Struct({ ok: Schema.Boolean }),
+        execute: (_params, ctx) =>
+          Effect.sync(() => {
+            context = ctx
+            return { ok: true }
+          }),
+      })
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { contextual } }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([
+              sseEvents(toolCallChunk("call_ctx", "contextual", '{"value":"x"}'), finishChunk("tool_calls")),
+            ]),
+          ),
+        ),
+      )
+
+      expect(events.some(LLMEvent.is.toolResult)).toBe(true)
+      expect(context).toEqual({ id: "call_ctx", name: "contextual" })
     }),
   )
 
@@ -160,11 +467,9 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* LLMClient.stream({
-          request: baseRequest,
-          tools: { get_weather: schema_only_weather },
-          toolExecution: "none",
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* LLMClient.stream(
+          LLMRequest.update(baseRequest, { tools: toDefinitions({ get_weather: schema_only_weather }) }),
+        ).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
       expect(events.find(LLMEvent.is.toolCall)).toMatchObject({ type: "tool-call", id: "call_1" })
@@ -213,7 +518,9 @@ describe("LLMClient tools", () => {
 
       yield* TestToolRuntime.runTools({
         request: LLM.updateRequest(baseRequest, {
-          model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+          model: AnthropicMessages.route
+            .with({ auth: Auth.header("x-api-key", "test") })
+            .model({ id: "claude-sonnet-4-5" }),
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
@@ -229,6 +536,80 @@ describe("LLMClient tools", () => {
             ],
           },
           { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1" }] },
+        ],
+      })
+    }),
+  )
+
+  it.effect("replays encrypted OpenAI reasoning items with tool outputs", () =>
+    Effect.gen(function* () {
+      const bodies: unknown[] = []
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() => {
+          bodies.push(decodeJson(input.text))
+          return input.respond(
+            bodies.length === 1
+              ? sseEvents(
+                  {
+                    type: "response.output_item.added",
+                    item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+                  },
+                  { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+                  { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+                  {
+                    type: "response.output_item.done",
+                    item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
+                  },
+                  {
+                    type: "response.output_item.added",
+                    item: {
+                      type: "function_call",
+                      id: "item_1",
+                      call_id: "call_1",
+                      name: "get_weather",
+                      arguments: "",
+                    },
+                  },
+                  { type: "response.function_call_arguments.delta", item_id: "item_1", delta: '{"city":"Paris"}' },
+                  {
+                    type: "response.output_item.done",
+                    item: {
+                      type: "function_call",
+                      id: "item_1",
+                      call_id: "call_1",
+                      name: "get_weather",
+                      arguments: '{"city":"Paris"}',
+                    },
+                  },
+                  { type: "response.completed", response: {} },
+                )
+              : sseEvents(
+                  { type: "response.output_text.delta", item_id: "msg_1", delta: "Done." },
+                  { type: "response.completed", response: {} },
+                ),
+            { headers: { "content-type": "text/event-stream" } },
+          )
+        }),
+      )
+
+      yield* TestToolRuntime.runTools({
+        request: LLM.request({
+          model: OpenAIResponses.route
+            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+            .model({ id: "gpt-5.5" }),
+          prompt: "Use the tool.",
+          providerOptions: { openai: { store: false, include: ["reasoning.encrypted_content"] } },
+        }),
+        tools: { get_weather },
+      }).pipe(Stream.runCollect, Effect.provide(layer))
+
+      expect(bodies[1]).toMatchObject({
+        include: ["reasoning.encrypted_content"],
+        input: [
+          { role: "user" },
+          { type: "reasoning", id: "rs_1", summary: [], encrypted_content: "encrypted-state" },
+          { type: "function_call", call_id: "call_1", name: "get_weather" },
+          { type: "function_call_output", call_id: "call_1" },
         ],
       })
     }),
@@ -297,6 +678,7 @@ describe("LLMClient tools", () => {
       const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
       expect(toolError?.message).toBe("Weather lookup failed for FAIL")
+      expect(toolError?.error).toBe(weatherFailureCause)
     }),
   )
 
@@ -313,7 +695,14 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
+      expect(events.map((event) => event.type)).toEqual([
+        "step-start",
+        "text-start",
+        "text-delta",
+        "text-end",
+        "step-finish",
+        "finish",
+      ])
       expect(LLMResponse.text({ events })).toBe("Done.")
     }),
   )
@@ -336,27 +725,9 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(2)
-    }),
-  )
-
-  it.effect("stops follow-up when stopWhen returns true after the first step", () =>
-    Effect.gen(function* () {
-      const layer = scriptedResponses([
-        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
-        sseEvents(deltaChunk({ role: "assistant", content: "Should not run." }), finishChunk("stop")),
-      ])
-
-      const events = Array.from(
-        yield* TestToolRuntime.runTools({
-          request: baseRequest,
-          tools: { get_weather },
-          stopWhen: (state) => state.step >= 0,
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
-      )
-
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
-      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.stepStart).map((event) => event.index)).toEqual([0, 1])
+      expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.index)).toEqual([0, 1])
     }),
   )
 
@@ -402,7 +773,9 @@ describe("LLMClient tools", () => {
       const events = Array.from(
         yield* TestToolRuntime.runTools({
           request: LLM.updateRequest(baseRequest, {
-            model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+            model: AnthropicMessages.route
+              .with({ auth: Auth.header("x-api-key", "test") })
+              .model({ id: "claude-sonnet-4-5" }),
           }),
           tools: {},
         }).pipe(Stream.runCollect, Effect.provide(layer)),

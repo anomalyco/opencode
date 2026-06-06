@@ -1,33 +1,31 @@
-import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, Stream } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
-import z from "zod"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
-import { NonNegativeInt, withStatics } from "@/util/schema"
-import { zod } from "@/util/effect-zod"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
   files: Schema.mutable(Schema.Array(Schema.String)),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type Patch = typeof Patch.Type
 
 export const FileDiff = Schema.Struct({
-  file: Schema.String,
-  patch: Schema.String,
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
+  // Optional because legacy/imported `summary_diffs` on disk may omit
+  // file details and patch text. Required Schema rejected the whole
+  // session response and broke session loading on Desktop.
+  file: Schema.optional(Schema.String),
+  patch: Schema.optional(Schema.String),
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
-})
-  .annotate({ identifier: "SnapshotFileDiff" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SnapshotFileDiff" })
 export type FileDiff = typeof FileDiff.Type
 
 const log = Log.create({ service: "snapshot" })
@@ -57,15 +55,11 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  AppFileSystem.Service | ChildProcessSpawner.ChildProcessSpawner | Config.Service
-> = Layer.effect(
+export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | Config.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const fs = yield* FSUtil.Service
+    const appProcess = yield* AppProcess.Service
     const config = yield* Config.Service
     const locks = new Map<string, Semaphore.Semaphore>()
 
@@ -89,29 +83,20 @@ export const layer: Layer.Layer<
 
         const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
-        const enc = new TextEncoder()
-        const feed = (list: string[]) => Stream.make(enc.encode(list.join("\0") + "\0"))
+        const feed = (list: string[]) => list.join("\0") + "\0"
 
         const git = Effect.fnUntraced(
-          function* (
-            cmd: string[],
-            opts?: { cwd?: string; env?: Record<string, string>; stdin?: ChildProcess.CommandInput },
-          ) {
-            const proc = ChildProcess.make("git", cmd, {
-              cwd: opts?.cwd,
-              env: opts?.env,
-              extendEnv: true,
-              stdin: opts?.stdin,
-            })
-            const handle = yield* spawner.spawn(proc)
-            const [text, stderr] = yield* Effect.all(
-              [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
-              { concurrency: 2 },
+          function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
+            const result = yield* appProcess.run(
+              ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }),
+              { stdin: opts?.stdin },
             )
-            const code = yield* handle.exitCode
-            return { code, text, stderr } satisfies GitResult
+            return {
+              code: ChildProcessSpawner.ExitCode(result.exitCode),
+              text: result.stdout.toString("utf8"),
+              stderr: result.stderr.toString("utf8"),
+            } satisfies GitResult
           },
-          Effect.scoped,
           Effect.catch((err) =>
             Effect.succeed({
               code: ChildProcessSpawner.ExitCode(1),
@@ -567,24 +552,21 @@ export const layer: Layer.Layer<
                   })
                   if (!refs.length) return new Map<string, { before: string; after: string }>()
 
-                  const proc = ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
-                    cwd: state.directory,
-                    extendEnv: true,
-                    stdin: Stream.make(new TextEncoder().encode(refs.map((item) => item.ref).join("\n") + "\n")),
-                  })
-                  const handle = yield* spawner.spawn(proc)
-                  const [out, err] = yield* Effect.all(
-                    [Stream.mkUint8Array(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
-                    { concurrency: 2 },
+                  const batch = yield* appProcess.run(
+                    ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
+                      cwd: state.directory,
+                      extendEnv: true,
+                    }),
+                    { stdin: refs.map((item) => item.ref).join("\n") + "\n" },
                   )
-                  const code = yield* handle.exitCode
-                  if (code !== 0) {
+                  if (batch.exitCode !== 0) {
                     log.info("git cat-file --batch failed during snapshot diff, falling back to per-file git show", {
-                      stderr: err,
+                      stderr: batch.stderr.toString("utf8"),
                       refs: refs.length,
                     })
                     return
                   }
+                  const out = batch.stdout
 
                   const fail = (msg: string, extra?: Record<string, string>) => {
                     log.info(msg, { ...extra, refs: refs.length })
@@ -769,8 +751,8 @@ export const layer: Layer.Layer<
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(AppProcess.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Config.defaultLayer),
 )
 

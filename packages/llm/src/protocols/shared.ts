@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, JsonSchema, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
@@ -9,8 +9,11 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
+  type TextPart,
   type ToolResultPart,
 } from "../schema"
+import { isRecord } from "../utils/record"
+export { isRecord }
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -19,12 +22,38 @@ export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
 
-/**
- * Plain-record narrowing. Excludes arrays so routes checking nested JSON
- * Schema fragments don't accidentally treat a tuple as a key/value bag.
- */
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+/** OpenAI function schemas require one flat object at the top level. */
+export const openAiToolInputSchema = (schema: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
+  const variants = Array.isArray(schema.anyOf) ? schema.anyOf.filter(isRecord) : []
+  const flattened =
+    variants.length === 0
+      ? { ...schema, type: "object" }
+      : {
+          ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "anyOf")),
+          type: "object",
+          properties: variants.reduce(
+            (properties, variant) => ({ ...(isRecord(variant.properties) ? variant.properties : {}), ...properties }),
+            {},
+          ),
+          additionalProperties: false,
+        }
+  const normalized = removeNullSchemas(flattened)
+  return isRecord(normalized) ? normalized : { type: "object" }
+}
+
+const removeNullSchemas = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(removeNullSchemas)
+  if (!isRecord(value)) return value
+  const fields = Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "anyOf")
+      .map(([key, field]) => [key, removeNullSchemas(field)]),
+  )
+  if (!Array.isArray(value.anyOf)) return fields
+  const variants = value.anyOf.filter((variant) => !isRecord(variant) || variant.type !== "null").map(removeNullSchemas)
+  if (variants.length === 1 && isRecord(variants[0])) return { ...fields, ...variants[0] }
+  return { ...fields, anyOf: variants }
+}
 
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across
@@ -42,6 +71,13 @@ export interface ToolAccumulator {
  * supplied total; otherwise falls back to `inputTokens + outputTokens` only
  * when at least one is defined. Returns `undefined` when neither input nor
  * output is known so routes don't publish a misleading `0`.
+ *
+ * Under the additive `LLM.Usage` contract, `inputTokens` and `outputTokens`
+ * are the non-cached input and visible output only. The provider-supplied
+ * `total` is the source of truth when present; the computed fallback
+ * under-counts cache and reasoning by design and exists mainly so
+ * Anthropic-style providers (which don't surface a total) still get a
+ * sensible aggregate on the input + output axes.
  */
 export const totalTokens = (
   inputTokens: number | undefined,
@@ -51,6 +87,35 @@ export const totalTokens = (
   if (total !== undefined) return total
   if (inputTokens === undefined && outputTokens === undefined) return undefined
   return (inputTokens ?? 0) + (outputTokens ?? 0)
+}
+
+/**
+ * Subtract `subtrahend` from `total`, clamping to zero if the provider
+ * reports a non-sensical breakdown (e.g. `cached_tokens > prompt_tokens`).
+ * Used by protocol mappers when deriving a non-overlapping breakdown field
+ * from a provider's inclusive total — `nonCachedInputTokens` from
+ * `inputTokens - cacheReadInputTokens - cacheWriteInputTokens`.
+ *
+ * If `total` is `undefined`, returns `undefined` (we don't fabricate
+ * counts). If `subtrahend` is `undefined`, returns `total` unchanged. The
+ * provider-native breakdown stays available on `Usage.native` for debugging.
+ */
+export const subtractTokens = (total: number | undefined, subtrahend: number | undefined): number | undefined => {
+  if (total === undefined) return undefined
+  if (subtrahend === undefined) return total
+  return Math.max(0, total - subtrahend)
+}
+
+/**
+ * Sum a list of optional token counts, returning `undefined` only when
+ * every value is `undefined` (so we don't fabricate a `0`). Used by
+ * protocol mappers to derive the inclusive `inputTokens` total from a
+ * provider that natively reports a non-overlapping breakdown
+ * (e.g. Anthropic, whose `input_tokens` is already non-cached only).
+ */
+export const sumTokens = (...values: ReadonlyArray<number | undefined>): number | undefined => {
+  if (values.every((value) => value === undefined)) return undefined
+  return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
@@ -74,6 +139,44 @@ export const parseJson = (route: string, input: string, message: string) =>
  */
 export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) => parts.map((part) => part.text).join("\n")
 
+const escapeSystemUpdateText = (text: string) =>
+  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+
+/**
+ * Stable fallback representation for chronological `Message.system(...)`
+ * updates on routes that do not support that privileged role natively. The
+ * wrapper remains visibly lower-authority user text, preserves the original
+ * temporal position, and XML-escapes content so it cannot close the wrapper.
+ */
+export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>) =>
+  `<system-update>\n${escapeSystemUpdateText(joinText(parts))}\n</system-update>`
+
+/**
+ * Chronological system updates deliberately accept text only. Do not insert
+ * raw retrieved, tool, or web content into privileged updates: keep untrusted
+ * data in ordinary user/tool messages instead.
+ */
+export const systemUpdateText = Effect.fn("ProviderShared.systemUpdateText")(function* (
+  route: string,
+  message: LLMRequest["messages"][number],
+) {
+  const content: TextPart[] = []
+  for (const part of message.content) {
+    if (!supportsContent(part, ["text"])) return yield* unsupportedContent(route, "system", ["text"])
+    content.push(part)
+  }
+  return content
+})
+
+/** Lower an unsupported privileged update into visible, in-order user text. */
+export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate")(function* (
+  route: string,
+  message: LLMRequest["messages"][number],
+) {
+  const content = yield* systemUpdateText(route, message)
+  return { type: "text" as const, text: wrapSystemUpdate(content), cache: content.at(-1)?.cache }
+})
+
 /**
  * Parse the streamed JSON input of a tool call. Treats an empty string as
  * `"{}"` — providers occasionally finish a tool call without ever emitting
@@ -83,19 +186,58 @@ export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) => par
 export const parseToolInput = (route: string, name: string, raw: string) =>
   parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
-/**
- * Encode a `MediaPart`'s raw bytes for inclusion in a JSON request body.
- * `data: string` is assumed to already be base64 (matches caller convention
- * across Gemini / Bedrock); `data: Uint8Array` is base64-encoded here. Used
- * by every route that supports image / document inputs.
- */
-export const mediaBytes = (part: MediaPart) =>
-  typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
+export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
+export const MAX_MEDIA_ENCODED_BYTES = 8 * 1024 * 1024
+export const MAX_MEDIA_DECODED_BYTES = 6 * 1024 * 1024
+
+const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+
+export interface ValidatedMedia {
+  readonly mime: string
+  readonly base64: string
+  readonly dataUrl: string
+  readonly bytes: Uint8Array
+}
+
+export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function* (
+  route: string,
+  part: MediaPart,
+  supportedMimes: ReadonlySet<string>,
+) {
+  const mime = part.mediaType.toLowerCase()
+  if (!supportedMimes.has(mime)) return yield* invalidRequest(`${route} does not support media type ${part.mediaType}`)
+
+  let base64: string
+  if (typeof part.data !== "string") {
+    if (part.data.byteLength > MAX_MEDIA_DECODED_BYTES)
+      return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
+    base64 = Buffer.from(part.data).toString("base64")
+  } else if (part.data.startsWith("data:")) {
+    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/s.exec(part.data)
+    if (!match) return yield* invalidRequest(`${route} media data URL must contain valid base64`)
+    if (match[1]!.toLowerCase() !== mime)
+      return yield* invalidRequest(`${route} media type ${part.mediaType} does not match data URL type ${match[1]}`)
+    base64 = match[2]!
+  } else {
+    base64 = part.data
+  }
+
+  if (Buffer.byteLength(base64, "utf8") > MAX_MEDIA_ENCODED_BYTES)
+    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_ENCODED_BYTES} byte encoded limit`)
+  if (!base64 || base64.length % 4 !== 0 || !base64Pattern.test(base64))
+    return yield* invalidRequest(`${route} media must contain valid base64`)
+  const bytes = Buffer.from(base64, "base64")
+  if (bytes.byteLength > MAX_MEDIA_DECODED_BYTES)
+    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
+  if (bytes.toString("base64") !== base64) return yield* invalidRequest(`${route} media must contain canonical base64`)
+  return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
+})
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
+  if (part.result.type === "content") return encodeJson(part.result.value)
   return encodeJson(part.result.value)
 }
 

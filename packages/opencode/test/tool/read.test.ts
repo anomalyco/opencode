@@ -1,20 +1,32 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import { Config } from "@/config/config"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
-import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
-import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import {
+  disposeAllInstances,
+  provideInstance,
+  testInstanceStoreLayer,
+  TestInstance,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Reference } from "@/reference/reference"
+import { RepositoryCache } from "@/reference/repository-cache"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -24,7 +36,7 @@ afterEach(async () => {
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -33,16 +45,27 @@ const ctx = {
   ask: () => Effect.void,
 }
 
-const it = testEffect(
+const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+  Reference.layer.pipe(
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(RepositoryCache.defaultLayer),
+    Layer.provide(RuntimeFlags.layer(flags)),
+  )
+
+const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
+    referenceLayer(flags),
+    Search.defaultLayer,
     Truncate.defaultLayer,
-  ),
-)
+  )
+
+const it = testEffect(Layer.mergeAll(readLayer(), testInstanceStoreLayer))
+const references = testEffect(Layer.mergeAll(readLayer({ experimentalReferences: true }), testInstanceStoreLayer))
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
@@ -81,21 +104,51 @@ const fail = Effect.fn("ReadToolTest.fail")(function* (
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
+const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
+      process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = url
+      return previous
+    }),
+    () => self,
+    (previous) =>
+      Effect.sync(() => {
+        if (previous) process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = previous
+        else delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
+      }),
+  )
+const git = Effect.fn("ReadToolTest.git")(function* (cwd: string, args: string[]) {
+  return yield* Effect.promise(async () => {
+    const proc = Bun.spawn(["git", ...args], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ])
+    if (code !== 0) throw new Error(stderr.trim() || stdout.trim() || `git ${args.join(" ")} failed`)
+    return stdout.trim()
+  })
+})
 const put = Effect.fn("ReadToolTest.put")(function* (p: string, content: string | Buffer | Uint8Array) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(p, content)
 })
 const load = Effect.fn("ReadToolTest.load")(function* (p: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   return yield* fs.readFileString(p)
 })
 const asks = () => {
-  const items: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  const items: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
   return {
     items,
     next: {
       ...ctx,
-      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+      ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
         }),
@@ -155,10 +208,23 @@ describe("tool.read external_directory permission", () => {
         yield* exec(dir, { filePath: alt }, next)
         const read = items.find((item) => item.permission === "read")
         expect(read).toBeDefined()
-        expect(read!.patterns).toEqual([full(target)])
+        expect(read!.patterns).toEqual([path.relative(dir, full(target))])
       }),
     )
   }
+
+  it.live("uses worktree-relative path for read permission so user rules match like edit/write", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "src", "secret.ts"), "shh")
+
+      const { items, next } = asks()
+      yield* exec(dir, { filePath: path.join(dir, "src", "secret.ts") }, next)
+      const read = items.find((item) => item.permission === "read")
+      expect(read).toBeDefined()
+      expect(read!.patterns).toEqual([path.join("src", "secret.ts")])
+    }),
+  )
 
   it.live("asks for directory-scoped external_directory permission when reading external directory", () =>
     Effect.gen(function* () {
@@ -199,6 +265,44 @@ describe("tool.read external_directory permission", () => {
       expect(ext).toBeUndefined()
     }),
   )
+
+  references.live("does not ask for external_directory permission when reading configured references", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const cache = path.join(Global.Path.repos, "github.com", "opencode-read-reference", "repo")
+      yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
+      yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
+
+      const source = yield* tmpdirScoped({ git: true })
+      const remoteRoot = yield* tmpdirScoped()
+      const remoteDir = path.join(remoteRoot, "opencode-read-reference")
+      const remoteRepo = path.join(remoteDir, "repo.git")
+      yield* put(path.join(source, "notes.md"), "reference notes")
+      yield* git(source, ["add", "."])
+      yield* git(source, ["commit", "-m", "add notes"])
+      yield* fs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
+      yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
+
+      const dir = yield* tmpdirScoped({
+        git: true,
+        config: {
+          reference: {
+            docs: "opencode-read-reference/repo",
+          },
+        },
+      })
+
+      const { items, next } = asks()
+      const result = yield* githubBase(
+        `file://${remoteRoot}/`,
+        exec(dir, { filePath: path.join(cache, "notes.md") }, next),
+      )
+      const ext = items.find((item) => item.permission === "external_directory")
+
+      expect(result.output).toContain("reference notes")
+      expect(ext).toBeUndefined()
+    }),
+  )
 })
 
 describe("tool.read env file permissions", () => {
@@ -227,7 +331,7 @@ describe("tool.read env file permissions", () => {
                 let asked = false
                 const next = {
                   ...ctx,
-                  ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+                  ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
                     Effect.sync(() => {
                       for (const pattern of req.patterns) {
                         const rule = Permission.evaluate(req.permission, pattern, info.permission)
@@ -235,7 +339,7 @@ describe("tool.read env file permissions", () => {
                           asked = true
                         }
                         if (rule.action === "deny") {
-                          throw new Permission.DeniedError({ ruleset: info.permission })
+                          throw new PermissionV1.DeniedError({ ruleset: info.permission })
                         }
                       }
                     }),
@@ -270,6 +374,38 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  it.instance("stops streaming after the byte cap", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "huge.txt")
+      const content = `${"x".repeat(80)}\n`.repeat(50_000)
+      yield* put(filepath, content)
+
+      const fs = yield* FSUtil.Service
+      const counter = { bytes: 0 }
+      const result = yield* run({ filePath: filepath }).pipe(
+        Effect.provideService(
+          FSUtil.Service,
+          FSUtil.Service.of({
+            ...fs,
+            stream: (file, options) =>
+              fs.stream(file, options).pipe(
+                Stream.tap((chunk) =>
+                  Effect.sync(() => {
+                    counter.bytes += chunk.length
+                  }),
+                ),
+              ),
+          }),
+        ),
+      )
+
+      expect(result.metadata.truncated).toBe(true)
+      expect(result.output).toContain("Output capped at")
+      expect(counter.bytes).toBeLessThan(Buffer.byteLength(content, "utf-8") / 2)
+    }),
+  )
+
   it.instance("truncates by line count when limit is specified", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
@@ -294,6 +430,15 @@ describe("tool.read truncation", () => {
       const result = yield* run({ filePath: path.join(test.directory, "small.txt") })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file")
+      expect(result.metadata.display).toMatchObject({
+        type: "file",
+        path: path.join(test.directory, "small.txt"),
+        text: "hello world",
+        lineStart: 1,
+        lineEnd: 1,
+        totalLines: 1,
+        truncated: false,
+      })
     }),
   )
 
@@ -361,6 +506,14 @@ describe("tool.read truncation", () => {
       const result = yield* exec(dir, { filePath: path.join(dir, "dir"), offset: 6, limit: 5 })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).not.toContain("Showing 5 of 10 entries")
+      expect(result.metadata.display).toMatchObject({
+        type: "directory",
+        path: path.join(dir, "dir"),
+        entries: ["file-5.txt", "file-6.txt", "file-7.txt", "file-8.txt", "file-9.txt"],
+        offset: 6,
+        totalEntries: 10,
+        truncated: false,
+      })
     }),
   )
 
