@@ -68,14 +68,52 @@ ensure_source() {
 # =============================================================================
 create_launcher() {
     mkdir -p "$BIN_DIR"
+
+    # Step 1: Download pre-built binary from releases
+    local platform arch
+    platform=$(uname -s | tr '[:upper:]' '[:lower:]')
+    case "$platform" in linux) ;; darwin) ;; *) platform="linux" ;; esac
+    arch=$(uname -m)
+    case "$arch" in x86_64|amd64) arch="x64" ;; aarch64|arm64) arch="arm64" ;; *) arch="x64" ;; esac
+
+    local bin_url="https://github.com/$RIN_REPO/releases/download/v1.16.2/rin-${platform}-${arch}.tar.gz"
+    echo -e "${G}▸${N} Downloading binary: ${bin_url}"
+    
+    if curl -fsSL "$bin_url" -o /tmp/rin-bin.tar.gz 2>/dev/null; then
+        mkdir -p /tmp/rin-extract
+        tar -xzf /tmp/rin-bin.tar.gz -C /tmp/rin-extract 2>/dev/null
+        local extracted
+        extracted=$(find /tmp/rin-extract -type f -executable 2>/dev/null | head -1)
+        if [ -n "$extracted" ]; then
+            cp "$extracted" "$BIN_DIR/rin"
+            chmod +x "$BIN_DIR/rin"
+            rm -rf /tmp/rin-extract /tmp/rin-bin.tar.gz
+            echo -e "${G}✓${N} Binary installed: $BIN_DIR/rin"
+            return
+        fi
+        rm -rf /tmp/rin-extract /tmp/rin-bin.tar.gz
+    fi
+
+    # Step 2: Build from source if binary unavailable
+    echo -e "${Y}▸${N} Binary download failed, building from source..."
+    cd "$SRC_DIR/packages/opencode"
+    if bun run script/build.ts --single --skip-embed-web-ui 2>&1 | tail -3; then
+        local built_bin
+        built_bin=$(find "$SRC_DIR/packages/opencode/dist" -name "opencode" -type f 2>/dev/null | head -1)
+        if [ -n "$built_bin" ]; then
+            cp "$built_bin" "$BIN_DIR/rin"
+            chmod +x "$BIN_DIR/rin"
+            echo -e "${G}✓${N} Built from source: $BIN_DIR/rin"
+            return
+        fi
+    fi
+
+    # Step 3: Last resort — bun run wrapper (shows 'local' as version but fully works)
+    echo -e "${Y}▸${N} Build failed, creating source wrapper..."
     cat > "$BIN_DIR/rin" << 'LAUNCHER'
 #!/bin/bash
-# Rin AI Launcher
-# Resolve real path even when called via symlink
 SCRIPT="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
 DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
-
-# Set unlimited mode
 export OPENCODE_TIMEOUT=false
 export OPENCODE_HEADER_TIMEOUT=false
 export OPENCODE_CHUNK_TIMEOUT=999999999
@@ -87,18 +125,14 @@ export OPENCODE_COMPACTION_AUTO=false
 export OPENCODE_COMPACTION_PRUNE=false
 export OPENCODE_TOOL_OUTPUT_MAX_LINES=999999999
 export OPENCODE_TOOL_OUTPUT_MAX_BYTES=999999999
-
-# Load proxies
 if [ -f "$DIR/rin-proxy.sh" ] && [ -z "$RIN_PROXIES" ]; then
     export RIN_PROXIES=$(bash "$DIR/rin-proxy.sh" 2>/dev/null | paste -sd ",")
 fi
-
-# Run Rin with bun
 cd "$DIR/src"
 exec bun run --conditions=browser packages/opencode/src/index.ts "$@"
 LAUNCHER
     chmod +x "$BIN_DIR/rin"
-    echo -e "${G}✓${N} Launcher created: $BIN_DIR/rin"
+    echo -e "${Y}▸${N} Source wrapper created (version shows 'local' but all features work)"
 }
 
 # =============================================================================
