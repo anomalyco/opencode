@@ -25,6 +25,8 @@ a.out
 target
 .scripts
 .direnv/
+.codegraph
+.understand-anything
 
 # Local dev files
 opencode-dev
