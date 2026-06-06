@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { commands, parse, pathWords } from "@opencode-ai/core/util/bash"
+import { commandParts, commands, parse, pathWords } from "@opencode-ai/core/util/bash"
+
+const norm = (command: string) => commandParts(command).map((c) => ({ tokens: c.parts.map((p) => p.text), source: c.source }))
 
 describe("util/bash", () => {
   test("returns command name and suffix words", () => {
@@ -33,5 +35,33 @@ describe("util/bash", () => {
   test("parses tolerantly without throwing on malformed input", () => {
     expect(() => parse(`cat "unterminated`)).not.toThrow()
     expect(() => pathWords("for do done |&")).not.toThrow()
+  })
+})
+
+describe("util/bash commandParts", () => {
+  test("keeps each command's source, including redirects and assignment prefixes", () => {
+    expect(norm(`FOO=bar rm -rf /tmp/x`)).toEqual([{ tokens: ["rm", "-rf", "/tmp/x"], source: "FOO=bar rm -rf /tmp/x" }])
+    expect(norm(`cat a.txt | grep foo > out.log`)).toEqual([
+      { tokens: ["cat", "a.txt"], source: "cat a.txt" },
+      { tokens: ["grep", "foo"], source: "grep foo > out.log" },
+    ])
+  })
+
+  test("reconstructs nested source for commands inside substitutions", () => {
+    expect(norm(`echo "hi $(rm -rf /tmp/z)"`)).toEqual([
+      { tokens: ["echo", `"hi $(rm -rf /tmp/z)"`], source: `echo "hi $(rm -rf /tmp/z)"` },
+      { tokens: ["rm", "-rf", "/tmp/z"], source: "rm -rf /tmp/z" },
+    ])
+  })
+
+  test("drops bare-expansion tokens but keeps brace expansions and quoted strings", () => {
+    expect(norm(`echo $(date) {a,b} "$HOME/x"`)).toEqual([
+      { tokens: ["echo", "{a,b}", `"$HOME/x"`], source: `echo $(date) {a,b} "$HOME/x"` },
+      { tokens: ["date"], source: "date" },
+    ])
+  })
+
+  test("omits the `[` test builtin to mirror tree-sitter", () => {
+    expect(norm(`[ -f x ] && rm x`)).toEqual([{ tokens: ["rm", "x"], source: "rm x" }])
   })
 })
