@@ -208,22 +208,31 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
 
   if (kind === "entry") {
     const mark = go.right.slice(1)
+    const top = 1
     const body_left = (mark[0]?.length ?? 0) + 2
 
     for (let i = 0; i < mark.length; i += 1) {
       draw(lines, mark[i] ?? "", {
         left: 0,
-        top: i,
+        top: top + i,
         fg: left,
         shadow: leftShadow,
       })
     }
 
-    push(lines, body_left, 0, "OpenCode", right, undefined, TextAttributes.BOLD)
+    push(lines, body_left, top, "OpenCode", right, undefined, TextAttributes.BOLD)
     if (input.detail) {
-      push(lines, body_left, 1, Locale.truncateMiddle(input.detail, Math.max(1, width - body_left)), right, undefined, TextAttributes.DIM)
+      push(
+        lines,
+        body_left,
+        top + 1,
+        Locale.truncateMiddle(input.detail, Math.max(1, width - body_left)),
+        right,
+        undefined,
+        TextAttributes.DIM,
+      )
     }
-    height = mark.length
+    height = top + mark.length
   }
 
   if (kind === "exit") {
