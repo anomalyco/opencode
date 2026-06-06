@@ -120,7 +120,15 @@ function parts(node: Node) {
 }
 
 function source(node: Node) {
-  return (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim()
+  const target = node.parent?.type === "redirected_statement" ? node.parent : node
+  const text = target.text
+  let offset = 0
+  for (let i = 0; i < target.childCount; i++) {
+    const child = target.child(i)
+    if (!child || child.type !== "variable_assignment") break
+    offset = child.endIndex - target.startIndex
+  }
+  return offset > 0 ? text.slice(offset).trim() : text.trim()
 }
 
 function commands(node: Node) {

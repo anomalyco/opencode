@@ -239,6 +239,58 @@ describe("tool.shell permissions", () => {
     }),
   )
 
+  for (const item of shells.filter((s) => !PS.has(s.label))) {
+    it.live(`strips env variable prefixes from permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+            yield* run(
+              {
+                command: "NODE_ENV=production echo hello",
+                description: "Echo with env var",
+              },
+              capture(requests),
+            )
+            expect(requests.length).toBe(1)
+            expect(requests[0].permission).toBe("bash")
+            expect(requests[0].patterns).toContain("echo hello")
+            expect(requests[0].patterns).not.toContain("NODE_ENV=production echo hello")
+            expect(requests[0].always).toContain("echo *")
+          }),
+        ),
+      ),
+    )
+  }
+
+  for (const item of shells.filter((s) => !PS.has(s.label))) {
+    it.live(`strips multiple env variable prefixes from permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+            yield* run(
+              {
+                command: "NODE_ENV=production DEBUG=1 go test ./...",
+                description: "Go test with env vars",
+              },
+              capture(requests),
+            )
+            expect(requests.length).toBe(1)
+            expect(requests[0].permission).toBe("bash")
+            expect(requests[0].patterns).toContain("go test ./...")
+            expect(requests[0].patterns).not.toContain("NODE_ENV=production DEBUG=1 go test ./...")
+            expect(requests[0].always).toContain("go test *")
+          }),
+        ),
+      ),
+    )
+  }
+
   each("asks for bash permission with multiple commands", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
