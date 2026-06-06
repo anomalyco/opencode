@@ -1,13 +1,12 @@
 export * as TuiConfig from "./tui"
 
 import path from "path"
-import { createBindingLookup } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
-import { Cause, Context, Effect, Fiber, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { KeymapLeaderTimeoutDefault, resolveAttentionSoundPaths, TuiInfo } from "./tui-schema"
+import { resolveHostAttentionSoundPaths } from "./host-attention"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@opencode-ai/tui/util/record"
 import { Global } from "@opencode-ai/core/global"
@@ -21,37 +20,28 @@ import { Filesystem } from "@/util/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
-import type { DeepMutable } from "@opencode-ai/core/schema"
-import type { TuiAttentionSoundName } from "@opencode-ai/plugin/tui"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { TuiConfig } from "@opencode-ai/tui/config"
 
 const log = Log.create({ service: "tui.config" })
 
-export const Info = TuiInfo
-export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+export const Info = TuiConfig.Info
+export type Info = TuiConfig.Info
 
 type Acc = {
   result: Info
   plugin_origins: ConfigPlugin.Origin[]
 }
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout"> & {
-  attention: {
-    enabled: boolean
-    notifications: boolean
-    sound: boolean
-    volume: number
-    sound_pack: string
-    sounds: Partial<Record<TuiAttentionSoundName, string>>
-  }
-  keybinds: TuiKeybind.BindingLookupView
-  leader_timeout: number
-  // Internal resolved plugin list used by runtime loading.
+export type Resolved = TuiConfig.Resolved
+
+export type HostMetadata = {
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
 export interface Interface {
   readonly get: () => Effect.Effect<Resolved>
+  readonly pluginOrigins: () => Effect.Effect<ConfigPlugin.Origin[]>
   readonly waitForDependencies: () => Effect.Effect<void>
 }
 
@@ -105,7 +95,9 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       const plugins = config.plugin
       if (!plugins) return config
       for (let i = 0; i < plugins.length; i++) {
-        plugins[i] = yield* Effect.promise(() => ConfigPlugin.resolvePluginSpec(plugins[i], configFilepath))
+        plugins[i] = yield* Effect.promise(() =>
+          ConfigPlugin.resolvePluginSpec(plugins[i] as ConfigPlugin.Origin["spec"], configFilepath),
+        )
       }
       return config
     })
@@ -126,7 +118,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
             ...parsed,
             attention: {
               ...parsed.attention,
-              sounds: resolveAttentionSoundPaths(path.dirname(configFilepath), parsed.attention.sounds),
+              sounds: resolveHostAttentionSoundPaths(path.dirname(configFilepath), parsed.attention.sounds),
             },
           }
         : parsed
@@ -183,7 +175,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       const scope = pluginScope(file, ctx)
       const plugins = ConfigPlugin.deduplicatePluginOrigins([
         ...acc.plugin_origins,
-        ...data.plugin.map((spec) => ({ spec, scope, source: file })),
+        ...data.plugin.map((spec) => ({ spec: spec as ConfigPlugin.Origin["spec"], scope, source: file })),
       ])
       acc.result.plugin = plugins.map((item) => item.spec)
       acc.plugin_origins = plugins
@@ -230,34 +222,18 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     }
   }
 
-  const keybinds = { ...acc.result.keybinds }
-  if (process.platform === "win32") {
-    // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
-    keybinds.terminal_suspend = "none"
-    const inputUndo = TuiKeybind.defaultValue("input_undo")
-    keybinds.input_undo ??= unique(["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]).join(",")
-  }
-  const parsedKeybinds = TuiKeybind.parse(keybinds)
-  const result: Resolved = {
-    ...acc.result,
-    attention: {
-      enabled: acc.result.attention?.enabled ?? false,
-      notifications: acc.result.attention?.notifications ?? true,
-      sound: acc.result.attention?.sound ?? true,
-      volume: acc.result.attention?.volume ?? 0.4,
-      sound_pack: acc.result.attention?.sound_pack ?? "opencode.default",
-      sounds: acc.result.attention?.sounds ?? {},
+  const result = TuiConfig.resolve(
+    {
+      ...acc.result,
     },
-    keybinds: createBindingLookup(TuiKeybind.toBindingConfig(parsedKeybinds), {
-      commandMap: TuiKeybind.CommandMap,
-      bindingDefaults: TuiKeybind.bindingDefaults(),
-    }),
-    leader_timeout: acc.result.leader_timeout ?? KeymapLeaderTimeoutDefault,
-    plugin_origins: acc.plugin_origins.length ? acc.plugin_origins : undefined,
-  }
+    {
+      terminalSuspend: process.platform !== "win32",
+    },
+  )
 
   return {
     config: result,
+    pluginOrigins: acc.plugin_origins,
     dirs: result.plugin?.length ? dirs : [],
   }
 })
@@ -287,11 +263,12 @@ export const layer = Layer.effect(
     )
 
     const get = Effect.fn("TuiConfig.get")(() => Effect.succeed(data.config))
+    const pluginOrigins = Effect.fn("TuiConfig.pluginOrigins")(() => Effect.succeed(data.pluginOrigins))
 
     const waitForDependencies = Effect.fn("TuiConfig.waitForDependencies")(() =>
       Effect.forEach(deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.ignore(), Effect.asVoid),
     )
-    return Service.of({ get, waitForDependencies })
+    return Service.of({ get, pluginOrigins, waitForDependencies })
   }).pipe(Effect.withSpan("TuiConfig.layer")),
 )
 
@@ -305,4 +282,8 @@ export async function waitForDependencies() {
 
 export async function get() {
   return runPromise((svc) => svc.get())
+}
+
+export async function pluginOrigins() {
+  return runPromise((svc) => svc.pluginOrigins())
 }

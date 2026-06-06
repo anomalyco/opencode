@@ -17,7 +17,7 @@ import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import * as Log from "@opencode-ai/core/util/log"
 import { errorData, errorMessage } from "@opencode-ai/tui/util/error"
 import { isRecord } from "@opencode-ai/tui/util/record"
-import { resolveAttentionSoundPaths } from "../config/tui-schema"
+import { resolveHostAttentionSoundPaths } from "../config/host-attention"
 import {
   readPackageThemes,
   readPluginId,
@@ -176,7 +176,7 @@ function createScopedAttention(
         return scope.track(
           attention.soundboard.registerPack({
             ...pack,
-            sounds: resolveAttentionSoundPaths(root, pack.sounds, { trim: true }),
+            sounds: resolveHostAttentionSoundPaths(root, pack.sounds, { trim: true }),
           }),
         )
       },
@@ -1018,7 +1018,7 @@ export const Slot = View
 
 export async function init(input: {
   api: HostPluginApi
-  config: TuiConfig.Resolved
+  config: TuiConfig.Resolved & TuiConfig.HostMetadata
   dispose?: () => void
   disposeTimeoutMs?: number
 }) {
@@ -1071,7 +1071,12 @@ export async function dispose() {
   state.dispose?.()
 }
 
-async function load(input: { api: Api; config: TuiConfig.Resolved; dispose?: () => void; disposeTimeoutMs?: number }) {
+async function load(input: {
+  api: Api
+  config: TuiConfig.Resolved & TuiConfig.HostMetadata
+  dispose?: () => void
+  disposeTimeoutMs?: number
+}) {
   const { api, config } = input
   const cwd = process.cwd()
   const slots = setupSlots(api)
@@ -1092,9 +1097,10 @@ async function load(input: { api: Api; config: TuiConfig.Resolved; dispose?: () 
         return yield* RuntimeFlags.Service
       }).pipe(Effect.provide(RuntimeFlags.defaultLayer)),
     )
-    const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])
-    if (Flag.OPENCODE_PURE && config.plugin_origins?.length) {
-      log.info("skipping external tui plugins in pure mode", { count: config.plugin_origins.length })
+    const pluginOrigins = config.plugin_origins ?? (await TuiConfig.pluginOrigins())
+    const records = Flag.OPENCODE_PURE ? [] : pluginOrigins
+    if (Flag.OPENCODE_PURE && pluginOrigins.length) {
+      log.info("skipping external tui plugins in pure mode", { count: pluginOrigins.length })
     }
 
     for (const item of internalTuiPlugins(flags)) {

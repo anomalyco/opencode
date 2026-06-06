@@ -297,7 +297,12 @@ refactor(tui): make runtime capabilities explicit
 
 ## Section 5: Separate Resolved TUI Config From Host Config Loading
 
-Status: Pending.
+Status: Completed for the package config contract and legacy host adapter.
+`@opencode-ai/tui/config` now owns schemas, defaults, keybind resolution, the
+resolved config type, and the Solid config provider. The legacy host retains
+file discovery, precedence, JSONC parsing, substitutions, migration,
+source-relative sound paths, plugin origins, dependency installation, and
+Effect services. `packages/cli` remains untouched until Section 9.
 
 Move config semantics needed by rendering while retaining filesystem discovery
 and migration in the legacy host.
@@ -598,7 +603,7 @@ Compiled checks:
 - [x] Section 2: Move presentation utilities and leaf UI
 - [x] Section 3: Remove backend tool implementation imports
 - [x] Section 4: Make runtime inputs explicit
-- [ ] Section 5: Separate resolved TUI config from host config loading
+- [x] Section 5: Separate resolved TUI config from host config loading
 - [ ] Section 6: Move SDK state, routes, and backend operations
 - [ ] Section 7: Isolate plugin presentation from plugin loading
 - [ ] Section 8: Move the application root and renderer lifecycle

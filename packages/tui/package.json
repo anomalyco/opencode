@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./src/index.tsx",
+    "./config": "./src/config.tsx",
     "./runtime": "./src/runtime.tsx",
     "./keybind": "./src/keybind.ts",
     "./keymap": "./src/keymap.tsx",

@@ -1,9 +1,9 @@
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
+import type { TuiConfig } from "@opencode-ai/tui/config"
 import { createTuiBuildInfo, createTuiEnvironment } from "@opencode-ai/tui/runtime"
 import path from "path"
-import type { TuiConfig } from "./config/tui"
 import { isZedTerminal, resolveZedDbPath } from "./context/editor-zed"
 
 export function resolveTuiRuntime(config: TuiConfig.Resolved) {

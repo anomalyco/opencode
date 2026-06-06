@@ -2,7 +2,7 @@ import path from "path"
 import { type ParseError as JsoncParseError, applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { unique } from "remeda"
 import { Option, Schema } from "effect"
-import { DiffStyle, ScrollAcceleration, ScrollSpeed } from "./tui-schema"
+import { TuiConfig } from "@opencode-ai/tui/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
@@ -15,9 +15,9 @@ const TUI_SCHEMA_URL = "https://opencode.ai/tui.json"
 
 const decodeTheme = Schema.decodeUnknownOption(Schema.String)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
-const decodeScrollSpeed = Schema.decodeUnknownOption(ScrollSpeed)
-const decodeScrollAcceleration = Schema.decodeUnknownOption(ScrollAcceleration)
-const decodeDiffStyle = Schema.decodeUnknownOption(DiffStyle)
+const decodeScrollSpeed = Schema.decodeUnknownOption(TuiConfig.ScrollSpeed)
+const decodeScrollAcceleration = Schema.decodeUnknownOption(TuiConfig.ScrollAcceleration)
+const decodeDiffStyle = Schema.decodeUnknownOption(TuiConfig.DiffStyle)
 
 interface MigrateInput {
   cwd: string
