@@ -261,6 +261,55 @@ test("sync v2 renders a promoted prompt when admission was missed", async () => 
   }
 })
 
+test("sync v2 projects live context updates with their message ID", async () => {
+  const events = createEventSource()
+  const calls = createFetch()
+  let sync!: ReturnType<typeof useSyncV2>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useSyncV2()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+      <ProjectProvider>
+        <SyncProviderV2>
+          <Probe />
+        </SyncProviderV2>
+      </ProjectProvider>
+    </SDKProvider>
+  ))
+
+  try {
+    await mounted
+    emitTwice(events, {
+      id: "evt_context_1",
+      type: "session.next.context.updated",
+      properties: {
+        sessionID: "session-1",
+        messageID: "msg_context_1",
+        timestamp: 1,
+        text: "Updated context",
+      },
+    })
+
+    await wait(() => sync.session.message.fromSession("session-1").length === 1)
+    expect(sync.session.message.fromSession("session-1")[0]).toMatchObject({
+      id: "msg_context_1",
+      type: "system",
+      text: "Updated context",
+    })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("sync v2 preserves live events while snapshot hydration is in flight", async () => {
   const events = createEventSource()
   const response = Promise.withResolvers<Response>()

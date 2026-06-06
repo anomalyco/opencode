@@ -18,7 +18,6 @@ const keys = new Set([
   "disabled_providers",
   "enabled_providers",
   "small_model",
-  "default_agent",
   "mode",
   "agent",
   "provider",
@@ -38,6 +37,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     $schema: info.$schema,
     shell: info.shell,
     model: info.model,
+    default_agent: info.default_agent,
     autoupdate: info.autoupdate,
     share: info.share ?? (info.autoshare ? "auto" : undefined),
     enterprise: info.enterprise,
@@ -55,7 +55,6 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
       auto: info.compaction.auto,
       prune: info.compaction.prune,
       keep: {
-        turns: info.compaction.tail_turns,
         tokens: info.compaction.preserve_recent_tokens,
       },
       buffer: info.compaction.reserved,

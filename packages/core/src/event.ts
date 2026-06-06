@@ -45,6 +45,8 @@ export type Payload<D extends Definition = Definition> = {
   readonly version?: number
   readonly location?: Location.Ref
   readonly metadata?: Record<string, unknown>
+  /** Internal replay marker for projectors that own non-replicated operational state. */
+  readonly replay?: boolean
 }
 
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
@@ -137,6 +139,8 @@ export interface PublishOptions {
   readonly id?: ID
   readonly metadata?: Record<string, unknown>
   readonly location?: Location.Ref
+  /** Local operational projection committed atomically with a new synchronized event. Not replayed or serialized. */
+  readonly commit?: (seq: number) => Effect.Effect<void>
 }
 
 export interface Interface {
@@ -215,6 +219,7 @@ export const layerWith = (options?: LayerOptions) =>
           readonly ownerID?: string
           readonly strictOwner?: boolean
         },
+        commit?: (seq: number) => Effect.Effect<void>,
       ) {
         return Effect.gen(function* () {
           const definition = registry.get(event.type)
@@ -330,6 +335,7 @@ export const layerWith = (options?: LayerOptions) =>
                           for (const projector of list) {
                             yield* projector({ ...event, seq } as Payload)
                           }
+                          if (commit) yield* commit(seq)
                           yield* db
                             .insert(EventSequenceTable)
                             .values([{ aggregate_id: aggregateID, seq, owner_id: input?.ownerID }])
@@ -375,11 +381,18 @@ export const layerWith = (options?: LayerOptions) =>
         })
       }
 
-      function publishEvent<D extends Definition>(event: Payload<D>) {
+      function publishEvent<D extends Definition>(event: Payload<D>, commit?: PublishOptions["commit"]) {
         return Effect.gen(function* () {
           const durable = registry.get(event.type)?.sync !== undefined
+          if (!durable && commit)
+            return yield* Effect.die(
+              new InvalidSyncEventError({
+                type: event.type,
+                message: "Local commit hooks require a synchronized event",
+              }),
+            )
           if (durable) {
-            const committed = yield* commitSyncEvent(event as Payload)
+            const committed = yield* commitSyncEvent(event as Payload, undefined, commit)
             if (committed) {
               event = { ...event, seq: committed.seq }
               yield* Effect.forEach(syncHandlers, (sync) => observe(event as Payload, "sync", sync), { discard: true })
@@ -424,14 +437,17 @@ export const layerWith = (options?: LayerOptions) =>
             (serviceLocation
               ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
               : undefined)
-          return yield* publishEvent({
-            id: options?.id ?? ID.create(),
-            ...(options?.metadata ? { metadata: options.metadata } : {}),
-            type: definition.type,
-            ...(definition.sync === undefined ? {} : { version: definition.sync.version }),
-            ...(location ? { location } : {}),
-            data,
-          } as Payload<D>)
+          return yield* publishEvent(
+            {
+              id: options?.id ?? ID.create(),
+              ...(options?.metadata ? { metadata: options.metadata } : {}),
+              type: definition.type,
+              ...(definition.sync === undefined ? {} : { version: definition.sync.version }),
+              ...(location ? { location } : {}),
+              data,
+            } as Payload<D>,
+            options?.commit,
+          )
         })
       }
 
@@ -451,6 +467,7 @@ export const layerWith = (options?: LayerOptions) =>
               type: definition.type,
               version: definition.sync.version,
               data: definition.decode(event.data),
+              replay: true,
             } as Payload
             const committed = yield* commitSyncEvent(payload, {
               seq: event.seq,

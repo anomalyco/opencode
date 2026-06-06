@@ -9,7 +9,7 @@ import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ApplyPatchTool } from "@opencode-ai/core/tool/apply-patch"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
@@ -86,7 +86,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   )
   const planning = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
   const commits = FileMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(planning))
-  const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+  const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const patch = ApplyPatchTool.layer.pipe(
     Layer.provide(registry),
     Layer.provide(planning),

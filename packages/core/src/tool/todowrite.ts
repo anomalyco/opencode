@@ -3,7 +3,7 @@ export * as TodoWriteTool from "./todowrite"
 import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
 import { Cause, Effect, Layer, Schema } from "effect"
 import { SessionTodo } from "../session/todo"
-import { ToolRegistry } from "../tool-registry"
+import { ToolRegistry } from "./registry"
 
 export const name = "todowrite"
 

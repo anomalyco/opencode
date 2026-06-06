@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
-import { OpenCode, Session } from "@opencode-ai/core/public"
+import { Effect, Schema } from "effect"
+import { OpenCode, Session, Tool } from "@opencode-ai/core/public"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(OpenCode.layer)
@@ -10,11 +10,14 @@ describe("public native OpenCode API", () => {
     Effect.gen(function* () {
       const opencode = yield* OpenCode.Service
 
+      expect(Object.keys(opencode).sort()).toEqual(["sessions", "tools"])
+
       expect(Object.keys(opencode.sessions).sort()).toEqual([
         "context",
         "create",
         "events",
         "get",
+        "interrupt",
         "list",
         "message",
         "messages",
@@ -23,6 +26,14 @@ describe("public native OpenCode API", () => {
       expect(Session.ID.create()).toStartWith("ses_")
       expect(Session.MessageID.create()).toStartWith("msg_")
       expect(yield* opencode.sessions.list()).toBeArray()
+      yield* opencode.tools.attach({
+        public_tool: Tool.make({
+          description: "Public tool",
+          parameters: Schema.Struct({}),
+          success: Schema.Struct({ ok: Schema.Boolean }),
+          execute: () => Effect.succeed({ ok: true }),
+        }),
+      })
     }),
   )
 })
