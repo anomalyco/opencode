@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { ToolFailure } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
+import { LLMEvent, ToolFailure } from "@opencode-ai/llm"
+import { LLMClient, RequestExecutor, WebSocketExecutor, type LLMClientShape } from "@opencode-ai/llm/route"
 import { jsonSchema, tool, type ModelMessage, type Tool } from "ai"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
@@ -10,9 +10,10 @@ import type { Provider } from "@/provider/provider"
 import { OAUTH_DUMMY_KEY } from "@/auth"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const baseModel: Provider.Model = {
-  id: ProviderV2.ModelID.make("gpt-5-mini"),
+  id: ModelV2.ID.make("gpt-5-mini"),
   providerID: ProviderV2.ID.make("openai"),
   api: {
     id: "gpt-5-mini",
@@ -532,6 +533,66 @@ describe("session.llm-native.request", () => {
       const failure = yield* Effect.flip(wrapped.incomplete.execute({}, { id: "call-1", name: "incomplete" }))
       expect(failure).toBeInstanceOf(ToolFailure)
       expect(failure.message).toContain("incomplete")
+    }),
+  )
+
+  it.effect("emits native tool calls before overlapping local settlements complete", () =>
+    Effect.gen(function* () {
+      const observed: string[] = []
+      const started: string[] = []
+      let release: (() => void) | undefined
+      let notifyStarted: (() => void) | undefined
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const bothStarted = new Promise<void>((resolve) => {
+        notifyStarted = resolve
+      })
+      const lookup = {
+        description: "Lookup data",
+        inputSchema: jsonSchema({ type: "object" }),
+        execute: async (_args: unknown, options: { toolCallId: string }) => {
+          started.push(options.toolCallId)
+          if (started.length === 2) notifyStarted?.()
+          await gate
+          return { output: options.toolCallId }
+        },
+      } satisfies Tool
+      const llmClient = {
+        prepare: () => Effect.die("unused"),
+        stream: () =>
+          Stream.fromIterable([
+            LLMEvent.toolCall({ id: "call-1", name: "lookup", input: {} }),
+            LLMEvent.toolCall({ id: "call-2", name: "lookup", input: {} }),
+            LLMEvent.finish({ reason: "tool-calls" }),
+          ]),
+        generate: () => Effect.die("unused"),
+      } as LLMClientShape
+      const native = LLMNativeRuntime.stream({
+        model: baseModel,
+        provider: providerInfo,
+        auth: undefined,
+        llmClient,
+        messages: [],
+        tools: { lookup },
+        headers: {},
+        abort: new AbortController().signal,
+      })
+      expect(native.type).toBe("supported")
+      if (native.type === "unsupported") throw new Error(native.reason)
+
+      const fiber = yield* native.stream.pipe(
+        Stream.runForEach((event) => Effect.sync(() => observed.push(event.type))),
+        Effect.forkScoped,
+      )
+      yield* Effect.promise(() => bothStarted)
+
+      expect(started).toEqual(["call-1", "call-2"])
+      expect(observed).toEqual(["tool-call", "tool-call", "finish"])
+
+      release?.()
+      yield* Fiber.join(fiber)
+      expect(observed).toEqual(["tool-call", "tool-call", "finish", "tool-result", "tool-result"])
     }),
   )
 

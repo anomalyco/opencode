@@ -1,27 +1,41 @@
 import { contextBridge, ipcRenderer } from "electron"
-import type { ElectronAPI, InitStep, SqliteMigrationProgress } from "./types"
+import type { ElectronAPI, WslServersEvent } from "./types"
 
 const api: ElectronAPI = {
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
   installCli: () => ipcRenderer.invoke("install-cli"),
-  awaitInitialization: (onStep) => {
-    const handler = (_: unknown, step: InitStep) => onStep(step)
-    ipcRenderer.on("init-step", handler)
-    return ipcRenderer.invoke("await-initialization").finally(() => {
-      ipcRenderer.removeListener("init-step", handler)
-    })
+  awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
+  wslServers: {
+    getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
+    subscribe: (cb) => {
+      const handler = (_: unknown, event: WslServersEvent) => cb(event)
+      ipcRenderer.on("wsl-servers-event", handler)
+      void ipcRenderer.invoke("wsl-servers-subscribe")
+      return () => {
+        ipcRenderer.removeListener("wsl-servers-event", handler)
+        void ipcRenderer.invoke("wsl-servers-unsubscribe")
+      }
+    },
+    probeRuntime: () => ipcRenderer.invoke("wsl-servers-probe-runtime"),
+    refreshDistros: () => ipcRenderer.invoke("wsl-servers-refresh-distros"),
+    installWsl: () => ipcRenderer.invoke("wsl-servers-install-wsl"),
+    installDistro: (name) => ipcRenderer.invoke("wsl-servers-install-distro", name),
+    probeDistro: (name) => ipcRenderer.invoke("wsl-servers-probe-distro", name),
+    probeOpencode: (name) => ipcRenderer.invoke("wsl-servers-probe-opencode", name),
+    installOpencode: (name) => ipcRenderer.invoke("wsl-servers-install-opencode", name),
+    openTerminal: (name) => ipcRenderer.invoke("wsl-servers-open-terminal", name),
+    addServer: (distro) => ipcRenderer.invoke("wsl-servers-add", distro),
+    removeServer: (id) => ipcRenderer.invoke("wsl-servers-remove", id),
+    startServer: (id) => ipcRenderer.invoke("wsl-servers-start", id),
   },
   getWindowConfig: () => ipcRenderer.invoke("get-window-config"),
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),
   setDefaultServerUrl: (url) => ipcRenderer.invoke("set-default-server-url", url),
-  getWslConfig: () => ipcRenderer.invoke("get-wsl-config"),
-  setWslConfig: (config) => ipcRenderer.invoke("set-wsl-config", config),
   getDisplayBackend: () => ipcRenderer.invoke("get-display-backend"),
   setDisplayBackend: (backend) => ipcRenderer.invoke("set-display-backend", backend),
   parseMarkdownCommand: (markdown) => ipcRenderer.invoke("parse-markdown", markdown),
   checkAppExists: (appName) => ipcRenderer.invoke("check-app-exists", appName),
-  wslPath: (path, mode) => ipcRenderer.invoke("wsl-path", path, mode),
   resolveAppPath: (appName) => ipcRenderer.invoke("resolve-app-path", appName),
   storeGet: (name, key) => ipcRenderer.invoke("store-get", name, key),
   storeSet: (name, key, value) => ipcRenderer.invoke("store-set", name, key, value),
@@ -31,11 +45,6 @@ const api: ElectronAPI = {
   storeLength: (name) => ipcRenderer.invoke("store-length", name),
 
   getWindowCount: () => ipcRenderer.invoke("get-window-count"),
-  onSqliteMigrationProgress: (cb) => {
-    const handler = (_: unknown, progress: SqliteMigrationProgress) => cb(progress)
-    ipcRenderer.on("sqlite-migration-progress", handler)
-    return () => ipcRenderer.removeListener("sqlite-migration-progress", handler)
-  },
   onMenuCommand: (cb) => {
     const handler = (_: unknown, id: string) => cb(id)
     ipcRenderer.on("menu-command", handler)
@@ -74,7 +83,6 @@ const api: ElectronAPI = {
   },
   setTitlebar: (theme) => ipcRenderer.invoke("set-titlebar", theme),
   runDesktopMenuAction: (action) => ipcRenderer.invoke("run-desktop-menu-action", action),
-  loadingWindowComplete: () => ipcRenderer.send("loading-window-complete"),
   runUpdater: (alertOnFail) => ipcRenderer.invoke("run-updater", alertOnFail),
   checkUpdate: () => ipcRenderer.invoke("check-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),

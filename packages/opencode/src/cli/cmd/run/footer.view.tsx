@@ -52,7 +52,8 @@ import type {
   RunResource,
   RunTuiConfig,
 } from "./types"
-import { RUN_THEME_FALLBACK, type RunTheme } from "./theme"
+import type { RunTheme } from "./theme"
+import { modelInfo } from "./variant.shared"
 
 const EMPTY_BORDER = {
   topLeft: "",
@@ -82,9 +83,10 @@ type RunFooterViewProps = {
   view?: () => FooterView
   subagent?: () => FooterSubagentState
   queuedPrompts?: () => FooterQueuedPrompt[]
-  theme?: RunTheme
+  theme: () => RunTheme
   diffStyle?: RunDiffStyle
   tuiConfig: RunTuiConfig
+  backgroundSubagents: boolean
   history?: RunPrompt[]
   agent: string
   onSubmit: (input: RunPrompt) => boolean
@@ -93,6 +95,7 @@ type RunFooterViewProps = {
   onQuestionReject: (input: QuestionReject) => void | Promise<void>
   onCycle: () => void
   onInterrupt: () => boolean
+  onBackground?: () => void
   onInputClear: () => void
   onExitRequest?: () => boolean
   onRequestExit?: (fn: (() => boolean) | undefined) => void
@@ -157,10 +160,17 @@ export function RunFooterView(props: RunFooterViewProps) {
       label: count === 1 ? "agent" : "agents",
     }
   })
+  const foregroundSubagents = createMemo(
+    () => props.backgroundSubagents && tabs().some((item) => item.status === "running" && !item.background),
+  )
   const queuedIndicator = createMemo(() => {
     const count = queuedPrompts().length
     if (count === 0) return
-    return { count, label: count === 1 ? "prompt" : "prompts" }
+    return { count }
+  })
+  const model = createMemo(() => {
+    const current = props.currentModel()
+    return current ? modelInfo(props.providers(), current) : { model: props.state().model, provider: undefined }
   })
   const detail = createMemo(() => {
     const current = route()
@@ -209,6 +219,15 @@ export function RunFooterView(props: RunFooterViewProps) {
         props.tuiConfig,
       ) ?? "",
   )
+  const backgroundShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeyBindings(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.background"] })
+          .get("session.background"),
+        props.tuiConfig,
+      ) ?? "",
+  )
   const hints = createMemo(() => hintFlags(term().width))
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
@@ -218,7 +237,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const duration = createMemo(() => props.state().duration)
   const usage = createMemo(() => props.state().usage)
   const interruptKey = createMemo(() => interrupt() || "/exit")
-  const runTheme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
+  const runTheme = createMemo(() => props.theme())
   const theme = createMemo(() => runTheme().footer)
   const block = createMemo(() => runTheme().block)
   const spin = createMemo(() => {
@@ -368,6 +387,21 @@ export function RunFooterView(props: RunFooterViewProps) {
       ...props.tuiConfig.keybinds.get("command.palette.show"),
       ...props.tuiConfig.keybinds.get("variant.cycle"),
     ],
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents(),
+    priority: 1,
+    commands: [
+      {
+        name: "session.background",
+        title: "Background subagents",
+        category: "Session",
+        run: () => props.onBackground?.(),
+      },
+    ],
+    bindings: props.tuiConfig.keybinds.get("session.background"),
   }))
 
   useBindings(() => ({
@@ -617,16 +651,33 @@ export function RunFooterView(props: RunFooterViewProps) {
                       {shell() ? "Shell" : props.agent}
                     </text>
                     <Show when={!shell()}>
-                      <text
-                        id="run-direct-footer-model"
-                        fg={theme().text}
-                        wrapMode="none"
-                        truncate
-                        flexGrow={1}
-                        flexShrink={1}
-                      >
-                        {props.state().model}
-                      </text>
+                      <box id="run-direct-footer-model" flexDirection="row" gap={1} flexGrow={1} flexShrink={1}>
+                        <text fg={theme().muted} wrapMode="none" flexShrink={0}>
+                          ·
+                        </text>
+                        <text fg={theme().text} wrapMode="none" truncate flexShrink={1}>
+                          {model().model}
+                        </text>
+                        <Show when={model().provider}>
+                          {(provider) => (
+                            <text fg={theme().muted} wrapMode="none" truncate flexShrink={1}>
+                              {provider()}
+                            </text>
+                          )}
+                        </Show>
+                        <Show when={props.currentVariant()}>
+                          {(variant) => (
+                            <>
+                              <text fg={theme().muted} wrapMode="none" flexShrink={0}>
+                                ·
+                              </text>
+                              <text wrapMode="none" truncate flexShrink={1}>
+                                <span style={{ fg: theme().warning, bold: true }}>{variant()}</span>
+                              </text>
+                            </>
+                          )}
+                        </Show>
+                      </box>
                     </Show>
                   </box>
                 </Show>
@@ -746,26 +797,25 @@ export function RunFooterView(props: RunFooterViewProps) {
                         <Show when={subagentIndicator()}>
                           {(info) => (
                             <text id="run-direct-footer-subagents-label" fg={theme().text} wrapMode="none" truncate>
-                              <Show when={busy() || exiting() || duration().length > 0}>
-                                <span style={{ fg: theme().muted }}>· </span>
-                              </Show>
-                              {info().count} <span style={{ fg: theme().muted }}>{info().label}</span>
-                              <span style={{ fg: theme().muted }}> · </span>
+                              <span style={{ fg: theme().highlight }}>• </span>
+                              {info().count} <span style={{ fg: theme().muted }}>{info().label} </span>
                               <span style={{ fg: theme().highlight }}>{subagentShortcut() || "leader+down"}</span>
-                              <span style={{ fg: theme().muted }}> to view</span>
                             </text>
                           )}
+                        </Show>
+                        <Show when={foregroundSubagents() && backgroundShortcut()}>
+                          <text id="run-direct-footer-background-label" fg={theme().text} wrapMode="none" truncate>
+                            <span style={{ fg: theme().highlight }}>• </span>
+                            <span style={{ fg: theme().highlight }}>{backgroundShortcut()}</span>{" "}
+                            <span style={{ fg: theme().muted }}>background</span>
+                          </text>
                         </Show>
                         <Show when={queuedIndicator()}>
                           {(info) => (
                             <text id="run-direct-footer-queued-label" fg={theme().text} wrapMode="none" truncate>
-                              <Show when={busy() || exiting() || duration().length > 0 || subagentIndicator()}>
-                                <span style={{ fg: theme().muted }}>· </span>
-                              </Show>
-                              {info().count} <span style={{ fg: theme().muted }}>queued {info().label}</span>
-                              <span style={{ fg: theme().muted }}> · </span>
+                              <span style={{ fg: theme().warning }}>• </span>
+                              {info().count} <span style={{ fg: theme().muted }}>queued </span>
                               <span style={{ fg: theme().highlight }}>{queuedShortcut() || "leader+q"}</span>
-                              <span style={{ fg: theme().muted }}> to edit/remove</span>
                             </text>
                           )}
                         </Show>

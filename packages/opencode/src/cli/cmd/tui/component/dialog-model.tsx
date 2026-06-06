@@ -164,7 +164,7 @@ export function DialogModel(props: { providerID?: string }) {
         {
           command: "model.dialog.favorite",
           title: "Favorite",
-          disabled: !connected(),
+          hidden: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },

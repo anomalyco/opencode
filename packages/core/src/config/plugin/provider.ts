@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { Catalog } from "../../catalog"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
+import { ModelRequest } from "../../model-request"
 import { PluginV2 } from "../../plugin"
 import { ProviderV2 } from "../../provider"
 
@@ -13,9 +14,15 @@ export const Plugin = PluginV2.define({
     const catalog = yield* Catalog.Service
     const config = yield* Config.Service
     const transform = yield* catalog.transform()
-    const files = yield* config.get()
+    const entries = yield* config.entries()
+    const files = entries.filter((entry): entry is Config.Document => entry.type === "document")
 
     yield* transform((catalog) => {
+      const configuredDefault = Config.latest(entries, "model")
+      if (configuredDefault !== undefined) {
+        const model = ModelV2.parse(configuredDefault)
+        catalog.model.default.set(model.providerID, model.modelID)
+      }
       for (const file of files) {
         for (const [id, item] of Object.entries(file.info.providers ?? {})) {
           const providerID = ProviderV2.ID.make(id)
@@ -23,21 +30,21 @@ export const Plugin = PluginV2.define({
             if (item.name !== undefined) provider.name = item.name
             if (item.env !== undefined) provider.env = [...item.env]
             provider.enabled = { via: "custom", data: {} }
-            if (item.endpoint !== undefined) provider.endpoint = { ...item.endpoint }
-            if (item.options !== undefined) {
-              Object.assign(provider.options.headers, item.options.headers ?? {})
-              Object.assign(provider.options.body, item.options.body ?? {})
-              Object.assign(provider.options.aisdk.provider, item.options.aisdk?.provider ?? {})
-              Object.assign(provider.options.aisdk.request, item.options.aisdk?.request ?? {})
+            if (item.api !== undefined) provider.api = { ...item.api }
+            if (item.request !== undefined) {
+              Object.assign(provider.request.headers, item.request.headers)
+              Object.assign(provider.request.body, item.request.body)
             }
           })
+          const providerApi = catalog.provider.get(providerID)?.provider.api
+          const providerPackage = providerApi?.type === "aisdk" ? providerApi.package : undefined
 
           for (const [id, config] of Object.entries(item.models ?? {})) {
             catalog.model.update(providerID, ModelV2.ID.make(id), (model) => {
-              if (config.api_id !== undefined) model.apiID = config.api_id
               if (config.family !== undefined) model.family = config.family
               if (config.name !== undefined) model.name = config.name
-              if (config.endpoint !== undefined) model.endpoint = { ...config.endpoint }
+              if (config.api !== undefined) model.api = { ...model.api, ...config.api }
+              const packageName = model.api.type === "aisdk" ? model.api.package : providerPackage
               if (config.capabilities !== undefined) {
                 model.capabilities = {
                   tools: config.capabilities.tools,
@@ -45,12 +52,12 @@ export const Plugin = PluginV2.define({
                   output: [...config.capabilities.output],
                 }
               }
-              if (config.options !== undefined) {
-                Object.assign(model.options.headers, config.options.headers ?? {})
-                Object.assign(model.options.body, config.options.body ?? {})
-                Object.assign(model.options.aisdk.provider, config.options.aisdk?.provider ?? {})
-                Object.assign(model.options.aisdk.request, config.options.aisdk?.request ?? {})
-                if (config.options.variant !== undefined) model.options.variant = config.options.variant
+              if (config.request !== undefined) {
+                ModelRequest.assign(model.request, {
+                  headers: config.request.headers,
+                  ...ModelRequest.normalizeAiSdkOptions(packageName, config.request.body ?? {}),
+                })
+                if (config.request.variant !== undefined) model.request.variant = config.request.variant
               }
               if (config.variants !== undefined) {
                 for (const variant of config.variants) {
@@ -60,17 +67,15 @@ export const Plugin = PluginV2.define({
                       id: variant.id,
                       headers: {},
                       body: {},
-                      aisdk: {
-                        provider: {},
-                        request: {},
-                      },
+                      generation: {},
+                      options: {},
                     }
                     model.variants.push(existing)
                   }
-                  Object.assign(existing.headers, variant.headers ?? {})
-                  Object.assign(existing.body, variant.body ?? {})
-                  Object.assign(existing.aisdk.provider, variant.aisdk?.provider ?? {})
-                  Object.assign(existing.aisdk.request, variant.aisdk?.request ?? {})
+                  ModelRequest.assign(existing, {
+                    headers: variant.headers,
+                    ...ModelRequest.normalizeAiSdkOptions(packageName, variant.body ?? {}),
+                  })
                 }
               }
               if (config.cost !== undefined) {
