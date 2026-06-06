@@ -71,14 +71,14 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(base),
     )
     const services = Layer.mergeAll(base, resources, permissionsAndTools)
-    const commits = FileMutation.locationLayer.pipe(Layer.provide(services))
+    const mutation = FileMutation.locationLayer.pipe(Layer.provide(services))
     const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
       Layer.provide(services),
-      Layer.provide(commits),
+      Layer.provide(mutation),
       Layer.provide(searches),
       Layer.provide(resources),
       Layer.provide(todos),
@@ -90,7 +90,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(model),
       Layer.provide(skillGuidance),
     )
-    return Layer.mergeAll(services, commits, searches, resources, todos, questions, model, runner, builtInTools).pipe(
+    return Layer.mergeAll(services, mutation, searches, resources, todos, questions, model, runner, builtInTools).pipe(
       Layer.fresh,
     )
   },
