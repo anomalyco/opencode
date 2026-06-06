@@ -76,13 +76,29 @@ shell_config() {
 # Install dependencies (bun, git, curl)
 # =============================================================================
 install_deps() {
-    # Only need curl for binary download
-    if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
+    # Check curl
+    if ! command -v curl &>/dev/null; then
         echo -e "${G}▸${N} Installing curl..."
         if command -v apt &>/dev/null; then sudo apt install -y curl
         elif command -v brew &>/dev/null; then brew install curl
-        else echo -e "${RED}✖ Install curl or wget manually${N}"; exit 1
+        else echo -e "${RED}✖ Install curl manually${N}"; exit 1
         fi
+    fi
+
+    # Check git
+    if ! command -v git &>/dev/null; then
+        echo -e "${G}▸${N} Installing git..."
+        if command -v apt &>/dev/null; then sudo apt install -y git
+        elif command -v brew &>/dev/null; then brew install git
+        else echo -e "${RED}✖ Install git manually${N}"; exit 1
+        fi
+    fi
+
+    # Check bun (needed to run Rin from source)
+    if ! command -v bun &>/dev/null; then
+        echo -e "${G}▸${N} Installing bun..."
+        curl -fsSL https://bun.sh/install | bash
+        export PATH="$HOME/.bun/bin:$PATH"
     fi
 }
 
@@ -91,68 +107,57 @@ install_deps() {
 # =============================================================================
 install_rin() {
     local install_dir="${RIN_HOME:-$HOME/.rin}"
-    local bin_dir="$install_dir/bin"
-    local repo_url="https://github.com/rinquickly/rin"
-    local version="${RIN_VERSION:-1.16.2}"
+    local repo_url="https://github.com/rinquickly/rin.git"
 
-    echo -e "${G}▸${N} Installing Rin v${version} to ${B}$install_dir${N}"
-    mkdir -p "$bin_dir"
+    echo -e "${G}▸${N} Installing Rin to ${B}$install_dir${N}"
 
-    # Detect platform for binary download
-    local os arch
-    os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    arch=$(uname -m)
-    case "$os" in linux) os="linux" ;; darwin) os="darwin" ;; *) os="linux" ;; esac
-    case "$arch" in x86_64|amd64) arch="x64" ;; aarch64|arm64) arch="arm64" ;; *) arch="x64" ;; esac
-
-    local binary_url="$repo_url/releases/download/v${version}/rin-${os}-${arch}.tar.gz"
-
-    echo -e "${G}▸${N} Downloading binary from ${B}$binary_url${N}..."
-
-    # Download binary
-    if command -v curl &>/dev/null; then
-        curl -fsSL "$binary_url" -o /tmp/rin.tar.gz || {
-            echo -e "${Y}▸${N} Binary download failed, trying source build..."
-            install_from_source "$install_dir" "$bin_dir"
-            return
-        }
-    elif command -v wget &>/dev/null; then
-        wget -qO /tmp/rin.tar.gz "$binary_url" || {
-            echo -e "${Y}▸${N} Binary download failed, trying source build..."
-            install_from_source "$install_dir" "$bin_dir"
-            return
-        }
+    # Remove old install if exists
+    if [ -d "$install_dir/src" ]; then
+        echo -e "${Y}▸${N} Updating existing Rin installation..."
+        cd "$install_dir"
+        git pull origin main --force 2>/dev/null || true
     else
-        echo -e "${Y}▸${N} No curl/wget, trying source build..."
-        install_from_source "$install_dir" "$bin_dir"
-        return
+        mkdir -p "$install_dir"
+        echo -e "${G}▸${N} Cloning Rin source..."
+        git clone --depth 1 --branch main "$repo_url" "$install_dir" 2>/dev/null || {
+            echo -e "${RED}✖ Failed to clone. Check internet.${N}"
+            exit 1
+        }
     fi
 
-    # Extract binary
-    tar -xzf /tmp/rin.tar.gz -C "$bin_dir" 2>/dev/null || {
-        # If tar.gz contains a single binary file
-        mkdir -p /tmp/rin_extract
-        tar -xzf /tmp/rin.tar.gz -C /tmp/rin_extract
-        find /tmp/rin_extract -type f -executable | head -1 | while read f; do
-            cp "$f" "$bin_dir/rin"
-        done
-        rm -rf /tmp/rin_extract
-    }
-    chmod +x "$bin_dir/rin" 2>/dev/null || true
-    rm -f /tmp/rin.tar.gz
+    # Install dependencies
+    echo -e "${G}▸${N} Installing dependencies..."
+    cd "$install_dir"
+    bun install 2>/dev/null || npm install 2>/dev/null || true
 
-    # Check binary works
-    if [ -f "$bin_dir/rin" ] && $bin_dir/rin --version &>/dev/null; then
-        echo -e "${G}✓${N} Binary installed successfully"
-    else
-        echo -e "${Y}▸${N} Binary not working, building from source..."
-        install_from_source "$install_dir" "$bin_dir"
-        return
-    fi
+    # Create launcher script
+    echo -e "${G}▸${N} Creating launcher..."
+    cat > "$install_dir/bin/rin" << 'LAUNCHER'
+#!/bin/bash
+# Rin launcher
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-    # Download proxy script
-    curl -fsSL "$repo_url/raw/main/script/rin-proxy.sh" -o "$install_dir/rin-proxy.sh" 2>/dev/null || true
-    chmod +x "$install_dir/rin-proxy.sh" 2>/dev/null || true
+# Fetch proxies if available
+if [ -f "$DIR/script/rin-proxy.sh" ] && [ -z "$RIN_PROXIES" ]; then
+    export RIN_PROXIES=$(bash "$DIR/script/rin-proxy.sh" 2>/dev/null | paste -sd ",")
+fi
+
+# Set unlimited mode
+export OPENCODE_TIMEOUT=false
+export OPENCODE_HEADER_TIMEOUT=false
+export OPENCODE_CHUNK_TIMEOUT=999999999
+export OPENCODE_CONTEXT_LIMIT=999999999
+export OPENCODE_INPUT_LIMIT=999999999
+export OPENCODE_OUTPUT_LIMIT=999999999
+export OPENCODE_STEPS=999999999
+export OPENCODE_COMPACTION_AUTO=false
+export OPENCODE_COMPACTION_PRUNE=false
+
+# Start Rin
+cd "$DIR"
+exec bun run --conditions=browser packages/opencode/src/index.ts "$@"
+LAUNCHER
+    chmod +x "$install_dir/bin/rin"
 
     # Symlink to PATH
     local symlink_dir="/usr/local/bin"
@@ -161,72 +166,32 @@ install_rin() {
         mkdir -p "$symlink_dir"
     fi
 
-    ln -sf "$bin_dir/rin" "$symlink_dir/rin" 2>/dev/null || true
+    if [ ! -f "$symlink_dir/rin" ]; then
+        ln -sf "$install_dir/bin/rin" "$symlink_dir/rin" 2>/dev/null || true
+    fi
 
-    # Update PATH in shell config
+    # Update PATH
     local config
     config=$(shell_config)
     if [ -n "$config" ] && ! grep -q "RIN_HOME" "$config" 2>/dev/null; then
         echo "" >> "$config"
         echo "# Rin AI" >> "$config"
         echo "export RIN_HOME=\"$install_dir\"" >> "$config"
-        echo "export PATH=\"\$PATH:$bin_dir:$HOME/.local/bin\"" >> "$config"
+        echo "export PATH=\"\$PATH:$install_dir/bin:$HOME/.local/bin\"" >> "$config"
         echo -e "${Y}▸${N} Added to ${B}$config${N}"
-        echo -e "${Y}▸${N} Run: ${B}source $config${N}"
+        echo -e "${Y}▸${N} Run: ${B}source $config${N} or restart terminal"
     fi
 
     echo ""
     echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
-    echo -e "${G}  Rin v${version} installed!${N}"
-    echo -e "${G}  Binary: ${B}$bin_dir/rin${N}"
-    echo -e "${G}  Run: ${B}rin${N}"
+    echo -e "${G}  Rin installed!${N}"
+    echo -e "${G}  Run: ${B}rin${N}  or  ${B}$install_dir/bin/rin${N}"
     echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
     echo ""
-    echo -e "  ${Y}Proxy rotation:${N}  ${B}export RIN_PROXIES=\"\$(bash $install_dir/rin-proxy.sh | paste -sd \",\")\"${N}"
-    echo -e "  ${Y}API key rotation:${N} ${B}export RIN_API_KEYS=\"key1,key2,...\"${N}"
+    echo -e "  ${Y}Proxy rotation:${N}  Auto-enabled (588+ free proxies)"
+    echo -e "  ${Y}API key rotation:${N} Set ${B}RIN_API_KEYS${N}=\"key1,key2,...\""
+    echo -e "  ${Y}Source:${N}         ${B}https://github.com/rinquickly/rin${N}"
     echo ""
-}
-
-# Fallback: install from source
-install_from_source() {
-    local install_dir="$1"
-    local bin_dir="$2"
-    echo -e "${G}▸${N} Building Rin from source..."
-
-    # Ensure bun
-    if ! command -v bun &>/dev/null; then
-        echo -e "${G}▸${N} Installing bun..."
-        curl -fsSL https://bun.sh/install | bash
-        export PATH="$HOME/.bun/bin:$PATH"
-    fi
-
-    # Clone
-    git clone --depth 1 --branch main "https://github.com/rinquickly/rin.git" "$install_dir/src" 2>/dev/null || {
-        echo -e "${RED}✖ Failed to clone${N}"
-        exit 1
-    }
-
-    # Install deps
-    cd "$install_dir/src"
-    bun install --ignore-scripts 2>/dev/null || true
-
-    # Build binary
-    bun build --compile --target=bun-linux-x64 --outfile="$bin_dir/rin" \
-        --external="@opentui/*" \
-        packages/opencode/src/index.ts 2>/dev/null || {
-        echo -e "${Y}▸${N} Build failed, using bun runner..."
-        cat > "$bin_dir/rin" << 'RUNNER'
-#!/bin/bash
-DIR="$(cd "$(dirname "$0")/.." && pwd)"
-export OPENCODE_TIMEOUT=false
-export OPENCODE_HEADER_TIMEOUT=false
-exec bun run "$DIR/src/packages/opencode/src/index.ts" "$@"
-RUNNER
-        chmod +x "$bin_dir/rin"
-    }
-
-    chmod +x "$bin_dir/rin" 2>/dev/null || true
-    echo -e "${G}✓${N} Rin built from source"
 }
 
 # =============================================================================
