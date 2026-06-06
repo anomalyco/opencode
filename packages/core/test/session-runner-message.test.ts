@@ -109,7 +109,7 @@ Recent work
     ])
   })
 
-  test("expands assistant tool calls and settled outcomes into canonical tool messages", () => {
+  test("replays durable tool media into canonical tool messages without structured base64", () => {
     const messages = toLLMMessages(
       [
         new SessionMessage.Assistant({
@@ -140,7 +140,7 @@ Recent work
                 status: "running",
                 input: { path: "README.md" },
                 content: [],
-                structured: {},
+                structured: { type: "media", mime: "image/png" },
               }),
               time: { created },
             }),

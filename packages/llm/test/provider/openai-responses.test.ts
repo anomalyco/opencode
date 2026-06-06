@@ -1254,7 +1254,7 @@ describe("OpenAI Responses route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("OpenAI Responses user media content only supports images")
+      expect(error.message).toContain("OpenAI Responses does not support media type application/pdf")
     }),
   )
 
@@ -1351,7 +1351,13 @@ describe("OpenAI Responses route", () => {
         ),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "context_length_exceeded: prompt too long" }])
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "context_length_exceeded: prompt too long",
+          classification: "context-overflow",
+        },
+      ])
     }),
   )
 

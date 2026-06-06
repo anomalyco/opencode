@@ -12,15 +12,13 @@ import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
-import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { type ServerHealth } from "@/utils/server-health"
 import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
-
-const pollMs = 10_000
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -60,7 +58,7 @@ const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
   const [state, setState] = createStore({
-    url: undefined as string | undefined,
+    key: undefined as ServerConnection.Key | undefined,
     tick: 0,
   })
 
@@ -69,7 +67,7 @@ const useDefaultServerKey = (
     let dead = false
     const result = get?.()
     if (!result) {
-      setState("url", undefined)
+      setState("key", undefined)
       onCleanup(() => {
         dead = true
       })
@@ -79,7 +77,7 @@ const useDefaultServerKey = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setState("url", next ? normalizeServerUrl(next) : undefined)
+        setState("key", next ?? undefined)
       })
       onCleanup(() => {
         dead = true
@@ -87,7 +85,7 @@ const useDefaultServerKey = (
       return
     }
 
-    setState("url", normalizeServerUrl(result))
+    setState("key", ServerConnection.Key.make(result))
     onCleanup(() => {
       dead = true
     })
@@ -95,9 +93,7 @@ const useDefaultServerKey = (
 
   return {
     key: () => {
-      const u = state.url
-      if (!u) return
-      return ServerConnection.key({ type: "http", http: { url: u } })
+      return state.key
     },
     refresh: () => setState("tick", (value) => value + 1),
   }
@@ -160,7 +156,6 @@ export function StatusPopoverServerBody() {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
-
   let dialogRun = 0
   let dialogDead = false
   onCleanup(() => {

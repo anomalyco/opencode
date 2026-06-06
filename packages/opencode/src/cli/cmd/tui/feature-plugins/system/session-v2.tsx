@@ -30,6 +30,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
+import { setPreLayoutSiblingMargin } from "../../util/layout"
 
 const id = "internal:session-v2-debug"
 const route = "session.v2.messages"
@@ -357,7 +358,7 @@ function AssistantText(props: { part: SessionMessageAssistantText; syntax: Synta
   const { theme } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box paddingLeft={3} marginTop={1} flexShrink={0} id="text">
+      <box paddingLeft={3} marginTop={1} flexShrink={0} id={`text-${props.part.id}`}>
         <code
           filetype="markdown"
           drawUnstyledText={false}
@@ -569,7 +570,6 @@ function InlineTool(props: {
 }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
-  const [margin, setMargin] = createSignal(0)
   const [hover, setHover] = createSignal(false)
   const [showError, setShowError] = createSignal(false)
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
@@ -592,7 +592,6 @@ function InlineTool(props: {
   const attributes = createMemo(() => (denied() ? TextAttributes.STRIKETHROUGH : undefined))
   return (
     <box
-      marginTop={margin()}
       paddingLeft={3}
       flexShrink={0}
       flexDirection="row"
@@ -605,16 +604,8 @@ function InlineTool(props: {
         if (renderer.getSelection()?.getSelectedText()) return
         setShowError((prev) => !prev)
       }}
-      renderBefore={function () {
-        const el = this as BoxRenderable
-        const parent = el.parent
-        if (!parent) return
-        const previous = parent.getChildren()[parent.getChildren().indexOf(el) - 1]
-        if (!previous) {
-          setMargin(0)
-          return
-        }
-        if (previous.id.startsWith("text")) setMargin(1)
+      ref={(el: BoxRenderable) => {
+        setPreLayoutSiblingMargin(el, (previous) => (previous?.id.startsWith("text-") ? 1 : 0))
       }}
     >
       <box flexShrink={0}>

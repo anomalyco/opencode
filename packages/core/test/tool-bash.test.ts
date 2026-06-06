@@ -38,6 +38,7 @@ let result: AppProcess.RunResult = {
   stderrTruncated: false,
 }
 let runFailure: AppProcess.AppProcessError | undefined
+let afterPermission = (_input: PermissionV2.AssertInput): Effect.Effect<void> => Effect.void
 let truncate = (input: ToolOutputStore.TruncateInput): Effect.Effect<ToolOutputStore.TruncateResult> =>
   Effect.succeed({ content: input.content, truncated: false })
 
@@ -46,6 +47,7 @@ const permission = Layer.succeed(
   PermissionV2.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
+        Effect.andThen(Effect.suspend(() => afterPermission(input))),
         Effect.andThen(
           input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
         ),
@@ -91,6 +93,7 @@ const reset = () => {
   truncations.length = 0
   denyAction = undefined
   runFailure = undefined
+  afterPermission = () => Effect.void
   result = {
     command: "mock",
     exitCode: 0,
@@ -118,6 +121,7 @@ const withTool = <A, E, R>(
     Layer.provide(registry),
     Layer.provide(permission),
     Layer.provide(mutation),
+    Layer.provide(filesystem),
     Layer.provide(processLayer),
     Layer.provide(resources),
     Layer.provide(config),
@@ -180,6 +184,33 @@ describe("BashTool", () => {
           Effect.andThen(withTool(tmp.path, (registry) => registry.execute(call({ command: "pwd", workdir: "src" })))),
           Effect.andThen(
             Effect.sync(() => expect(runs).toMatchObject([{ cwd: realpathSync(path.join(tmp.path, "src")) }])),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects a workdir that stops being a directory during approval", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const workdir = path.join(tmp.path, "src")
+        afterPermission = (input) =>
+          input.action === "bash"
+            ? Effect.promise(async () => {
+                await fs.rm(workdir, { recursive: true })
+                await fs.writeFile(workdir, "not a directory")
+              }).pipe(Effect.orDie)
+            : Effect.void
+        return Effect.promise(() => fs.mkdir(workdir)).pipe(
+          Effect.andThen(withTool(tmp.path, (registry) => registry.execute(call({ command: "pwd", workdir: "src" })))),
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(runs).toEqual([])
+              expect(assertions.map((input) => input.action)).toEqual(["bash"])
+            }),
           ),
         )
       },
