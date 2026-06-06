@@ -109,6 +109,20 @@ describe("file.search", () => {
     }),
   )
 
+  it.live("keeps fff grep include no-match results", () =>
+    Effect.gen(function* () {
+      expect(Fff.available()).toBe(true)
+      const dir = yield* tmpdir()
+      yield* write(path.join(dir, "src", "match.ts"), "needle\n")
+
+      const search = yield* Search.Service
+      const result = yield* search.search({ cwd: dir, pattern: "missing", glob: ["*.ts"], limit: 10 })
+
+      expect(result.engine).toBe("fff")
+      expect(result.items).toEqual([])
+    }),
+  )
+
   it.live("post-filters fff glob matches", () =>
     Effect.gen(function* () {
       expect(Fff.available()).toBe(true)

@@ -413,8 +413,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       const rows: Item[] = fffGrep.value.items.map(item)
       const regexFallbackError = fffGrep.value.regexFallbackError
 
-      if (!rows.length && input.glob?.length) return yield* rip(input)
-
       remember(state, dir, input.pattern, Array.from(new Set(rows.map((row) => path.join(dir, row.path.text)))))
 
       return {
