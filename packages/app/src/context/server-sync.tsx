@@ -247,17 +247,21 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
     },
   })
 
-  async function loadSessions(directory: string) {
+  async function loadSessions(directory: string, options?: { limit?: number }) {
     const key = directoryKey(directory)
     const pending = sessionLoads.get(key)
-    if (pending) return pending
+    if (pending) {
+      await pending
+      return loadSessions(directory, options)
+    }
 
     children.pin(key)
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(key)
-    if (meta && meta.limit >= store.limit) {
+    const retainedLimit = Math.max(store.limit, options?.limit ?? 0, meta?.limit ?? 0)
+    if (meta && meta.limit >= retainedLimit) {
       const next = trimSessions(store.session, {
-        limit: store.limit,
+        limit: retainedLimit,
         permission: store.permission,
       })
       if (next.length !== store.session.length) {
@@ -268,7 +272,7 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
       return
     }
 
-    const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
+    const limit = Math.max(retainedLimit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
     const promise = queryClient
       .fetchQuery({
         ...queryOptionsApi.sessions(key),
@@ -283,7 +287,7 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
                 .filter((s) => !!s?.id)
                 .filter((s) => !s.time?.archived)
                 .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-              const limit = store.limit
+              const limit = Math.max(store.limit, options?.limit ?? 0, sessionMeta.get(key)?.limit ?? 0)
               const childSessions = store.session.filter((s) => !!s.parentID)
               const sessions = trimSessions([...nonArchived, ...childSessions], {
                 limit,
@@ -400,6 +404,7 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
       setStore,
       push: queue.push,
       setSessionTodo,
+      retainedLimit: sessionMeta.get(key)?.limit,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))

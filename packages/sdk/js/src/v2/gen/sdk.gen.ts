@@ -818,9 +818,9 @@ export class ProjectCopy extends HeyApiClient {
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
       projectID: string
-      query_directory?: string
       workspace?: string
-      body_directory?: string
+      directory?: string
+      force?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -830,17 +830,9 @@ export class ProjectCopy extends HeyApiClient {
         {
           args: [
             { in: "path", key: "projectID" },
-            {
-              in: "query",
-              key: "query_directory",
-              map: "directory",
-            },
             { in: "query", key: "workspace" },
-            {
-              in: "body",
-              key: "body_directory",
-              map: "directory",
-            },
+            { in: "body", key: "directory" },
+            { in: "body", key: "force" },
           ],
         },
       ],

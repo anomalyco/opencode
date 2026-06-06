@@ -10,6 +10,10 @@ import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-ses
 import { DialogWorkspaceFileChanges } from "../dialog-workspace-file-changes"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
 
+function moveReminderText(directory: string) {
+  return `<system-reminder>The user has changed the current working directory to "${directory}". This is still the same project but at a possibly new location; take this into account when working with any files from now on.</system-reminder>`
+}
+
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
   const sdk = useSDK()
@@ -37,6 +41,11 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       )
       const directory = result.data?.directory
       if (!directory) throw new Error("No project copy directory returned")
+
+      // Call a location-based route to make sure it's bootstrapped
+      // before moving on
+      await sdk.client.path.get({ directory }, { throwOnError: true })
+
       setProgress("Creating session")
       return directory
     } catch (err) {
@@ -51,9 +60,21 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   function open() {
     const projectID = input.projectID()
     if (!projectID) return
+    const sessionID = input.sessionID()
+    const session = sessionID ? sync.session.get(sessionID) : undefined
     dialog.replace(() => (
       <DialogMoveSession
         projectID={projectID}
+        current={
+          homeDestination?.destination() ??
+          (session
+            ? {
+                type: "directory",
+                directory: session.directory,
+                subdirectory: !!session.path,
+              }
+            : undefined)
+        }
         onSelect={(selection) => {
           const sessionID = input.sessionID()
           if (!sessionID) {
@@ -93,8 +114,8 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       return
     }
     setProgress("Moving session")
-    await sdk.client.experimental.controlPlane
-      .moveSession(
+    try {
+      await sdk.client.experimental.controlPlane.moveSession(
         {
           sessionID,
           destination: { directory },
@@ -102,15 +123,28 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
         },
         { throwOnError: true },
       )
-      .then(() => dialog.clear())
-      .catch((error) => {
-        toast.error(error)
-        dialog.clear()
-      })
-      .finally(() => {
-        setProgress(undefined)
-        setCreating(false)
-      })
+      await sdk.client.session
+        .promptAsync({
+          sessionID,
+          directory,
+          noReply: true,
+          parts: [
+            {
+              type: "text",
+              text: moveReminderText(directory),
+              synthetic: true,
+            },
+          ],
+        })
+        .catch(() => undefined)
+      dialog.clear()
+    } catch (error) {
+      toast.error(error)
+      dialog.clear()
+    } finally {
+      setProgress(undefined)
+      setCreating(false)
+    }
   }
 
   const pending = createMemo(() => Boolean(homeDestination?.destination()))

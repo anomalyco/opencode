@@ -21,7 +21,6 @@ const assertions: PermissionV2.AssertInput[] = []
 const writes: string[] = []
 let reads = 0
 let denyAction: string | undefined
-let afterAssertion = (_input: PermissionV2.AssertInput): Effect.Effect<void> => Effect.void
 let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
 
 const permission = Layer.succeed(
@@ -30,9 +29,7 @@ const permission = Layer.succeed(
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
         Effect.andThen(
-          input.action === denyAction
-            ? Effect.fail(new PermissionV2.DeniedError({ rules: [] }))
-            : afterAssertion(input),
+          input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
         ),
       ),
     ask: () => Effect.die("unused"),
@@ -48,7 +45,6 @@ const reset = () => {
   writes.length = 0
   reads = 0
   denyAction = undefined
-  afterAssertion = () => Effect.void
   afterRead = () => Effect.void
 }
 
@@ -68,6 +64,10 @@ const filesystem = Layer.effect(
           ),
       writeWithDirs: (target, content, mode) =>
         Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
+      writeFile: (target, content, options) =>
+        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFile(target, content, options))),
+      writeFileString: (target, content, options) =>
+        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFileString(target, content, options))),
     })
   }),
 ).pipe(Layer.provide(FSUtil.defaultLayer))
@@ -77,18 +77,18 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
-  const planning = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const commits = FileMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(planning))
+  const resolution = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
+  const mutation = FileMutation.layer.pipe(Layer.provide(filesystem))
   const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const edit = EditTool.layer.pipe(
     Layer.provide(registry),
-    Layer.provide(planning),
-    Layer.provide(commits),
+    Layer.provide(resolution),
+    Layer.provide(mutation),
     Layer.provide(filesystem),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
-  }).pipe(Effect.provide(Layer.mergeAll(registry, planning, commits, edit)))
+  }).pipe(Effect.provide(Layer.mergeAll(registry, resolution, mutation, edit)))
 }
 
 const call = (input: typeof EditTool.Parameters.Type, id = "call-edit") => ({
@@ -384,55 +384,6 @@ describe("EditTool", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
-
-  if (process.platform !== "win32") {
-    it.live("delegates post-approval revalidation to FileMutation before writing", () =>
-      Effect.acquireUseRelease(
-        Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-        ([active, outside]) => {
-          reset()
-          const parent = path.join(active.path, "parent")
-          const detached = path.join(active.path, "detached")
-          afterAssertion = (input) =>
-            input.action === "edit"
-              ? Effect.promise(async () => {
-                  await fs.rename(parent, detached)
-                  await fs.symlink(outside.path, parent)
-                })
-              : Effect.void
-          return Effect.promise(async () => {
-            await fs.mkdir(parent)
-            await fs.writeFile(path.join(parent, "escape.txt"), "before")
-          }).pipe(
-            Effect.andThen(
-              withTool(active.path, (registry) =>
-                registry.execute(call({ path: "parent/escape.txt", oldString: "before", newString: "after" })),
-              ),
-            ),
-            Effect.andThen((result) =>
-              Effect.gen(function* () {
-                expect(result).toEqual({ type: "error", value: "Unable to edit parent/escape.txt" })
-                expect(assertions.map((input) => input.action)).toEqual(["edit"])
-                expect(writes).toEqual([])
-                expect(
-                  yield* Effect.promise(() =>
-                    fs.stat(path.join(outside.path, "escape.txt")).then(
-                      () => true,
-                      () => false,
-                    ),
-                  ),
-                ).toBe(false)
-              }),
-            ),
-          )
-        },
-        ([active, outside]) =>
-          Effect.promise(() =>
-            Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-          ),
-      ),
-    )
-  }
 })
 
 test("keeps the locked edit schema, semantics docstring, and deferred TODOs visible", async () => {

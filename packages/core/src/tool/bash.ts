@@ -41,7 +41,7 @@ const Success = Schema.Struct({
   truncated: Schema.Boolean,
   stdoutTruncated: Schema.Boolean.pipe(Schema.optional),
   stderrTruncated: Schema.Boolean.pipe(Schema.optional),
-  resource: ToolOutputStore.Resource.pipe(Schema.optional),
+  outputPath: Schema.String.pipe(Schema.optional),
   timedOut: Schema.Boolean.pipe(Schema.optional),
   warnings: Schema.Array(Schema.String).pipe(Schema.optional),
 })
@@ -114,6 +114,7 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
     const mutation = yield* LocationMutation.Service
+    const fs = yield* FSUtil.Service
     const appProcess = yield* AppProcess.Service
     const resources = yield* ToolOutputStore.Service
     const config = yield* Config.Service
@@ -121,19 +122,19 @@ export const layer = Layer.effectDiscard(
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
+        outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),
         execute: ({ parameters, sessionID, call, assertPermission }) =>
           Effect.gen(function* () {
-            const plan = yield* mutation.resolve({ path: parameters.workdir ?? ".", kind: "directory" })
-            const external = plan.target.externalDirectory
+            const target = yield* mutation.resolve({ path: parameters.workdir ?? ".", kind: "directory" })
+            const external = target.externalDirectory
             if (external) yield* assertPermission(LocationMutation.externalDirectoryPermission(external))
-            const warnings = externalCommandDirectories(parameters.command, plan.target.canonical).map(
+            const warnings = externalCommandDirectories(parameters.command, target.canonical).map(
               (directory) =>
                 `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
             )
             yield* assertPermission({ action: name, resources: [parameters.command], save: [parameters.command] })
 
-            const target = yield* mutation.revalidate(plan)
-            if (!target.exists || target.type !== "Directory")
+            if ((yield* fs.stat(target.canonical)).type !== "Directory")
               throw new Error(`Working directory is not a directory: ${target.canonical}`)
 
             const entries = yield* config.entries()
@@ -187,7 +188,7 @@ export const layer = Layer.effectDiscard(
               ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
               ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
               ...(truncated.truncated && !result.stdoutTruncated && !result.stderrTruncated
-                ? { resource: truncated.resource }
+                ? { outputPath: truncated.outputPath }
                 : {}),
             }
           }).pipe(

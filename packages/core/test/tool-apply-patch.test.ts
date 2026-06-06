@@ -24,6 +24,7 @@ let editApproved = false
 let blockRemoveTarget: string | undefined
 let removeStarted: Deferred.Deferred<void> | undefined
 let releaseRemove: Deferred.Deferred<void> | undefined
+let afterEditApproval = (): Effect.Effect<void> => Effect.void
 
 const permission = Layer.succeed(
   PermissionV2.Service,
@@ -33,6 +34,7 @@ const permission = Layer.succeed(
         assertions.push(input)
         if (input.action === "edit") editApproved = true
       }).pipe(
+        Effect.andThen(input.action === "edit" ? Effect.suspend(afterEditApproval) : Effect.void),
         Effect.andThen(
           input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
         ),
@@ -54,6 +56,7 @@ const reset = () => {
   blockRemoveTarget = undefined
   removeStarted = undefined
   releaseRemove = undefined
+  afterEditApproval = () => Effect.void
 }
 
 const filesystem = Layer.effect(
@@ -84,18 +87,18 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
-  const planning = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const commits = FileMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(planning))
+  const resolution = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
+  const mutation = FileMutation.layer.pipe(Layer.provide(filesystem))
   const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const patch = ApplyPatchTool.layer.pipe(
     Layer.provide(registry),
-    Layer.provide(planning),
-    Layer.provide(commits),
+    Layer.provide(resolution),
+    Layer.provide(mutation),
     Layer.provide(filesystem),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
-  }).pipe(Effect.provide(Layer.mergeAll(registry, planning, commits, patch)))
+  }).pipe(Effect.provide(Layer.mergeAll(registry, resolution, mutation, patch)))
 }
 
 const call = (patchText: string, id = "call-apply-patch") => ({
@@ -296,6 +299,26 @@ describe("ApplyPatchTool", () => {
               }),
             ),
           ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects an add target that appears during permission approval", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "appeared.txt")
+        afterEditApproval = () => Effect.promise(() => fs.writeFile(target, "winner\n")).pipe(Effect.orDie)
+        return withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            expect(
+              yield* registry.execute(call("*** Begin Patch\n*** Add File: appeared.txt\n+replacement\n*** End Patch")),
+            ).toEqual({ type: "error", value: "Unable to apply patch at appeared.txt" })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("winner\n")
+          }),
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
