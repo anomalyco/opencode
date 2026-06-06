@@ -29,7 +29,9 @@ const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
     capabilities: { tools: true, input: ["text"], output: ["text"] },
     request: {
       headers: { "x-test": "header" },
-      body: { store: false, apiKey: "secret" },
+      body: { apiKey: "secret", custom_extension: { enabled: true } },
+      generation: { temperature: 0.7 },
+      options: { store: false, serviceTier: "priority" },
     },
     variants,
     time: { released: DateTime.makeUnsafe(0) },
@@ -63,7 +65,9 @@ describe("SessionRunnerModel", () => {
         defaults: {
           headers: { "x-test": "header" },
           limits: { context: 100, output: 20 },
-          http: { body: { store: false } },
+          generation: { temperature: 0.7 },
+          providerOptions: { openai: { store: false, serviceTier: "priority" } },
+          http: { body: { custom_extension: { enabled: true } } },
         },
       })
     }),
@@ -91,7 +95,7 @@ describe("SessionRunnerModel", () => {
             url: "https://compatible.example/v1",
             settings: { apiKey: "settings-secret", compatibility: "strict" },
           }),
-          request: { headers: {}, body: {} },
+          request: { headers: {}, body: {}, generation: {}, options: {} },
         }),
       )
       const request = LLM.request({ model: resolved, prompt: "Hello" })
@@ -108,15 +112,21 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("applies the selected Session variant to request options", () =>
+  it.effect("lowers selected OpenAI Session variants into Responses options", () =>
     Effect.gen(function* () {
-      const catalog = model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }, [
+      const base = model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }, [
         {
           id: ModelV2.VariantID.make("high"),
           headers: { "x-variant": "high" },
-          body: { reasoningEffort: "high" },
+          body: {},
+          generation: { temperature: 0.2 },
+          options: { reasoningEffort: "high" },
         },
       ])
+      const catalog = new ModelV2.Info({
+        ...base,
+        request: { ...base.request, options: { ...base.request.options, reasoningEffort: "medium" } },
+      })
       const session = SessionV2.Info.make({
         id: SessionV2.ID.make("ses_model_variant"),
         projectID: ProjectV2.ID.global,
@@ -133,11 +143,87 @@ describe("SessionRunnerModel", () => {
       })
 
       const resolved = yield* SessionRunnerModel.resolve(session, catalog)
+      const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
 
-      expect(resolved.route.defaults).toMatchObject({
-        headers: { "x-test": "header", "x-variant": "high" },
-        http: { body: { store: false, reasoningEffort: "high" } },
+      expect(resolved.route.defaults.headers).toMatchObject({ "x-test": "header", "x-variant": "high" })
+      expect(resolved.route.defaults.http?.body).toEqual({ custom_extension: { enabled: true } })
+      expect(prepared.body).toMatchObject({
+        store: false,
+        service_tier: "priority",
+        temperature: 0.2,
+        reasoning: { effort: "high" },
       })
+      expect(prepared.body).not.toHaveProperty("reasoningEffort")
+    }),
+  )
+
+  it.effect("lowers selected OpenAI-compatible Session variants into Chat options", () =>
+    Effect.gen(function* () {
+      const catalog = model(
+        { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://compatible.example/v1" },
+        [
+          {
+            id: ModelV2.VariantID.make("high"),
+            headers: {},
+            body: {},
+            generation: {},
+            options: { reasoningEffort: "high" },
+          },
+        ],
+      )
+      const session = SessionV2.Info.make({
+        id: SessionV2.ID.make("ses_compatible_variant"),
+        projectID: ProjectV2.ID.global,
+        title: "test",
+        model: { id: catalog.id, providerID: catalog.providerID, variant: ModelV2.VariantID.make("high") },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+        location: { directory: AbsolutePath.make("/project") },
+      })
+
+      const resolved = yield* SessionRunnerModel.resolve(session, catalog)
+      const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
+
+      expect(resolved.route.defaults.http?.body).toEqual({ custom_extension: { enabled: true } })
+      expect(prepared.body).toMatchObject({
+        store: false,
+        reasoning_effort: "high",
+      })
+      expect(prepared.body).not.toHaveProperty("reasoningEffort")
+    }),
+  )
+
+  it.effect("lowers selected Anthropic Session variants into Messages options", () =>
+    Effect.gen(function* () {
+      const catalog = model({ type: "aisdk", package: "@ai-sdk/anthropic", url: "https://anthropic.example/v1" }, [
+        {
+          id: ModelV2.VariantID.make("high"),
+          headers: {},
+          body: {},
+          generation: {},
+          options: { thinking: { type: "enabled", budgetTokens: 12000 } },
+        },
+      ])
+      const session = SessionV2.Info.make({
+        id: SessionV2.ID.make("ses_anthropic_variant"),
+        projectID: ProjectV2.ID.global,
+        title: "test",
+        model: { id: catalog.id, providerID: catalog.providerID, variant: ModelV2.VariantID.make("high") },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+        location: { directory: AbsolutePath.make("/project") },
+      })
+
+      const resolved = yield* SessionRunnerModel.resolve(session, catalog)
+      const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
+
+      expect(resolved.route.defaults.http?.body).toEqual({ custom_extension: { enabled: true } })
+      expect(prepared.body).toMatchObject({
+        thinking: { type: "enabled", budget_tokens: 12000 },
+      })
+      expect(JSON.stringify(prepared.body)).not.toContain("budgetTokens")
     }),
   )
 
@@ -159,7 +245,7 @@ describe("SessionRunnerModel", () => {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         new ModelV2.Info({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
-          request: { headers: {}, body: {} },
+          request: { headers: {}, body: {}, generation: {}, options: {} },
         }),
         provider({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
       )

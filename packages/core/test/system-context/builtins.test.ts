@@ -6,10 +6,10 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SystemContext } from "@opencode-ai/core/system-context"
-import { SystemContextBuiltIns } from "@opencode-ai/core/system-context-builtins"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context-registry"
-import { location } from "./fixture/location"
-import { testEffect } from "./lib/effect"
+import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
+import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { location } from "../fixture/location"
+import { testEffect } from "../lib/effect"
 
 const directory = AbsolutePath.make(FSUtil.resolve("/repo/packages/core"))
 const projectDirectory = AbsolutePath.make(FSUtil.resolve("/repo"))

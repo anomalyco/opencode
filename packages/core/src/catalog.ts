@@ -3,6 +3,7 @@ export * as Catalog from "./catalog"
 import { Context, Effect, Layer, Option, Order, pipe, Schema, Array, Scope, Stream } from "effect"
 import { castDraft, enableMapSet, type Draft } from "immer"
 import { ModelV2 } from "./model"
+import { ModelRequest } from "./model-request"
 import { PluginV2 } from "./plugin"
 import { ProviderV2 } from "./provider"
 import { Location } from "./location"
@@ -106,14 +107,7 @@ export const layer = Layer.effect(
               ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
               : model.api
       const request = {
-        headers: {
-          ...provider.request.headers,
-          ...model.request.headers,
-        },
-        body: {
-          ...provider.request.body,
-          ...model.request.body,
-        },
+        ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
         variant: model.request.variant,
       }
       return new ModelV2.Info({
@@ -199,6 +193,8 @@ export const layer = Layer.effect(
         }
       }),
     })
+    const available = (model: ModelV2.Info) =>
+      state.get().providers.get(model.providerID)?.provider.enabled !== false && model.enabled
 
     yield* events.subscribe(PluginV2.Event.Added).pipe(
       // Plugin registries are location scoped even though the event bus is process scoped.
@@ -250,17 +246,17 @@ export const layer = Layer.effect(
         }),
 
         available: Effect.fn("CatalogV2.model.available")(function* () {
-          return (yield* result.model.all()).filter((model) => {
-            const record = state.get().providers.get(model.providerID)
-            return record?.provider.enabled !== false && model.enabled
-          })
+          return (yield* result.model.all()).filter(available)
         }),
 
         default: Effect.fn("CatalogV2.model.default")(function* () {
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
-            const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID).pipe(Effect.option)
-            if (Option.isSome(model) && model.value.enabled) return model
+            const provider = state.get().providers.get(defaultModel.providerID)?.provider
+            if (provider?.enabled !== false) {
+              const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID).pipe(Effect.option)
+              if (Option.isSome(model) && available(model.value)) return model
+            }
           }
 
           return pipe(

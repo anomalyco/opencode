@@ -1,7 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
-import { TextAttributes, type BorderSides, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
+import {
+  TextAttributes,
+  type BorderSides,
+  type BoxRenderable,
+  type DiffRenderable,
+  type ScrollBoxRenderable,
+} from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { useBindings, useCommandShortcut } from "@tui/keymap"
 import { useTheme } from "@tui/context/theme"
@@ -40,6 +46,7 @@ const KV_VIEW = "diff_viewer_view"
 type DiffMode = "git" | "last-turn"
 type DiffViewerFocus = "patches" | "files"
 type DiffView = "split" | "unified"
+type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
 
 type DiffFile = {
   readonly file: string
@@ -143,6 +150,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const patchFileIndexes = createMemo(() => orderedPatchFileIndexes(flattenFileTree(fileTree())))
   const focusRunner = (input: Record<DiffViewerFocus, () => void>) => () => input[focus()]()
   const switchFocusShortcut = useCommandShortcut("diff.switch_focus")
+  const nextHunkShortcut = useCommandShortcut("diff.next_hunk")
+  const previousHunkShortcut = useCommandShortcut("diff.previous_hunk")
   const nextFileShortcut = useCommandShortcut("diff.next_file")
   const previousFileShortcut = useCommandShortcut("diff.previous_file")
   const toggleFileTreeShortcut = useCommandShortcut("diff.toggle_file_tree")
@@ -153,6 +162,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const helpShortcut = useCommandShortcut("diff.help")
   let scroll: ScrollBoxRenderable | undefined
   const patchNodeByFileIndex = new Map<number, BoxRenderable>()
+  const diffNodeByFileIndex = new Map<number, DiffRenderable>()
+  const [selectedHunk, setSelectedHunk] = createSignal<SelectedHunk | undefined>()
   const [pendingPatchScrollFileIndex, setPendingPatchScrollFileIndex] = createSignal<number | undefined>()
   const [patchFillerHeight, setPatchFillerHeight] = createSignal(0)
 
@@ -164,6 +175,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     setLastHighlightedFileNode(undefined)
     setActivePatchFileIndex(undefined)
     setSelectedFileIndex(undefined)
+    setSelectedHunk(undefined)
     setReviewedFileNames(new Set<string>())
   })
 
@@ -189,6 +201,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const clearFileTreePatchState = () => {
     setHighlightedFileNode(undefined)
     setActivePatchFileIndex(undefined)
+    setSelectedHunk(undefined)
   }
 
   const scrollPatchNodeToTop = (patchNode: BoxRenderable) => {
@@ -227,6 +240,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
 
   const jumpToFileIndex = (fileIndex: number | undefined) => {
     if (fileIndex === undefined) return
+    setSelectedHunk(undefined)
     scrollToFileIndex(fileIndex)
   }
 
@@ -248,6 +262,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   }
 
   const jumpRelativePatchFile = (offset: number) => {
+    setSelectedHunk(undefined)
     const next = movePatchFileIndex(patchFileIndexes(), selectedFileIndex() ?? activePatchFileIndex(), offset)
     if (singlePatch()) {
       if (next === undefined) return
@@ -256,6 +271,38 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       return
     }
     scrollToFileIndex(next)
+  }
+
+  const jumpRelativeHunk = (offset: -1 | 1) => {
+    const patchScroll = scroll
+    if (!patchScroll) return
+    const hunks = visiblePatchFiles()
+      .flatMap((entry) => {
+        const node = diffNodeByFileIndex.get(entry.fileIndex)
+        if (!node || node.isDestroyed) return []
+        const contentY = patchScroll.scrollTop + node.y - patchScroll.viewport.y
+        return node.getHunkRowOffsets().map((row, hunkIndex) => ({
+          fileIndex: entry.fileIndex,
+          hunkIndex,
+          contentY: contentY + row,
+        }))
+      })
+      .sort((left, right) => left.contentY - right.contentY)
+    const selected = selectedHunk()
+    const selectedIndex =
+      selected?.scrollTop === patchScroll.scrollTop
+        ? hunks.findIndex((hunk) => hunk.fileIndex === selected.fileIndex && hunk.hunkIndex === selected.hunkIndex)
+        : -1
+    const next =
+      selectedIndex !== -1
+        ? hunks[selectedIndex + offset]
+        : offset === 1
+          ? hunks.find((hunk) => hunk.contentY > patchScroll.scrollTop)
+          : hunks.findLast((hunk) => hunk.contentY < patchScroll.scrollTop)
+    if (!next) return
+    selectPatchFile(next.fileIndex)
+    patchScroll.scrollTo(next.contentY)
+    setSelectedHunk({ fileIndex: next.fileIndex, hunkIndex: next.hunkIndex, scrollTop: patchScroll.scrollTop })
   }
 
   const highlightedPatchFileIndex = () => fileRows().find((row) => row.id === highlightedFileNode())?.fileIndex
@@ -505,6 +552,22 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       }),
     },
     {
+      name: "diff.next_hunk",
+      title: "Jump to next diff hunk",
+      category: "VCS",
+      run() {
+        jumpRelativeHunk(1)
+      },
+    },
+    {
+      name: "diff.previous_hunk",
+      title: "Jump to previous diff hunk",
+      category: "VCS",
+      run() {
+        jumpRelativeHunk(-1)
+      },
+    },
+    {
       name: "diff.next_file",
       title: "Jump to next diff file",
       category: "VCS",
@@ -557,6 +620,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       title: "Toggle single patch view",
       category: "VCS",
       run() {
+        setSelectedHunk(undefined)
         if (!singlePatch()) {
           ensureHighlightedPatchFile()
           setSinglePatch(true)
@@ -592,6 +656,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       category: "VCS",
       run() {
         if (!splitAvailable()) return
+        setSelectedHunk(undefined)
         const next = view() === "split" ? "unified" : "split"
         setViewOverride(next)
         props.api.kv.set(KV_VIEW, next)
@@ -716,6 +781,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                 <Panel flexGrow={1} minHeight={0} border="none">
                   <Separator axis="x" start={showFileTree() ? "edge-out" : undefined} />
                   <scrollbox
+                    id="diff-viewer-patches"
                     ref={(element: ScrollBoxRenderable) => (scroll = element)}
                     flexGrow={1}
                     minHeight={0}
@@ -755,6 +821,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                               {(patch) => (
                                 <box border={patchLeftBorder()} borderColor={theme().border}>
                                   <diff
+                                    id={`diff-viewer-patch-${entry.fileIndex}`}
+                                    ref={(element: DiffRenderable) => diffNodeByFileIndex.set(entry.fileIndex, element)}
                                     diff={patch()}
                                     view={view()}
                                     filetype={reviewed() ? PLAIN_TEXT_FILETYPE : filetype(entry.file.file)}
@@ -808,6 +876,20 @@ function DiffViewer(props: { api: TuiPluginApi }) {
               </text>
             )}
           </Show>
+          <Show when={nextHunkShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>next hunk</span>
+              </text>
+            )}
+          </Show>
+          <Show when={previousHunkShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>previous hunk</span>
+              </text>
+            )}
+          </Show>
           <Show when={previousFileShortcut()}>
             {(shortcut) => (
               <text fg={theme().text}>
@@ -854,6 +936,16 @@ function DiffViewerHelpDialog() {
       shortcut: useCommandShortcut("diff.switch_focus"),
       action: "Focus file tree",
       description: "Move keyboard focus between the file tree and patch pane",
+    },
+    {
+      shortcut: useCommandShortcut("diff.next_hunk"),
+      action: "Next hunk",
+      description: "Jump to the next diff hunk",
+    },
+    {
+      shortcut: useCommandShortcut("diff.previous_hunk"),
+      action: "Previous hunk",
+      description: "Jump to the previous diff hunk",
     },
     {
       shortcut: useCommandShortcut("diff.next_file"),
