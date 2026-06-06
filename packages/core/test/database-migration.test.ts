@@ -452,6 +452,64 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("imports existing drizzle migration state without a name column", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('hash-1', 1), ('hash-2', 2)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [])
+
+        expect(yield* db.all(sql`SELECT id FROM migration ORDER BY id`)).toEqual(
+          migrations.slice(0, 2).map((migration) => ({ id: migration.id })),
+        )
+      }),
+    )
+  })
+
+  test("skips already counted legacy drizzle migrations without replaying them", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('hash-1', 1), ('hash-2', 2)`,
+        )
+        const executed: string[] = []
+
+        yield* DatabaseMigration.applyOnly(db, [
+          {
+            id: migrations[0]!.id,
+            up() {
+              return Effect.sync(() => executed.push("first"))
+            },
+          },
+          {
+            id: migrations[1]!.id,
+            up() {
+              return Effect.sync(() => executed.push("second"))
+            },
+          },
+          {
+            id: "future",
+            up() {
+              return Effect.sync(() => executed.push("future"))
+            },
+          },
+        ])
+
+        expect(executed).toEqual(["future"])
+      }),
+    )
+  })
+
   test("does not replay a migrated session metadata column", async () => {
     await run(
       Effect.gen(function* () {
