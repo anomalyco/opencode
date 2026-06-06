@@ -28,16 +28,6 @@ export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const MAX_LINE_LENGTH = 2_000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 
-export class ReadLimitError extends Error {
-  constructor(
-    readonly resource: string,
-    readonly maximumBytes: number,
-  ) {
-    super(`File exceeds ${maximumBytes} byte read limit: ${resource}`)
-    this.name = "ReadLimitError"
-  }
-}
-
 export class BinaryFileError extends Error {
   constructor(readonly resource: string) {
     super(`Cannot read binary file: ${resource}`)
@@ -137,12 +127,9 @@ export class TextPage extends Schema.Class<TextPage>("FileSystem.TextPage")({
   next: PositiveInt.pipe(Schema.optional),
 }) {}
 
-export class ReadTarget extends Schema.Class<ReadTarget>("FileSystem.ReadTarget")({
-  real: Schema.String,
+export class ReadPath extends Schema.Class<ReadPath>("FileSystem.ReadPath")({
+  type: Schema.Literals(["file", "directory"]),
   resource: Schema.String,
-  size: NonNegativeInt,
-  dev: Schema.Number,
-  ino: Schema.Number.pipe(Schema.optional),
 }) {}
 
 export const ListInput = Schema.Struct({
@@ -178,10 +165,6 @@ export class RootTarget extends Schema.Class<RootTarget>("FileSystem.RootTarget"
   dev: Schema.Number,
   ino: Schema.Number.pipe(Schema.optional),
 }) {}
-
-export type ReadPathTarget =
-  | { readonly type: "file"; readonly target: ReadTarget }
-  | { readonly type: "directory"; readonly target: ListTarget }
 
 export class Entry extends Schema.Class<Entry>("FileSystem.Entry")({
   path: RelativePath,
@@ -235,12 +218,8 @@ export const Event = {
 
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<Content>
-  readonly resolveReadPath: (input: ReadInput) => Effect.Effect<ReadPathTarget>
-  readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
-  readonly readResolved: (target: ReadTarget, maximumBytes?: number) => Effect.Effect<Content>
-  readonly readSampleResolved: (target: ReadTarget, maximumBytes: number) => Effect.Effect<Uint8Array>
-  readonly readTextPageResolved: (target: ReadTarget, page?: TextPageInput) => Effect.Effect<TextPage>
-  readonly readToolResolved: (target: ReadTarget, page?: TextPageInput) => Effect.Effect<Content | TextPage>
+  readonly resolveReadPath: (input: ReadInput) => Effect.Effect<ReadPath>
+  readonly readTool: (input: ReadInput, page?: TextPageInput) => Effect.Effect<Content | TextPage>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   /** Select a contained canonical read root without asserting leaf policy. */
   readonly resolveRoot: (input?: ListInput) => Effect.Effect<RootTarget>
@@ -361,33 +340,27 @@ export const layer = Layer.effect(
     })
 
     const resolveReadPath = Effect.fn("FileSystem.resolveReadPath")(function* (input: ReadInput) {
-      const file = yield* resolve(input.path, input.reference)
-      const info = yield* fs.stat(file.real).pipe(Effect.orDie)
-      const relative = path.relative(file.root, file.real).replaceAll("\\", "/")
-      const resource = input.reference === undefined ? relative || "." : `${input.reference}:${relative || "."}`
-      if (info.type === "File") {
-        return {
-          type: "file" as const,
-          target: new ReadTarget({
-            real: file.real,
-            resource,
-            size: Number(info.size),
-            dev: info.dev,
-            ino: Option.getOrUndefined(info.ino),
-          }),
-        }
-      }
-      if (info.type === "Directory") {
-        return { type: "directory" as const, target: new ListTarget({ ...file, resource }) }
-      }
-      return yield* Effect.die(new Error("Path is not a file or directory"))
+      const target = yield* resolve(input.path, input.reference)
+      const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+      const type = info.type === "File" ? "file" : info.type === "Directory" ? "directory" : undefined
+      if (!type) return yield* Effect.die(new Error("Path is not a file or directory"))
+      const relative = path.relative(target.root, target.real).replaceAll("\\", "/") || "."
+      return new ReadPath({
+        type,
+        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
+      })
     })
-    const resolveRead = Effect.fn("FileSystem.resolveRead")(function* (input: ReadInput) {
-      const resolved = yield* resolveReadPath(input)
-      if (resolved.type !== "file") return yield* Effect.die(new Error("Path is not a file"))
-      return resolved.target
+    const resolveFile = Effect.fnUntraced(function* (input: ReadInput) {
+      const target = yield* resolve(input.path, input.reference)
+      const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+      if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+      const relative = path.relative(target.root, target.real).replaceAll("\\", "/") || "."
+      return {
+        real: target.real,
+        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
+      }
     })
-    const content = (target: ReadTarget, bytes: Uint8Array) =>
+    const content = (target: { readonly real: string }, bytes: Uint8Array) =>
       Effect.gen(function* () {
         const mime = FSUtil.mimeType(target.real)
         if (!bytes.includes(0)) {
@@ -403,143 +376,13 @@ export const layer = Layer.effect(
           mime,
         })
       })
-    const readResolved = Effect.fn("FileSystem.readResolved")(function* (target: ReadTarget, maximumBytes?: number) {
-      if (maximumBytes === undefined) return yield* content(target, yield* fs.readFile(target.real).pipe(Effect.orDie))
+    const readTool = Effect.fn("FileSystem.readTool")(function* (input: ReadInput, page: TextPageInput = {}) {
+      const target = yield* resolveFile(input)
       return yield* Effect.scoped(
         Effect.gen(function* () {
           const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
           const info = yield* file.stat.pipe(Effect.orDie)
           if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
-            return yield* Effect.die(new Error("File changed after permission approval"))
-          if (info.size > maximumBytes) return yield* Effect.die(new ReadLimitError(target.resource, maximumBytes))
-          const bytes = yield* file.readAlloc(maximumBytes + 1).pipe(Effect.orDie)
-          if (bytes._tag === "Some" && bytes.value.length > maximumBytes)
-            return yield* Effect.die(new ReadLimitError(target.resource, maximumBytes))
-          return yield* content(target, bytes._tag === "Some" ? bytes.value : new Uint8Array())
-        }),
-      )
-    })
-    const readSampleResolved = Effect.fn("FileSystem.readSampleResolved")(function* (
-      target: ReadTarget,
-      maximumBytes: number,
-    ) {
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
-          const info = yield* file.stat.pipe(Effect.orDie)
-          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
-            return yield* Effect.die(new Error("File changed after permission approval"))
-          return Option.getOrElse(yield* file.readAlloc(maximumBytes).pipe(Effect.orDie), () => new Uint8Array())
-        }),
-      )
-    })
-    const readTextPageResolved = Effect.fn("FileSystem.readTextPageResolved")(function* (
-      target: ReadTarget,
-      page: TextPageInput = {},
-    ) {
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
-          const info = yield* file.stat.pipe(Effect.orDie)
-          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
-            return yield* Effect.die(new Error("File changed after permission approval"))
-
-          const offset = page.offset ?? 1
-          const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
-          const lines: string[] = []
-          const decoder = new TextDecoder("utf-8", { fatal: true })
-          let pending = ""
-          let discard = false
-          let line = 1
-          let bytes = 0
-          let found = false
-          let truncated = false
-          let next: number | undefined
-
-          const append = (input: string) => {
-            if (line < offset) {
-              line++
-              return true
-            }
-            if (lines.length >= limit) {
-              truncated = true
-              next = line
-              return false
-            }
-            found = true
-            const text = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
-            const size = Buffer.byteLength(text, "utf-8") + (lines.length > 0 ? 1 : 0)
-            if (bytes + size > MAX_READ_BYTES) {
-              truncated = true
-              next = line
-              return false
-            }
-            lines.push(text)
-            bytes += size
-            line++
-            return true
-          }
-
-          let done = false
-          while (!done) {
-            const chunk = yield* file.readAlloc(64 * 1024).pipe(Effect.orDie)
-            if (Option.isNone(chunk)) break
-            if (chunk.value.includes(0)) return yield* Effect.die(new BinaryFileError(target.resource))
-            let text = decoder.decode(chunk.value, { stream: true })
-            while (true) {
-              const index = text.indexOf("\n")
-              if (index === -1) {
-                if (!discard) {
-                  pending += text
-                  if (pending.length > MAX_LINE_LENGTH) {
-                    pending = pending.slice(0, MAX_LINE_LENGTH + 1)
-                    discard = true
-                  }
-                }
-                break
-              }
-              const current = pending + (discard ? "" : text.slice(0, index))
-              pending = ""
-              discard = false
-              text = text.slice(index + 1)
-              if (!append(current.endsWith("\r") ? current.slice(0, -1) : current)) {
-                done = true
-                break
-              }
-            }
-          }
-          if (!done) {
-            const tail = decoder.decode()
-            if (!discard) pending += tail
-            if (pending && !append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)) done = true
-          }
-          if (!done && !found && offset !== 1) return yield* Effect.die(new Error(`Offset ${offset} is out of range`))
-
-          return new TextPage({
-            type: "text-page",
-            content: lines.join("\n"),
-            mime: FSUtil.mimeType(target.real),
-            offset,
-            truncated,
-            ...(next === undefined ? {} : { next }),
-          })
-        }),
-      )
-    })
-    const readToolResolved = Effect.fn("FileSystem.readToolResolved")(function* (
-      target: ReadTarget,
-      page: TextPageInput = {},
-    ) {
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
-          const info = yield* file.stat.pipe(Effect.orDie)
-          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
-            return yield* Effect.die(new Error("File changed after permission approval"))
 
           const first = Option.getOrElse(
             yield* file.readAlloc(Math.min(64 * 1024, Number(info.size) || READ_SAMPLE_BYTES)).pipe(Effect.orDie),
@@ -761,14 +604,11 @@ export const layer = Layer.effect(
 
     return Service.of({
       read: Effect.fn("FileSystem.read")(function* (input) {
-        return yield* readResolved(yield* resolveRead(input))
+        const target = yield* resolveFile(input)
+        return yield* content(target, yield* fs.readFile(target.real).pipe(Effect.orDie))
       }),
       resolveReadPath,
-      resolveRead,
-      readResolved,
-      readSampleResolved,
-      readTextPageResolved,
-      readToolResolved,
+      readTool,
       list: Effect.fn("FileSystem.list")(function* (input) {
         return yield* listResolved(yield* resolveList(input))
       }),

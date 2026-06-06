@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit, Fiber, Layer, Schema } from "effect"
+import { Effect, Exit, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -91,26 +91,9 @@ describe("FileSystem", () => {
           encoding: "base64",
           mime: "application/octet-stream",
         })
-        const binary = yield* service.resolveRead({ path: RelativePath.make("data.bin") })
-        expect(Exit.isFailure(yield* service.readTextPageResolved(binary).pipe(Effect.exit))).toBe(true)
-      }).pipe(provide(directory)),
-    ),
-  )
-
-  it.live("revalidates file identity before sampled classification", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        const file = path.join(directory, "image.png")
-        yield* Effect.promise(() => fs.writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47])))
-        const service = yield* FileSystem.Service
-        const target = yield* service.resolveRead({ path: RelativePath.make("image.png") })
-
-        yield* Effect.promise(() => fs.rename(file, path.join(directory, "original.png")))
-        yield* Effect.promise(() => fs.writeFile(file, Buffer.from([0xff, 0xd8, 0xff])))
-
-        expect(
-          Exit.isFailure(yield* service.readSampleResolved(target, FileSystem.READ_SAMPLE_BYTES).pipe(Effect.exit)),
-        ).toBe(true)
+        expect(Exit.isFailure(yield* service.readTool({ path: RelativePath.make("data.bin") }).pipe(Effect.exit))).toBe(
+          true,
+        )
       }).pipe(provide(directory)),
     ),
   )
@@ -121,17 +104,18 @@ describe("FileSystem", () => {
         const lines = Array.from({ length: 30 }, (_, index) => `line-${index + 1}-é`.padEnd(2_000, "x"))
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "large.txt"), lines.join("\n")))
         const service = yield* FileSystem.Service
-        const target = yield* service.resolveRead({ path: RelativePath.make("large.txt") })
+        const input = { path: RelativePath.make("large.txt") }
 
-        const first = yield* service.readTextPageResolved(target)
-        expect(first).toMatchObject({
+        const result = yield* service.readTool(input)
+        expect(result).toMatchObject({
           type: "text-page",
           offset: 1,
           truncated: true,
         })
+        const first = result.type === "text-page" ? result : yield* Effect.die(new Error("Expected a text page"))
         expect(first.next).toBeDefined()
         const next = first.next!
-        expect(yield* service.readTextPageResolved(target, { offset: next, limit: 1 })).toEqual({
+        expect(yield* service.readTool(input, { offset: next, limit: 1 })).toEqual({
           type: "text-page",
           content: lines[next - 1],
           mime: "text/plain",
@@ -139,7 +123,7 @@ describe("FileSystem", () => {
           truncated: true,
           next: next + 1,
         })
-        expect(yield* service.readTextPageResolved(target, { offset: 30 })).toEqual({
+        expect(yield* service.readTool(input, { offset: 30 })).toEqual({
           type: "text-page",
           content: lines[29],
           mime: "text/plain",
@@ -161,8 +145,11 @@ describe("FileSystem", () => {
           ),
         )
         const service = yield* FileSystem.Service
-        const target = yield* service.resolveRead({ path: RelativePath.make("late-binary.txt") })
-        expect(Exit.isFailure(yield* service.readToolResolved(target, { limit: 1 }).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* service.readTool({ path: RelativePath.make("late-binary.txt") }, { limit: 1 }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
       }).pipe(provide(directory)),
     ),
   )
@@ -178,8 +165,11 @@ describe("FileSystem", () => {
           ),
         )
         const service = yield* FileSystem.Service
-        const target = yield* service.resolveRead({ path: RelativePath.make("invalid-utf8.txt") })
-        expect(Exit.isFailure(yield* service.readToolResolved(target, { limit: 1 }).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* service.readTool({ path: RelativePath.make("invalid-utf8.txt") }, { limit: 1 }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
       }).pipe(provide(directory)),
     ),
   )
@@ -194,11 +184,17 @@ describe("FileSystem", () => {
           fs.writeFile(large, Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(80_000)])),
         )
         const service = yield* FileSystem.Service
-        const smallTarget = yield* service.resolveRead({ path: RelativePath.make("small.pdf") })
-        const largeTarget = yield* service.resolveRead({ path: RelativePath.make("large.pdf") })
-        expect(Exit.isFailure(yield* service.readToolResolved(smallTarget).pipe(Effect.exit))).toBe(true)
-        expect(Exit.isFailure(yield* service.readToolResolved(largeTarget).pipe(Effect.exit))).toBe(true)
-        expect(Exit.isFailure(yield* service.readToolResolved(largeTarget, { limit: 1 }).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(yield* service.readTool({ path: RelativePath.make("small.pdf") }).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(yield* service.readTool({ path: RelativePath.make("large.pdf") }).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(
+          Exit.isFailure(
+            yield* service.readTool({ path: RelativePath.make("large.pdf") }, { limit: 1 }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
       }).pipe(provide(directory)),
     ),
   )
@@ -217,42 +213,14 @@ describe("FileSystem", () => {
           }
         })
         const service = yield* FileSystem.Service
-        const target = yield* service.resolveRead({ path: RelativePath.make("huge.png") })
-        const exit = yield* service.readToolResolved(target).pipe(Effect.exit)
+        const exit = yield* service.readTool({ path: RelativePath.make("huge.png") }).pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("Media exceeds")
       }).pipe(provide(directory)),
     ),
   )
 
-  it.live("never mixes a sampled image with replacement-path content", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        const file = path.join(directory, "race.png")
-        const moved = path.join(directory, "original.png")
-        const original = Buffer.concat([
-          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-          Buffer.alloc(4 * 1024 * 1024, 0x11),
-        ])
-        const replacement = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(1024, 0x22)])
-        yield* Effect.promise(() => fs.writeFile(file, original))
-        const service = yield* FileSystem.Service
-        const target = yield* service.resolveRead({ path: RelativePath.make("race.png") })
-        const reading = yield* service.readToolResolved(target).pipe(Effect.forkChild)
-        yield* Effect.promise(async () => {
-          await fs.rename(file, moved)
-          await fs.writeFile(file, replacement)
-        })
-        const exit = yield* Fiber.join(reading).pipe(Effect.exit)
-        if (Exit.isSuccess(exit)) {
-          expect(exit.value).toMatchObject({ type: "binary", mime: "image/png" })
-          if (exit.value.type === "binary") expect(exit.value.content).toBe(original.toString("base64"))
-        }
-      }).pipe(provide(directory)),
-    ),
-  )
-
-  it.live("closes validated descriptors after successful and failed reads", () =>
+  it.live("closes descriptors after successful and failed reads", () =>
     withTmp((directory) => {
       let active = 0
       const filesystem = Layer.effect(
@@ -280,10 +248,8 @@ describe("FileSystem", () => {
             ? undefined
             : yield* Effect.promise(() => fs.readdir("/dev/fd").then((entries) => entries.length))
         for (let index = 0; index < 50; index++) {
-          yield* service.readToolResolved(yield* service.resolveRead({ path: RelativePath.make("text.txt") }))
-          yield* service
-            .readToolResolved(yield* service.resolveRead({ path: RelativePath.make("binary.pdf") }))
-            .pipe(Effect.exit)
+          yield* service.readTool({ path: RelativePath.make("text.txt") })
+          yield* service.readTool({ path: RelativePath.make("binary.pdf") }).pipe(Effect.exit)
         }
         expect(active).toBe(0)
         if (before !== undefined) {
