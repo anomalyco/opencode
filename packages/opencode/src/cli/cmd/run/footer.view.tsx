@@ -754,7 +754,8 @@ export function RunFooterView(props: RunFooterViewProps) {
                 offset={composer.offset}
                 rows={composer.rows}
                 limit={FOOTER_MENU_ROWS}
-                paddingLeft={1}
+                border={false}
+                paddingLeft={0}
               />
             </Show>
 
