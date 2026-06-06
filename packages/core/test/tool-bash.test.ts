@@ -149,6 +149,7 @@ describe("BashTool", () => {
             const definitions = yield* registry.definitions()
             expect(definitions.map((tool) => tool.name)).toEqual(["bash"])
             expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.background")
+            expect(yield* registry.definitions([{ action: "bash", resource: "*", effect: "deny" }])).toEqual([])
             expect(yield* registry.settle(call({ command: "pwd", description: "Print working directory" }))).toEqual({
               result: { type: "text", value: "hello\n\n\nCommand exited with code 0." },
               output: {

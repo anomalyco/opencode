@@ -110,6 +110,7 @@ describe("EditTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["edit"])
+                expect(yield* registry.definitions([{ action: "edit", resource: "*", effect: "deny" }])).toEqual([])
                 const settled = yield* registry.settle(
                   call({ path: "hello.txt", oldString: "before", newString: "after" }),
                 )
