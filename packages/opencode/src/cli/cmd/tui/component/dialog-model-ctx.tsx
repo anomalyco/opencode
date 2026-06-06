@@ -23,25 +23,30 @@ function fmtGB(mb: number): string {
   return (mb / 1024).toFixed(1)
 }
 
-type MemSnapshot = { freeMb: number; totalMb: number; usedMb: number; label: string }
+type MemSnapshot = {
+  freeMb: number
+  totalMb: number
+  usedMb: number
+  label: string
+  modelMb: number    // model weights (from file size); 0 if unknown
+  kvEstMb: number    // kv cache estimate; 0 if unknown
+}
 
 function extractMem(hw: ResourceSnapshot): MemSnapshot | null {
-  // Discrete GPU: use aggregate VRAM
+  const modelMb = hw.loaded_model?.model_mb ?? 0
+  const kvEstMb = hw.loaded_model?.kv_estimate_mb ?? 0
+
   if (hw.vram?.total_mb && hw.vram.total_mb > 100) {
-    return {
-      freeMb: hw.vram.free_mb ?? 0,
-      usedMb: hw.vram.used_mb ?? 0,
-      totalMb: hw.vram.total_mb,
-      label: "VRAM",
-    }
+    return { freeMb: hw.vram.free_mb ?? 0, usedMb: hw.vram.used_mb ?? 0, totalMb: hw.vram.total_mb, label: "VRAM", modelMb, kvEstMb }
   }
-  // Apple Silicon unified memory or CPU-only
   if (hw.memory?.total_mb) {
     return {
       freeMb: hw.memory.free_mb ?? 0,
       usedMb: hw.memory.used_mb ?? 0,
       totalMb: hw.memory.total_mb,
       label: hw.memory.type === "unified" ? "Unified" : "RAM",
+      modelMb,
+      kvEstMb,
     }
   }
   return null
@@ -98,8 +103,6 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
         description = "recommended — sweet spot for most MCP workflows"
       } else if (n > cur) {
         description = `+${fmtCtxK(n - cur)}`
-        // Warn if free memory is known and expansion looks risky.
-        // Rough heuristic: KV cache growth ≈ 4 MB per 1k extra tokens.
         if (m) {
           const extraKvMb = ((n - cur) / 1024) * 4
           if (extraKvMb > m.freeMb * 0.8) {

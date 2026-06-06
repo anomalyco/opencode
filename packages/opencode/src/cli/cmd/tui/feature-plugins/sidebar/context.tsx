@@ -27,11 +27,20 @@ function fmtGB(mb: number): string {
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
-type MemSnapshot = { usedMb: number; totalMb: number; freeMb: number; label: string }
+type MemSnapshot = {
+  usedMb: number
+  totalMb: number
+  freeMb: number
+  label: string
+  modelMb: number   // 0 if unknown
+  kvEstMb: number   // 0 if unknown
+}
 
 function extractMem(hw: ResourceSnapshot): MemSnapshot | null {
+  const modelMb = hw.loaded_model?.model_mb ?? 0
+  const kvEstMb = hw.loaded_model?.kv_estimate_mb ?? 0
   if (hw.vram?.total_mb && hw.vram.total_mb > 100) {
-    return { usedMb: hw.vram.used_mb ?? 0, freeMb: hw.vram.free_mb ?? 0, totalMb: hw.vram.total_mb, label: "VRAM" }
+    return { usedMb: hw.vram.used_mb ?? 0, freeMb: hw.vram.free_mb ?? 0, totalMb: hw.vram.total_mb, label: "VRAM", modelMb, kvEstMb }
   }
   if (hw.memory?.total_mb) {
     return {
@@ -39,6 +48,8 @@ function extractMem(hw: ResourceSnapshot): MemSnapshot | null {
       freeMb: hw.memory.free_mb ?? 0,
       totalMb: hw.memory.total_mb,
       label: hw.memory.type === "unified" ? "Unified" : "RAM",
+      modelMb,
+      kvEstMb,
     }
   }
   return null
@@ -48,13 +59,32 @@ function normalizeBaseURL(url: string): string {
   return url.replace(/\/+$/, "").replace(/\/v1$/, "")
 }
 
-function MemBar(props: { used: number; total: number; theme: any }) {
-  const filled = Math.max(1, Math.min(BAR_WIDTH, Math.round((props.used / props.total) * BAR_WIDTH)))
-  const empty = BAR_WIDTH - filled
+// Three-segment bar when model info is available; two-segment otherwise.
+function MemBar(props: { mem: MemSnapshot; theme: any }) {
+  const m = props.mem
+  const t = props.theme
+  const total = m.totalMb || 1
+  const hasBreakdown = m.modelMb > 0
+
+  if (hasBreakdown) {
+    const modelChars = Math.max(1, Math.round((m.modelMb / total) * BAR_WIDTH))
+    const kvChars = Math.max(0, Math.min(BAR_WIDTH - modelChars, Math.round((m.kvEstMb / total) * BAR_WIDTH)))
+    const freeChars = BAR_WIDTH - modelChars - kvChars
+    return (
+      <text>
+        <span style={{ fg: t.warning }}>{"█".repeat(modelChars)}</span>
+        <span style={{ fg: t.accent }}>{"▓".repeat(kvChars)}</span>
+        <span style={{ fg: t.textMuted }}>{"░".repeat(Math.max(0, freeChars))}</span>
+      </text>
+    )
+  }
+
+  // Fallback: used vs free
+  const usedChars = Math.max(1, Math.min(BAR_WIDTH, Math.round((m.usedMb / total) * BAR_WIDTH)))
   return (
     <text>
-      <span style={{ fg: props.theme.warning }}>{"█".repeat(filled)}</span>
-      <span style={{ fg: props.theme.textMuted }}>{"░".repeat(empty)}</span>
+      <span style={{ fg: t.warning }}>{"█".repeat(usedChars)}</span>
+      <span style={{ fg: t.textMuted }}>{"░".repeat(BAR_WIDTH - usedChars)}</span>
     </text>
   )
 }
@@ -87,7 +117,6 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     return { tokens, percent: ctx > 0 && tokens > 0 ? Math.round((tokens / ctx) * 100) : null, ctxWindow: ctx > 0 ? fmtCtxK(ctx) : null, tokensPerSecond, isLocal, providerID: providerID ?? null, modelID: modelID ?? null, baseURL: baseURL ?? null }
   })
 
-  // Poll /api/hardware when provider is a local llama-skein backend
   createEffect(on(
     () => state().baseURL,
     (url) => {
@@ -102,8 +131,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         } catch { /* backend may not support /api/hardware */ }
       }
       poll()
-      const id = setInterval(poll, 30_000)
-      onCleanup(() => clearInterval(id))
+      const pollId = setInterval(poll, 30_000)
+      onCleanup(() => clearInterval(pollId))
     },
   ))
 
@@ -140,12 +169,25 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <Show when={mem()}>
         {(m) => (
           <>
-            <MemBar used={m().usedMb} total={m().totalMb} theme={theme()} />
-            <text fg={theme().textMuted}>
-              {fmtGB(m().usedMb)}/{fmtGB(m().totalMb)} GB {m().label}
-              {" · "}
-              <span style={{ fg: theme().accent }}>{fmtGB(m().freeMb)} free</span>
-            </text>
+            <MemBar mem={m()} theme={theme()} />
+            <Show
+              when={m().modelMb > 0}
+              fallback={
+                <text fg={theme().textMuted}>
+                  {fmtGB(m().usedMb)}/{fmtGB(m().totalMb)} GB {m().label}
+                  {" · "}
+                  <span style={{ fg: theme().accent }}>{fmtGB(m().freeMb)} free</span>
+                </text>
+              }
+            >
+              <text fg={theme().textMuted}>
+                <span style={{ fg: theme().warning }}>{fmtGB(m().modelMb)} model</span>
+                {" · "}
+                <span style={{ fg: theme().accent }}>{fmtGB(m().kvEstMb)} KV</span>
+                {" · "}
+                {fmtGB(m().freeMb)} free
+              </text>
+            </Show>
           </>
         )}
       </Show>
