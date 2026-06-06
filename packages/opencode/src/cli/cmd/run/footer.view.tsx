@@ -1,4 +1,4 @@
-// Top-level footer layout for direct interactive mode.
+// Footer layout
 //
 // Renders the footer region as a compact vertical stack:
 //   1. Single-line composer or active footer body
@@ -384,10 +384,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   const activityMeta = createMemo(() => {
     const items: string[] = []
 
-    // if (queue() > 0) {
-    //   items.push(`${queue()} queued`)
-    // }
-
     if (term().width >= 80 && usage().length > 0) {
       items.push(usage())
     }
@@ -403,7 +399,9 @@ export function RunFooterView(props: RunFooterViewProps) {
     return {
       model: model().model,
       variant: props.currentVariant(),
-      provider: term().width >= 150 ? model().provider : undefined,
+      provider: undefined,
+      // Prefer without provider, but if we show it, only show on wide terminals
+      // provider: term().width >= 150 ? model().provider : undefined,
     }
   })
   const statusColor = createMemo(() => {
@@ -421,6 +419,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return theme().muted
   })
+  const statuslineBackground = createMemo(() => theme().status)
   const contextHints = createMemo(() => {
     if (!prompt() || shell() || term().width < 80) {
       return []
@@ -767,7 +766,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 flexDirection="row"
                 gap={0}
                 flexShrink={0}
-                backgroundColor={theme().pane}
+                backgroundColor={statuslineBackground()}
               >
                 <box
                   id="run-direct-footer-statusline-mode"
@@ -790,7 +789,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   minWidth={12}
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={theme().surface}
+                  backgroundColor={statuslineBackground()}
                 >
                   <Show when={busy() && !exiting()}>
                     <box id="run-direct-footer-status-spinner" flexShrink={0}>
@@ -818,7 +817,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                     id="run-direct-footer-statusline-meta"
                     paddingLeft={1}
                     paddingRight={1}
-                    backgroundColor={theme().shade}
+                    backgroundColor={statuslineBackground()}
                     flexShrink={1}
                     maxWidth={12}
                   >
@@ -834,7 +833,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                       id="run-direct-footer-statusline-model"
                       paddingLeft={1}
                       paddingRight={1}
-                      backgroundColor={theme().shade}
+                      backgroundColor={statuslineBackground()}
                       flexShrink={1}
                       maxWidth={term().width >= 150 ? 40 : 24}
                     >

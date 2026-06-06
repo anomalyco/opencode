@@ -32,6 +32,7 @@ export type RunFooterTheme = {
   error: ColorInput
   muted: ColorInput
   text: ColorInput
+  status: ColorInput
   shade: ColorInput
   surface: ColorInput
   pane: ColorInput
@@ -501,9 +502,11 @@ function map(
 ): RunTheme {
   const opaqueSubtleSyntax = opaqueSyntaxStyle(subtleSyntax, scrollbackTheme.background)
   subtleSyntax?.destroy()
+  const footerBackground = alpha(footerTheme.background, 1)
   const shade = fade(footerTheme.backgroundMenu, footerTheme.background, 0.12, 0.56, 0.72)
   const surface = fade(footerTheme.backgroundMenu, footerTheme.background, 0.18, 0.76, 0.9)
   const line = fade(footerTheme.backgroundMenu, footerTheme.background, 0.24, 0.9, 0.98)
+  const status = tint(footerBackground, rgba("#000000"), mode(footerBackground) === "dark" ? 0.12 : 0.06)
 
   return {
     background: footerTheme.background,
@@ -516,6 +519,7 @@ function map(
       error: footerTheme.error,
       muted: footerTheme.textMuted,
       text: footerTheme.text,
+      status,
       shade,
       surface,
       pane: footerTheme.backgroundMenu,
@@ -597,6 +601,7 @@ export const RUN_THEME_FALLBACK: RunTheme = {
     error: seed.error,
     muted: seed.muted,
     text: seed.text,
+    status: tint(seed.panel, rgba("#000000"), 0.12),
     shade: alpha(seed.panel, 0.68),
     surface: alpha(seed.panel, 0.86),
     pane: seed.panel,
