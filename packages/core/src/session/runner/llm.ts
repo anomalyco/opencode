@@ -219,7 +219,7 @@ export const layer = Layer.effect(
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: toLLMMessages(context, model),
-        tools: yield* tools.definitions(),
+        tools: yield* tools.definitions(agent.info?.permissions),
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
         return yield* Effect.die(rebuildPreparedTurn())

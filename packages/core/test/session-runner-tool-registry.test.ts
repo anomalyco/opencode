@@ -45,6 +45,96 @@ const echo = Tool.make({
 })
 
 describe("ToolRegistry", () => {
+  it.effect("matches V1 whole-tool filtering, edit aliases, and ordered wildcard precedence", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const transform = yield* registry.transform()
+      const sessionID = SessionV2.ID.make("ses_registry_filter")
+      yield* transform((editor) => {
+        editor.set("question", { tool: echo })
+        editor.set("bash", { tool: echo })
+        editor.set("edit", { tool: echo })
+        editor.set("write", { tool: echo })
+        editor.set("apply_patch", { tool: echo })
+      })
+
+      const names = (rules: PermissionV2.Ruleset) =>
+        registry.definitions(rules).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
+
+      expect(yield* names([{ action: "question", resource: "*", effect: "deny" }])).toEqual([
+        "bash",
+        "edit",
+        "write",
+        "apply_patch",
+      ])
+
+      expect(
+        yield* names([
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "question", resource: "private", effect: "allow" },
+        ]),
+      ).toEqual(["question"])
+
+      expect(
+        yield* names([
+          { action: "question", resource: "private", effect: "allow" },
+          { action: "*", resource: "*", effect: "deny" },
+        ]),
+      ).toEqual([])
+
+      expect(yield* names([{ action: "question", resource: "*", effect: "ask" }])).toContain("question")
+      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["question", "bash"])
+      expect(
+        yield* names([
+          { action: "edit", resource: "*", effect: "deny" },
+          { action: "edit", resource: "*.md", effect: "ask" },
+        ]),
+      ).toEqual(["question", "bash", "edit", "write", "apply_patch"])
+      expect(
+        yield* names([
+          { action: "edit", resource: "*.md", effect: "allow" },
+          { action: "edit", resource: "*", effect: "deny" },
+        ]),
+      ).toEqual(["question", "bash"])
+    }),
+  )
+
+  it.effect("settles only through concrete leaf authorization, not catalog visibility", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const transform = yield* registry.transform()
+      const sessionID = SessionV2.ID.make("ses_registry_stale")
+      let executed = false
+      yield* transform((editor) =>
+        editor.set("question", {
+          tool: echo,
+          permission: { action: "question", resource: "*" },
+          authorize: ({ assertPermission }) =>
+            assertPermission({ action: "question", resources: ["actual"] }).pipe(
+              Effect.mapError(() => new ToolFailure({ message: "Denied" })),
+            ),
+          execute: () =>
+            Effect.sync(() => {
+              executed = true
+              return { text: "unexpected" }
+            }),
+        }),
+      )
+
+      expect(
+        (yield* registry.definitions([{ action: "question", resource: "*", effect: "deny" }])).map((tool) => tool.name),
+      ).toEqual([])
+      expect(
+        yield* registry.settle({
+          sessionID,
+          call: { type: "tool-call", id: "call-stale", name: "question", input: { text: "hello" } },
+        }),
+      ).toMatchObject({ result: { type: "json", value: { text: "unexpected" } } })
+      expect(assertions.at(-1)).toMatchObject({ action: "question", resources: ["actual"] })
+      expect(executed).toBe(true)
+    }),
+  )
+
   it.effect("rebuilds advertised definitions when a scoped transform closes", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

@@ -449,6 +449,7 @@ describe("Config", () => {
                 permission: {
                   bash: "ask",
                   edit: { "*.md": "allow", "*": "deny" },
+                  question: "deny",
                 },
                 agent: {
                   reviewer: {
@@ -526,6 +527,7 @@ describe("Config", () => {
               { action: "bash", resource: "*", effect: "ask" },
               { action: "edit", resource: "*.md", effect: "allow" },
               { action: "edit", resource: "*", effect: "deny" },
+              { action: "question", resource: "*", effect: "deny" },
             ])
             expect(documents[0]?.info.agents?.reviewer).toMatchObject({
               system: "Review changes.",
