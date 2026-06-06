@@ -107,6 +107,16 @@ export function pathWords(command: string): string[] {
   return out
 }
 
+/** Tokenize a single command string into an unquoted argv (program + arguments). */
+export function argv(command: string): string[] {
+  for (const cmd of commands(parse(command))) {
+    const out: string[] = cmd.name ? [cmd.name.value] : []
+    for (const word of cmd.suffix) out.push(word.value)
+    return out
+  }
+  return []
+}
+
 // Bare single-part expansions that tree-sitter-bash omits from a command's tokens
 // (a brace expansion is a literal `word` to tree-sitter, so it stays a token).
 const BARE: ReadonlySet<string> = new Set([

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { commandParts, commands, parse, pathWords } from "@opencode-ai/core/util/bash"
+import { argv, commandParts, commands, parse, pathWords } from "@opencode-ai/core/util/bash"
 
-const norm = (command: string) => commandParts(command).map((c) => ({ tokens: c.parts.map((p) => p.text), source: c.source }))
+const norm = (command: string) =>
+  commandParts(command).map((c) => ({ tokens: c.parts.map((p) => p.text), source: c.source }))
 
 describe("util/bash", () => {
   test("returns command name and suffix words", () => {
@@ -40,7 +41,9 @@ describe("util/bash", () => {
 
 describe("util/bash commandParts", () => {
   test("keeps each command's source, including redirects and assignment prefixes", () => {
-    expect(norm(`FOO=bar rm -rf /tmp/x`)).toEqual([{ tokens: ["rm", "-rf", "/tmp/x"], source: "FOO=bar rm -rf /tmp/x" }])
+    expect(norm(`FOO=bar rm -rf /tmp/x`)).toEqual([
+      { tokens: ["rm", "-rf", "/tmp/x"], source: "FOO=bar rm -rf /tmp/x" },
+    ])
     expect(norm(`cat a.txt | grep foo > out.log`)).toEqual([
       { tokens: ["cat", "a.txt"], source: "cat a.txt" },
       { tokens: ["grep", "foo"], source: "grep foo > out.log" },
@@ -63,5 +66,24 @@ describe("util/bash commandParts", () => {
 
   test("omits the `[` test builtin to mirror tree-sitter", () => {
     expect(norm(`[ -f x ] && rm x`)).toEqual([{ tokens: ["rm", "x"], source: "rm x" }])
+  })
+})
+
+describe("util/bash argv", () => {
+  test("tokenizes a command into an unquoted argv", () => {
+    expect(argv("npx -y @scope/pkg")).toEqual(["npx", "-y", "@scope/pkg"])
+  })
+
+  test("respects quotes around arguments with spaces", () => {
+    expect(argv(`mcp-server "/my dir/x"`)).toEqual(["mcp-server", "/my dir/x"])
+    expect(argv(`uvx 'some thing'`)).toEqual(["uvx", "some thing"])
+  })
+
+  test("collapses runs of whitespace instead of emitting empty tokens", () => {
+    expect(argv("foo   bar")).toEqual(["foo", "bar"])
+  })
+
+  test("returns an empty argv for a blank command", () => {
+    expect(argv("   ")).toEqual([])
   })
 })

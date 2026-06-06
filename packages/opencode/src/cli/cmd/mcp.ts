@@ -13,6 +13,7 @@ import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
+import { argv } from "@opencode-ai/core/util/bash"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
@@ -566,7 +567,7 @@ export const McpAddCommand = effectCmd({
 
         const mcpConfig: ConfigMCPV1.Info = {
           type: "local",
-          command: command.split(" "),
+          command: argv(command),
         }
 
         await addMcpToConfig(name, mcpConfig, configPath)
