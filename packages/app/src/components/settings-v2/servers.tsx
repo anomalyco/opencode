@@ -24,7 +24,9 @@ export const SettingsServersV2: Component = () => {
   const [store, setStore] = createStore({ filter: "" })
   const wslServers = useFilteredWslServers(() => store.filter)
 
-  const showSearch = createMemo(() => controller.sortedItems().filter((item) => !isWslServer(item)).length + wslServers().length > 1)
+  const showSearch = createMemo(
+    () => controller.sortedItems().filter((item) => !isWslServer(item)).length + wslServers().length > 1,
+  )
 
   const filtered = createMemo(() => {
     const items = controller.sortedItems().filter((item) => !isWslServer(item))
