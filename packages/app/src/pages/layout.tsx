@@ -16,6 +16,8 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useQuery } from "@tanstack/solid-query"
 import { useLayout, LocalProject } from "@/context/layout"
+import { useBrowser } from "@/context/browser"
+import { useTabs, tabHref } from "@/context/tabs"
 import { useServerSync } from "@/context/server-sync"
 import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -90,6 +92,8 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { BrowserPanel } from "./browser/browser-panel"
+import { BrowserView } from "@opencode-ai/ui/browser/browser-view"
 import { runUpdateAndRestart } from "./layout/update"
 
 export default function Layout(props: ParentProps) {
@@ -119,6 +123,8 @@ export default function Layout(props: ParentProps) {
   const layout = useLayout()
   const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
+  const browser = useBrowser()
+  const tabs = useTabs()
   const settings = useSettings()
   const server = useServer()
   const notification = useNotification()
@@ -2347,7 +2353,29 @@ export default function Layout(props: ParentProps) {
 
   const projects = () => layout.projects.list()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
-  const sidebarContent = (mobile?: boolean) => (
+  const handleSendToAgent = (text: string) => {
+      const activeTab = tabs.store.find((t) => tabHref(t) === location.pathname)
+      if (activeTab && activeTab.type === "session") {
+        void serverSDK.client.session.prompt({
+          sessionID: activeTab.sessionId,
+          prompt: [{ type: "text" as const, content: text, start: 0, end: text.length }],
+        })
+        showToast({ variant: "success", title: language.t("browser.sentToAgent") ?? "Sent to Agent" })
+      } else {
+        showToast({
+          variant: "info",
+          title: language.t("browser.noActiveSession") ?? "No active session",
+          description: language.t("browser.openSessionToShare") ?? "Open a session to send data to the agent.",
+        })
+      }
+    }
+
+    const handleShareWithAgent = (url: string, content: string) => {
+      const message = `Context from browser (${url}):\n\n${content}`
+      handleSendToAgent(message)
+    }
+
+    const sidebarContent = (mobile?: boolean) => (
     <SidebarContent
       mobile={mobile}
       opened={() => layout.sidebar.opened()}
@@ -2368,9 +2396,12 @@ export default function Layout(props: ParentProps) {
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-      renderPanel={() =>
-        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
-      }
+      browserLabel={() => language.t("sidebar.browser") ?? "Browser"}
+      onOpenBrowser={() => browser.toggleBrowser()}
+      renderPanel={() => {
+        if (browser.store.isOpen) return <BrowserPanel />
+        return mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
+      }}
     />
   )
 
@@ -2494,7 +2525,19 @@ export default function Layout(props: ParentProps) {
                   }}
                 >
                   <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
-                    {props.children}
+                    <Show
+                      when={browser.store.isOpen}
+                      fallback={props.children}
+                    >
+                      <BrowserView
+                        url={browser.store.tabs[0]?.url ?? "https://google.com"}
+                        onBookmark={(title, url) => browser.addBookmark(title, url)}
+                        onUrlChange={(url) => browser.store.tabs[0] && browser.navigateTo(browser.store.tabs[0].id, url)}
+                        onTitleChange={(title) => browser.store.tabs[0] && browser.updateTitle(browser.store.tabs[0].id, title)}
+                        onSendToAgent={handleSendToAgent}
+                        onShareWithAgent={handleShareWithAgent}
+                      />
+                    </Show>
                   </Show>
                 </main>
               </div>
