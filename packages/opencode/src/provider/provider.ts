@@ -1361,8 +1361,22 @@ export const layer = Layer.effect(
           const providerID = ProviderV2.ID.make(p.id)
           if (disabled.has(providerID)) continue
 
-          const provider = database[providerID]
-          if (!provider) continue
+          // A plugin can define a provider that models.dev (and config) doesn't know
+          // about. Synthesize a minimal catalog record so it self-registers, instead
+          // of requiring a models.dev entry or a hand-written config block that a
+          // catalog refresh would wipe. The models() hook below fills in the models.
+          let provider = database[providerID]
+          if (!provider) {
+            provider = {
+              id: providerID,
+              name: p.name ?? p.id,
+              source: "custom",
+              env: [],
+              options: {},
+              models: {},
+            }
+            database[providerID] = provider
+          }
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
@@ -1510,10 +1524,16 @@ export const layer = Layer.effect(
           if (!stored) continue
           if (!plugin.auth.loader) continue
 
+          // A credential can be stored for a provider that isn't in the catalog
+          // (e.g. installed via models.dev later, or a stale entry). Skip rather
+          // than crash in toPublicInfo when there's no catalog record yet.
+          const record = database[plugin.auth.provider]
+          if (!record) continue
+
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
               () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
-              toPublicInfo(database[plugin.auth!.provider]),
+              toPublicInfo(record),
             ),
           )
           const opts = options ?? {}

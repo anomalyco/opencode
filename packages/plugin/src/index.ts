@@ -213,6 +213,11 @@ export type ProviderHookContext = {
 
 export type ProviderHook = {
   id: string
+  /**
+   * Display name for the provider. Used when the provider is not present in the
+   * models.dev catalog or user config, so the plugin can register it standalone.
+   */
+  name?: string
   models?: (provider: ProviderV2, ctx: ProviderHookContext) => Promise<Record<string, ModelV2>>
 }
 
