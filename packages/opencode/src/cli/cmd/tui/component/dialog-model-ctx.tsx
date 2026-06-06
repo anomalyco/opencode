@@ -9,19 +9,17 @@ import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
 import type { ResourceSnapshot } from "@/local/llama-skein/gen/types.gen"
 
 const MIN_WORKFLOW_CTX = 65536
-const SYSTEM_RESERVE_MB = 1536  // 1.5 GB held back for OS + driver overhead
 const MAX_CTX = 262144
 
 // Compute the optimal ctx_size from actual hardware data.
-// Uses the real KV estimate for the current ctx_size to derive MB-per-token,
-// then fills remaining VRAM (after model weights + system reserve) with context.
-// Returns null when insufficient data is available.
+// kv_estimate_mb is the KV pre-allocated for the full current ctx_size.
+// freeMb is genuinely available VRAM as reported by the GPU driver (already
+// excludes driver/OS overhead — no artificial reserve needed).
+// Total KV budget = kvEstMb (already allocated) + freeMb (available to expand into).
 function computeRecommendedCtx(m: MemSnapshot, currentCtx: number): number | null {
-  if (m.kvEstMb <= 0 || currentCtx <= 0 || m.modelMb <= 0 || m.totalMb <= 0) return null
-  const kvPerToken = m.kvEstMb / currentCtx
-  const headroomMb = m.totalMb - m.modelMb - SYSTEM_RESERVE_MB
-  if (headroomMb < kvPerToken * MIN_WORKFLOW_CTX) return null
-  const tokens = Math.floor(headroomMb / kvPerToken)
+  if (m.kvEstMb <= 0 || currentCtx <= 0) return null
+  const kvBudgetMb = m.kvEstMb + m.freeMb
+  const tokens = Math.floor(kvBudgetMb * currentCtx / m.kvEstMb)
   const rounded = Math.floor(tokens / 4096) * 4096
   return Math.max(MIN_WORKFLOW_CTX, Math.min(MAX_CTX, rounded))
 }
@@ -135,11 +133,10 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
       } else if (n < MIN_WORKFLOW_CTX) {
         description = "⚠ too small — MCP tools fill this before meaningful work"
       } else if (n > cur && m && kvPerToken) {
-        const newKvMb = n * kvPerToken
-        const totalNeeded = m.modelMb + newKvMb + SYSTEM_RESERVE_MB
+        const extraKvMb = (n - cur) * kvPerToken
         description = `+${fmtCtxK(n - cur)}`
-        if (totalNeeded > m.totalMb) {
-          description += ` · ⚠ exceeds ${m.label} (${fmtGB(m.totalMb)} GB)`
+        if (extraKvMb > m.freeMb) {
+          description += ` · ⚠ exceeds free ${m.label} (${fmtGB(m.freeMb)} GB)`
         }
       }
       return { value: n, title: fmtCtxK(n), description, highlight: n === cur || n === rec }
