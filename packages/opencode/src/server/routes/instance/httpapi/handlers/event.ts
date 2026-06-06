@@ -29,9 +29,12 @@ function eventResponse(events: EventV2.Interface) {
   return Effect.gen(function* () {
     const instance = yield* InstanceState.context
     const workspaceID = yield* InstanceState.workspaceID
-    // Listener registration is eager, so events published after this point cannot
-    // be lost while the HTTP body fiber is starting or emitting server.connected.
-    const queue = yield* Queue.unbounded<EventV2.Payload>()
+    // Bound the queue so a slow or disconnected SSE consumer cannot grow the
+    // server worker without limit. Sliding strategy keeps the most recent events
+    // (which carry the up-to-date progress the client cares about) and drops the
+    // oldest. Older events are recoverable via GET /api/sessions/:id and final
+    // session state lives in the database, so dropping is safe.
+    const queue = yield* Queue.bounded<EventV2.Payload>(1000, { strategy: "sliding" })
     const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(queue, event)))
     yield* Effect.addFinalizer(() => unsubscribe)
     const stream = Stream.fromQueue(queue).pipe(
