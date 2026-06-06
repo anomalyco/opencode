@@ -1,4 +1,4 @@
-import { Global } from "@opencode-ai/core/global"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { rename, rm } from "fs/promises"
@@ -10,9 +10,10 @@ import path from "path"
 export const { use: useKV, provider: KVProvider } = createSimpleContext({
   name: "KV",
   init: () => {
+    const environment = useTuiEnvironment()
     const [ready, setReady] = createSignal(false)
     const [store, setStore] = createStore<Record<string, any>>()
-    const filePath = path.join(Global.Path.state, "kv.json")
+    const filePath = path.join(environment.paths.state, "kv.json")
     const lock = `tui-kv:${filePath}`
     // Queue same-process writes so rapid updates persist in order.
     let write = Promise.resolve()

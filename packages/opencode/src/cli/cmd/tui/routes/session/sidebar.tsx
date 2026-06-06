@@ -3,7 +3,7 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { useTuiBuildInfo } from "@opencode-ai/tui/runtime"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
 import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
@@ -14,6 +14,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
+  const build = useTuiBuildInfo()
   const session = createMemo(() => sync.session.get(props.sessionID))
   const workspace = () => {
     const workspaceID = session()?.workspaceID
@@ -56,7 +57,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <text fg={theme.text}>
                   <b>{session()!.title}</b>
                 </text>
-                <Show when={InstallationChannel !== "latest"}>
+                <Show when={build.channel !== "latest"}>
                   <text fg={theme.textMuted}>{props.sessionID}</text>
                 </Show>
                 <Show when={session()!.workspaceID}>
@@ -92,7 +93,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <span style={{ fg: theme.text }}>
                 <b>Code</b>
               </span>{" "}
-              <span>{InstallationVersion}</span>
+              <span>{build.version}</span>
             </text>
           </TuiPluginRuntime.Slot>
         </box>

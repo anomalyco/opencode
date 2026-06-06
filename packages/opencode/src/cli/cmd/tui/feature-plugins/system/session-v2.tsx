@@ -10,6 +10,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { RGBA, TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { useBindings } from "../../keymap"
 import { Locale } from "@opencode-ai/tui/util/locale"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { toolDisplayMetadata, webSearchProviderLabel } from "@opencode-ai/tui/util/tool-display"
 import path from "path"
@@ -740,6 +741,7 @@ function Bash(props: ToolProps) {
 }
 
 function Glob(props: ToolProps) {
+  const normalizePath = usePathNormalizer()
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={toolComplete(props.part)} part={props.part}>
       Glob "{stringValue(props.input.pattern) ?? pendingInput(props.part)}"{" "}
@@ -756,6 +758,7 @@ function Glob(props: ToolProps) {
 }
 
 function Read(props: ToolProps) {
+  const normalizePath = usePathNormalizer()
   const { theme } = useTheme()
   const loaded = createMemo(() =>
     arrayValue(props.metadata.loaded).filter((item): item is string => typeof item === "string"),
@@ -786,6 +789,7 @@ function Read(props: ToolProps) {
 }
 
 function Grep(props: ToolProps) {
+  const normalizePath = usePathNormalizer()
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={toolComplete(props.part)} part={props.part}>
       Grep "{stringValue(props.input.pattern) ?? pendingInput(props.part)}"{" "}
@@ -820,6 +824,7 @@ function WebSearch(props: ToolProps) {
 }
 
 function Write(props: ToolProps) {
+  const normalizePath = usePathNormalizer()
   const { theme, syntax } = useTheme()
   const filePath = createMemo(() => stringValue(props.input.filePath) ?? "")
   const content = createMemo(() => stringValue(props.input.content) ?? "")
@@ -849,6 +854,7 @@ function Write(props: ToolProps) {
 }
 
 function Edit(props: ToolProps) {
+  const normalizePath = usePathNormalizer()
   const { theme, syntax } = useTheme()
   const dimensions = useTerminalDimensions()
   const filePath = createMemo(() => stringValue(props.input.filePath) ?? "")
@@ -893,6 +899,7 @@ function Edit(props: ToolProps) {
 }
 
 function ApplyPatch(props: ToolProps) {
+  const normalizePath = usePathNormalizer()
   const { theme, syntax } = useTheme()
   const dimensions = useTerminalDimensions()
   const files = createMemo(() => arrayValue(props.metadata.files).flatMap((item) => (isRecord(item) ? [item] : [])))
@@ -1041,6 +1048,7 @@ function Task(props: ToolProps) {
 }
 
 function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
+  const normalizePath = usePathNormalizer()
   const { theme } = useTheme()
   const errors = createMemo(() => {
     if (!isRecord(props.diagnostics)) return []
@@ -1113,10 +1121,15 @@ function input(input: Record<string, unknown>, omit?: string[]) {
   return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
 }
 
-function normalizePath(input?: string) {
+function usePathNormalizer() {
+  const cwd = useTuiEnvironment().cwd
+  return (input?: string) => normalizePath(input, cwd)
+}
+
+function normalizePath(input: string | undefined, cwd: string) {
   if (!input) return ""
-  const absolute = path.isAbsolute(input) ? input : path.resolve(process.cwd(), input)
-  const relative = path.relative(process.cwd(), absolute)
+  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
+  const relative = path.relative(cwd, absolute)
   if (!relative) return "."
   if (!relative.startsWith("..")) return relative
   return absolute

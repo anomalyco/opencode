@@ -9,6 +9,7 @@ import { onCleanup } from "solid-js"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import type { TuiKeybind } from "../../../src/cli/cmd/tui/config/keybind"
+import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
 
 async function wait(fn: () => boolean, timeout = 2000) {
   const start = Date.now()
@@ -26,13 +27,12 @@ async function mountPrompt(input: {
   const { Global } = await import("@opencode-ai/core/global")
   const previous = {
     config: Global.Path.config,
-    state: Global.Path.state,
   }
   Global.Path.config = path.join(input.root, "config")
-  Global.Path.state = path.join(input.root, "state")
+  const state = path.join(input.root, "state")
   await mkdir(Global.Path.config, { recursive: true })
-  await mkdir(Global.Path.state, { recursive: true })
-  await Bun.write(path.join(Global.Path.state, "kv.json"), "{}")
+  await mkdir(state, { recursive: true })
+  await Bun.write(path.join(state, "kv.json"), "{}")
 
   const [
     { DialogProvider },
@@ -63,19 +63,28 @@ async function mountPrompt(input: {
     onCleanup(off)
 
     return (
-      <OpencodeKeymapProvider keymap={keymap}>
-        <TuiConfigProvider config={resolvedConfig}>
-          <KVProvider>
-            <ThemeProvider mode="dark">
-              <ToastProvider>
-                <DialogProvider>
-                  <DialogPrompt title="Rename Session" value="draft" onConfirm={input.onConfirm} />
-                </DialogProvider>
-              </ToastProvider>
-            </ThemeProvider>
-          </KVProvider>
-        </TuiConfigProvider>
-      </OpencodeKeymapProvider>
+      <TestTuiEnvironmentProvider
+        directory={input.root}
+        paths={{
+          home: input.root,
+          state,
+          worktree: input.root,
+        }}
+      >
+        <OpencodeKeymapProvider keymap={keymap}>
+          <TuiConfigProvider config={resolvedConfig}>
+            <KVProvider>
+              <ThemeProvider mode="dark">
+                <ToastProvider>
+                  <DialogProvider>
+                    <DialogPrompt title="Rename Session" value="draft" onConfirm={input.onConfirm} />
+                  </DialogProvider>
+                </ToastProvider>
+              </ThemeProvider>
+            </KVProvider>
+          </TuiConfigProvider>
+        </OpencodeKeymapProvider>
+      </TestTuiEnvironmentProvider>
     )
   }
 
@@ -85,7 +94,6 @@ async function mountPrompt(input: {
     async cleanup() {
       app.renderer.destroy()
       Global.Path.config = previous.config
-      Global.Path.state = previous.state
     },
   }
 }

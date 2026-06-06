@@ -1,11 +1,12 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { createMemo, Show } from "solid-js"
-import { Global } from "@opencode-ai/core/global"
+import { abbreviateHome, useTuiEnvironment } from "@opencode-ai/tui/runtime"
 
 const id = "internal:sidebar-footer"
 
 function View(props: { api: TuiPluginApi; sessionID: string }) {
+  const environment = useTuiEnvironment()
   const theme = () => props.api.theme.current
   const has = createMemo(() =>
     props.api.state.provider.some(
@@ -16,8 +17,8 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
   const show = createMemo(() => !has() && !done())
   const path = createMemo(() => {
     const session = props.api.state.session.get(props.sessionID)
-    const dir = session?.directory || props.api.state.path.directory || process.cwd()
-    const out = dir.replace(Global.Path.home, "~")
+    const dir = session?.directory || props.api.state.path.directory || environment.cwd
+    const out = abbreviateHome(dir, environment.paths.home)
     const branch = session?.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
     const text = branch ? out + ":" + branch : out
     const list = text.split("/")

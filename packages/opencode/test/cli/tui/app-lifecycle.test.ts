@@ -10,6 +10,7 @@ import { Global } from "@opencode-ai/core/global"
 import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
 import * as TuiAudio from "../../../src/cli/cmd/tui/util/audio"
 import * as TuiKeymap from "../../../src/cli/cmd/tui/keymap"
+import { createTuiBuildInfo, createTuiEnvironment } from "@opencode-ai/tui/runtime"
 
 type TestRendererSetup = Awaited<ReturnType<typeof createTestRenderer>>
 type TmpDir = Awaited<ReturnType<typeof tmpdir>>
@@ -186,7 +187,7 @@ test("plugin, audio, and keymap cleanup run exactly once", async () => {
 
 async function startTui(options: { rejectTheme?: Error } = {}) {
   const tmp = await tmpdir()
-  const restore = await isolateGlobalPaths(tmp.path)
+  const isolated = await isolateGlobalPaths(tmp.path)
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false, maxFps: Number.POSITIVE_INFINITY })
   const theme = deferred<"dark" | "light" | null>()
   const waitForThemeMode = spyOn(setup.renderer, "waitForThemeMode").mockImplementation(() => {
@@ -197,7 +198,25 @@ async function startTui(options: { rejectTheme?: Error } = {}) {
 
   const calls = createFetch()
   const events = createEventSource()
+  const environment = createTuiEnvironment({
+    cwd: tmp.path,
+    platform: "linux",
+    paths: { home: tmp.path, state: isolated.state, worktree: path.join(tmp.path, "worktree") },
+    capabilities: {
+      mouse: true,
+      copyOnSelect: true,
+      terminalTitle: false,
+      terminalSuspend: false,
+      workspaces: false,
+      showTimeToFirstDraw: false,
+    },
+    terminal: {},
+    editor: { zedTerminal: false },
+    skipInitialLoading: false,
+  })
   const handle = tui({
+    environment,
+    build: createTuiBuildInfo({ version: "test", channel: "test" }),
     url: "http://test",
     renderer: setup.renderer,
     config: createTuiResolvedConfig({ plugin_enabled: disabledInternalPlugins }),
@@ -212,7 +231,7 @@ async function startTui(options: { rejectTheme?: Error } = {}) {
     tmp,
     restore: () => {
       waitForThemeMode.mockRestore()
-      restore()
+      isolated.restore()
     },
   }
 
@@ -220,19 +239,18 @@ async function startTui(options: { rejectTheme?: Error } = {}) {
 }
 
 async function isolateGlobalPaths(root: string) {
-  const previous = {
-    config: Global.Path.config,
-    state: Global.Path.state,
-  }
+  const previous = Global.Path.config
   Global.Path.config = path.join(root, "config")
-  Global.Path.state = path.join(root, "state")
+  const state = path.join(root, "state")
   await mkdir(Global.Path.config, { recursive: true })
-  await mkdir(Global.Path.state, { recursive: true })
-  await Bun.write(path.join(Global.Path.state, "kv.json"), JSON.stringify({ animations_enabled: false }))
+  await mkdir(state, { recursive: true })
+  await Bun.write(path.join(state, "kv.json"), JSON.stringify({ animations_enabled: false }))
 
-  return () => {
-    Global.Path.config = previous.config
-    Global.Path.state = previous.state
+  return {
+    state,
+    restore() {
+      Global.Path.config = previous
+    },
   }
 }
 

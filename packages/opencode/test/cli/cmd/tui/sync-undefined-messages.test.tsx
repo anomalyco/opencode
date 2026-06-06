@@ -7,7 +7,6 @@
  * `messages.data!` while the SDK leaves `data` undefined on error.
  */
 import { describe, expect, test } from "bun:test"
-import { Global } from "@opencode-ai/core/global"
 import { tmpdir } from "../../../fixture/fixture"
 import { directory, json, mount } from "./sync-fixture"
 
@@ -15,9 +14,7 @@ const sessionID = "ses_undef"
 
 describe("tui sync (#26560)", () => {
   test("entering a session whose messages endpoint errors does not crash sync", async () => {
-    const previous = Global.Path.state
     await using tmp = await tmpdir()
-    Global.Path.state = tmp.path
     await Bun.write(`${tmp.path}/kv.json`, "{}")
 
     const sessionPayload = {
@@ -35,13 +32,12 @@ describe("tui sync (#26560)", () => {
       if (url.pathname === `/session/${sessionID}/diff`) return json([])
       if (url.pathname === "/session") return json([sessionPayload])
       return undefined
-    })
+    }, tmp.path)
 
     try {
       await expect(sync.session.sync(sessionID)).resolves.toBeUndefined()
     } finally {
       app.renderer.destroy()
-      Global.Path.state = previous
     }
   })
 })

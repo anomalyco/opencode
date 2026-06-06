@@ -1,5 +1,5 @@
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
@@ -35,7 +35,8 @@ export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptI
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
-    const historyPath = path.join(Global.Path.state, "prompt-history.jsonl")
+    const environment = useTuiEnvironment()
+    const historyPath = path.join(environment.paths.state, "prompt-history.jsonl")
     onMount(async () => {
       const text = await Filesystem.readText(historyPath).catch(() => "")
       const lines = text

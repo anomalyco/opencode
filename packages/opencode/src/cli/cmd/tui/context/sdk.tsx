@@ -1,8 +1,8 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { batch, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
@@ -18,6 +18,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     headers?: RequestInit["headers"]
     events?: EventSource
   }) => {
+    const environment = useTuiEnvironment()
     const abort = new AbortController()
     let sse: AbortController | undefined
 
@@ -85,7 +86,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
             sseMaxRetryAttempts: 0,
           })
 
-          if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+          if (environment.capabilities.workspaces) {
             // Start syncing workspaces, it's important to do this after
             // we've started listening to events
             await sdk.sync.start().catch(() => {})
@@ -113,7 +114,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         const unsub = await props.events.subscribe(handleEvent)
         onCleanup(unsub)
 
-        if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+        if (environment.capabilities.workspaces) {
           // Start syncing workspaces, it's important to do this after
           // we've started listening to events
           await sdk.sync.start().catch(() => {})

@@ -1,11 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import path from "path"
-import { mkdir } from "fs/promises"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import type { Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
-import { Global } from "@opencode-ai/core/global"
 import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
 import { KVProvider } from "../../../src/cli/cmd/tui/context/kv"
@@ -16,6 +13,7 @@ import { OpencodeKeymapProvider } from "../../../src/cli/cmd/tui/keymap"
 import diffViewerPlugin from "../../../src/cli/cmd/tui/feature-plugins/system/diff-viewer"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
@@ -109,9 +107,6 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20) {
   let renderDiff: TuiRouteDefinition["render"] | undefined
   let vcsDiffInput: unknown
   const config = createTuiResolvedConfig()
-  await mkdir(Global.Path.state, { recursive: true })
-  await Bun.write(path.join(Global.Path.state, "kv.json"), "{}")
-
   function Harness() {
     const renderer = useRenderer()
     const keymap = createDefaultOpenTuiKeymap(renderer)
@@ -157,15 +152,17 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20) {
     commands.get("diff.open")?.run?.({} as never)
 
     return (
-      <OpencodeKeymapProvider keymap={keymap}>
-        <TuiConfigProvider config={config}>
-          <KVProvider>
-            <ThemeProvider mode="dark">
-              {renderDiff?.({ params: "params" in current ? current.params : undefined })}
-            </ThemeProvider>
-          </KVProvider>
-        </TuiConfigProvider>
-      </OpencodeKeymapProvider>
+      <TestTuiEnvironmentProvider>
+        <OpencodeKeymapProvider keymap={keymap}>
+          <TuiConfigProvider config={config}>
+            <KVProvider>
+              <ThemeProvider mode="dark">
+                {renderDiff?.({ params: "params" in current ? current.params : undefined })}
+              </ThemeProvider>
+            </KVProvider>
+          </TuiConfigProvider>
+        </OpencodeKeymapProvider>
+      </TestTuiEnvironmentProvider>
     )
   }
 

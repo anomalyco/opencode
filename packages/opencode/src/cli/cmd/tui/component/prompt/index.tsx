@@ -17,6 +17,7 @@ import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder, SplitBorder } from "@opencode-ai/tui/ui/border"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { Spinner } from "@tui/component/spinner"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -53,7 +54,6 @@ import { createFadeIn } from "@opencode-ai/tui/util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../context/tui-config"
 import { usePromptWorkspace } from "./workspace"
@@ -136,6 +136,7 @@ export function Prompt(props: PromptProps) {
   const leader = useLeaderActive()
   const local = useLocal()
   const args = useArgs()
+  const environment = useTuiEnvironment()
   const sdk = useSDK()
   const editor = useEditorContext()
   const route = useRoute()
@@ -427,7 +428,7 @@ export function Prompt(props: PromptProps) {
             cwd:
               (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
               project.instance.directory() ||
-              process.cwd(),
+              environment.cwd,
           })
           if (!content) return
 
@@ -518,7 +519,7 @@ export function Prompt(props: PromptProps) {
         desc: "Change the workspace for the session",
         name: "workspace.set",
         category: "Session",
-        enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
+        enabled: environment.capabilities.workspaces,
         slashName: "warp",
         run: () => {
           workspace.open()
@@ -1181,7 +1182,7 @@ export function Prompt(props: PromptProps) {
           return fileURLToPath(raw)
         } catch {}
       }
-      if (process.platform === "win32") return raw
+      if (environment.platform === "win32") return raw
       return raw.replace(/\\(.)/g, "$1")
     })
     const isUrl = /^(https?):\/\//.test(filepath)

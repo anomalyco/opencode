@@ -6,6 +6,7 @@ import { createRoot } from "solid-js"
 import { EditorContextProvider, useEditorContext } from "../../../src/cli/cmd/tui/context/editor"
 import { tmpdir } from "../../fixture/fixture"
 import { FakeWebSocket } from "../../lib/websocket"
+import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
 
 const originalClaudePort = process.env.CLAUDE_CODE_SSE_PORT
 const originalOpencodePort = process.env.OPENCODE_EDITOR_SSE_PORT
@@ -31,10 +32,17 @@ function mountEditorContext(WebSocketImpl?: typeof WebSocket) {
       return null
     }
 
+    const value = process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT
     return (
-      <EditorContextProvider WebSocketImpl={WebSocketImpl}>
-        <Consumer />
-      </EditorContextProvider>
+      <TestTuiEnvironmentProvider
+        cwd={process.cwd()}
+        paths={{ home: os.homedir() }}
+        editor={{ port: value ? Number.parseInt(value, 10) : undefined }}
+      >
+        <EditorContextProvider WebSocketImpl={WebSocketImpl}>
+          <Consumer />
+        </EditorContextProvider>
+      </TestTuiEnvironmentProvider>
     )
   })
 

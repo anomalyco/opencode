@@ -4,6 +4,7 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { validateSession } from "./validate-session"
 import { ServerAuth } from "@/server/auth"
+import { resolveTuiRuntime } from "./runtime"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -67,6 +68,7 @@ export const AttachCommand = cmd({
       })()
       const headers = ServerAuth.headers({ password: args.password, username: args.username })
       const config = await TuiConfig.get()
+      const runtime = resolveTuiRuntime(config)
 
       try {
         await validateSession({
@@ -82,8 +84,9 @@ export const AttachCommand = cmd({
       }
 
       const { createTuiRenderer, tui } = await import("./app")
-      const renderer = await createTuiRenderer(config)
+      const renderer = await createTuiRenderer(config, runtime)
       const handle = tui({
+        ...runtime,
         url: args.url,
         config,
         renderer,

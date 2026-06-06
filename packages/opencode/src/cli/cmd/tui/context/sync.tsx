@@ -22,6 +22,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "@tui/context/project"
 import { useEvent } from "@tui/context/event"
 import { useSDK } from "@tui/context/sdk"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
@@ -37,6 +38,7 @@ import { aggregateFailures } from "./aggregate-failures"
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
+    const environment = useTuiEnvironment()
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
       provider: Provider[]
@@ -518,7 +520,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.status
       },
       get ready() {
-        if (process.env.OPENCODE_FAST_BOOT) return true
+        if (environment.skipInitialLoading) return true
         return store.status !== "loading"
       },
       get path() {

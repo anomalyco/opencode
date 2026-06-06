@@ -7,7 +7,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "@tui/context/sdk"
 import { useTheme } from "@tui/context/theme"
 import { useSync } from "@tui/context/sync"
-import { Global } from "@opencode-ai/core/global"
+import { abbreviateHome, useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { Locale } from "@opencode-ai/tui/util/locale"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { useToast } from "@tui/ui/toast"
@@ -32,6 +32,7 @@ export function DialogMoveSession(props: {
   const sync = useSync()
   const projectContext = useProject()
   const toast = useToast()
+  const environment = useTuiEnvironment()
   const [working, setWorking] = createSignal(Boolean(props.initialRemoving))
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
@@ -100,11 +101,7 @@ export function DialogMoveSession(props: {
     })
     const titleWidth = Math.max(1, Math.min(116, dimensions().width - 2) - 12)
     return list.map((item) => {
-      const title =
-        Global.Path.home &&
-        (item.location === Global.Path.home || item.location.startsWith(Global.Path.home + path.sep))
-          ? item.location.replace(Global.Path.home, "~")
-          : item.location
+      const title = abbreviateHome(item.location, environment.paths.home)
       const suffix = item.location === item.root ? undefined : path.sep + path.relative(item.root, item.location)
       const visible = Locale.truncateLeft(title, titleWidth)
       const split = suffix ? Math.max(0, visible.length - suffix.length) : visible.length

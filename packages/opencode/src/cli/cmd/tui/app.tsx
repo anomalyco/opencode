@@ -19,8 +19,15 @@ import {
   on,
 } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import semver from "semver"
+import {
+  TuiBuildInfoProvider,
+  TuiEnvironmentProvider,
+  useTuiBuildInfo,
+  useTuiEnvironment,
+  type TuiBuildInfo,
+  type TuiEnvironment,
+} from "@opencode-ai/tui/runtime"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { ErrorComponent } from "@tui/component/error-component"
@@ -128,9 +135,12 @@ const appBindingCommands = [
   "app.toggle.session_directory_filter",
 ] as const
 
-export function tuiRendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
-  const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
+export type TuiRuntimeInput = {
+  environment: TuiEnvironment
+  build: TuiBuildInfo
+}
 
+export function tuiRendererConfig(_config: TuiConfig.Resolved, runtime: TuiRuntimeInput): CliRendererConfig {
   return {
     externalOutputMode: "passthrough",
     targetFps: 60,
@@ -139,7 +149,7 @@ export function tuiRendererConfig(_config: TuiConfig.Resolved): CliRendererConfi
     useKittyKeyboard: {},
     autoFocus: false,
     openConsoleOnError: false,
-    useMouse: mouseEnabled,
+    useMouse: runtime.environment.capabilities.mouse,
     consoleOptions: {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
@@ -151,8 +161,8 @@ export function tuiRendererConfig(_config: TuiConfig.Resolved): CliRendererConfi
   }
 }
 
-export function createTuiRenderer(config: TuiConfig.Resolved) {
-  return createCliRenderer(tuiRendererConfig(config))
+export function createTuiRenderer(config: TuiConfig.Resolved, runtime: TuiRuntimeInput) {
+  return createCliRenderer(tuiRendererConfig(config, runtime))
 }
 
 export type TuiHandle = {
@@ -161,7 +171,7 @@ export type TuiHandle = {
   exit: Exit
 }
 
-type TuiInput = {
+export type TuiInput = TuiRuntimeInput & {
   url: string
   args: Args
   config: TuiConfig.Resolved
@@ -228,62 +238,68 @@ async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefa
   await render(() => {
     return (
       <ErrorBoundary
-        fallback={(error, reset) => <ErrorComponent error={error} reset={reset} exit={input.exit} mode={mode} />}
+        fallback={(error, reset) => (
+          <ErrorComponent error={error} reset={reset} exit={input.exit} version={input.build.version} mode={mode} />
+        )}
       >
-        <OpencodeKeymapProvider keymap={input.keymap}>
-          <ArgsProvider {...input.args}>
-            <ExitProvider exit={input.exit}>
-              <KVProvider>
-                <ToastProvider>
-                  <RouteProvider
-                    initialRoute={
-                      input.args.continue
-                        ? {
-                            type: "session",
-                            sessionID: "dummy",
-                          }
-                        : undefined
-                    }
-                  >
-                    <TuiConfigProvider config={input.config}>
-                      <SDKProvider
-                        url={input.url}
-                        directory={input.directory}
-                        fetch={input.fetch}
-                        headers={input.headers}
-                        events={input.events}
+        <TuiEnvironmentProvider value={input.environment}>
+          <TuiBuildInfoProvider value={input.build}>
+            <OpencodeKeymapProvider keymap={input.keymap}>
+              <ArgsProvider {...input.args}>
+                <ExitProvider exit={input.exit}>
+                  <KVProvider>
+                    <ToastProvider>
+                      <RouteProvider
+                        initialRoute={
+                          input.args.continue
+                            ? {
+                                type: "session",
+                                sessionID: "dummy",
+                              }
+                            : undefined
+                        }
                       >
-                        <ProjectProvider>
-                          <SyncProvider>
-                            <SyncProviderV2>
-                              <ThemeProvider mode={mode}>
-                                <LocalProvider>
-                                  <PromptStashProvider>
-                                    <DialogProvider>
-                                      <FrecencyProvider>
-                                        <PromptHistoryProvider>
-                                          <PromptRefProvider>
-                                            <EditorContextProvider>
-                                              <App onSnapshot={input.onSnapshot} />
-                                            </EditorContextProvider>
-                                          </PromptRefProvider>
-                                        </PromptHistoryProvider>
-                                      </FrecencyProvider>
-                                    </DialogProvider>
-                                  </PromptStashProvider>
-                                </LocalProvider>
-                              </ThemeProvider>
-                            </SyncProviderV2>
-                          </SyncProvider>
-                        </ProjectProvider>
-                      </SDKProvider>
-                    </TuiConfigProvider>
-                  </RouteProvider>
-                </ToastProvider>
-              </KVProvider>
-            </ExitProvider>
-          </ArgsProvider>
-        </OpencodeKeymapProvider>
+                        <TuiConfigProvider config={input.config}>
+                          <SDKProvider
+                            url={input.url}
+                            directory={input.directory}
+                            fetch={input.fetch}
+                            headers={input.headers}
+                            events={input.events}
+                          >
+                            <ProjectProvider>
+                              <SyncProvider>
+                                <SyncProviderV2>
+                                  <ThemeProvider mode={mode}>
+                                    <LocalProvider>
+                                      <PromptStashProvider>
+                                        <DialogProvider>
+                                          <FrecencyProvider>
+                                            <PromptHistoryProvider>
+                                              <PromptRefProvider>
+                                                <EditorContextProvider>
+                                                  <App onSnapshot={input.onSnapshot} />
+                                                </EditorContextProvider>
+                                              </PromptRefProvider>
+                                            </PromptHistoryProvider>
+                                          </FrecencyProvider>
+                                        </DialogProvider>
+                                      </PromptStashProvider>
+                                    </LocalProvider>
+                                  </ThemeProvider>
+                                </SyncProviderV2>
+                              </SyncProvider>
+                            </ProjectProvider>
+                          </SDKProvider>
+                        </TuiConfigProvider>
+                      </RouteProvider>
+                    </ToastProvider>
+                  </KVProvider>
+                </ExitProvider>
+              </ArgsProvider>
+            </OpencodeKeymapProvider>
+          </TuiBuildInfoProvider>
+        </TuiEnvironmentProvider>
       </ErrorBoundary>
     )
   }, renderer)
@@ -368,6 +384,8 @@ async function waitUntilDone(ready: Promise<void>, exited: Promise<void>) {
 }
 
 function App(props: { onSnapshot?: () => Promise<string[]> }) {
+  const environment = useTuiEnvironment()
+  const build = useTuiBuildInfo()
   const tuiConfig = useTuiConfig()
   const route = useRoute()
   const dimensions = useTerminalDimensions()
@@ -394,6 +412,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
 
   const api = createTuiApi({
+    version: build.version,
     tuiConfig,
     dialog,
     keymap,
@@ -422,11 +441,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       setReady(true)
     })
 
-  // Let selection copy/dismiss win ahead of normal bindings when the feature flag is on.
+  // Let selection copy/dismiss win ahead of normal bindings when explicit copy is required.
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+      if (environment.capabilities.copyOnSelect) return
       Selection.handleSelectionKey(renderer, toast, event)
     },
     { priority: 1 },
@@ -453,7 +472,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   // Update terminal window title based on current route and session
   createEffect(() => {
-    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+    if (!terminalTitleEnabled() || !environment.capabilities.terminalTitle) return
 
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")
@@ -612,7 +631,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         name: "workspace.list",
         title: "Manage workspaces",
         category: "Workspace",
-        hidden: !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
+        hidden: !environment.capabilities.workspaces,
         slashName: "workspaces",
         run: () => {
           dialog.replace(() => <DialogWorkspaceList />)
@@ -861,7 +880,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         title: "Suspend terminal",
         category: "System",
         hidden: true,
-        enabled: process.platform !== "win32",
+        enabled: environment.capabilities.terminalSuspend,
         run: () => {
           process.once("SIGCONT", () => {
             renderer.resume()
@@ -1076,16 +1095,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (environment.capabilities.copyOnSelect) return
         if (evt.button !== MouseButton.RIGHT) return
 
         if (!Selection.copy(renderer, toast)) return
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
+      onMouseUp={environment.capabilities.copyOnSelect ? () => Selection.copy(renderer, toast) : undefined}
     >
-      <Show when={Flag.OPENCODE_SHOW_TTFD}>
+      <Show when={environment.capabilities.showTimeToFirstDraw}>
         <TimeToFirstDraw />
       </Show>
       <Show when={ready()}>
@@ -1107,7 +1126,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         </box>
         <TuiPluginRuntime.Slot name="app" />
       </Show>
-      <StartupLoading ready={ready} />
+      <Show when={!environment.skipInitialLoading}>
+        <StartupLoading ready={ready} />
+      </Show>
     </box>
   )
 }

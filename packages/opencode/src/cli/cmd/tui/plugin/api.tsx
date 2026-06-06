@@ -15,7 +15,6 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Keymap from "../keymap"
 import { createCommandShim } from "./command-shim"
 
@@ -27,6 +26,7 @@ type RouteEntry = {
 export type RouteMap = Map<string, RouteEntry[]>
 
 type Input = {
+  version: string
   tuiConfig: TuiConfig.Resolved
   dialog: ReturnType<typeof useDialog>
   keymap: ReturnType<typeof useOpencodeKeymap>
@@ -190,10 +190,10 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
   }
 }
 
-function appApi(): TuiPluginApi["app"] {
+function appApi(version: string): TuiPluginApi["app"] {
   return {
     get version() {
-      return InstallationVersion
+      return version
     },
   }
 }
@@ -206,7 +206,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
     },
   }
   return {
-    app: appApi(),
+    app: appApi(input.version),
     attention: input.attention,
     // Keep deprecated `api.command` working for v1 plugins; remove in v2.
     command: createCommandShim(input.keymap, input.dialog, input.tuiConfig.keybinds),

@@ -1,6 +1,5 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { Global } from "@opencode-ai/core/global"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import { tmpdir } from "../../../fixture/fixture"
 import { json, mount, wait } from "./sync-fixture"
@@ -35,9 +34,7 @@ function global(payload: GlobalEvent["payload"]): GlobalEvent {
 }
 
 test("stale session hydration does not overwrite live message parts", async () => {
-  const previous = Global.Path.state
   await using tmp = await tmpdir()
-  Global.Path.state = tmp.path
   await Bun.write(`${tmp.path}/kv.json`, "{}")
 
   let resolveMessages!: (response: Response) => void
@@ -53,7 +50,7 @@ test("stale session hydration does not overwrite live message parts", async () =
     }
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
-  })
+  }, tmp.path)
 
   try {
     const hydrate = sync.session.sync(sessionID)
@@ -85,14 +82,11 @@ test("stale session hydration does not overwrite live message parts", async () =
     expect(sync.data.part[messageID][0]).toMatchObject({ text: "visible live content" })
   } finally {
     app.renderer.destroy()
-    Global.Path.state = previous
   }
 })
 
 test("orphan live deltas do not suppress hydrated parts", async () => {
-  const previous = Global.Path.state
   await using tmp = await tmpdir()
-  Global.Path.state = tmp.path
   await Bun.write(`${tmp.path}/kv.json`, "{}")
 
   let resolveMessages!: (response: Response) => void
@@ -108,7 +102,7 @@ test("orphan live deltas do not suppress hydrated parts", async () => {
     }
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
-  })
+  }, tmp.path)
 
   try {
     const hydrate = sync.session.sync(sessionID)
@@ -128,14 +122,11 @@ test("orphan live deltas do not suppress hydrated parts", async () => {
     expect(sync.data.part[messageID][0]).toMatchObject({ text: "hydrated" })
   } finally {
     app.renderer.destroy()
-    Global.Path.state = previous
   }
 })
 
 test("hydration does not clear text streamed before it starts", async () => {
-  const previous = Global.Path.state
   await using tmp = await tmpdir()
-  Global.Path.state = tmp.path
   await Bun.write(`${tmp.path}/kv.json`, "{}")
 
   let resolveMessages!: (response: Response) => void
@@ -151,7 +142,7 @@ test("hydration does not clear text streamed before it starts", async () => {
     }
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
-  })
+  }, tmp.path)
 
   try {
     emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
@@ -182,14 +173,11 @@ test("hydration does not clear text streamed before it starts", async () => {
     expect(sync.data.part[messageID][0]).toMatchObject({ text: "visible streamed content" })
   } finally {
     app.renderer.destroy()
-    Global.Path.state = previous
   }
 })
 
 test("live messages merged during hydration retain the 100 message window", async () => {
-  const previous = Global.Path.state
   await using tmp = await tmpdir()
-  Global.Path.state = tmp.path
   await Bun.write(`${tmp.path}/kv.json`, "{}")
 
   let resolveMessages!: (response: Response) => void
@@ -205,7 +193,7 @@ test("live messages merged during hydration retain the 100 message window", asyn
     }
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
-  })
+  }, tmp.path)
 
   try {
     const hydrate = sync.session.sync(sessionID)
@@ -232,14 +220,11 @@ test("live messages merged during hydration retain the 100 message window", asyn
     expect(sync.data.part.msg_000).toBeUndefined()
   } finally {
     app.renderer.destroy()
-    Global.Path.state = previous
   }
 })
 
 test("a message removed during hydration does not regain stale parts", async () => {
-  const previous = Global.Path.state
   await using tmp = await tmpdir()
-  Global.Path.state = tmp.path
   await Bun.write(`${tmp.path}/kv.json`, "{}")
 
   let resolveMessages!: (response: Response) => void
@@ -255,7 +240,7 @@ test("a message removed during hydration does not regain stale parts", async () 
     }
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
-  })
+  }, tmp.path)
 
   try {
     emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
@@ -273,6 +258,5 @@ test("a message removed during hydration does not regain stale parts", async () 
     expect(sync.data.part[messageID]).toBeUndefined()
   } finally {
     app.renderer.destroy()
-    Global.Path.state = previous
   }
 })

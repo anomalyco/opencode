@@ -8,6 +8,7 @@ import { KVProvider } from "../../../src/cli/cmd/tui/context/kv"
 import { ThemeProvider } from "../../../src/cli/cmd/tui/context/theme"
 import { TuiConfigProvider } from "../../../src/cli/cmd/tui/context/tui-config"
 import { DiffViewerFileTree } from "../../../src/cli/cmd/tui/feature-plugins/system/diff-viewer-file-tree"
+import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -179,11 +180,13 @@ async function captureSettledFrame(app: Awaited<ReturnType<typeof testRender>>) 
 
 function withTheme(component: () => JSX.Element) {
   return (
-    <TuiConfigProvider config={createTuiResolvedConfig()}>
-      <KVProvider>
-        <ThemeProvider mode="dark">{component()}</ThemeProvider>
-      </KVProvider>
-    </TuiConfigProvider>
+    <TestTuiEnvironmentProvider>
+      <TuiConfigProvider config={createTuiResolvedConfig()}>
+        <KVProvider>
+          <ThemeProvider mode="dark">{component()}</ThemeProvider>
+        </KVProvider>
+      </TuiConfigProvider>
+    </TestTuiEnvironmentProvider>
   )
 }
 

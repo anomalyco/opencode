@@ -20,6 +20,7 @@ import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { SplitBorder } from "@opencode-ai/tui/ui/border"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { Spinner } from "@tui/component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
@@ -174,6 +175,7 @@ export function Session() {
   const sync = useSync()
   const event = useEvent()
   const project = useProject()
+  const environment = useTuiEnvironment()
   const tuiConfig = useTuiConfig()
   const kv = useKV()
   const { theme } = useTheme()
@@ -985,10 +987,10 @@ export function Session() {
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
-                process.cwd(),
+                environment.cwd,
             })
           } else {
-            const exportDir = process.cwd()
+            const exportDir = environment.cwd
             const filename = options.filename.trim()
             const filepath = path.join(exportDir, filename)
 
@@ -1001,7 +1003,7 @@ export function Session() {
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
-                process.cwd(),
+                environment.cwd,
             })
             if (result !== undefined) {
               await Filesystem.write(filepath, result)

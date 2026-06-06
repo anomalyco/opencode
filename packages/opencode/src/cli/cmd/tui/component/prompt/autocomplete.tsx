@@ -10,6 +10,7 @@ import { useProject } from "@tui/context/project"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { useTuiConfig } from "../../context/tui-config"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@opencode-ai/tui/ui/border"
@@ -92,6 +93,7 @@ export function Autocomplete(props: {
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const tuiConfig = useTuiConfig()
+  const environment = useTuiEnvironment()
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
@@ -235,7 +237,7 @@ export function Autocomplete(props: {
   }
 
   function createFilePart(item: string, lineRange?: { startLine: number; endLine?: number }) {
-    const baseDir = (sync.path.directory || process.cwd()).replace(/\/+$/, "")
+    const baseDir = (sync.path.directory || environment.cwd).replace(/\/+$/, "")
     const fullPath = path.isAbsolute(item) ? item : path.join(baseDir, item)
     const urlObj = pathToFileURL(fullPath)
     const filename =
@@ -290,8 +292,8 @@ export function Autocomplete(props: {
   const references = createMemo(() =>
     Reference.resolveAll({
       references: ConfigReference.normalize(sync.data.config.reference ?? {}),
-      directory: sync.path.directory || process.cwd(),
-      worktree: sync.path.worktree || sync.path.directory || process.cwd(),
+      directory: sync.path.directory || environment.cwd,
+      worktree: sync.path.worktree || sync.path.directory || environment.cwd,
     }),
   )
 
@@ -304,7 +306,7 @@ export function Autocomplete(props: {
   })
 
   function normalizeMentionPath(filePath: string) {
-    const baseDir = sync.path.directory || process.cwd()
+    const baseDir = sync.path.directory || environment.cwd
     const absolute = path.resolve(filePath)
     const relative = path.relative(baseDir, absolute)
 

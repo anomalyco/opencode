@@ -8,6 +8,7 @@ import {
   type Setter,
 } from "solid-js"
 import { useSync } from "../../context/sync"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 
 export type HomeSessionDestination = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
 
@@ -21,9 +22,10 @@ const HomeSessionDestinationContext = createContext<Context>()
 
 export function HomeSessionDestinationProvider(props: ParentProps) {
   const sync = useSync()
+  const environment = useTuiEnvironment()
   const [selected, setDestination] = createSignal<HomeSessionDestination>()
   const destination = createMemo<HomeSessionDestination>(
-    () => selected() ?? { type: "directory", directory: sync.path.directory || process.cwd(), subdirectory: false },
+    () => selected() ?? { type: "directory", directory: sync.path.directory || environment.cwd, subdirectory: false },
   )
   return (
     <HomeSessionDestinationContext.Provider

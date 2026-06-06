@@ -2,13 +2,13 @@ import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import { createSignal } from "solid-js"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
 
 export function ErrorComponent(props: {
   error: Error
   reset: () => void
   exit: () => Promise<void>
+  version: string
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
@@ -42,7 +42,7 @@ export function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("opencode-version", InstallationVersion)
+  issueURL.searchParams.set("opencode-version", props.version)
 
   const copyIssueURL = () => {
     void Clipboard.copy(issueURL.toString()).then(() => {

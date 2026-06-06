@@ -7,7 +7,7 @@ import { useRoute } from "@tui/context/route"
 import { useEvent } from "@tui/context/event"
 import { uniqueBy } from "remeda"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { iife } from "@/util/iife"
 import { useToast } from "../ui/toast"
 import { useArgs } from "./args"
@@ -29,6 +29,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const sdk = useSDK()
     const toast = useToast()
+    const environment = useTuiEnvironment()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
@@ -129,7 +130,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {},
       })
 
-      const filePath = path.join(Global.Path.state, "model.json")
+      const filePath = path.join(environment.paths.state, "model.json")
       const state = {
         pending: false,
       }
@@ -391,7 +392,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         pinned: [],
       })
 
-      const filePath = path.join(Global.Path.state, "session.json")
+      const filePath = path.join(environment.paths.state, "session.json")
       const state = {
         pending: false,
       }

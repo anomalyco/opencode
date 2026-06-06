@@ -8,6 +8,7 @@ import { ProjectProvider, useProject } from "../../../../src/cli/cmd/tui/context
 import { SDKProvider } from "../../../../src/cli/cmd/tui/context/sdk"
 import { SyncProvider, useSync } from "../../../../src/cli/cmd/tui/context/sync"
 import { createEventSource, createFetch, type FetchHandler, directory } from "../../../fixture/tui-sdk"
+import { TestTuiEnvironmentProvider } from "../../../fixture/tui-environment"
 export { createEventSource, createFetch, directory, eventSource, json, worktree } from "../../../fixture/tui-sdk"
 
 export async function wait(fn: () => boolean, timeout = 2000) {
@@ -20,7 +21,7 @@ export async function wait(fn: () => boolean, timeout = 2000) {
 
 type Ctx = { kv: ReturnType<typeof useKV>; project: ReturnType<typeof useProject>; sync: ReturnType<typeof useSync> }
 
-export async function mount(override?: FetchHandler) {
+export async function mount(override?: FetchHandler, state?: string) {
   const calls = createFetch(override)
   const events = createEventSource()
   let sync!: ReturnType<typeof useSync>
@@ -43,19 +44,21 @@ export async function mount(override?: FetchHandler) {
   }
 
   const app = await testRender(() => (
-    <ArgsProvider>
-      <ExitProvider exit={createExit(async () => {})}>
-        <KVProvider>
-          <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
-            <ProjectProvider>
-              <SyncProvider>
-                <Probe />
-              </SyncProvider>
-            </ProjectProvider>
-          </SDKProvider>
-        </KVProvider>
-      </ExitProvider>
-    </ArgsProvider>
+    <TestTuiEnvironmentProvider paths={state ? { state } : undefined}>
+      <ArgsProvider>
+        <ExitProvider exit={createExit(async () => {})}>
+          <KVProvider>
+            <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
+              <ProjectProvider>
+                <SyncProvider>
+                  <Probe />
+                </SyncProvider>
+              </ProjectProvider>
+            </SDKProvider>
+          </KVProvider>
+        </ExitProvider>
+      </ArgsProvider>
+    </TestTuiEnvironmentProvider>
   ))
 
   await ready

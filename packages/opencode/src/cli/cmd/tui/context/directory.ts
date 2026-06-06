@@ -1,14 +1,15 @@
 import { createMemo } from "solid-js"
 import { useProject } from "./project"
 import { useSync } from "./sync"
-import { Global } from "@opencode-ai/core/global"
+import { abbreviateHome, useTuiEnvironment } from "@opencode-ai/tui/runtime"
 
 export function useDirectory() {
   const project = useProject()
   const sync = useSync()
+  const environment = useTuiEnvironment()
   return createMemo(() => {
-    const directory = project.instance.path().directory || process.cwd()
-    const result = directory.replace(Global.Path.home, "~")
+    const directory = project.instance.path().directory || environment.cwd
+    const result = abbreviateHome(directory, environment.paths.home)
     if (sync.data.vcs?.branch) return result + ":" + sync.data.vcs.branch
     return result
   })

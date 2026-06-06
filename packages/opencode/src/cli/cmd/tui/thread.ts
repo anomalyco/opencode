@@ -20,6 +20,7 @@ import {
   sanitizedProcessEnv,
 } from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "./validate-session"
+import { resolveTuiRuntime } from "./runtime"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -188,6 +189,7 @@ export const TuiThreadCommand = cmd({
 
       const prompt = await input(args.prompt)
       const config = await TuiConfig.get()
+      const runtime = resolveTuiRuntime(config)
 
       const network = resolveNetworkOptionsNoConfig(args)
       const external =
@@ -229,8 +231,9 @@ export const TuiThreadCommand = cmd({
 
       try {
         const { createTuiRenderer, tui } = await import("./app")
-        const renderer = await createTuiRenderer(config)
+        const renderer = await createTuiRenderer(config, runtime)
         const handle = tui({
+          ...runtime,
           url: transport.url,
           renderer,
           async onSnapshot() {

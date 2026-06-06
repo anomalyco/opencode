@@ -7,6 +7,7 @@ import { ProjectProvider, useProject } from "../../../src/cli/cmd/tui/context/pr
 import { SDKProvider } from "../../../src/cli/cmd/tui/context/sdk"
 import { useEvent } from "../../../src/cli/cmd/tui/context/event"
 import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
+import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
 
 const projectID = "proj_test"
 
@@ -59,19 +60,21 @@ async function mount() {
   })
 
   const app = await testRender(() => (
-    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
-      <ProjectProvider>
-        <Probe
-          onReady={async (ctx) => {
-            project = ctx.project
-            await project.sync()
-            done()
-          }}
-          seen={seen}
-          workspaces={workspaces}
-        />
-      </ProjectProvider>
-    </SDKProvider>
+    <TestTuiEnvironmentProvider>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <Probe
+            onReady={async (ctx) => {
+              project = ctx.project
+              await project.sync()
+              done()
+            }}
+            seen={seen}
+            workspaces={workspaces}
+          />
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiEnvironmentProvider>
   ))
 
   await ready

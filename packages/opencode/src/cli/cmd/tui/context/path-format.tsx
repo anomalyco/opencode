@@ -1,6 +1,6 @@
 import path from "path"
 import { createContext, useContext, type ParentProps } from "solid-js"
-import { Global } from "@opencode-ai/core/global"
+import { abbreviateHome, useTuiEnvironment } from "@opencode-ai/tui/runtime"
 
 const context = createContext<{
   path: () => string
@@ -8,9 +8,13 @@ const context = createContext<{
 }>()
 
 export function PathFormatterProvider(props: ParentProps<{ path: string | undefined }>) {
+  const environment = useTuiEnvironment()
   return (
     <context.Provider
-      value={{ path: () => props.path || process.cwd(), format: (input) => formatPath(input, props.path) }}
+      value={{
+        path: () => props.path || environment.cwd,
+        format: (input) => formatPath(input, props.path || environment.cwd, environment.paths.home),
+      }}
     >
       {props.children}
     </context.Provider>
@@ -23,17 +27,13 @@ export function usePathFormatter() {
   return value
 }
 
-function formatPath(input: string | undefined, base: string | undefined) {
+function formatPath(input: string | undefined, base: string, home: string) {
   if (typeof input !== "string" || !input) return ""
 
-  const root = base || process.cwd()
-  const absolute = path.isAbsolute(input) ? input : path.resolve(root, input)
-  const relative = path.relative(root, absolute)
+  const absolute = path.isAbsolute(input) ? input : path.resolve(base, input)
+  const relative = path.relative(base, absolute)
 
   if (!relative) return "."
   if (relative !== ".." && !relative.startsWith(".." + path.sep)) return relative
-  if (Global.Path.home && (absolute === Global.Path.home || absolute.startsWith(Global.Path.home + path.sep))) {
-    return absolute.replace(Global.Path.home, "~")
-  }
-  return absolute
+  return abbreviateHome(absolute, home)
 }

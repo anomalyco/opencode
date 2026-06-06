@@ -1,5 +1,5 @@
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -18,7 +18,8 @@ const MAX_FRECENCY_ENTRIES = 1000
 export const { use: useFrecency, provider: FrecencyProvider } = createSimpleContext({
   name: "Frecency",
   init: () => {
-    const frecencyPath = path.join(Global.Path.state, "frecency.jsonl")
+    const environment = useTuiEnvironment()
+    const frecencyPath = path.join(environment.paths.state, "frecency.jsonl")
     onMount(async () => {
       const text = await Filesystem.readText(frecencyPath).catch(() => "")
       const lines = text
@@ -63,7 +64,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     })
 
     function updateFrecency(filePath: string) {
-      const absolutePath = path.resolve(process.cwd(), filePath)
+      const absolutePath = path.resolve(environment.cwd, filePath)
       const newEntry = {
         frequency: (store.data[absolutePath]?.frequency || 0) + 1,
         lastOpen: Date.now(),
@@ -82,7 +83,8 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     }
 
     return {
-      getFrecency: (filePath: string) => calculateFrecency(store.data[path.resolve(process.cwd(), filePath)]),
+      getFrecency: (filePath: string) =>
+        calculateFrecency(store.data[path.resolve(environment.cwd, filePath)]),
       updateFrecency,
       data: () => store.data,
     }

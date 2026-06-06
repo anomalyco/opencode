@@ -1,5 +1,5 @@
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
@@ -18,7 +18,8 @@ const MAX_STASH_ENTRIES = 50
 export const { use: usePromptStash, provider: PromptStashProvider } = createSimpleContext({
   name: "PromptStash",
   init: () => {
-    const stashPath = path.join(Global.Path.state, "prompt-stash.jsonl")
+    const environment = useTuiEnvironment()
+    const stashPath = path.join(environment.paths.state, "prompt-stash.jsonl")
     onMount(async () => {
       const text = await Filesystem.readText(stashPath).catch(() => "")
       const lines = text

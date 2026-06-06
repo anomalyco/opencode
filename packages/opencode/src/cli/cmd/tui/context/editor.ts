@@ -1,12 +1,12 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
-import os from "node:os"
 import path from "node:path"
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Option, Schema, SchemaGetter } from "effect"
 import { isRecord } from "@opencode-ai/tui/util/record"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { createSimpleContext } from "./helper"
-import { isZedTerminal, resolveZedDbPath, resolveZedSelection } from "./editor-zed"
+import { resolveZedSelection } from "./editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -117,6 +117,7 @@ type EditorLockFile = {
 export const { use: useEditorContext, provider: EditorContextProvider } = createSimpleContext({
   name: "EditorContext",
   init: (props: { WebSocketImpl?: typeof WebSocket }) => {
+    const environment = useTuiEnvironment()
     const mentionListeners = new Set<(mention: EditorMention) => void>()
     const WebSocketImpl = props.WebSocketImpl ?? WebSocket
     const [store, setStore] = createStore<{
@@ -138,7 +139,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     let requestID = 0
     let zedSelection: Promise<void> | undefined
     let lastZedSelectionKey: string | undefined
-    let directory = process.cwd()
+    let directory = environment.cwd
     let preserveSelectionOnReconnect = false
     const pending = new Map<number, string>()
 
@@ -171,15 +172,15 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     const connect = () => {
       if (closed) return
 
-      const connection = resolveEditorConnection(directory)
+      const connection = resolveEditorConnection(directory, environment.editor.port, environment.paths.home)
       if (!connection) {
-        if (!isZedTerminal()) {
+        if (!environment.editor.zedTerminal) {
           setStore("status", "disabled")
           scheduleReconnect()
           return
         }
 
-        const dbPath = resolveZedDbPath()
+        const dbPath = environment.editor.zedDatabase
         if (!dbPath) {
           setStore("status", "disabled")
           scheduleReconnect()
@@ -285,7 +286,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     }
 
     const reconnectWithDirectory = (nextDirectory?: string) => {
-      const resolved = nextDirectory || process.cwd()
+      const resolved = nextDirectory || environment.cwd
       const sameDirectory = directory === resolved
       clearSelectionForReconnect({ resetZedSelectionKey: !sameDirectory })
       if (sameDirectory) return
@@ -317,7 +318,10 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection(directory) || (isZedTerminal() && resolveZedDbPath()))
+        return Boolean(
+          resolveEditorConnection(directory, environment.editor.port, environment.paths.home) ||
+            (environment.editor.zedTerminal && environment.editor.zedDatabase),
+        )
       },
       connected() {
         return store.status === "connected"
@@ -363,8 +367,7 @@ function parsePort(value: string | undefined) {
   return parsed
 }
 
-function resolveEditorConnection(directory: string): EditorConnection | undefined {
-  const port = parsePort(process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT)
+function resolveEditorConnection(directory: string, port: number | undefined, home: string): EditorConnection | undefined {
   if (port) {
     return {
       url: `ws://127.0.0.1:${port}`,
@@ -372,7 +375,7 @@ function resolveEditorConnection(directory: string): EditorConnection | undefine
     }
   }
 
-  const lock = resolveEditorLockFile(directory)
+  const lock = resolveEditorLockFile(directory, home)
   if (lock) {
     return {
       url: `ws://127.0.0.1:${lock.port}`,
@@ -382,8 +385,8 @@ function resolveEditorConnection(directory: string): EditorConnection | undefine
   }
 }
 
-function resolveEditorLockFile(activeDirectory: string) {
-  const directory = path.join(os.homedir(), ".claude", "ide")
+function resolveEditorLockFile(activeDirectory: string, home: string) {
+  const directory = path.join(home, ".claude", "ide")
   let entries: string[]
 
   try {

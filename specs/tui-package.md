@@ -233,7 +233,13 @@ refactor(tui): decouple tool rendering from backend tools
 
 ## Section 4: Make Runtime Inputs Explicit
 
-Status: Pending.
+Status: Completed for the shared runtime contract and legacy host. The TUI now
+receives immutable launch-directory, path, capability, terminal/editor, startup,
+and build inputs through `@opencode-ai/tui/runtime`. Movable app, component,
+route, and feature-plugin code no longer reads OpenCode globals or process state;
+command, config, plugin-loading, custom-theme discovery, editor/clipboard, and
+Windows lifecycle adapters remain host-owned. `packages/cli` does not consume
+this contract yet; that integration remains deferred to Section 9.
 
 Replace process-global OpenCode state with resolved TUI inputs.
 
@@ -280,8 +286,8 @@ Exit criteria:
 
 - Movable TUI code does not import `Flag` or `Global`.
 - TUI tests can supply deterministic capabilities and storage paths.
-- Both host adapters can construct the required input without importing TUI
-  internals.
+- The legacy host constructs the required input through the public package API;
+  the new CLI integration remains deferred to Section 9.
 
 Checkpoint commit:
 
@@ -591,7 +597,7 @@ Compiled checks:
 - [x] Section 1: Create the package skeleton
 - [x] Section 2: Move presentation utilities and leaf UI
 - [x] Section 3: Remove backend tool implementation imports
-- [ ] Section 4: Make runtime inputs explicit
+- [x] Section 4: Make runtime inputs explicit
 - [ ] Section 5: Separate resolved TUI config from host config loading
 - [ ] Section 6: Move SDK state, routes, and backend operations
 - [ ] Section 7: Isolate plugin presentation from plugin loading

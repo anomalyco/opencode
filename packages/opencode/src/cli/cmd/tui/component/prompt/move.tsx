@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "@tui/context/sdk"
@@ -20,6 +20,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const sync = useSync()
   const toast = useToast()
   const homeDestination = useHomeSessionDestination()
+  const environment = useTuiEnvironment()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
   const [progress, setProgress] = createSignal<string>()
@@ -34,7 +35,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
         {
           projectID,
           strategy: "git_worktree",
-          directory: path.join(Global.Path.data, "worktree", projectID.slice(0, 6)),
+          directory: path.join(environment.paths.worktree, projectID.slice(0, 6)),
           context,
         },
         { throwOnError: true },

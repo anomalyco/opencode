@@ -4,7 +4,7 @@ import { useTheme } from "@tui/context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import * as Selection from "@tui/util/selection"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 
@@ -180,6 +180,7 @@ export function DialogProvider(props: ParentProps) {
   const value = init()
   const renderer = useRenderer()
   const toast = useToast()
+  const environment = useTuiEnvironment()
 
   return (
     <ctx.Provider value={value}>
@@ -188,16 +189,14 @@ export function DialogProvider(props: ParentProps) {
         position="absolute"
         zIndex={3000}
         onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
-          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+          if (environment.capabilities.copyOnSelect) return
           if (evt.button !== MouseButton.RIGHT) return
 
           if (!Selection.copy(renderer, toast)) return
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={
-          !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => Selection.copy(renderer, toast) : undefined
-        }
+        onMouseUp={environment.capabilities.copyOnSelect ? () => Selection.copy(renderer, toast) : undefined}
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>

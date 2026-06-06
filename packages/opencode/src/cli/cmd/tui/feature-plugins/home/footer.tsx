@@ -1,7 +1,7 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { createMemo, Match, Show, Switch } from "solid-js"
-import { Global } from "@opencode-ai/core/global"
+import { abbreviateHome, useTuiEnvironment } from "@opencode-ai/tui/runtime"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
 
 const id = "internal:home-footer"
@@ -9,12 +9,15 @@ const id = "internal:home-footer"
 function Directory(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   const destination = useHomeSessionDestination()
+  const environment = useTuiEnvironment()
   const dir = createMemo(() => {
     const selected = destination?.destination()
     if (!selected || selected.type === "new") return
-    const out = selected.directory.replace(Global.Path.home, "~")
+    const out = abbreviateHome(selected.directory, environment.paths.home)
     const branch =
-      selected.directory === (props.api.state.path.directory || process.cwd()) ? props.api.state.vcs?.branch : undefined
+      selected.directory === (props.api.state.path.directory || environment.cwd)
+        ? props.api.state.vcs?.branch
+        : undefined
     if (branch) return out + ":" + branch
     return out
   })
