@@ -24,6 +24,14 @@ export const AcpCommand = effectCmd({
     const { ACP } = yield* Effect.promise(() => import("@/acp/agent"))
     ACPProfile.mark("cli.acp.handler")
     process.env.OPENCODE_CLIENT = "acp"
+    // Prevent the internal SDK HTTP client from routing localhost
+    // requests through a configured HTTP proxy (http_proxy / https_proxy).
+    // Without this, ACP internal API calls (config.providers, session.create,
+    // etc.) fail when a proxy is set because the proxy cannot reach 127.0.0.1.
+    process.env.NO_PROXY = [process.env.NO_PROXY, "127.0.0.1,localhost"]
+      .filter(Boolean)
+      .join(",")
+    process.env.no_proxy = process.env.NO_PROXY
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)))
 
