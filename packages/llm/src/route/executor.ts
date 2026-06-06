@@ -26,6 +26,7 @@ import {
 export interface Interface {
   readonly execute: (
     request: HttpClientRequest.HttpClientRequest,
+    fetch?: typeof globalThis.fetch,
   ) => Effect.Effect<HttpClientResponse.HttpClientResponse, LLMError>
 }
 
@@ -352,19 +353,53 @@ const retryStatusFailures = <A, R>(
     )
   })
 
+function fetchBody(request: HttpClientRequest.HttpClientRequest): string | Uint8Array | FormData | undefined {
+  const body = request.body
+  if (body._tag === "Raw" || body._tag === "Uint8Array") return body.body as string | Uint8Array
+  if (body._tag === "FormData") return body.formData
+  return undefined
+}
+
+const executeWithFetch = (
+  request: HttpClientRequest.HttpClientRequest,
+  fetch: typeof globalThis.fetch,
+  redactedNames: ReadonlyArray<string | RegExp>,
+) => {
+  const body = fetchBody(request)
+  const init: Record<string, unknown> = {
+    method: request.method,
+    headers: request.headers,
+  }
+  if (body !== undefined) init.body = body
+  return Effect.tryPromise({
+    try: () => fetch(request.url, init as globalThis.RequestInit),
+    catch: (cause) =>
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.TransportError({ request, cause }),
+      }),
+  }).pipe(
+    Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
+    Effect.mapError(toHttpError(redactedNames)),
+    Effect.flatMap(statusError(request, redactedNames)),
+  )
+}
+
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const executeOnce = (request: HttpClientRequest.HttpClientRequest) =>
+    const executeOnce = (request: HttpClientRequest.HttpClientRequest, fetch?: typeof globalThis.fetch) =>
       Effect.gen(function* () {
         const redactedNames = yield* Headers.CurrentRedactedNames
+        if (fetch) {
+          return yield* executeWithFetch(request, fetch, redactedNames)
+        }
         return yield* http
           .execute(request)
           .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
       })
     return Service.of({
-      execute: (request) => retryStatusFailures(executeOnce(request)),
+      execute: (request, fetch) => retryStatusFailures(executeOnce(request, fetch)),
     })
   }),
 )

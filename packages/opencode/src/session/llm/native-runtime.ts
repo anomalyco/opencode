@@ -6,8 +6,8 @@ import { isRecord } from "@/util/record"
 import { asSchema, type ModelMessage, type Tool } from "ai"
 import { Cause, Effect, FiberSet, Queue } from "effect"
 import * as Stream from "effect/Stream"
-import { FetchHttpClient } from "effect/unstable/http"
 import {
+  HttpOptions,
   LLMRequest,
   Tool as NativeTool,
   ToolFailure,
@@ -92,7 +92,7 @@ export function stream(input: StreamInput): StreamResult {
   // — if a field ever needs to differ between the two surfaces, the
   // translation belongs here, not split across both packages.
   const tools = nativeTools(input.tools, input)
-  const request = LLMNative.request({
+  const baseRequest = LLMNative.request({
     model: input.model,
     apiKey: current.apiKey,
     baseURL: current.baseURL,
@@ -105,6 +105,13 @@ export function stream(input: StreamInput): StreamResult {
     providerOptions: ProviderTransform.providerOptions(input.model, input.providerOptions ?? {}),
     headers: { ...providerHeaders(input.provider.options.headers), ...input.headers },
   })
+  const request = fetch
+    ? (() => {
+        const http = new HttpOptions({})
+        http.fetch = fetch
+        return LLMRequest.update(baseRequest, { http } as any)
+      })()
+    : baseRequest
   const stream = Stream.scoped(
     Stream.unwrap(
       Effect.gen(function* () {
@@ -146,7 +153,7 @@ export function stream(input: StreamInput): StreamResult {
 
   return {
     ...current,
-    stream: fetch ? stream.pipe(Stream.provideService(FetchHttpClient.Fetch, fetch)) : stream,
+    stream,
   }
 }
 

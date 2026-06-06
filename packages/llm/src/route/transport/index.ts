@@ -8,6 +8,8 @@ import type { LLMError, LLMRequest } from "../../schema"
 export interface TransportRuntime {
   readonly http: RequestExecutorInterface
   readonly webSocket?: WebSocketExecutorInterface
+  /** Per-request fetch override for the HTTP executor. */
+  readonly fetch?: typeof globalThis.fetch
 }
 
 export interface Transport<Body, Prepared, Frame> {

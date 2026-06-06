@@ -54,7 +54,10 @@ export class HttpOptions extends Schema.Class<HttpOptions>("LLM.HttpOptions")({
   body: Schema.optional(JsonSchema),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-}) {}
+}) {
+  /** Per-request fetch override — threaded through the transport layer, not part of the Schema. */
+  declare fetch?: typeof globalThis.fetch
+}
 
 export namespace HttpOptions {
   export type Input = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
