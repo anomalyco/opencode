@@ -423,7 +423,6 @@ test("keeps locked deferred parity TODOs visible", async () => {
   for (const todo of [
     "Port tree-sitter bash / PowerShell parser-based approval reduction.",
     "Port BashArity reusable command-prefix approvals.",
-    "Replace token-based command-argument external-directory advisories with parser-based detection.",
     "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
     "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
     "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",

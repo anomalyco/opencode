@@ -11,6 +11,7 @@ import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
+import { pathWords } from "../util/bash"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -65,7 +66,6 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
  */
 // TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
 // TODO: Port BashArity reusable command-prefix approvals.
-// TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
 // TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.
@@ -76,12 +76,9 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
 // TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
 // TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
 
-const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
-const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
 const externalCommandDirectories = (command: string, cwd: string) => {
   const directories = new Set<string>()
-  for (const token of shellTokens(command)) {
-    const value = unquote(token).replace(/[;,|&]+$/, "")
+  for (const value of pathWords(command)) {
     if (!path.isAbsolute(value)) continue
     const resolved = FSUtil.resolve(value)
     if (FSUtil.contains(cwd, resolved)) continue
