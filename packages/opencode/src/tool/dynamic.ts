@@ -1,3 +1,4 @@
+import fs from "fs"
 import path from "path"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { ToolRuntime, ToolRuntimeError } from "@opencode-ai/database/tool/runtime"
@@ -8,6 +9,8 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import * as Log from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "tool.dynamic" })
+
+const toolMtimes = new Map<string, number>()
 
 const typeToJsonSchema = (typeName: string): JSONSchema7["type"] =>
   typeName === "number" ? "number" : typeName === "boolean" ? "boolean" : "string"
@@ -81,16 +84,27 @@ export const syncDynamic = Effect.fn("DynamicTools.sync")(function* (runtime: To
 
   for (const match of matches) {
     const name = path.basename(match, path.extname(match))
-    const already = yield* runtime.isRegistered(name)
-    if (already) continue
+    const mtime = yield* Effect.sync(() => fs.statSync(match).mtimeMs)
+    const prevMtime = toolMtimes.get(name)
+    if (prevMtime === mtime) continue
 
-    yield* runtime
-      .register(name, match)
-      .pipe(
+    const already = yield* runtime.isRegistered(name)
+
+    if (already) {
+      yield* runtime.reload(name, match).pipe(
+        Effect.catchTag("ToolRuntimeError", (e: ToolRuntimeError) =>
+          Effect.sync(() => log.warn("failed to reload tool", { name, error: e.message })),
+        ),
+      )
+    } else {
+      yield* runtime.register(name, match).pipe(
         Effect.catchTag("ToolRuntimeError", (e: ToolRuntimeError) =>
           Effect.sync(() => log.warn("failed to register tool", { name, error: e.message })),
         ),
       )
+    }
+
+    toolMtimes.set(name, mtime)
   }
 })
 
