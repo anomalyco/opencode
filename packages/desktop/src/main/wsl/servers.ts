@@ -119,6 +119,28 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
     setOpencodeCheck(distro, opencodeCheck(distro, resolved, version, appVersion))
   }
 
+  const refreshOpencodeCheckBackground = (id: string, distro: string) => {
+    void refreshOpencodeCheck(distro).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      logger?.error("wsl opencode check failed", { id, distro, message })
+    })
+  }
+
+  const refreshOpencodeChecks = async () => {
+    await Promise.all(
+      state.servers.map((item) =>
+        refreshOpencodeCheck(item.config.distro).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          logger?.error("wsl opencode check failed", {
+            id: item.config.id,
+            distro: item.config.distro,
+            message,
+          })
+        }),
+      ),
+    )
+  }
+
   const refreshDistroLists = async (opts: { signal?: AbortSignal }) => {
     const [installed, online] = await Promise.all([listInstalledWslDistros(opts), listOnlineWslDistros(opts)])
     return { installed, online }
@@ -170,10 +192,7 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
         setRuntime(id, { kind: "failed", message })
         logger?.error("wsl sidecar exited", { id, distro: item.config.distro, code, signal })
       })
-      void refreshOpencodeCheck(item.config.distro).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error)
-        logger?.error("wsl opencode check failed", { id, distro: item.config.distro, message })
-      })
+      refreshOpencodeCheckBackground(id, item.config.distro)
       logger?.log("wsl sidecar ready", { id, distro: item.config.distro, url: sidecar.url })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -225,6 +244,7 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
 
     async initialize() {
       refreshFromStore()
+      void refreshOpencodeChecks()
       for (const id of wslServerIdsToStartOnInitialize(state.servers.map((item) => item.config))) void startServer(id)
     },
 
