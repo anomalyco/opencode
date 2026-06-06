@@ -1,4 +1,3 @@
-/// <reference types="node" />
 export * as DatabaseMigration from "./migration"
 
 import { sql } from "drizzle-orm"
@@ -46,8 +45,9 @@ function ensureMigrationTable(db: Database) {
 }
 
 function loadCompleted(db: Database) {
-  return Effect.map(db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`), (rows) =>
-    new Set(rows.map((row) => row.id)),
+  return Effect.map(
+    db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`),
+    (rows) => new Set(rows.map((row) => row.id)),
   )
 }
 
@@ -55,12 +55,16 @@ function importLegacyDrizzleState(db: Database) {
   return Effect.gen(function* () {
     // Existing installs used Drizzle's migration journal. Seed the new
     // journal once so TypeScript migrations don't replay old SQL.
-    if (!(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${"__drizzle_migrations"}`))) {
+    if (
+      !(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${"__drizzle_migrations"}`))
+    ) {
       return yield* loadCompleted(db)
     }
 
     const columns = new Set(
-      (yield* db.all<{ name: string }>(sql`SELECT name FROM pragma_table_info('__drizzle_migrations')`)).map((row) => row.name),
+      (yield* db.all<{ name: string }>(sql`SELECT name FROM pragma_table_info('__drizzle_migrations')`)).map(
+        (row) => row.name,
+      ),
     )
     if (columns.has("name")) {
       yield* db.run(sql`
