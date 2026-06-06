@@ -32,8 +32,8 @@ type MemSnapshot = {
   totalMb: number
   freeMb: number
   label: string
-  modelMb: number   // 0 if unknown
-  kvEstMb: number   // 0 if unknown
+  modelMb: number
+  kvEstMb: number
 }
 
 function extractMem(hw: ResourceSnapshot): MemSnapshot | null {
@@ -59,7 +59,18 @@ function normalizeBaseURL(url: string): string {
   return url.replace(/\/+$/, "").replace(/\/v1$/, "")
 }
 
-// Three-segment bar when model info is available; two-segment otherwise.
+// Token context usage bar: accent fill for used, muted for free.
+function CtxBar(props: { percent: number; theme: any; onClick?: () => void }) {
+  const used = Math.max(1, Math.min(BAR_WIDTH, Math.round((props.percent / 100) * BAR_WIDTH)))
+  return (
+    <text onMouseUp={props.onClick}>
+      <span style={{ fg: props.theme.accent }}>{"█".repeat(used)}</span>
+      <span style={{ fg: props.theme.textMuted }}>{"░".repeat(BAR_WIDTH - used)}</span>
+    </text>
+  )
+}
+
+// VRAM/memory bar: three segments when model info available, two otherwise.
 function MemBar(props: { mem: MemSnapshot; theme: any }) {
   const m = props.mem
   const t = props.theme
@@ -79,7 +90,6 @@ function MemBar(props: { mem: MemSnapshot; theme: any }) {
     )
   }
 
-  // Fallback: used vs free
   const usedChars = Math.max(1, Math.min(BAR_WIDTH, Math.round((m.usedMb / total) * BAR_WIDTH)))
   return (
     <text>
@@ -114,7 +124,16 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const tokensPerSecond = last && seconds > 0 && last.tokens.output > 0 ? last.tokens.output / seconds : null
     const isLocal = Boolean(provider?.options?.["baseURL"])
     const baseURL = (provider?.options?.["baseURL"]) as string | undefined
-    return { tokens, percent: ctx > 0 && tokens > 0 ? Math.round((tokens / ctx) * 100) : null, ctxWindow: ctx > 0 ? fmtCtxK(ctx) : null, tokensPerSecond, isLocal, providerID: providerID ?? null, modelID: modelID ?? null, baseURL: baseURL ?? null }
+    return {
+      tokens,
+      percent: ctx > 0 && tokens > 0 ? Math.round((tokens / ctx) * 100) : null,
+      ctxWindow: ctx > 0 ? fmtCtxK(ctx) : null,
+      tokensPerSecond,
+      isLocal,
+      providerID: providerID ?? null,
+      modelID: modelID ?? null,
+      baseURL: baseURL ?? null,
+    }
   })
 
   createEffect(on(
@@ -142,55 +161,72 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     props.api.ui.dialog.replace(() => <DialogModelCtx providerID={providerID} modelID={modelID} />)
   }
 
+  const canOpenDialog = () => state().isLocal && Boolean(state().ctxWindow)
+
   return (
     <box>
-      <text fg={theme().text}>
-        <b>Context</b>
-      </text>
+      {/* ── Tokens section ── */}
       <text
-        fg={theme().textMuted}
-        onMouseUp={state().isLocal && state().ctxWindow ? openCtxDialog : undefined}
+        fg={theme().text}
+        bold
+        onMouseUp={canOpenDialog() ? openCtxDialog : undefined}
       >
+        Tokens
+      </text>
+      <text fg={theme().textMuted}>
         {state().tokens.toLocaleString()}
         <Show when={state().ctxWindow}>
           {" / "}
-          <span style={{ fg: state().isLocal ? theme().accent : theme().textMuted }}>
+          <span style={{ fg: canOpenDialog() ? theme().accent : theme().textMuted }}>
             {state().ctxWindow}
           </span>
+          <Show when={state().percent !== null}>
+            {"  "}{state().percent}%
+          </Show>
         </Show>
-        {" tokens"}
       </text>
       <Show when={state().percent !== null}>
-        <text fg={theme().textMuted}>{state().percent}% used</text>
+        <CtxBar
+          percent={state().percent!}
+          theme={theme()}
+          onClick={canOpenDialog() ? openCtxDialog : undefined}
+        />
       </Show>
-      <Show when={state().tokensPerSecond !== null}>
-        <text fg={theme().textMuted}>{fmtTokensPerSecond(state().tokensPerSecond!)} tokens/s</text>
-      </Show>
+
+      {/* ── Memory section — always shown when hw data available ── */}
       <Show when={mem()}>
         {(m) => (
           <>
+            <text fg={theme().text} bold>{m().label}</text>
             <MemBar mem={m()} theme={theme()} />
             <Show
               when={m().modelMb > 0}
               fallback={
                 <text fg={theme().textMuted}>
-                  {fmtGB(m().usedMb)}/{fmtGB(m().totalMb)} GB {m().label}
+                  {fmtGB(m().usedMb)}/{fmtGB(m().totalMb)} GB
                   {" · "}
                   <span style={{ fg: theme().accent }}>{fmtGB(m().freeMb)} free</span>
                 </text>
               }
             >
               <text fg={theme().textMuted}>
-                <span style={{ fg: theme().warning }}>{fmtGB(m().modelMb)} model</span>
+                <span style={{ fg: theme().warning }}>{fmtGB(m().modelMb)}</span>
                 {" · "}
-                <span style={{ fg: theme().accent }}>{fmtGB(m().kvEstMb)} KV</span>
+                <span style={{ fg: theme().accent }}>{fmtGB(m().kvEstMb)}</span>
                 {" · "}
-                {fmtGB(m().freeMb)} free
+                {fmtGB(m().freeMb)} GB
               </text>
             </Show>
           </>
         )}
       </Show>
+
+      {/* ── Speed — below both bars ── */}
+      <Show when={state().tokensPerSecond !== null}>
+        <text fg={theme().textMuted}>{fmtTokensPerSecond(state().tokensPerSecond!)} t/s</text>
+      </Show>
+
+      {/* ── Cost — non-local providers only ── */}
       <Show when={!state().isLocal}>
         <text fg={theme().textMuted}>{money.format(cost())} spent</text>
       </Show>
