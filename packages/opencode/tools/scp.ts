@@ -1,8 +1,29 @@
 import { spawnSync } from "child_process"
+import { existsSync, readFileSync } from "fs"
+import { homedir } from "os"
+import { join } from "path"
+
+const CONFIG_FILE = join(homedir(), ".config", "opencode", "ssh-defaults.json")
+
+interface SshDefaults {
+  host?: string
+  username?: string
+  keyPath?: string
+  port?: number
+}
+
+function readDefaults(): SshDefaults {
+  try {
+    if (existsSync(CONFIG_FILE)) {
+      return JSON.parse(readFileSync(CONFIG_FILE, "utf-8"))
+    }
+  } catch { /* ignore */ }
+  return {}
+}
 
 export const tool = {
   name: "scp",
-  description: "Copy files or directories to a remote server via SCP with key-based auth.",
+  description: "Copy files or directories to a remote server via SCP with key-based auth. Falls back to saved ssh-config defaults for omitted fields.",
   schema: {
     input: {
       host: "string",
@@ -20,18 +41,23 @@ export const tool = {
 }
 
 export default function scp(input: {
-  host: string
-  username: string
+  host?: string
+  username?: string
   keyPath?: string
   port?: number
   localPath: string
   remotePath: string
   recursive?: boolean
 }) {
-  const { host, username, keyPath, port = 22, localPath, remotePath, recursive = false } = input
+  const defaults = readDefaults()
+  const host = input.host ?? defaults.host
+  const username = input.username ?? defaults.username
+  const keyPath = input.keyPath ?? defaults.keyPath
+  const port = input.port ?? defaults.port ?? 22
+  const { localPath, remotePath, recursive = false } = input
 
-  if (!host) return { success: false, message: "host is required" }
-  if (!username) return { success: false, message: "username is required" }
+  if (!host) return { success: false, message: "host is required (set via ssh-config or pass directly)" }
+  if (!username) return { success: false, message: "username is required (set via ssh-config or pass directly)" }
   if (!localPath) return { success: false, message: "localPath is required" }
   if (!remotePath) return { success: false, message: "remotePath is required" }
 

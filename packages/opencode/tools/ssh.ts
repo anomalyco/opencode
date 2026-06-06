@@ -1,9 +1,29 @@
 import { spawnSync } from "child_process"
-import { existsSync } from "fs"
+import { existsSync, readFileSync } from "fs"
+import { homedir } from "os"
+import { join } from "path"
+
+const CONFIG_FILE = join(homedir(), ".config", "opencode", "ssh-defaults.json")
+
+interface SshDefaults {
+  host?: string
+  username?: string
+  keyPath?: string
+  port?: number
+}
+
+function readDefaults(): SshDefaults {
+  try {
+    if (existsSync(CONFIG_FILE)) {
+      return JSON.parse(readFileSync(CONFIG_FILE, "utf-8"))
+    }
+  } catch { /* ignore */ }
+  return {}
+}
 
 export const tool = {
   name: "ssh",
-  description: "Execute shell commands on a remote server via SSH with key-based auth.",
+  description: "Execute shell commands on a remote server via SSH with key-based auth. Falls back to saved ssh-config defaults for omitted fields.",
   schema: {
     input: {
       host: "string",
@@ -22,16 +42,22 @@ export const tool = {
 }
 
 export default function ssh(input: {
-  host: string
-  username: string
+  host?: string
+  username?: string
   keyPath?: string
   port?: number
   command: string
 }) {
-  const { host, username, keyPath, port = 22, command } = input
+  const defaults = readDefaults()
 
-  if (!host) return { success: false, stdout: "", stderr: "host is required", exitCode: 1 }
-  if (!username) return { success: false, stdout: "", stderr: "username is required", exitCode: 1 }
+  const host = input.host ?? defaults.host
+  const username = input.username ?? defaults.username
+  const keyPath = input.keyPath ?? defaults.keyPath
+  const port = input.port ?? defaults.port ?? 22
+  const command = input.command
+
+  if (!host) return { success: false, stdout: "", stderr: "host is required (set via ssh-config or pass directly)", exitCode: 1 }
+  if (!username) return { success: false, stdout: "", stderr: "username is required (set via ssh-config or pass directly)", exitCode: 1 }
   if (!command) return { success: false, stdout: "", stderr: "command is required", exitCode: 1 }
 
   const args = [
