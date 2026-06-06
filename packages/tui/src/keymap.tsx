@@ -14,6 +14,7 @@ import {
 } from "@opentui/keymap/extras"
 import { KeymapProvider, useKeymap, useKeymapSelector, useBindings } from "@opentui/keymap/solid"
 import { createMemo, type Accessor } from "solid-js"
+import { useTuiConfig } from "./config"
 import { TuiKeybind } from "./keybind"
 
 export const LEADER_TOKEN = "leader"
@@ -248,6 +249,16 @@ export function registerOpencodeKeymap(
 
 export function useLeaderActive(): Accessor<boolean> {
   return useKeymapSelector((keymap: OpenTuiKeymap) => keymap.getPendingSequence()[0]?.tokenName === LEADER_TOKEN)
+}
+
+export function useCommandShortcut(command: string): Accessor<string> {
+  const config = useTuiConfig()
+  return useKeymapSelector((keymap: OpenTuiKeymap) =>
+    formatKeySequence(
+      keymap.getCommandBindings({ visibility: "registered", commands: [command] }).get(command)?.[0]?.sequence,
+      config,
+    ),
+  )
 }
 
 export function useCommandSlashes(): Accessor<readonly CommandSlashEntry[]> {

@@ -14,7 +14,7 @@ import {
   showDiffViewerFileTree,
   singlePatchFileIndex,
   toggleFileTreeDirectory,
-} from "../../../src/cli/cmd/tui/feature-plugins/system/diff-viewer-file-tree-utils"
+} from "../../src/feature-plugins/system/diff-viewer-file-tree-utils"
 
 describe("diff viewer file tree utilities", () => {
   test("builds a nested tree with deduplicated directories and file indexes", () => {

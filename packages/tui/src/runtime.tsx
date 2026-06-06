@@ -1,4 +1,4 @@
-import { createContext, type JSX, useContext } from "solid-js"
+import { createComponent, createContext, type JSX, useContext } from "solid-js"
 import path from "path"
 
 export type TuiEnvironment = Readonly<{
@@ -40,11 +40,21 @@ const EnvironmentContext = createContext<TuiEnvironment>()
 const BuildInfoContext = createContext<TuiBuildInfo>()
 
 export function TuiEnvironmentProvider(props: { value: TuiEnvironment; children: JSX.Element }) {
-  return <EnvironmentContext.Provider value={props.value}>{props.children}</EnvironmentContext.Provider>
+  return createComponent(EnvironmentContext.Provider, {
+    value: props.value,
+    get children() {
+      return props.children
+    },
+  })
 }
 
 export function TuiBuildInfoProvider(props: { value: TuiBuildInfo; children: JSX.Element }) {
-  return <BuildInfoContext.Provider value={props.value}>{props.children}</BuildInfoContext.Provider>
+  return createComponent(BuildInfoContext.Provider, {
+    value: props.value,
+    get children() {
+      return props.children
+    },
+  })
 }
 
 export function useTuiEnvironment() {

@@ -84,11 +84,13 @@ export const AttachCommand = cmd({
       }
 
       const { createTuiRenderer, tui } = await import("./app")
+      const { createLegacyTuiPluginHost } = await import("./plugin/runtime")
       const renderer = await createTuiRenderer(config, runtime)
       const handle = tui({
         ...runtime,
         url: args.url,
         config,
+        pluginHost: createLegacyTuiPluginHost(),
         renderer,
         args: {
           continue: args.continue,

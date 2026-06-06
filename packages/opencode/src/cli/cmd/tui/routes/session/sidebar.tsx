@@ -4,12 +4,13 @@ import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
 import { useTuiBuildInfo } from "@opencode-ai/tui/runtime"
-import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import { usePluginRuntime } from "@opencode-ai/tui/plugin/runtime"
 
 import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
 import { WorkspaceLabel } from "../../component/workspace-label"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+  const pluginRuntime = usePluginRuntime()
   const project = useProject()
   const sync = useSync()
   const { theme } = useTheme()
@@ -46,7 +47,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           }}
         >
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <TuiPluginRuntime.Slot
+            <pluginRuntime.Slot
               name="sidebar_title"
               mode="single_winner"
               session_id={props.sessionID}
@@ -81,13 +82,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <text fg={theme.textMuted}>{session()!.share!.url}</text>
                 </Show>
               </box>
-            </TuiPluginRuntime.Slot>
-            <TuiPluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
+            </pluginRuntime.Slot>
+            <pluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
           </box>
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <TuiPluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
+          <pluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
             <text fg={theme.textMuted}>
               <span style={{ fg: theme.success }}>•</span> <b>Open</b>
               <span style={{ fg: theme.text }}>
@@ -95,7 +96,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </span>{" "}
               <span>{build.version}</span>
             </text>
-          </TuiPluginRuntime.Slot>
+          </pluginRuntime.Slot>
         </box>
       </box>
     </Show>

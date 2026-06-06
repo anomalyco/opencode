@@ -13,6 +13,14 @@ export type PlatformClipboardContent = Readonly<{
 
 export type TuiPlatform = Readonly<{
   files: PlatformFiles
+  state?: Readonly<{
+    read(): Promise<Record<string, unknown>>
+    write(value: Record<string, unknown>): Promise<void>
+  }>
+  themes?: Readonly<{
+    discover(): Promise<Record<string, unknown>>
+    subscribeRefresh?(refresh: () => void): () => void
+  }>
   clipboard?: Readonly<{
     read?(): Promise<PlatformClipboardContent | undefined>
     write?(text: string): Promise<void>
@@ -35,4 +43,8 @@ export function useTuiPlatform() {
   const value = useContext(PlatformContext)
   if (!value) throw new Error("TuiPlatformProvider is missing")
   return value
+}
+
+export function useOptionalTuiPlatform() {
+  return useContext(PlatformContext)
 }

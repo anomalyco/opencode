@@ -1,4 +1,4 @@
-import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition, TuiSlotProps } from "@opencode-ai/plugin/tui"
+import type { TuiDialogSelectOption, TuiPluginApi, TuiSlotProps } from "@opencode-ai/plugin/tui"
 import type { TuiConfig } from "@opencode-ai/tui/config"
 import type { useEvent } from "@tui/context/event"
 import type { useRoute } from "@tui/context/route"
@@ -13,17 +13,12 @@ import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
 import { Prompt } from "../component/prompt"
-import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
 import * as Keymap from "../keymap"
 import { createCommandShim } from "./command-shim"
-
-type RouteEntry = {
-  key: symbol
-  render: TuiRouteDefinition["render"]
-}
-
-export type RouteMap = Map<string, RouteEntry[]>
+import type { PluginRoutes } from "@opencode-ai/tui/plugin/api"
+export type { RouteMap } from "@opencode-ai/tui/plugin/api"
+export { createPluginRoutes, createTuiApi } from "@opencode-ai/tui/plugin/api"
 
 type Input = {
   version: string
@@ -32,8 +27,7 @@ type Input = {
   keymap: ReturnType<typeof useOpencodeKeymap>
   kv: ReturnType<typeof useKV>
   route: ReturnType<typeof useRoute>
-  routes: RouteMap
-  bump: () => void
+  routes: PluginRoutes
   event: ReturnType<typeof useEvent>
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
@@ -41,30 +35,7 @@ type Input = {
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
   attention: TuiPluginApi["attention"]
-}
-
-function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
-  const key = Symbol()
-  for (const item of list) {
-    const prev = routes.get(item.name) ?? []
-    prev.push({ key, render: item.render })
-    routes.set(item.name, prev)
-  }
-  bump()
-
-  return () => {
-    for (const item of list) {
-      const prev = routes.get(item.name)
-      if (!prev) continue
-      const next = prev.filter((x) => x.key !== key)
-      if (!next.length) {
-        routes.delete(item.name)
-        continue
-      }
-      routes.set(item.name, next)
-    }
-    bump()
-  }
+  Slot: TuiPluginApi["ui"]["Slot"]
 }
 
 function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?: Record<string, unknown>) {
@@ -198,13 +169,7 @@ function appApi(version: string): TuiPluginApi["app"] {
   }
 }
 
-export function createTuiApi(input: Input): TuiPluginApi {
-  const lifecycle: TuiPluginApi["lifecycle"] = {
-    signal: new AbortController().signal,
-    onDispose() {
-      return () => {}
-    },
-  }
+export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycle"> {
   return {
     app: appApi(input.version),
     attention: input.attention,
@@ -229,7 +194,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
     },
     route: {
       register(list) {
-        return routeRegister(input.routes, list, input.bump)
+        return input.routes.register(list)
       },
       navigate(name, params) {
         routeNavigate(input.route, name, params)
@@ -271,7 +236,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
         )
       },
       Slot<Name extends string>(props: TuiSlotProps<Name>) {
-        return <HostSlot {...props} />
+        return <input.Slot {...props} />
       },
       Prompt(props) {
         return (
@@ -362,7 +327,6 @@ export function createTuiApi(input: Input): TuiPluginApi {
         }
       },
     },
-    lifecycle,
     theme: {
       get current() {
         return input.theme.theme

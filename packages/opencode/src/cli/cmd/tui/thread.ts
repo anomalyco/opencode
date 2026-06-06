@@ -231,6 +231,7 @@ export const TuiThreadCommand = cmd({
 
       try {
         const { createTuiRenderer, tui } = await import("./app")
+        const { createLegacyTuiPluginHost } = await import("./plugin/runtime")
         const renderer = await createTuiRenderer(config, runtime)
         const handle = tui({
           ...runtime,
@@ -242,6 +243,7 @@ export const TuiThreadCommand = cmd({
             return [tui, server]
           },
           config,
+          pluginHost: createLegacyTuiPluginHost(),
           directory: cwd,
           fetch: transport.fetch,
           events: transport.events,

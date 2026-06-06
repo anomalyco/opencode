@@ -1,5 +1,5 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { InternalTuiPlugin } from "../../plugin/internal"
+import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, For, Show, createSignal } from "solid-js"
 import { Locale } from "@opencode-ai/tui/util/locale"
 
@@ -62,7 +62,7 @@ const tui: TuiPlugin = async (api) => {
   })
 }
 
-const plugin: InternalTuiPlugin = {
+const plugin: BuiltinTuiPlugin = {
   id,
   tui,
 }

@@ -392,7 +392,12 @@ refactor(tui): move sdk state and routes into package
 
 ## Section 7: Isolate Plugin Presentation From Plugin Loading
 
-Status: Pending.
+Status: Completed. Plugin slots, route registration, TUI-facing APIs, runtime
+presentation state, and built-in feature plugins now live in
+`@opencode-ai/tui`. The legacy host injects a narrow plugin host that retains
+discovery, installation, manifest/config mutation, external module execution,
+pure-mode filtering, and cleanup ownership. Missing or failing plugin hosts
+degrade to the base TUI without blocking startup.
 
 Keep plugin UI extensibility without importing the legacy plugin installer and
 loader into the TUI package.
@@ -612,7 +617,7 @@ Compiled checks:
 - [x] Section 4: Make runtime inputs explicit
 - [x] Section 5: Separate resolved TUI config from host config loading
 - [x] Section 6: Move SDK state, routes, and backend operations
-- [ ] Section 7: Isolate plugin presentation from plugin loading
+- [x] Section 7: Isolate plugin presentation from plugin loading
 - [ ] Section 8: Move the application root and renderer lifecycle
 - [ ] Section 9: Convert both CLIs to thin adapters
 - [ ] Section 10: Remove compatibility paths and finish ownership

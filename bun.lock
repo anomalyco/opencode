@@ -796,6 +796,7 @@
       "name": "@opencode-ai/tui",
       "version": "0.0.0",
       "dependencies": {
+        "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "@opentui/core": "catalog:",
         "@opentui/keymap": "catalog:",
@@ -803,9 +804,12 @@
         "@solid-primitives/scheduled": "1.5.2",
         "diff": "catalog:",
         "effect": "catalog:",
+        "fuzzysort": "catalog:",
         "open": "10.1.2",
         "opentui-spinner": "catalog:",
+        "remeda": "catalog:",
         "solid-js": "catalog:",
+        "strip-ansi": "7.1.2",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",

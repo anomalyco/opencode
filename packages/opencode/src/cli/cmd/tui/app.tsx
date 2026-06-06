@@ -71,9 +71,15 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import type { TuiConfig } from "@opencode-ai/tui/config"
-import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
-import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
-import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
+import { createTuiApiAdapters } from "@/cli/cmd/tui/plugin/api"
+import { createTuiApi } from "@opencode-ai/tui/plugin/api"
+import {
+  createPluginRuntime,
+  PluginRuntimeProvider,
+  usePluginRuntime,
+  type PluginRuntime,
+  type TuiPluginHost,
+} from "@opencode-ai/tui/plugin/runtime"
 import { createTuiAttention } from "@/cli/cmd/tui/attention"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 import { Log } from "@opencode-ai/core/util/log"
@@ -185,6 +191,7 @@ export type TuiInput = TuiRuntimeInput & {
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  pluginHost: TuiPluginHost
 }
 
 type TuiLifecycle = {
@@ -217,22 +224,30 @@ export function tui(input: TuiInput): TuiHandle {
   const renderer = input.renderer
   const keymap = createDefaultOpenTuiKeymap(renderer)
   const unregisterKeymap = registerOpencodeKeymap(keymap, renderer, input.config)
+  const pluginRuntime = createPluginRuntime()
   const lifecycle = createTuiLifecycle({
     renderer,
     unguard,
     cleanup: async () => {
       unregisterKeymap()
-      await TuiPluginRuntime.dispose()
-      TuiAudio.dispose()
+      try {
+        await input.pluginHost.dispose()
+      } catch (error) {
+        console.error("Failed to dispose TUI plugins", error)
+      } finally {
+        TuiAudio.dispose()
+      }
     },
   })
-  const ready = mountTui({ ...input, keymap, exit: lifecycle.exit }).catch((error) => lifecycle.fail(error))
+  const ready = mountTui({ ...input, keymap, pluginRuntime, exit: lifecycle.exit }).catch((error) => lifecycle.fail(error))
   const done = waitUntilDone(ready, lifecycle.exited)
 
   return { ready, done, exit: lifecycle.exit }
 }
 
-async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefaultOpenTuiKeymap>; exit: Exit }) {
+async function mountTui(
+  input: TuiInput & { keymap: ReturnType<typeof createDefaultOpenTuiKeymap>; pluginRuntime: PluginRuntime; exit: Exit },
+) {
   const renderer = input.renderer
   // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
   void renderer.getPalette({ size: 16 }).catch(() => undefined)
@@ -265,37 +280,39 @@ async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefa
                           }
                         >
                           <TuiConfigProvider config={input.config}>
-                            <SDKProvider
-                              url={input.url}
-                              directory={input.directory}
-                              fetch={input.fetch}
-                              headers={input.headers}
-                              events={input.events}
-                            >
-                              <ProjectProvider>
-                                <LegacySyncProvider>
-                                  <SyncProviderV2>
-                                    <ThemeProvider mode={mode}>
-                                      <LocalBridge>
-                                        <PromptStashProvider>
-                                          <DialogProvider>
-                                            <FrecencyProvider>
-                                              <PromptHistoryProvider>
-                                                <PromptRefProvider>
-                                                  <EditorContextProvider>
-                                                    <App onSnapshot={input.onSnapshot} />
-                                                  </EditorContextProvider>
-                                                </PromptRefProvider>
-                                              </PromptHistoryProvider>
-                                            </FrecencyProvider>
-                                          </DialogProvider>
-                                        </PromptStashProvider>
-                                      </LocalBridge>
-                                    </ThemeProvider>
-                                  </SyncProviderV2>
-                                </LegacySyncProvider>
-                              </ProjectProvider>
-                            </SDKProvider>
+                            <PluginRuntimeProvider value={input.pluginRuntime}>
+                              <SDKProvider
+                                url={input.url}
+                                directory={input.directory}
+                                fetch={input.fetch}
+                                headers={input.headers}
+                                events={input.events}
+                              >
+                                <ProjectProvider>
+                                  <LegacySyncProvider>
+                                    <SyncProviderV2>
+                                      <ThemeProvider mode={mode}>
+                                        <LocalBridge>
+                                          <PromptStashProvider>
+                                            <DialogProvider>
+                                              <FrecencyProvider>
+                                                <PromptHistoryProvider>
+                                                  <PromptRefProvider>
+                                                    <EditorContextProvider>
+                                                      <App onSnapshot={input.onSnapshot} pluginHost={input.pluginHost} />
+                                                    </EditorContextProvider>
+                                                  </PromptRefProvider>
+                                                </PromptHistoryProvider>
+                                              </FrecencyProvider>
+                                            </DialogProvider>
+                                          </PromptStashProvider>
+                                        </LocalBridge>
+                                      </ThemeProvider>
+                                    </SyncProviderV2>
+                                  </LegacySyncProvider>
+                                </ProjectProvider>
+                              </SDKProvider>
+                            </PluginRuntimeProvider>
                           </TuiConfigProvider>
                         </RouteProvider>
                       </ToastProvider>
@@ -409,7 +426,7 @@ async function waitUntilDone(ready: Promise<void>, exited: Promise<void>) {
   await exited
 }
 
-function App(props: { onSnapshot?: () => Promise<string[]> }) {
+function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPluginHost }) {
   const environment = useTuiEnvironment()
   const build = useTuiBuildInfo()
   const tuiConfig = useTuiConfig()
@@ -429,23 +446,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const project = useProject()
   const exit = useExit()
   const promptRef = usePromptRef()
-  const routes: RouteMap = new Map()
-  const [routeRev, setRouteRev] = createSignal(0)
-  const routeView = (name: string) => {
-    routeRev()
-    return routes.get(name)?.at(-1)?.render
-  }
+  const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
 
-  const api = createTuiApi({
+  const api = createTuiApi(createTuiApiAdapters({
     version: build.version,
     tuiConfig,
     dialog,
     keymap,
     kv,
     route,
-    routes,
-    bump: () => setRouteRev((x) => x + 1),
+    routes: pluginRuntime.routes,
     event,
     sdk,
     sync,
@@ -453,11 +464,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     toast,
     renderer,
     attention,
-  })
+    Slot: pluginRuntime.Slot,
+  }))
   const [ready, setReady] = createSignal(false)
-  TuiPluginRuntime.init({
+  props.pluginHost.start({
     api,
     config: tuiConfig,
+    runtime: pluginRuntime,
     dispose: () => attention.dispose(),
   })
     .catch((error) => {
@@ -1109,7 +1122,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const plugin = createMemo(() => {
     if (!ready()) return
     if (route.data.type !== "plugin") return
-    const render = routeView(route.data.id)
+    const render = pluginRuntime.routes.get(route.data.id)
     if (!render) return <PluginRouteMissing id={route.data.id} onHome={() => route.navigate({ type: "home" })} />
     return render({ params: route.data.data })
   })
@@ -1148,9 +1161,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           {plugin()}
         </box>
         <box flexShrink={0}>
-          <TuiPluginRuntime.Slot name="app_bottom" />
+          <pluginRuntime.Slot name="app_bottom" />
         </box>
-        <TuiPluginRuntime.Slot name="app" />
+        <pluginRuntime.Slot name="app" />
       </Show>
       <Show when={!environment.skipInitialLoading}>
         <StartupLoading ready={ready} />

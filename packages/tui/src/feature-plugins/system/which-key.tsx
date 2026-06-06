@@ -5,7 +5,7 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { useBindings, useKeymapSelector } from "../../keymap"
 import type { ActiveKey } from "@opentui/keymap"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { InternalTuiPlugin } from "../../plugin/internal"
+import type { BuiltinTuiPlugin } from "../builtins"
 
 const command = {
   toggle: "which-key.toggle",
@@ -599,7 +599,7 @@ const tui: TuiPlugin = async (api) => {
   })
 }
 
-const plugin: InternalTuiPlugin = {
+const plugin: BuiltinTuiPlugin = {
   id: "which-key",
   enabled: false,
   tui,

@@ -14,30 +14,18 @@ test("replace slot mounts plugin content once", async () => {
     onMount(() => {
       mounts += 1
     })
-
     return <box />
   }
 
   const App = () => {
-    const renderer = useRenderer()
-    const reg = createSolidSlotRegistry<Slots>(renderer, {})
-    const Slot = createSlot(reg)
-
-    reg.register({
-      id: "plugin",
-      slots: {
-        prompt() {
-          return <Probe />
-        },
-      },
-    })
+    const registry = createSolidSlotRegistry<Slots>(useRenderer(), {})
+    const Slot = createSlot(registry)
+    registry.register({ id: "plugin", slots: { prompt: () => <Probe /> } })
 
     return (
-      <box>
-        <Slot name="prompt" mode="replace">
-          <box />
-        </Slot>
-      </box>
+      <Slot name="prompt" mode="replace">
+        <box />
+      </Slot>
     )
   }
 

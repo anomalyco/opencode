@@ -36,13 +36,13 @@ import { Process } from "@/util/process"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { internalTuiPlugins, type InternalTuiPlugin } from "./internal"
-import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { createCommandShim } from "./command-shim"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect } from "effect"
+import { createPluginRuntime, type PluginRuntime, type TuiPluginHost } from "@opencode-ai/tui/plugin/runtime"
 
 ensureRuntimePluginSupport({ additional: keymapRuntimeModules })
 
@@ -110,6 +110,7 @@ const ScopedKeymapMethods = new Set<PropertyKey>([
 type RuntimeState = {
   directory: string
   api: Api
+  view: PluginRuntime
   dispose?: () => void
   slots: HostSlots
   plugins: PluginEntry[]
@@ -524,17 +525,24 @@ function listPluginStatus(state: RuntimeState): TuiPluginStatus[] {
 async function deactivatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
   plugin.enabled = false
   if (persist) writePluginEnabledState(state.api, plugin.id, false)
-  if (!plugin.scope) return true
+  if (!plugin.scope) {
+    state.view.update({ status: listPluginStatus(state) })
+    return true
+  }
   const scope = plugin.scope
   plugin.scope = undefined
   await scope.dispose()
+  state.view.update({ status: listPluginStatus(state) })
   return true
 }
 
 async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
   plugin.enabled = true
   if (persist) writePluginEnabledState(state.api, plugin.id, true)
-  if (plugin.scope) return true
+  if (plugin.scope) {
+    state.view.update({ status: listPluginStatus(state) })
+    return true
+  }
 
   const scope = createPluginScope(plugin.load, plugin.id, state.dispose_timeout_ms)
   const api = pluginApi(state, plugin, scope, plugin.id)
@@ -555,15 +563,18 @@ async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, per
 
   if (!ok) {
     await scope.dispose()
+    state.view.update({ status: listPluginStatus(state) })
     return false
   }
 
   if (!plugin.enabled) {
     await scope.dispose()
+    state.view.update({ status: listPluginStatus(state) })
     return true
   }
 
   plugin.scope = scope
+  state.view.update({ status: listPluginStatus(state) })
   return true
 }
 
@@ -1014,11 +1025,11 @@ async function installPluginBySpec(
 let dir = ""
 let loaded: Promise<void> | undefined
 let runtime: RuntimeState | undefined
-export const Slot = View
 
 export async function init(input: {
   api: HostPluginApi
   config: TuiConfig.Resolved & TuiConfig.HostMetadata
+  runtime?: PluginRuntime
   dispose?: () => void
   disposeTimeoutMs?: number
 }) {
@@ -1031,7 +1042,7 @@ export async function init(input: {
   }
 
   dir = cwd
-  loaded = load(input)
+  loaded = load({ ...input, runtime: input.runtime ?? createPluginRuntime() })
   return loaded
 }
 
@@ -1060,29 +1071,38 @@ export async function dispose() {
   const task = loaded
   loaded = undefined
   dir = ""
-  if (task) await task
+  if (task) await task.catch((error) => fail("failed to finish loading tui plugins during disposal", { error }))
   const state = runtime
   runtime = undefined
   if (!state) return
   const queue = [...state.plugins].reverse()
   for (const plugin of queue) {
-    await deactivatePluginEntry(state, plugin, false)
+    await deactivatePluginEntry(state, plugin, false).catch((error) =>
+      fail("failed to dispose tui plugin", { id: plugin.id, error }),
+    )
   }
-  state.dispose?.()
+  try {
+    state.dispose?.()
+  } finally {
+    state.slots.dispose()
+    state.view.clear()
+  }
 }
 
 async function load(input: {
   api: Api
   config: TuiConfig.Resolved & TuiConfig.HostMetadata
+  runtime: PluginRuntime
   dispose?: () => void
   disposeTimeoutMs?: number
 }) {
   const { api, config } = input
   const cwd = process.cwd()
-  const slots = setupSlots(api)
+  const slots = input.runtime.setupSlots(api)
   const next: RuntimeState = {
     directory: cwd,
     api,
+    view: input.runtime,
     dispose: input.dispose,
     slots,
     plugins: [],
@@ -1091,6 +1111,15 @@ async function load(input: {
     dispose_timeout_ms: input.disposeTimeoutMs ?? DISPOSE_TIMEOUT_MS,
   }
   runtime = next
+  next.view.update({
+    commands: {
+      activate: activatePlugin,
+      deactivate: deactivatePlugin,
+      add: addPlugin,
+      install: installPlugin,
+    },
+    status: listPluginStatus(next),
+  })
   try {
     const flags = await Effect.runPromise(
       Effect.gen(function* () {
@@ -1129,8 +1158,16 @@ async function load(input: {
       // and hook chains rely on stable plugin ordering.
       await activatePluginEntry(next, plugin, false)
     }
+    next.view.update({ status: listPluginStatus(next) })
   } catch (error) {
     fail("failed to load tui plugins", { directory: cwd, error })
+  }
+}
+
+export function createLegacyTuiPluginHost(): TuiPluginHost {
+  return {
+    start: init,
+    dispose,
   }
 }
 

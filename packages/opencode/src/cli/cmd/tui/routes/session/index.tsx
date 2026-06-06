@@ -75,7 +75,7 @@ import { useTuiConfig } from "../../context/tui-config"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
 import { collapseToolOutput } from "@opencode-ai/tui/util/collapse-tool-output"
-import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import { usePluginRuntime } from "@opencode-ai/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { getRevertDiffFiles } from "@opencode-ai/tui/util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
@@ -173,6 +173,7 @@ function use() {
 }
 
 export function Session() {
+  const pluginRuntime = usePluginRuntime()
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const sync = useSync()
@@ -1288,7 +1289,7 @@ export function Session() {
                   <SubagentFooter />
                 </Show>
                 <Show when={visible()}>
-                  <TuiPluginRuntime.Slot
+                  <pluginRuntime.Slot
                     name="session_prompt"
                     mode="replace"
                     session_id={route.sessionID}
@@ -1305,9 +1306,9 @@ export function Session() {
                         toBottom()
                       }}
                       sessionID={route.sessionID}
-                      right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                     />
-                  </TuiPluginRuntime.Slot>
+                  </pluginRuntime.Slot>
                 </Show>
               </box>
             </Show>

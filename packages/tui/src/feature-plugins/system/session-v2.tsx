@@ -1,5 +1,5 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { InternalTuiPlugin } from "../../plugin/internal"
+import type { BuiltinTuiPlugin } from "../builtins"
 import { useSyncV2 } from "@tui/context/sync-v2"
 import { SplitBorder } from "@opencode-ai/tui/ui/border"
 import { Spinner } from "@tui/component/spinner"
@@ -11,7 +11,7 @@ import { RGBA, TextAttributes, type BoxRenderable, type SyntaxStyle } from "@ope
 import { useBindings } from "../../keymap"
 import { Locale } from "@opencode-ai/tui/util/locale"
 import { useTuiEnvironment } from "@opencode-ai/tui/runtime"
-import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
 import { toolDisplayMetadata, webSearchProviderLabel } from "@opencode-ai/tui/util/tool-display"
 import path from "path"
 import stripAnsi from "strip-ansi"
@@ -1189,7 +1189,7 @@ const tui: TuiPlugin = async (api) => {
   })
 }
 
-const plugin: InternalTuiPlugin = {
+const plugin: BuiltinTuiPlugin = {
   id,
   tui,
 }

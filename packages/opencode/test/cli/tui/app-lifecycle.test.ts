@@ -4,7 +4,6 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { TuiPluginRuntime } from "../../../src/cli/cmd/tui/plugin/runtime"
 import { tui, type TuiHandle } from "../../../src/cli/cmd/tui/app"
 import { Global } from "@opencode-ai/core/global"
 import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
@@ -40,7 +39,6 @@ afterEach(async () => {
   current?.restore?.()
   await Bun.sleep(20)
   await current?.tmp?.[Symbol.asyncDispose]()
-  await TuiPluginRuntime.dispose().catch(() => {})
 })
 
 test("returns a handle immediately and resolves ready after async mount setup", async () => {
@@ -60,6 +58,23 @@ test("production can await done only and still receives mount failures", async (
 
   await expect(app.handle.done).rejects.toThrow("theme failed")
   expect(app.setup.renderer.isDestroyed).toBe(true)
+})
+
+test("plugin startup failure does not fail the app", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const app = await startTui({ rejectPlugins: new Error("plugins failed") })
+    app.theme.resolve("dark")
+
+    await expect(app.handle.ready).resolves.toBeUndefined()
+    await app.pluginHost.started
+    expect(app.setup.renderer.isDestroyed).toBe(false)
+    expect(app.pluginHost.starts).toBe(1)
+    await app.handle.exit()
+    await app.handle.done
+  } finally {
+    error.mockRestore()
+  }
 })
 
 test("exit destroys the renderer, resolves done, and runs cleanup once", async () => {
@@ -162,7 +177,6 @@ test("plugin, audio, and keymap cleanup run exactly once", async () => {
       unregister()
     }
   })
-  const disposePlugins = spyOn(TuiPluginRuntime, "dispose")
   const disposeAudio = spyOn(TuiAudio, "dispose")
 
   try {
@@ -176,16 +190,35 @@ test("plugin, audio, and keymap cleanup run exactly once", async () => {
 
     expect(registerKeymap).toHaveBeenCalledTimes(1)
     expect(unregisterKeymapCalls).toBe(1)
-    expect(disposePlugins).toHaveBeenCalledTimes(1)
+    expect(app.pluginHost.disposes).toBe(1)
     expect(disposeAudio).toHaveBeenCalledTimes(1)
   } finally {
     registerKeymap.mockRestore()
-    disposePlugins.mockRestore()
     disposeAudio.mockRestore()
   }
 })
 
-async function startTui(options: { rejectTheme?: Error } = {}) {
+test("plugin disposal failure does not stop remaining cleanup", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {})
+  const disposeAudio = spyOn(TuiAudio, "dispose")
+  try {
+    const app = await startTui({ rejectPluginDispose: new Error("dispose failed") })
+    app.theme.resolve("dark")
+    await app.handle.ready
+
+    await app.handle.exit()
+    await app.handle.done
+
+    expect(app.pluginHost.disposes).toBe(1)
+    expect(disposeAudio).toHaveBeenCalledTimes(1)
+    expect(app.setup.renderer.isDestroyed).toBe(true)
+  } finally {
+    error.mockRestore()
+    disposeAudio.mockRestore()
+  }
+})
+
+async function startTui(options: { rejectTheme?: Error; rejectPlugins?: Error; rejectPluginDispose?: Error } = {}) {
   const tmp = await tmpdir()
   const isolated = await isolateGlobalPaths(tmp.path)
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false, maxFps: Number.POSITIVE_INFINITY })
@@ -198,6 +231,21 @@ async function startTui(options: { rejectTheme?: Error } = {}) {
 
   const calls = createFetch()
   const events = createEventSource()
+  const pluginStarted = deferred<void>()
+  const pluginHost = {
+    starts: 0,
+    disposes: 0,
+    started: pluginStarted.promise,
+    async start() {
+      pluginHost.starts++
+      pluginStarted.resolve()
+      if (options.rejectPlugins) throw options.rejectPlugins
+    },
+    async dispose() {
+      pluginHost.disposes++
+      if (options.rejectPluginDispose) throw options.rejectPluginDispose
+    },
+  }
   const environment = createTuiEnvironment({
     cwd: tmp.path,
     platform: "linux",
@@ -223,6 +271,7 @@ async function startTui(options: { rejectTheme?: Error } = {}) {
     directory,
     fetch: calls.fetch,
     events: events.source,
+    pluginHost,
     args: {},
   })
   active = {
@@ -235,7 +284,7 @@ async function startTui(options: { rejectTheme?: Error } = {}) {
     },
   }
 
-  return { handle, setup, theme }
+  return { handle, setup, theme, pluginHost }
 }
 
 async function isolateGlobalPaths(root: string) {
