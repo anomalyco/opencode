@@ -71,7 +71,9 @@ create_launcher() {
     cat > "$BIN_DIR/rin" << 'LAUNCHER'
 #!/bin/bash
 # Rin AI Launcher
-DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Resolve real path even when called via symlink
+SCRIPT="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
+DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 
 # Set unlimited mode
 export OPENCODE_TIMEOUT=false
@@ -108,20 +110,23 @@ ensure_path() {
     elif [ -n "$ZSH_VERSION" ]; then config="$HOME/.zshrc"
     fi
 
-    # Symlink to common bin dir
+    # Add to shell config if not already there
+    if [ -n "$config" ] && ! grep -q "RIN_HOME" "$config" 2>/dev/null; then
+        echo "" >> "$config"
+        echo "# Rin AI" >> "$config"
+        echo "export RIN_HOME=\"$RIN_HOME\"" >> "$config"
+        echo "export PATH=\"\$PATH:$BIN_DIR\"" >> "$config"
+        echo -e "${Y}▸${N} Added to ${B}$config${N}"
+        echo -e "${Y}▸${N} Run: ${B}source $config${N} or log out and back in"
+    fi
+
+    # Also symlink to a common bin dir as fallback
     local link_dir="/usr/local/bin"
     if [ ! -w "$link_dir" ]; then
         link_dir="$HOME/.local/bin"
         mkdir -p "$link_dir"
     fi
     ln -sf "$BIN_DIR/rin" "$link_dir/rin" 2>/dev/null || true
-
-    # Add to shell config if not already there
-    if [ -n "$config" ] && ! grep -q "RIN_HOME" "$config" 2>/dev/null; then
-        echo "" >> "$config"
-        echo "# Rin AI" >> "$config"
-        echo "export RIN_HOME=\"$RIN_HOME\"" >> "$config"
-        echo "export PATH=\"\$PATH:$BIN_DIR:$link_dir\"" >> "$config"
         echo -e "${Y}▸${N} Added to ${B}$config${N}"
         echo -e "${Y}▸${N} Run: ${B}source $config${N}"
     fi
