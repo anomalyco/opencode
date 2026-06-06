@@ -195,8 +195,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
 
   return (
     <box>
-      {/* ── Tokens ── */}
-      <text fg={theme().text} bold {...clickProps()}>Tokens</text>
+      {/* ── Context ── */}
+      <text fg={theme().text} bold {...clickProps()}>Context</text>
       <Show when={state().percent !== null}>
         <Bar
           segs={tokenSegs(state().percent!, theme())}
@@ -213,29 +213,34 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         </text>
       </Show>
 
-      {/* ── Memory ── */}
-      <Show when={mem()}>
-        {(m) => (
+      {/* ── VRAM (local) or Cost (cloud) ── */}
+      <Show
+        when={state().isLocal}
+        fallback={
           <>
-            <text fg={theme().text} bold>{m().label}</text>
-            <Bar
-              segs={vramSegs(m(), state().percent, theme())}
-              percent={Math.round((m().usedMb / (m().totalMb || 1)) * 100)}
-              theme={theme()}
-            />
-            <MemBreakdown mem={m()} theme={theme()} />
+            <text fg={theme().text} bold>Cost</text>
+            <text fg={theme().textMuted}>{money.format(cost())} spent</text>
           </>
-        )}
+        }
+      >
+        <Show when={mem()}>
+          {(m) => (
+            <>
+              <text fg={theme().text} bold>{m().label}</text>
+              <Bar
+                segs={vramSegs(m(), state().percent, theme())}
+                percent={Math.round((m().usedMb / (m().totalMb || 1)) * 100)}
+                theme={theme()}
+              />
+              <MemBreakdown mem={m()} theme={theme()} />
+            </>
+          )}
+        </Show>
       </Show>
 
       {/* ── Speed ── */}
       <Show when={state().tokensPerSecond !== null}>
         <text fg={theme().textMuted}>{fmtTokensPerSecond(state().tokensPerSecond!)} t/s</text>
-      </Show>
-
-      {/* ── Cost (non-local only) ── */}
-      <Show when={!state().isLocal}>
-        <text fg={theme().textMuted}>{money.format(cost())} spent</text>
       </Show>
     </box>
   )
