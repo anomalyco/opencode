@@ -114,6 +114,8 @@ create_launcher() {
 #!/bin/bash
 SCRIPT="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
 DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
+
+# ===== RIN UNLIMITED MODE =====
 export OPENCODE_TIMEOUT=false
 export OPENCODE_HEADER_TIMEOUT=false
 export OPENCODE_CHUNK_TIMEOUT=999999999
@@ -125,9 +127,33 @@ export OPENCODE_COMPACTION_AUTO=false
 export OPENCODE_COMPACTION_PRUNE=false
 export OPENCODE_TOOL_OUTPUT_MAX_LINES=999999999
 export OPENCODE_TOOL_OUTPUT_MAX_BYTES=999999999
-if [ -f "$DIR/rin-proxy.sh" ] && [ -z "$RIN_PROXIES" ]; then
-    export RIN_PROXIES=$(bash "$DIR/rin-proxy.sh" 2>/dev/null | paste -sd ",")
+
+# ===== AUTO PROXY ROTATION =====
+# Fetches 500+ free proxies automatically.
+# Sets RIN_PROXIES for provider.ts smart rotation.
+# When a proxy gets rate-limited, Rin auto-rotates to a live one.
+if [ -z "$RIN_PROXIES" ]; then
+    if [ -f "$DIR/rin-proxy.sh" ]; then
+        echo "⟳ Rin: Fetching 500+ rotating proxies..." >&2
+        RIN_PROXIES=$(bash "$DIR/rin-proxy.sh" 2>/dev/null | paste -sd ",")
+        COUNT=$(echo "$RIN_PROXIES" | tr ',' '\n' | wc -l)
+        echo "✓ Rin: $COUNT proxies loaded (auto-rotate on limit)" >&2
+        export RIN_PROXIES
+    elif command -v curl &>/dev/null; then
+        # Fallback: direct API fetch
+        echo "⟳ Rin: Fetching proxies from ProxyScrape..." >&2
+        RIN_PROXIES=$(curl -sf "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text&protocol=http&timeout=10000" 2>/dev/null | head -100 | paste -sd ",")
+        COUNT=$(echo "$RIN_PROXIES" | tr ',' '\n' | wc -l)
+        if [ "$COUNT" -gt 0 ]; then
+            echo "✓ Rin: $COUNT proxies loaded" >&2
+            export RIN_PROXIES
+        fi
+    fi
 fi
+
+# ===== API KEY ROTATION =====
+# Set RIN_API_KEYS="key1,key2,key3" for automatic key rotation
+
 cd "$DIR/src"
 exec bun run --conditions=browser packages/opencode/src/index.ts "$@"
 LAUNCHER

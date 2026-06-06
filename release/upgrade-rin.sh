@@ -132,6 +132,34 @@ download_binary() {
 }
 
 # =============================================================================
+# Setup proxy rotation
+# =============================================================================
+setup_proxies() {
+    local proxy_script="$RIN_HOME/rin-proxy.sh"
+    if [ ! -f "$proxy_script" ]; then
+        echo -e "${G}▸${N} Downloading proxy rotator..."
+        curl -sf "https://raw.githubusercontent.com/$RIN_REPO/main/script/rin-proxy.sh" \
+          -o "$proxy_script" 2>/dev/null && chmod +x "$proxy_script"
+    fi
+
+    # Auto-fetch proxies into RIN_PROXIES
+    if [ -f "$proxy_script" ]; then
+        echo -e "${G}▸${N} Fetching 500+ free proxies..."
+        local proxies
+        proxies=$(bash "$proxy_script" 2>/dev/null | head -100 | paste -sd ",")
+        local count
+        count=$(echo "$proxies" | tr ',' '\n' | wc -l)
+        if [ "$count" -gt 0 ]; then
+            echo -e "${G}✓${N} $count proxies loaded (auto-rotate on rate limit)"
+            echo -e "${Y}▸${N} Set RIN_PROXIES to persist across sessions:"
+            echo -e "    ${B}export RIN_PROXIES=\"$proxies\"${N}"
+            # Set for current session
+            export RIN_PROXIES="$proxies"
+        fi
+    fi
+}
+
+# =============================================================================
 # Symlink to PATH
 # =============================================================================
 ensure_path() {
@@ -179,6 +207,7 @@ case "${1:-}" in
         ;;
     --install|-i)
         download_binary "$CURRENT_VERSION"
+        setup_proxies
         ensure_path
         echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
         echo -e "${G}  Rin installed!${N}"
@@ -197,6 +226,7 @@ case "${1:-}" in
     *)
         if check_latest; then
             download_binary "$LATEST_VERSION"
+            setup_proxies
             ensure_path
             echo -e "${G}✓${N} Rin upgraded to v${LATEST_VERSION}!"
             echo -e "${G}▸${N} Run: ${B}rin${N}"
