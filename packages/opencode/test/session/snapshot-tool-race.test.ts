@@ -58,7 +58,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
 import { RepositoryCache } from "../../src/reference/repository-cache"
@@ -142,7 +142,7 @@ function makeHttp() {
     Layer.provide(RepositoryCache.defaultLayer),
     Layer.provide(Git.defaultLayer),
     Layer.provide(Reference.defaultLayer),
-    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Search.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(todo),

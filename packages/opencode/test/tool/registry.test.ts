@@ -26,7 +26,7 @@ import { Instruction } from "@/session/instruction"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Format } from "@/format"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 import { Reference } from "@/reference/reference"
@@ -69,7 +69,7 @@ const registryLayer = (opts: RegistryLayerOptions = {}) =>
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(Layer.mergeAll(node, Database.defaultLayer)),
-      Layer.provide(Ripgrep.defaultLayer),
+      Layer.provide(Search.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
     .pipe(Layer.provide(RuntimeFlags.layer(opts.flags ?? {})))

@@ -5,7 +5,7 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import { GlobTool } from "../../src/tool/glob"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
@@ -17,6 +17,7 @@ import { RepositoryCache } from "@/reference/repository-cache"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
+import { Filesystem } from "@/util/filesystem"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
 
@@ -31,7 +32,7 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
     FSUtil.defaultLayer,
-    Ripgrep.defaultLayer,
+    Search.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
     Git.defaultLayer,
@@ -40,6 +41,7 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 
 const it = testEffect(toolLayer())
 const references = testEffect(toolLayer({ experimentalReferences: true }))
+const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -172,7 +174,7 @@ describe("tool.glob", () => {
         )
 
         expect(result.metadata.count).toBe(1)
-        expect(result.output).toContain(path.join(cache, "src", "index.ts"))
+        expect(full(result.output)).toContain(full(path.join(cache, "src", "index.ts")))
         expect(items.find((item) => item.permission === "external_directory")).toBeUndefined()
       }),
     {

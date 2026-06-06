@@ -345,21 +345,12 @@ export function Autocomplete(props: {
 
       const options: AutocompleteOption[] = []
 
-      // Add file options
+      // Add file options. Trust the order returned by fff (frecency, fuzzy
+      // score, filename bonus, etc. are already factored in).
       if (!result.error && result.data) {
-        const sortedFiles = result.data.sort((a, b) => {
-          const aScore = frecency.getFrecency(a)
-          const bScore = frecency.getFrecency(b)
-          if (aScore !== bScore) return bScore - aScore
-          const aDepth = a.split("/").length
-          const bDepth = b.split("/").length
-          if (aDepth !== bDepth) return aDepth - bDepth
-          return a.localeCompare(b)
-        })
-
         const width = props.anchor().width - 4
         options.push(
-          ...sortedFiles.map((item): AutocompleteOption => {
+          ...result.data.map((item): AutocompleteOption => {
             const { filename, url, part } = createFilePart(item, lineRange)
 
             const isDir = item.endsWith("/")
@@ -506,45 +497,49 @@ export function Autocomplete(props: {
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()
     const commandsValue = commands()
-
-    const mixed: AutocompleteOption[] =
-      store.visible === "@"
-        ? referenceMatchValue
-          ? referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
-          : [...referenceAliasesValue, ...agentsValue, ...(filesValue || []), ...mcpResources()]
-        : [...commandsValue]
-
     const searchValue = search()
 
+    // @<alias>/... — narrow to the matched reference, files come from fff
+    // already ranked so there is no re-ranking here.
+    if (store.visible === "@" && referenceMatchValue) {
+      return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
+    }
+
+    // Files come from fff already fuzzy ranked and filtered
+    // it shouldn't be additionally sorted by fuzzysort as it will loose the results
+    const fileOptions: AutocompleteOption[] = store.visible === "@" ? filesValue || [] : []
+    const nonFileOptions: AutocompleteOption[] =
+      store.visible === "@" ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()] : [...commandsValue]
+
     if (!searchValue) {
-      return mixed
+      return [...nonFileOptions, ...fileOptions]
     }
 
     if (files.loading && prev && prev.length > 0) {
       return prev
     }
 
-    if (referenceMatchValue) return mixed
+    const fuzziedNonFiles = fuzzysort
+      .go(removeLineRange(searchValue), nonFileOptions, {
+        keys: [
+          (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
+          "description",
+          (obj) => obj.aliases?.join(" ") ?? "",
+        ],
+        limit: 10,
+        scoreFn: (objResults) => {
+          const displayResult = objResults[0]
+          let score = objResults.score
+          if (displayResult && displayResult.target.startsWith(store.visible + searchValue)) {
+            score *= 2
+          }
+          const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
+          return score * (1 + frecencyScore)
+        },
+      })
+      .map((arr) => arr.obj)
 
-    const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
-      keys: [
-        (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
-        "description",
-        (obj) => obj.aliases?.join(" ") ?? "",
-      ],
-      limit: 10,
-      scoreFn: (objResults) => {
-        const displayResult = objResults[0]
-        let score = objResults.score
-        if (displayResult && displayResult.target.startsWith(store.visible + searchValue)) {
-          score *= 2
-        }
-        const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
-        return score * (1 + frecencyScore)
-      },
-    })
-
-    return result.map((arr) => arr.obj)
+    return [...fuzziedNonFiles, ...fileOptions].slice(0, 10)
   })
 
   createEffect(() => {

@@ -32,6 +32,11 @@
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
+    },
+    "#fff": {
+      "bun": "./src/filesystem/fff.bun.ts",
+      "node": "./src/filesystem/fff.node.ts",
+      "default": "./src/filesystem/fff.bun.ts"
     }
   },
   "devDependencies": {
@@ -81,6 +86,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@lydell/node-pty": "catalog:",
+    "@ff-labs/fff-bun": "0.9.3",
     "@npmcli/arborist": "9.4.0",
     "@npmcli/config": "10.8.1",
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
