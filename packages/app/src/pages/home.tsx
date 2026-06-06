@@ -46,8 +46,10 @@ import { useSettings } from "@/context/settings"
 import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
+import { buildHomeActivity, formatActivityTokenAmount, type HomeActivity } from "./home/activity"
 
 const HOME_SESSION_LIMIT = 64
+const HOME_ACTIVITY_SESSION_LIMIT = 360
 const HOME_ROW_LAYOUT =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
 const HOME_ROW_BASE = `${HOME_ROW_LAYOUT} border-0`
@@ -168,7 +170,7 @@ function HomeDesign() {
     queryFn: async () => {
       await Promise.all(
         projectDirectories().map((directory) =>
-          focusedSync().project.loadSessions(directory, { limit: HOME_SESSION_LIMIT }),
+          focusedSync().project.loadSessions(directory, { limit: HOME_ACTIVITY_SESSION_LIMIT }),
         ),
       )
       return null
@@ -187,6 +189,7 @@ function HomeDesign() {
     }),
   )
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
+  const activity = createMemo(() => buildHomeActivity(allRecords(), language.intl()))
   const searchResults = createMemo(() => {
     const query = search().toLowerCase()
     if (!query) return []
@@ -366,6 +369,8 @@ function HomeDesign() {
           unseenCount={unseenCount}
           openSettings={openSettings}
           openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+          activity={activity()}
+          activityLoading={sessionLoad.isLoading}
           language={language}
         />
 
@@ -452,13 +457,16 @@ function HomeProjectColumn(props: {
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   openSettings: () => void
   openHelp: () => void
+  activity: HomeActivity
+  activityLoading: boolean
   language: ReturnType<typeof useLanguage>
 }) {
   const global = useGlobal()
   const dialog = useDialog()
   const controller = useServerManagementController({ navigateOnAdd: false })
   return (
-    <aside class="flex min-w-0 flex-col lg:pt-[52px] mt-14 gap-4" aria-label={props.language.t("home.projects")}>
+    <aside class="flex min-w-0 flex-col lg:pt-[52px] mt-14 gap-4" aria-label={props.language.t("home.title")}>
+      <HomeActivityGraph activity={props.activity} loading={props.activityLoading} language={props.language} />
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <Show when={global.servers.list().length === 1}>
@@ -524,6 +532,90 @@ function HomeProjectColumn(props: {
       </div>
     </aside>
   )
+}
+
+function HomeActivityGraph(props: {
+  activity: HomeActivity
+  loading: boolean
+  language: ReturnType<typeof useLanguage>
+}) {
+  const lifetimeTokens = createMemo(() => formatActivityTokenAmount(props.activity.totalTokens, props.language.intl()))
+  const peakTokens = createMemo(() => formatActivityTokenAmount(props.activity.peakTokens, props.language.intl()))
+  const currentStreak = createMemo(() => formatDays(props.activity.currentStreak, props.language))
+  const longestStreak = createMemo(() => formatDays(props.activity.longestStreak, props.language))
+  const summary = createMemo(() => {
+    if (props.loading) return props.language.t("home.activity.loading")
+    if (!props.activity.hasActivity) return props.language.t("home.activity.empty")
+    return props.language.t("home.activity.summary", {
+      tokens: lifetimeTokens(),
+      peak: peakTokens(),
+      current: currentStreak(),
+      longest: longestStreak(),
+    })
+  })
+
+  return (
+    <section
+      class="min-w-0 px-1.5 py-1"
+      aria-label={props.language.t("home.activity.title")}
+      aria-describedby="home-activity-summary"
+      aria-busy={props.loading ? "true" : undefined}
+    >
+      <div
+        class="grid gap-[2px]"
+        aria-hidden="true"
+        style={{
+          "grid-template-columns": `repeat(${props.activity.weekCount}, minmax(0, 1fr))`,
+          "grid-template-rows": "repeat(7, minmax(0, 1fr))",
+        }}
+      >
+        <For each={props.activity.days}>
+          {(day, index) => (
+            <div
+              class="group/activity-cell relative aspect-square rounded-[2px] transition-[background-color,opacity] duration-300 motion-reduce:transition-none"
+              classList={{ "animate-pulse motion-reduce:animate-none": props.loading }}
+              tabIndex={0}
+              role="button"
+              title={activityCellLabel(day.value, props.activity.metric, day.label, props.language.intl())}
+              aria-label={activityCellLabel(day.value, props.activity.metric, day.label, props.language.intl())}
+              style={{
+                "grid-column": day.column,
+                "grid-row": day.row,
+                opacity: props.loading ? 0.75 + (index() % 4) * 0.06 : 1,
+                "background-color": props.loading ? "var(--v2-border-border-base)" : activityCellColor(day.level),
+              }}
+            >
+              <span class="pointer-events-none absolute bottom-[calc(100%_+_6px)] left-1/2 z-20 hidden -translate-x-1/2 whitespace-nowrap rounded-[6px] bg-v2-background-bg-inverse px-1.5 py-1 text-[10px] leading-3 text-v2-text-text-inverse shadow-[var(--v2-elevation-floating)] group-hover/activity-cell:block group-focus-visible/activity-cell:block">
+                {activityCellLabel(day.value, props.activity.metric, day.label, props.language.intl())}
+              </span>
+            </div>
+          )}
+        </For>
+      </div>
+
+      <span id="home-activity-summary" class="sr-only">
+        {summary()}
+      </span>
+    </section>
+  )
+}
+
+function activityCellColor(level: number) {
+  if (level <= 0) return "color-mix(in srgb, var(--v2-border-border-base) 58%, transparent)"
+  if (level === 1) return "color-mix(in srgb, var(--v2-icon-icon-accent) 28%, var(--v2-background-bg-base))"
+  if (level === 2) return "color-mix(in srgb, var(--v2-icon-icon-accent) 48%, var(--v2-background-bg-base))"
+  if (level === 3) return "color-mix(in srgb, var(--v2-icon-icon-accent) 68%, var(--v2-background-bg-base))"
+  return "var(--v2-icon-icon-accent)"
+}
+
+function activityCellLabel(value: number, metric: string, day: string, locale: string) {
+  const amount = formatActivityTokenAmount(value, locale)
+  const unit = metric === "sessions" ? "sessions" : "tokens"
+  return `${amount} ${unit} - ${day}`
+}
+
+function formatDays(value: number, language: ReturnType<typeof useLanguage>) {
+  return language.t(value === 1 ? "home.activity.days.one" : "home.activity.days.other", { count: value })
 }
 
 function HomeServerRow(props: {
