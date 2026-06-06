@@ -372,14 +372,11 @@ export const layer = Layer.effect(
               } satisfies SessionV1.ToolPart)
             }),
           ask: (req: any) =>
-            permission
-              .ask({
-                ...req,
-                sessionID,
-                ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
-              })
-              .pipe(Effect.orDie),
-        })
+            permission.ask({
+              ...req,
+              sessionID,
+              ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+            }),
         .pipe(
           Effect.catchCause((cause) => {
             const defect = Cause.squash(cause)
