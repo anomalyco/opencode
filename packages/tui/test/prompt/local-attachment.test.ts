@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { readLocalAttachment } from "../../../src/cli/cmd/tui/component/prompt/local-attachment"
-import type { PlatformFiles } from "@opencode-ai/tui/platform"
+import { readLocalAttachment } from "../../src/component/prompt/local-attachment"
+import type { PlatformFiles } from "../../src/platform"
 
 function files(input: { mime: string; text?: string; bytes?: Uint8Array }): PlatformFiles {
   return {

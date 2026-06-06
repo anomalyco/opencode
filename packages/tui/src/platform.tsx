@@ -27,6 +27,8 @@ export type TuiPlatform = Readonly<{
   }>
   editor?: Readonly<{
     open(input: Readonly<{ value: string; cwd?: string }>): Promise<string | undefined>
+    connection?(directory: string): Readonly<{ url: string; authToken?: string; source: string }> | undefined
+    selection?(directory: string): Promise<unknown>
   }>
   export?: Readonly<{
     write(path: string, content: string): Promise<void>

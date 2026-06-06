@@ -1,8 +1,8 @@
 import { Database } from "bun:sqlite"
+import { statSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { Option, Schema } from "effect"
-import { Filesystem } from "@/util/filesystem"
 import type { EditorSelection } from "./editor"
 
 const ZedEditorRowSchema = Schema.Struct({
@@ -201,7 +201,7 @@ export function isZedTerminal() {
 
 function isFile(item: string) {
   try {
-    return Filesystem.stat(item)?.isFile() === true
+    return statSync(item).isFile()
   } catch {
     return false
   }

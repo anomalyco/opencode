@@ -429,7 +429,12 @@ refactor(tui): separate plugin presentation from loading
 
 ## Section 8: Move The Application Root And Renderer Lifecycle
 
-Status: Pending.
+Status: Completed. `packages/tui` now owns the canonical application root,
+provider composition, routes, components, parser presentation, renderer
+configuration, and renderer lifecycle. Process mutation, Windows console
+handling, backend worker startup, config loading, plugin loading, native audio,
+and legacy platform implementations remain injected host adapters. Old source
+paths are temporary compatibility re-exports for the legacy command host.
 
 Move the canonical app composition after its dependencies have already crossed
 the package boundary.
@@ -618,7 +623,7 @@ Compiled checks:
 - [x] Section 5: Separate resolved TUI config from host config loading
 - [x] Section 6: Move SDK state, routes, and backend operations
 - [x] Section 7: Isolate plugin presentation from plugin loading
-- [ ] Section 8: Move the application root and renderer lifecycle
+- [x] Section 8: Move the application root and renderer lifecycle
 - [ ] Section 9: Convert both CLIs to thin adapters
 - [ ] Section 10: Remove compatibility paths and finish ownership
 

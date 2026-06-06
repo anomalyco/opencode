@@ -7,6 +7,8 @@ import { EditorContextProvider, useEditorContext } from "../../../src/cli/cmd/tu
 import { tmpdir } from "../../fixture/fixture"
 import { FakeWebSocket } from "../../lib/websocket"
 import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
+import { TuiPlatformProvider, type TuiPlatform } from "@opencode-ai/tui/platform"
+import { discoverEditorConnection } from "../../../src/cli/cmd/tui/platform"
 
 const originalClaudePort = process.env.CLAUDE_CODE_SSE_PORT
 const originalOpencodePort = process.env.OPENCODE_EDITOR_SSE_PORT
@@ -39,9 +41,11 @@ function mountEditorContext(WebSocketImpl?: typeof WebSocket) {
         paths={{ home: os.homedir() }}
         editor={{ port: value ? Number.parseInt(value, 10) : undefined }}
       >
-        <EditorContextProvider WebSocketImpl={WebSocketImpl}>
-          <Consumer />
-        </EditorContextProvider>
+        <TuiPlatformProvider value={platform}>
+          <EditorContextProvider WebSocketImpl={WebSocketImpl}>
+            <Consumer />
+          </EditorContextProvider>
+        </TuiPlatformProvider>
       </TestTuiEnvironmentProvider>
     )
   })
@@ -50,6 +54,18 @@ function mountEditorContext(WebSocketImpl?: typeof WebSocket) {
     editor,
     dispose,
   }
+}
+
+const platform: TuiPlatform = {
+  files: {
+    readText: (file) => Bun.file(file).text(),
+    readBytes: (file) => Bun.file(file).bytes(),
+    mime: () => Promise.resolve("application/octet-stream"),
+  },
+  editor: {
+    open: () => Promise.resolve(undefined),
+    connection: discoverEditorConnection,
+  },
 }
 
 function createWebSocketImpl(...sockets: FakeWebSocket[]) {
