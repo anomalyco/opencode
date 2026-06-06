@@ -77,9 +77,10 @@ create_launcher() {
     case "$arch" in x86_64|amd64) arch="x64" ;; aarch64|arm64) arch="arm64" ;; *) arch="x64" ;; esac
 
     local bin_url="https://github.com/$RIN_REPO/releases/download/v1.16.2/rin-${platform}-${arch}.tar.gz"
-    echo -e "${G}▸${N} Downloading binary: ${bin_url}"
-    
-    if curl -fsSL "$bin_url" -o /tmp/rin-bin.tar.gz 2>/dev/null; then
+    echo -ne "${G}▸${N} Downloading... 0%"
+    if curl -fsSL --progress-bar "$bin_url" -o /tmp/rin-bin.tar.gz 2>&1 | tr '\n' '\r' | while read -r line; do
+        echo -ne "\r${G}▸${N} Downloading... ${line}"
+    done && echo -e "\r${G}▸${N} Downloading... 100%"; then
         mkdir -p /tmp/rin-extract
         tar -xzf /tmp/rin-bin.tar.gz -C /tmp/rin-extract 2>/dev/null
         local extracted
@@ -233,14 +234,4 @@ echo -e "${G}  Rin installed!${N}"
 echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo ""
 echo -e "  ${G}Run:${N}     ${B}rin${N}"
-echo -e "  ${G}Binary:${N}  ${B}$BIN_DIR/rin${N}"
-echo -e ""
-echo -e "  ${Y}Proxy rotation:${N}  ${B}export RIN_PROXIES=\"\$(bash $RIN_HOME/rin-proxy.sh | paste -sd \",\")\"${N}"
-echo -e "  ${Y}API rotation:${N}    ${B}export RIN_API_KEYS=\"key1,key2,...\"${N}"
 echo ""
-
-# Fetch proxies in background
-if [ -f "$RIN_HOME/rin-proxy.sh" ]; then
-    echo -e "${G}▸${N} Fetching proxies..."
-    RIN_PROXIES=$(bash "$RIN_HOME/rin-proxy.sh" 2>/dev/null | paste -sd ",") || true
-fi
