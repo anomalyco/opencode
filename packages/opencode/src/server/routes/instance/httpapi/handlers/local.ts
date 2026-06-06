@@ -1,5 +1,7 @@
 import { Config } from "@/config/config"
 import { probeModelIDs, scanLlamaSwap } from "@/local/mdns"
+import { createClient, createConfig } from "@/local/llama-skein/gen/client"
+import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -43,6 +45,12 @@ function canonicalServiceName(name: string) {
 
 function normalizeControlBaseURL(baseURL: string) {
   return baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
+}
+
+function llamaClient(baseURL: string) {
+  return new LlamaSkeinClient({
+    client: createClient(createConfig({ baseUrl: normalizeControlBaseURL(baseURL) })),
+  })
 }
 
 export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (handlers) =>
@@ -212,15 +220,10 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const config = yield* configSvc.get()
       const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
       if (!baseURL) return false
-      const url = `${normalizeControlBaseURL(baseURL)}/api/config/models/${encodeURIComponent(modelID)}`
-      const ok = yield* Effect.tryPromise(() =>
-        fetch(url, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ctx_size }),
-        }).then((r) => r.ok),
-      ).pipe(Effect.orElseSucceed(() => false))
-      return ok
+      const res = yield* Effect.tryPromise(() =>
+        llamaClient(baseURL).patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size } }),
+      ).pipe(Effect.orElseSucceed(() => null))
+      return res !== null && !res.error
     })
 
     return handlers
