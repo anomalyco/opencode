@@ -1,12 +1,12 @@
-// Prompt textarea component and its state machine for direct interactive mode.
+// Prompt composer and its state machine for direct interactive mode.
 //
 // createPromptState() wires keymap command layers, history navigation, and
 // `@` autocomplete for files, subagents, and MCP resources.
-// It produces a PromptState that RunPromptBody renders as an OpenTUI textarea,
-// while the footer view renders the current menu state below it.
+// It produces a PromptState that RunPromptBody renders as a slim single-line
+// composer while the footer view renders any active menus below it.
 /** @jsxImportSource @opentui/solid */
 import { pathToFileURL } from "bun"
-import { StyledText, bg, fg, type KeyEvent, type TextareaRenderable } from "@opentui/core"
+import { StyledText, fg, type ColorInput, type KeyEvent, type TextareaRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import path from "path"
@@ -193,6 +193,7 @@ export function hintFlags(width: number) {
 
 export function RunPromptBody(props: {
   theme: () => RunFooterTheme
+  background: () => ColorInput
   placeholder: () => StyledText | string
   onSubmit: () => void
   onKeyDown: (event: KeyEvent) => void
@@ -243,7 +244,7 @@ export function RunPromptBody(props: {
 
   return (
     <box id="run-direct-footer-prompt" width="100%">
-      <box id="run-direct-footer-input-shell" paddingTop={1} paddingLeft={2} paddingRight={2}>
+      <box id="run-direct-footer-input-shell" paddingTop={1} paddingBottom={1} paddingRight={2}>
         <textarea
           id="run-direct-footer-composer"
           width="100%"
@@ -254,8 +255,8 @@ export function RunPromptBody(props: {
           placeholderColor={props.theme().muted}
           textColor={props.theme().text}
           focusedTextColor={props.theme().text}
-          backgroundColor={props.theme().surface}
-          focusedBackgroundColor={props.theme().surface}
+          backgroundColor={props.background()}
+          focusedBackgroundColor={props.background()}
           cursorColor={props.theme().text}
           onSubmit={props.onSubmit}
           onKeyDown={props.onKeyDown}
@@ -276,16 +277,14 @@ export function createPromptState(input: PromptInput): PromptState {
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
     if (shell()) {
-      return new StyledText([bg(input.theme().surface)(fg(input.theme().muted)('Run a command... "git status"'))])
+      return new StyledText([fg(input.theme().muted)('Run a command... "git status"')])
     }
 
     if (!input.state().first) {
       return ""
     }
 
-    return new StyledText([
-      bg(input.theme().surface)(fg(input.theme().muted)('Ask anything... "Fix a TODO in the codebase"')),
-    ])
+    return new StyledText([fg(input.theme().muted)('Ask anything... "Fix a TODO in the codebase"')])
   })
 
   let history = createPromptHistory(input.history)

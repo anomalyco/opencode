@@ -479,17 +479,25 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
   }
 })
 
-// OpenTUI currently segfaults when the full footer view suite creates several
-// keymap-backed test renderers in one process. Re-enable after the runtime fix.
-test.skip("direct footer opens command panel through keymap binding", async () => {
+test("direct footer recreates the frame across command panel transitions", async () => {
   const app = await renderFooter()
 
   try {
     await app.renderOnce()
-    app.mockInput.pressKey("p", { ctrl: true })
-    await app.renderOnce()
 
-    expect(app.captureCharFrame()).toContain("Commands")
+    for (let index = 0; index < 3; index++) {
+      const composerFrame = app.renderer.root.findDescendantById("run-direct-footer-composer-frame") as BoxRenderable
+      app.mockInput.pressKey("p", { ctrl: true })
+      await app.renderOnce()
+
+      expect(app.captureCharFrame()).toContain("Commands")
+      expect(app.renderer.root.findDescendantById("run-direct-footer-composer-frame")).not.toBe(composerFrame)
+      app.mockInput.pressKey("c", { ctrl: true })
+      await app.renderOnce()
+      expect(app.captureCharFrame()).not.toContain("Commands")
+      expect(app.captureCharFrame()).not.toContain("┃")
+      expect(app.captureCharFrame()).not.toContain("█")
+    }
   } finally {
     app.cleanup()
   }
