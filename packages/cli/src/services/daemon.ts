@@ -10,6 +10,7 @@ import path from "path"
 
 export interface Interface {
   readonly client: () => Effect.Effect<ReturnType<typeof createOpencodeClient>, unknown>
+  readonly transport: () => Effect.Effect<{ url: string; headers: RequestInit["headers"] }, unknown>
   readonly start: () => Effect.Effect<string, Error>
   readonly status: () => Effect.Effect<string | undefined>
   readonly stop: () => Effect.Effect<void, unknown>
@@ -132,8 +133,13 @@ export const layer = Layer.effect(
       )
     })
 
+    const transport = Effect.fn("cli.daemon.transport")(function* () {
+      return { url: yield* start(), headers: ServerAuth.headers({ password: yield* password() }) }
+    })
+
     const client = Effect.fn("cli.daemon.client")(function* () {
-      return yield* createClient(yield* start())
+      const connection = yield* transport()
+      return createOpencodeClient({ baseUrl: connection.url, headers: connection.headers })
     })
 
     const status = Effect.fn("cli.daemon.status")(function* () {
@@ -178,7 +184,7 @@ export const layer = Layer.effect(
       )
     })
 
-    return Service.of({ client, start, status, stop, password, register })
+    return Service.of({ client, transport, start, status, stop, password, register })
   }),
 )
 

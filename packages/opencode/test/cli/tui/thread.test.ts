@@ -5,6 +5,15 @@ import { tmpdir } from "../../fixture/fixture"
 import { resolveThreadDirectory } from "../../../src/cli/cmd/tui/thread"
 
 describe("tui thread", () => {
+  test("loads the public TUI API and legacy hosts lazily", async () => {
+    const source = await Bun.file(new URL("../../../src/cli/cmd/tui/thread.ts", import.meta.url)).text()
+
+    expect(source).toContain('await import("@opencode-ai/tui")')
+    expect(source).toContain('await import("./host")')
+    expect(source).toContain('await import("./plugin/runtime")')
+    expect(source).not.toContain('import("./app")')
+  })
+
   async function check(project?: string) {
     await using tmp = await tmpdir({ git: true })
     const link = path.join(path.dirname(tmp.path), path.basename(tmp.path) + "-link")

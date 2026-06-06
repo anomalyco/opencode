@@ -1,11 +1,4 @@
-import {
-  createRenderer,
-  mount,
-  run,
-  tuiRendererConfig,
-  type TuiHost,
-  type TuiInput,
-} from "@opencode-ai/tui"
+import type { TuiHost, TuiInput } from "@opencode-ai/tui"
 import { Log } from "@opencode-ai/core/util/log"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 import { createTuiAttention } from "./attention"
@@ -13,15 +6,7 @@ import { createLegacyTuiPlatform } from "./platform"
 import * as TuiAudio from "./util/audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 
-export * from "@opencode-ai/tui"
-
-export const createTuiRenderer = createRenderer
-
-export function tui(input: Omit<TuiInput, "host">) {
-  return run({ ...input, host: createHost(input.renderer) })
-}
-
-function createHost(renderer: TuiInput["renderer"]): TuiHost {
+export function createLegacyTuiHost(renderer: TuiInput["renderer"]): TuiHost {
   return {
     platform: createLegacyTuiPlatform(renderer),
     attention: createTuiAttention,
@@ -49,5 +34,3 @@ function createHost(renderer: TuiInput["renderer"]): TuiHost {
     },
   }
 }
-
-export { mount, tuiRendererConfig }

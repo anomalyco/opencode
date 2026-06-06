@@ -230,7 +230,8 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
-        const { createTuiRenderer, tui } = await import("./app")
+        const { createTuiRenderer, tui } = await import("@opencode-ai/tui")
+        const { createLegacyTuiHost } = await import("./host")
         const { createLegacyTuiPluginHost } = await import("./plugin/runtime")
         const renderer = await createTuiRenderer(config, runtime)
         const handle = tui({
@@ -243,6 +244,7 @@ export const TuiThreadCommand = cmd({
             return [tui, server]
           },
           config,
+          host: createLegacyTuiHost(renderer),
           pluginHost: createLegacyTuiPluginHost(),
           directory: cwd,
           fetch: transport.fetch,

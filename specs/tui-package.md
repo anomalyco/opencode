@@ -483,7 +483,13 @@ refactor(tui): move application root into package
 
 ## Section 9: Convert Both CLIs To Thin Adapters
 
-Status: Pending.
+Status: Completed. The legacy thread and attach commands now lazily invoke the
+public `@opencode-ai/tui` root while retaining worker/server/config/plugin and
+process adapters. The new CLI default command launches the same package against
+its authenticated daemon transport with a minimal local platform/host. Missing
+legacy provider/config APIs currently degrade to the shared provider-connect
+screen; source and compiled new-CLI behavior match, while named commands remain
+outside the TUI path.
 
 Make both executable packages consume the same TUI package.
 
@@ -624,7 +630,7 @@ Compiled checks:
 - [x] Section 6: Move SDK state, routes, and backend operations
 - [x] Section 7: Isolate plugin presentation from plugin loading
 - [x] Section 8: Move the application root and renderer lifecycle
-- [ ] Section 9: Convert both CLIs to thin adapters
+- [x] Section 9: Convert both CLIs to thin adapters
 - [ ] Section 10: Remove compatibility paths and finish ownership
 
 Update each section's status and this checklist in the same commit that completes

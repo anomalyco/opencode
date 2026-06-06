@@ -4,7 +4,8 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { tui, type TuiHandle } from "../../../src/cli/cmd/tui/app"
+import { tui, type TuiHandle } from "@opencode-ai/tui"
+import { createLegacyTuiHost } from "../../../src/cli/cmd/tui/host"
 import { Global } from "@opencode-ai/core/global"
 import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
 import * as TuiAudio from "../../../src/cli/cmd/tui/util/audio"
@@ -267,6 +268,7 @@ async function startTui(options: { rejectTheme?: Error; rejectPlugins?: Error; r
     build: createTuiBuildInfo({ version: "test", channel: "test" }),
     url: "http://test",
     renderer: setup.renderer,
+    host: createLegacyTuiHost(setup.renderer),
     config: createTuiResolvedConfig({ plugin_enabled: disabledInternalPlugins }),
     directory,
     fetch: calls.fetch,

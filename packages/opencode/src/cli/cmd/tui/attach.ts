@@ -83,13 +83,15 @@ export const AttachCommand = cmd({
         return
       }
 
-      const { createTuiRenderer, tui } = await import("./app")
+      const { createTuiRenderer, tui } = await import("@opencode-ai/tui")
+      const { createLegacyTuiHost } = await import("./host")
       const { createLegacyTuiPluginHost } = await import("./plugin/runtime")
       const renderer = await createTuiRenderer(config, runtime)
       const handle = tui({
         ...runtime,
         url: args.url,
         config,
+        host: createLegacyTuiHost(renderer),
         pluginHost: createLegacyTuiPluginHost(),
         renderer,
         args: {
