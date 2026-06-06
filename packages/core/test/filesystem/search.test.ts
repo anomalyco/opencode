@@ -13,9 +13,9 @@ const tmpdir = (init?: (dir: string) => Effect.Effect<void>) =>
   Effect.acquireRelease(
     Effect.promise(async () => fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-test-")))),
     (dir) =>
-      Effect.promise(() =>
-        fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
-      ).pipe(Effect.ignore),
+      Effect.promise(() => fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })).pipe(
+        Effect.ignore,
+      ),
   ).pipe(Effect.tap((dir) => init?.(dir) ?? Effect.void))
 
 const write = (file: string, data: string) => Effect.promise(() => Bun.write(file, data))
@@ -69,10 +69,7 @@ describe("file.search", () => {
     Effect.gen(function* () {
       expect(Fff.available()).toBe(true)
       const dir = yield* tmpdir()
-      yield* write(
-        path.join(dir, "matches.txt"),
-        Array.from({ length: 150 }, (_, idx) => `needle ${idx}\n`).join(""),
-      )
+      yield* write(path.join(dir, "matches.txt"), Array.from({ length: 150 }, (_, idx) => `needle ${idx}\n`).join(""))
 
       const search = yield* Search.Service
       const result = yield* search.search({ cwd: dir, pattern: "needle" })

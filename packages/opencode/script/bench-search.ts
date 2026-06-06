@@ -113,4 +113,3 @@ for (const q of GLOB_QUERIES) {
 }
 
 process.exit(0)
-

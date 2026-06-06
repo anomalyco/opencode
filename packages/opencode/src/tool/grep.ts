@@ -113,9 +113,7 @@ export const GrepTool = Tool.define(
 
           if (result.hasNextPage) {
             output.push("")
-            output.push(
-              `(Results truncated. Consider using a more specific path or pattern.)`,
-            )
+            output.push(`(Results truncated. Consider using a more specific path or pattern.)`)
           }
 
           if (result.partial) {
