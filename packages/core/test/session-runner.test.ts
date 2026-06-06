@@ -126,7 +126,7 @@ const registry = ToolRegistry.layer.pipe(
 const agents = AgentV2.layer
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
-    registry.contribute((editor) => {
+    registry.update((editor) => {
       ;(editor.set("echo", {
         authorize: (input) =>
           Effect.sync(() => {
@@ -175,7 +175,7 @@ const skillBaselines = new Map<AgentV2.ID, string>()
 const systemContext = Layer.effectDiscard(
   SystemContextRegistry.Service.pipe(
     Effect.flatMap((registry) =>
-      registry.contribute({
+      registry.register({
         key: systemContextKey,
         load: Effect.sync(() =>
           SystemContext.combine(

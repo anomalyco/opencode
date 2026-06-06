@@ -2,13 +2,12 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { ServiceUnavailableError } from "../../errors"
-import { V2Authorization } from "../../middleware/authorization"
-import { LocationQuery, locationQueryOpenApi, V2LocationMiddleware } from "./location"
+import { ServiceUnavailableError } from "../errors"
+import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
 
-export const ModelGroup = HttpApiGroup.make("v2.model")
+export const ModelGroup = HttpApiGroup.make("server.model")
   .add(
-    HttpApiEndpoint.get("models", "/api/model", {
+    HttpApiEndpoint.get("model.list", "/api/model", {
       query: LocationQuery,
       success: Location.response(Schema.Array(ModelV2.Info)),
       error: ServiceUnavailableError,
@@ -17,16 +16,15 @@ export const ModelGroup = HttpApiGroup.make("v2.model")
       .annotateMerge(
         OpenApi.annotations({
           identifier: "v2.model.list",
-          summary: "List v2 models",
-          description: "Retrieve available v2 models ordered by release date.",
+          summary: "List models",
+          description: "Retrieve available models ordered by release date.",
         }),
       ),
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "v2 models",
-      description: "Experimental v2 model routes.",
+      title: "models",
+      description: "Experimental model routes.",
     }),
   )
-  .middleware(V2LocationMiddleware)
-  .middleware(V2Authorization)
+  .middleware(LocationMiddleware)

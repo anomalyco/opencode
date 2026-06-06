@@ -5,6 +5,7 @@ import { ServerAuth } from "@opencode-ai/server/auth"
 import { Context, Effect, FileSystem, Layer, Option, Schedule, Schema, Scope } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { randomBytes, randomUUID } from "crypto"
+import { spawn } from "node:child_process"
 import path from "path"
 
 export interface Interface {
@@ -108,16 +109,20 @@ export const layer = Layer.effect(
     const start = Effect.fn("cli.daemon.start")(function* () {
       const existing = yield* healthy().pipe(Effect.option)
       const found = Option.getOrUndefined(existing)
-      if (found?.version === InstallationVersion) return found.url
+      const compiled = path.basename(process.execPath).replace(/\.exe$/, "") !== "bun"
+      if (found?.version === InstallationVersion && compiled) return found.url
       if (found) yield* stopProcess(found).pipe(Effect.ignore)
 
-      yield* Effect.sync(() => {
-        const compiled = path.basename(process.execPath).replace(/\.exe$/, "") !== "bun"
-        Bun.spawn([process.execPath, ...(compiled ? [] : [Bun.main]), "serve", "--register"], {
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "ignore",
-        }).unref()
+      const entrypoint = compiled ? undefined : process.argv[1]
+      if (!compiled && entrypoint === undefined) return yield* Effect.fail(new Error("Failed to resolve CLI entrypoint"))
+      yield* Effect.try({
+        try: () => {
+          spawn(process.execPath, [...(entrypoint ? [entrypoint] : []), "serve", "--register"], {
+            detached: true,
+            stdio: "ignore",
+          }).unref()
+        },
+        catch: (cause) => new Error("Failed to start server", { cause }),
       })
 
       return yield* compatible().pipe(

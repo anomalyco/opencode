@@ -2,10 +2,10 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../../errors"
-import { V2Authorization } from "../../middleware/authorization"
+import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors"
+import { SessionLocationMiddleware } from "../middleware/session-location"
 
-export const MessagesQuery = Schema.Struct({
+export const SessionMessagesQuery = Schema.Struct({
   limit: Schema.optional(
     Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
   ).annotate({
@@ -20,34 +20,35 @@ export const MessagesQuery = Schema.Struct({
         "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.",
     }),
   ),
-}).annotate({ identifier: "V2SessionMessagesQuery" })
+}).annotate({ identifier: "SessionMessagesQuery" })
 
-export const MessageGroup = HttpApiGroup.make("v2.message")
+export const MessageGroup = HttpApiGroup.make("server.message")
   .add(
-    HttpApiEndpoint.get("messages", "/api/session/:sessionID/message", {
+    HttpApiEndpoint.get("session.messages", "/api/session/:sessionID/message", {
       params: { sessionID: SessionV2.ID },
-      query: MessagesQuery,
+      query: SessionMessagesQuery,
       success: Schema.Struct({
         data: Schema.Array(SessionMessage.Message),
         cursor: Schema.Struct({
           previous: Schema.String.pipe(Schema.optional),
           next: Schema.String.pipe(Schema.optional),
         }),
-      }).annotate({ identifier: "V2SessionMessagesResponse" }),
+      }).annotate({ identifier: "SessionMessagesResponse" }),
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "v2.session.messages",
-        summary: "Get v2 session messages",
-        description:
-          "Retrieve projected v2 messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
-      }),
-    ),
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.messages",
+          summary: "Get session messages",
+          description:
+            "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
+        }),
+      ),
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "v2 messages",
-      description: "Experimental v2 message routes.",
+      title: "messages",
+      description: "Experimental message routes.",
     }),
   )
-  .middleware(V2Authorization)

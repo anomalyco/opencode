@@ -1,16 +1,8 @@
-import { Catalog } from "@opencode-ai/core/catalog"
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { CommandV2 } from "@opencode-ai/core/command"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { FileSystem } from "@opencode-ai/core/filesystem"
-import { PermissionV2 } from "@opencode-ai/core/permission"
-import { ProjectReference } from "@opencode-ai/core/project-reference"
-import { SkillV2 } from "@opencode-ai/core/skill"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
-import { QuestionV2 } from "@opencode-ai/core/question"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
@@ -22,7 +14,7 @@ export const LocationQuery = Schema.Struct({
       workspace: Schema.optional(Schema.String),
     }),
   ),
-}).annotate({ identifier: "V2LocationQuery" })
+}).annotate({ identifier: "LocationQuery" })
 
 export const locationQueryOpenApi = OpenApi.annotations({
   transform: (operation) => {
@@ -53,22 +45,14 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   })
 }
 
-export class V2LocationMiddleware extends HttpApiMiddleware.Service<
-  V2LocationMiddleware,
+export type LocationServices = Layer.Success<ReturnType<typeof LocationServiceMap.get>>
+
+export class LocationMiddleware extends HttpApiMiddleware.Service<
+  LocationMiddleware,
   {
-    provides:
-      | Catalog.Service
-      | AgentV2.Service
-      | CommandV2.Service
-      | Location.Service
-      | PluginBoot.Service
-      | PermissionV2.Service
-      | ProjectReference.Service
-      | FileSystem.Service
-      | SkillV2.Service
-      | QuestionV2.Service
+    provides: LocationServices
   }
->()("@opencode/ExperimentalHttpApiV2Location") {}
+>()("@opencode/HttpApiLocation") {}
 
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
@@ -82,10 +66,10 @@ function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
 }
 
 export const layer = Layer.effect(
-  V2LocationMiddleware,
+  LocationMiddleware,
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap
-    return V2LocationMiddleware.of((effect) =>
+    return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
         return yield* effect.pipe(Effect.provide(locations.get(ref(request))))

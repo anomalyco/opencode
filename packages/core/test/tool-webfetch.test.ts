@@ -86,7 +86,7 @@ describe("WebFetchTool helpers", () => {
   })
 })
 
-describe("WebFetchTool contribution", () => {
+describe("WebFetchTool transform", () => {
   it.effect("registers and fetches an ordinary hostname HTTP URL without rewriting it", () =>
     Effect.gen(function* () {
       reset()

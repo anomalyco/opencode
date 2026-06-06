@@ -77,7 +77,7 @@ export type Editor = {
 
 export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
-  readonly contribute: (update: State.Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
+  readonly update: State.Interface<Data, Editor>["update"]
   readonly definitions: () => Effect.Effect<ReadonlyArray<ReturnType<typeof Tool.toDefinitions>[number]>>
   readonly execute: (input: ExecuteInput) => Effect.Effect<ToolResultValue>
   readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement>
@@ -213,10 +213,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      contribute: Effect.fn("ToolRegistry.contribute")(function* (update) {
-        const transform = yield* state.transform()
-        yield* transform(update)
-      }),
+      update: state.update,
       definitions,
       execute,
       settle,

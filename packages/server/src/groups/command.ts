@@ -2,12 +2,11 @@ import { CommandV2 } from "@opencode-ai/core/command"
 import { Location } from "@opencode-ai/core/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { V2Authorization } from "../../middleware/authorization"
-import { LocationQuery, locationQueryOpenApi, V2LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
 
-export const CommandGroup = HttpApiGroup.make("v2.command")
+export const CommandGroup = HttpApiGroup.make("server.command")
   .add(
-    HttpApiEndpoint.get("commands", "/api/command", {
+    HttpApiEndpoint.get("command.list", "/api/command", {
       query: LocationQuery,
       success: Location.response(Schema.Array(CommandV2.Info)),
     })
@@ -15,16 +14,15 @@ export const CommandGroup = HttpApiGroup.make("v2.command")
       .annotateMerge(
         OpenApi.annotations({
           identifier: "v2.command.list",
-          summary: "List v2 commands",
-          description: "Retrieve currently registered v2 commands.",
+          summary: "List commands",
+          description: "Retrieve currently registered commands.",
         }),
       ),
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "v2 commands",
-      description: "Experimental v2 command routes.",
+      title: "commands",
+      description: "Experimental command routes.",
     }),
   )
-  .middleware(V2LocationMiddleware)
-  .middleware(V2Authorization)
+  .middleware(LocationMiddleware)

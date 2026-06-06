@@ -14,8 +14,8 @@ import {
   ServiceUnavailableError,
   SessionNotFoundError,
   UnknownError,
-} from "../../errors"
-import { V2Authorization } from "../../middleware/authorization"
+} from "../errors"
+import { SessionLocationMiddleware } from "../middleware/session-location"
 
 const SessionsQueryFields = {
   workspace: WorkspaceV2.ID.pipe(Schema.optional),
@@ -57,7 +57,7 @@ const encodeSessionsCursor = Schema.encodeSync(SessionsCursorJson)
 const decodeSessionsCursor = Schema.decodeUnknownEffect(SessionsCursorJson)
 
 export const SessionsCursor = Schema.String.pipe(
-  Schema.brand("V2SessionsCursor"),
+  Schema.brand("SessionsCursor"),
   withStatics((schema) => {
     const make = schema.make
     return {
@@ -82,11 +82,11 @@ export const SessionsQuery = Schema.Struct({
   project: ProjectV2.ID.pipe(Schema.optional),
   subpath: RelativePath.pipe(Schema.optional),
   cursor: SessionsCursorQuery.fields.cursor.pipe(Schema.optional),
-}).annotate({ identifier: "V2SessionsQuery" })
+}).annotate({ identifier: "SessionsQuery" })
 
-export const SessionGroup = HttpApiGroup.make("v2.session")
+export const SessionGroup = HttpApiGroup.make("server.session")
   .add(
-    HttpApiEndpoint.get("sessions", "/api/session", {
+    HttpApiEndpoint.get("session.list", "/api/session", {
       query: SessionsQuery,
       success: Schema.Struct({
         data: Schema.Array(SessionV2.Info),
@@ -94,19 +94,19 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
           previous: SessionsCursor.pipe(Schema.optional),
           next: SessionsCursor.pipe(Schema.optional),
         }),
-      }).annotate({ identifier: "V2SessionsResponse" }),
+      }).annotate({ identifier: "SessionsResponse" }),
       error: [InvalidCursorError, InvalidRequestError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.list",
-        summary: "List v2 sessions",
+        summary: "List sessions",
         description:
           "Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.",
       }),
     ),
   )
   .add(
-    HttpApiEndpoint.post("prompt", "/api/session/:sessionID/prompt", {
+    HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
       params: { sessionID: SessionV2.ID },
       payload: Schema.Struct({
         id: SessionMessage.ID.pipe(Schema.optional),
@@ -116,57 +116,64 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       }),
       success: Schema.Struct({ data: SessionInput.Admitted }),
       error: [ConflictError, SessionNotFoundError],
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "v2.session.prompt",
-        summary: "Send v2 message",
-        description: "Durably admit one v2 session input and schedule agent-loop execution unless resume is false.",
-      }),
-    ),
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.prompt",
+          summary: "Send message",
+          description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+        }),
+      ),
   )
   .add(
-    HttpApiEndpoint.post("compact", "/api/session/:sessionID/compact", {
+    HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
       params: { sessionID: SessionV2.ID },
       success: HttpApiSchema.NoContent,
       error: [SessionNotFoundError, ServiceUnavailableError],
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "v2.session.compact",
-        summary: "Compact v2 session",
-        description: "Compact a v2 session conversation.",
-      }),
-    ),
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.compact",
+          summary: "Compact session",
+          description: "Compact a session conversation.",
+        }),
+      ),
   )
   .add(
-    HttpApiEndpoint.post("wait", "/api/session/:sessionID/wait", {
+    HttpApiEndpoint.post("session.wait", "/api/session/:sessionID/wait", {
       params: { sessionID: SessionV2.ID },
       success: HttpApiSchema.NoContent,
       error: [SessionNotFoundError, ServiceUnavailableError],
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "v2.session.wait",
-        summary: "Wait for v2 session",
-        description: "Wait for a v2 session agent loop to become idle.",
-      }),
-    ),
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.wait",
+          summary: "Wait for session",
+          description: "Wait for a session agent loop to become idle.",
+        }),
+      ),
   )
   .add(
-    HttpApiEndpoint.get("context", "/api/session/:sessionID/context", {
+    HttpApiEndpoint.get("session.context", "/api/session/:sessionID/context", {
       params: { sessionID: SessionV2.ID },
       success: Schema.Struct({ data: Schema.Array(SessionMessage.Message) }),
       error: [SessionNotFoundError, UnknownError],
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "v2.session.context",
-        summary: "Get v2 session context",
-        description: "Retrieve the active context messages for a v2 session (all messages after the last compaction).",
-      }),
-    ),
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.context",
+          summary: "Get session context",
+          description: "Retrieve the active context messages for a session (all messages after the last compaction).",
+        }),
+      ),
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "v2",
-      description: "Experimental v2 routes.",
+      title: "sessions",
+      description: "Experimental session routes.",
     }),
   )
-  .middleware(V2Authorization)

@@ -2,8 +2,8 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { V2Api } from "../../api"
-import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../../errors"
+import { Api } from "../api"
+import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors"
 
 const DefaultMessagesLimit = 50
 
@@ -24,12 +24,12 @@ const cursor = {
   },
 }
 
-export const messageHandlers = HttpApiBuilder.group(V2Api, "v2.message", (handlers) =>
+export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handlers) =>
   Effect.gen(function* () {
     const session = yield* SessionV2.Service
 
     return handlers.handle(
-      "messages",
+      "session.messages",
       Effect.fn(function* (ctx) {
         if (ctx.query.cursor && ctx.query.order !== undefined)
           return yield* new InvalidCursorError({ message: "Cursor cannot be combined with order" })
@@ -56,7 +56,7 @@ export const messageHandlers = HttpApiBuilder.group(V2Api, "v2.message", (handle
             ),
             Effect.catchTag("Session.MessageDecodeError", (error) => {
               const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-              return Effect.logError("failed to decode v2 session message").pipe(
+              return Effect.logError("failed to decode session message").pipe(
                 Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
                 Effect.andThen(
                   Effect.fail(

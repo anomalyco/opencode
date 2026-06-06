@@ -54,7 +54,7 @@ export const layer = Layer.effectDiscard(
     const registry = yield* ToolRegistry.Service
     const question = yield* QuestionV2.Service
 
-    yield* registry.contribute((editor) =>
+    yield* registry.update((editor) =>
       editor.set(name, {
         tool: definition,
         execute: ({ parameters, sessionID, source }) =>

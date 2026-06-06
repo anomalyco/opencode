@@ -3,8 +3,7 @@ import { Location } from "@opencode-ai/core/location"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { V2Authorization } from "../../middleware/authorization"
-import { LocationQuery, locationQueryOpenApi, V2LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
 
 const ReadQuery = Schema.Struct({
   ...LocationQuery.fields,
@@ -18,9 +17,9 @@ const ListQuery = Schema.Struct({
   reference: Schema.String.pipe(Schema.optional),
 })
 
-export const FileSystemGroup = HttpApiGroup.make("v2.fs")
+export const FileSystemGroup = HttpApiGroup.make("server.fs")
   .add(
-    HttpApiEndpoint.get("read", "/api/fs/read", {
+    HttpApiEndpoint.get("fs.read", "/api/fs/read", {
       query: ReadQuery,
       success: Location.response(FileSystem.Content),
     })
@@ -34,7 +33,7 @@ export const FileSystemGroup = HttpApiGroup.make("v2.fs")
       ),
   )
   .add(
-    HttpApiEndpoint.get("list", "/api/fs/list", {
+    HttpApiEndpoint.get("fs.list", "/api/fs/list", {
       query: ListQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),
     })
@@ -49,9 +48,8 @@ export const FileSystemGroup = HttpApiGroup.make("v2.fs")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "v2 filesystem",
-      description: "Experimental v2 location-scoped filesystem routes.",
+      title: "filesystem",
+      description: "Experimental location-scoped filesystem routes.",
     }),
   )
-  .middleware(V2LocationMiddleware)
-  .middleware(V2Authorization)
+  .middleware(LocationMiddleware)

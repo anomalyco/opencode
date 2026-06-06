@@ -102,7 +102,7 @@ export const layer = Layer.effectDiscard(
     const files = yield* FileMutation.Service
     const fs = yield* FSUtil.Service
 
-    yield* registry.contribute((editor) =>
+    yield* registry.update((editor) =>
       editor.set(name, {
         tool: definition,
         execute: ({ parameters, assertPermission }) => {

@@ -70,7 +70,7 @@ export const layer = Layer.effectDiscard(
       toModelOutput: ({ output }) => [toolText({ type: "text", text: output.output })],
     })
 
-    yield* registry.contribute((editor) =>
+    yield* registry.update((editor) =>
       editor.set(name, {
         tool: definition,
         outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),

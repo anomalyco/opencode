@@ -12,9 +12,8 @@ export const Plugin = PluginV2.define({
   effect: Effect.gen(function* () {
     const command = yield* CommandV2.Service
     const location = yield* Location.Service
-    const transform = yield* command.transform()
 
-    yield* transform((editor) => {
+    command.update((editor) => {
       editor.update("init", (command) => {
         command.template = PROMPT_INITIALIZE.replace("${path}", location.project.directory)
         command.description = "guided AGENTS.md setup"

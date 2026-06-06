@@ -136,7 +136,7 @@ const websearch = WebSearchTool.layer.pipe(
 )
 const it = testEffect(Layer.mergeAll(registry, permission, http, websearchConfig, resources, websearch))
 
-describe("WebSearchTool contribution", () => {
+describe("WebSearchTool transform", () => {
   it.effect("registers websearch, asserts query permission, and calls Exa", () =>
     Effect.gen(function* () {
       requests.length = 0

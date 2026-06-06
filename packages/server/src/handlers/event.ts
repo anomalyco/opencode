@@ -4,7 +4,7 @@ import { Effect, Stream } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
-import { V2Api } from "../../api"
+import { Api } from "../api"
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -15,10 +15,10 @@ function eventData(data: unknown): Sse.Event {
   }
 }
 
-export const eventHandlers = HttpApiBuilder.group(V2Api, "v2.event", (handlers) =>
+export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers) =>
   Effect.gen(function* () {
     const events = yield* EventV2.Service
-    return handlers.handleRaw("events", () =>
+    return handlers.handleRaw("event.subscribe", () =>
       Effect.gen(function* () {
         const location = yield* Location.Service
         const connected = {

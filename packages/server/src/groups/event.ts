@@ -2,8 +2,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { V2Authorization } from "../../middleware/authorization"
-import { LocationQuery, locationQueryOpenApi, V2LocationMiddleware } from "./location"
+import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
 
 const Event = Schema.Struct({
   id: EventV2.ID,
@@ -14,9 +13,9 @@ const Event = Schema.Struct({
   data: Schema.Unknown,
 })
 
-export const EventGroup = HttpApiGroup.make("v2.event")
+export const EventGroup = HttpApiGroup.make("server.event")
   .add(
-    HttpApiEndpoint.get("events", "/api/event", {
+    HttpApiEndpoint.get("event.subscribe", "/api/event", {
       query: LocationQuery,
       success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/event-stream" })),
     })
@@ -24,13 +23,12 @@ export const EventGroup = HttpApiGroup.make("v2.event")
       .annotateMerge(
         OpenApi.annotations({
           identifier: "v2.event.subscribe",
-          summary: "Subscribe to v2 events",
-          description: "Subscribe to native EventV2 payloads for a location.",
+          summary: "Subscribe to events",
+          description: "Subscribe to native event payloads for a location.",
         }),
       ),
   )
-  .annotateMerge(OpenApi.annotations({ title: "v2 events", description: "Experimental v2 event stream route." }))
-  .middleware(V2LocationMiddleware)
-  .middleware(V2Authorization)
+  .annotateMerge(OpenApi.annotations({ title: "events", description: "Experimental event stream route." }))
+  .middleware(LocationMiddleware)
 
 export type Event = typeof Event.Type

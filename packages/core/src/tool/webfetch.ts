@@ -138,7 +138,7 @@ export const layer = Layer.effectDiscard(
     const http = yield* HttpClient.HttpClient
     const resources = yield* ToolOutputStore.Service
 
-    yield* registry.contribute((editor) =>
+    yield* registry.update((editor) =>
       editor.set(name, {
         tool: definition,
         outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),

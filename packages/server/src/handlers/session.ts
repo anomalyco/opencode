@@ -1,25 +1,25 @@
 import { SessionV2 } from "@opencode-ai/core/session"
 import { DateTime, Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { V2Api } from "../../api"
-import { SessionsCursor } from "../../groups/v2/session"
+import { Api } from "../api"
+import { SessionsCursor } from "../groups/session"
 import {
   ConflictError,
   InvalidCursorError,
   ServiceUnavailableError,
   SessionNotFoundError,
   UnknownError,
-} from "../../errors"
+} from "../errors"
 
 const DefaultSessionsLimit = 50
 
-export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handlers) =>
+export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* SessionV2.Service
 
     return handlers
       .handle(
-        "sessions",
+        "session.list",
         Effect.fn(function* (ctx) {
           const query =
             ctx.query.cursor !== undefined
@@ -62,7 +62,7 @@ export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handle
         }),
       )
       .handle(
-        "prompt",
+        "session.prompt",
         Effect.fn(function* (ctx) {
           return {
             data: yield* session
@@ -95,7 +95,7 @@ export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handle
         }),
       )
       .handle(
-        "compact",
+        "session.compact",
         Effect.fn(function* (ctx) {
           yield* session.compact({ sessionID: ctx.params.sessionID }).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
@@ -109,8 +109,8 @@ export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handle
             Effect.catchTag("Session.OperationUnavailableError", (error) =>
               Effect.fail(
                 new ServiceUnavailableError({
-                  message: `V2 session ${error.operation} is not available yet`,
-                  service: `v2.session.${error.operation}`,
+                  message: `Session ${error.operation} is not available yet`,
+                  service: `session.${error.operation}`,
                 }),
               ),
             ),
@@ -119,7 +119,7 @@ export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handle
         }),
       )
       .handle(
-        "wait",
+        "session.wait",
         Effect.fn(function* (ctx) {
           yield* session.wait(ctx.params.sessionID).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
@@ -133,8 +133,8 @@ export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handle
             Effect.catchTag("Session.OperationUnavailableError", (error) =>
               Effect.fail(
                 new ServiceUnavailableError({
-                  message: `V2 session ${error.operation} is not available yet`,
-                  service: `v2.session.${error.operation}`,
+                  message: `Session ${error.operation} is not available yet`,
+                  service: `session.${error.operation}`,
                 }),
               ),
             ),
@@ -143,7 +143,7 @@ export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handle
         }),
       )
       .handle(
-        "context",
+        "session.context",
         Effect.fn(function* (ctx) {
           return {
             data: yield* session.context(ctx.params.sessionID).pipe(
@@ -157,7 +157,7 @@ export const sessionHandlers = HttpApiBuilder.group(V2Api, "v2.session", (handle
               ),
               Effect.catchTag("Session.MessageDecodeError", (error) => {
                 const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-                return Effect.logError("failed to decode v2 session message").pipe(
+                return Effect.logError("failed to decode session message").pipe(
                   Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
                   Effect.andThen(
                     Effect.fail(

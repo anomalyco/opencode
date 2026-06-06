@@ -2,13 +2,9 @@ export * as OpenCode from "./opencode"
 
 import { Context, Effect, Layer } from "effect"
 import { Database } from "../database/database"
-import { EventV2 } from "../event"
 import { LocationServiceMap } from "../location-layer"
-import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
 import * as SessionExecutionLocal from "../session/execution/local"
-import { SessionProjector } from "../session/projector"
-import { SessionStore } from "../session/store"
 import { ApplicationTools } from "../tool/application-tools"
 import { Session } from "./session"
 import { Tool } from "./tool"
@@ -21,15 +17,10 @@ export interface Interface {
 /** Intentional public native API for Effect applications embedding OpenCode. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/public/OpenCode") {}
 
-const SessionsLayer = SessionV2.layer.pipe(
-  Layer.provide(SessionProjector.layer),
-  Layer.provide(SessionExecutionLocal.layer),
+const SessionsLayer = SessionV2.defaultLayer.pipe(
+  Layer.provide(SessionExecutionLocal.defaultLayer),
   Layer.provide(LocationServiceMap.layer),
-  Layer.provide(SessionStore.layer),
-  Layer.provide(EventV2.layer),
   Layer.provide(Database.defaultLayer),
-  Layer.provide(ProjectV2.defaultLayer),
-  Layer.orDie,
 )
 const ApplicationToolsLayer = ApplicationTools.layer
 

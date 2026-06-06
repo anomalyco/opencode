@@ -118,7 +118,7 @@ export const layer = Layer.effectDiscard(
     const resources = yield* ToolOutputStore.Service
     const config = yield* Config.Service
 
-    yield* registry.contribute((editor) =>
+    yield* registry.update((editor) =>
       editor.set(name, {
         tool: definition,
         outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),

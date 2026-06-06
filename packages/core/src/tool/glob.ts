@@ -56,7 +56,7 @@ export const layer = Layer.effectDiscard(
     const filesystem = yield* FileSystem.Service
     const search = yield* LocationSearch.Service
 
-    yield* registry.contribute((editor) =>
+    yield* registry.update((editor) =>
       editor.set(name, {
         tool: definition,
         execute: ({ parameters, assertPermission }) =>
