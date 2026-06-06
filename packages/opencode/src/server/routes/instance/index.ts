@@ -1,7 +1,7 @@
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
-import { Context, Effect } from "effect"
+import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import z from "zod"
 import { Format } from "@/format"
@@ -44,7 +44,7 @@ import type { CorsOptions } from "@/server/cors"
 export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): Hono => {
   const app = new Hono()
   const handler = ExperimentalHttpApiServer.webHandler(opts).handler
-  const context = Context.empty() as Context.Context<unknown>
+  const context = ExperimentalHttpApiServer.context
 
   app.all("/api/*", (c) => handler(c.req.raw, context))
 
