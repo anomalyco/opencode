@@ -1,17 +1,40 @@
-name: Build Windows Binary
+name: Build & Release Windows Binary
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.16.2-fork.1). Defaults to package.json version + short SHA."
+        required: false
+        type: string
+      create_release:
+        description: "Create a GitHub release"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            PKG_VERSION=$(bun -e "console.log(require('./packages/opencode/package.json').version)")
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            echo "version=${PKG_VERSION}-fork.${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install dependencies
         run: bun install
@@ -27,7 +50,15 @@ jobs:
           cd packages/opencode
           bun run script/build.ts --skip-install
         env:
-          OPENCODE_VERSION: "0.0.0-local"
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Package Windows artifacts
+        run: |
+          cd packages/opencode/dist
+          for dir in opencode-windows-*/; do
+            name="${dir%/}"
+            tar -czf "${name}.tar.gz" -C "$dir" .
+          done
 
       - name: Upload Windows x64
         uses: actions/upload-artifact@v4
@@ -46,3 +77,17 @@ jobs:
         with:
           name: opencode-windows-arm64
           path: packages/opencode/dist/opencode-windows-arm64/
+
+      - name: Create GitHub Release
+        if: inputs.create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          gh release create "$TAG" \
+            --title "opencode $TAG (Windows)" \
+            --notes "Windows build from \`${{ github.ref_name }}\` @ $(git rev-parse --short HEAD)" \
+            --target "${{ github.sha }}" \
+            packages/opencode/dist/opencode-windows-x64.tar.gz \
+            packages/opencode/dist/opencode-windows-x64-baseline.tar.gz \
+            packages/opencode/dist/opencode-windows-arm64.tar.gz
