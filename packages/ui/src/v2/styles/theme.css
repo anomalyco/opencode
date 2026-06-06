@@ -3,31 +3,31 @@
     color-scheme: light;
 
     /* ── Background ── */
-    --v2-background-bg-base: var(--v2-grey-100);
-    --v2-background-bg-deep: var(--v2-grey-200);
-    --v2-background-bg-layer-01: var(--v2-grey-200);
-    --v2-background-bg-layer-02: var(--v2-grey-300);
-    --v2-background-bg-layer-03: var(--v2-grey-400);
-    --v2-background-bg-layer-04: var(--v2-grey-600);
-    --v2-background-bg-inverse: var(--v2-grey-1000);
-    --v2-background-bg-contrast: var(--v2-grey-900);
-    --v2-background-bg-button-neutral: var(--v2-grey-100);
+    --v2-background-bg-base: var(--v2-grey-50);
+    --v2-background-bg-deep: var(--v2-grey-100);
+    --v2-background-bg-layer-01: var(--v2-grey-100);
+    --v2-background-bg-layer-02: var(--v2-grey-200);
+    --v2-background-bg-layer-03: var(--v2-grey-300);
+    --v2-background-bg-layer-04: var(--v2-grey-400);
+    --v2-background-bg-inverse: var(--v2-grey-1100);
+    --v2-background-bg-contrast: var(--v2-grey-1000);
+    --v2-background-bg-button-neutral: var(--v2-grey-50);
     --v2-background-bg-accent: var(--v2-blue-600);
 
     /* ── Text ── */
-    --v2-text-text-base: var(--v2-grey-1000);
+    --v2-text-text-base: var(--v2-grey-1100);
     --v2-text-text-muted: var(--v2-grey-700);
     --v2-text-text-faint: var(--v2-grey-600);
-    --v2-text-text-inverse: var(--v2-grey-100);
-    --v2-text-text-contrast: var(--v2-grey-100);
+    --v2-text-text-inverse: var(--v2-grey-50);
+    --v2-text-text-contrast: var(--v2-grey-50);
     --v2-text-text-accent: var(--v2-blue-600);
     --v2-text-text-accent-hover: var(--v2-blue-700);
 
     /* ── Icon ── */
     --v2-icon-icon-base: var(--v2-grey-800);
     --v2-icon-icon-muted: var(--v2-grey-600);
-    --v2-icon-icon-inverse: var(--v2-grey-100);
-    --v2-icon-icon-contrast: var(--v2-grey-200);
+    --v2-icon-icon-inverse: var(--v2-grey-50);
+    --v2-icon-icon-contrast: var(--v2-grey-100);
     --v2-icon-icon-accent: var(--v2-blue-600);
     --v2-icon-icon-accent-hover: var(--v2-blue-700);
 
@@ -225,29 +225,29 @@
   [data-color-scheme="light"] {
     color-scheme: light;
 
-    --v2-background-bg-base: var(--v2-grey-100);
-    --v2-background-bg-deep: var(--v2-grey-200);
-    --v2-background-bg-layer-01: var(--v2-grey-200);
-    --v2-background-bg-layer-02: var(--v2-grey-300);
-    --v2-background-bg-layer-03: var(--v2-grey-400);
-    --v2-background-bg-layer-04: var(--v2-grey-600);
-    --v2-background-bg-inverse: var(--v2-grey-1000);
-    --v2-background-bg-contrast: var(--v2-grey-900);
-    --v2-background-bg-button-neutral: var(--v2-grey-100);
+    --v2-background-bg-base: var(--v2-grey-50);
+    --v2-background-bg-deep: var(--v2-grey-100);
+    --v2-background-bg-layer-01: var(--v2-grey-100);
+    --v2-background-bg-layer-02: var(--v2-grey-200);
+    --v2-background-bg-layer-03: var(--v2-grey-300);
+    --v2-background-bg-layer-04: var(--v2-grey-400);
+    --v2-background-bg-inverse: var(--v2-grey-1100);
+    --v2-background-bg-contrast: var(--v2-grey-1000);
+    --v2-background-bg-button-neutral: var(--v2-grey-50);
     --v2-background-bg-accent: var(--v2-blue-600);
 
-    --v2-text-text-base: var(--v2-grey-1000);
+    --v2-text-text-base: var(--v2-grey-1100);
     --v2-text-text-muted: var(--v2-grey-700);
     --v2-text-text-faint: var(--v2-grey-600);
-    --v2-text-text-inverse: var(--v2-grey-100);
-    --v2-text-text-contrast: var(--v2-grey-100);
+    --v2-text-text-inverse: var(--v2-grey-50);
+    --v2-text-text-contrast: var(--v2-grey-50);
     --v2-text-text-accent: var(--v2-blue-600);
     --v2-text-text-accent-hover: var(--v2-blue-700);
 
     --v2-icon-icon-base: var(--v2-grey-800);
     --v2-icon-icon-muted: var(--v2-grey-600);
-    --v2-icon-icon-inverse: var(--v2-grey-100);
-    --v2-icon-icon-contrast: var(--v2-grey-200);
+    --v2-icon-icon-inverse: var(--v2-grey-50);
+    --v2-icon-icon-contrast: var(--v2-grey-100);
     --v2-icon-icon-accent: var(--v2-blue-600);
     --v2-icon-icon-accent-hover: var(--v2-blue-700);
 
@@ -334,29 +334,29 @@
   [data-color-scheme="dark"] {
     color-scheme: dark;
 
-    --v2-background-bg-base: var(--v2-grey-1000);
-    --v2-background-bg-deep: var(--v2-grey-1100);
-    --v2-background-bg-layer-01: var(--v2-grey-900);
-    --v2-background-bg-layer-02: var(--v2-grey-800);
-    --v2-background-bg-layer-03: var(--v2-grey-700);
-    --v2-background-bg-layer-04: var(--v2-grey-600);
-    --v2-background-bg-inverse: var(--v2-grey-100);
+    --v2-background-bg-base: var(--v2-grey-1100);
+    --v2-background-bg-deep: var(--v2-grey-1200);
+    --v2-background-bg-layer-01: var(--v2-grey-1000);
+    --v2-background-bg-layer-02: var(--v2-grey-900);
+    --v2-background-bg-layer-03: var(--v2-grey-800);
+    --v2-background-bg-layer-04: var(--v2-grey-700);
+    --v2-background-bg-inverse: var(--v2-grey-50);
     --v2-background-bg-contrast: var(--v2-grey-700);
     --v2-background-bg-button-neutral: var(--v2-alpha-light-6);
     --v2-background-bg-accent: var(--v2-blue-600);
 
-    --v2-text-text-base: var(--v2-grey-200);
+    --v2-text-text-base: var(--v2-grey-100);
     --v2-text-text-muted: var(--v2-grey-500);
     --v2-text-text-faint: var(--v2-grey-600);
-    --v2-text-text-inverse: var(--v2-grey-1000);
-    --v2-text-text-contrast: var(--v2-grey-100);
+    --v2-text-text-inverse: var(--v2-grey-1100);
+    --v2-text-text-contrast: var(--v2-grey-50);
     --v2-text-text-accent: var(--v2-blue-400);
     --v2-text-text-accent-hover: var(--v2-blue-300);
 
     --v2-icon-icon-base: var(--v2-grey-400);
     --v2-icon-icon-muted: var(--v2-grey-600);
-    --v2-icon-icon-inverse: var(--v2-grey-1000);
-    --v2-icon-icon-contrast: var(--v2-grey-200);
+    --v2-icon-icon-inverse: var(--v2-grey-1100);
+    --v2-icon-icon-contrast: var(--v2-grey-100);
     --v2-icon-icon-accent: var(--v2-blue-400);
     --v2-icon-icon-accent-hover: var(--v2-blue-300);
 

@@ -161,14 +161,14 @@
 
 [data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"]
   [data-slot="tabs-v2-trigger-wrapper"]:hover:not(:disabled):not(:has([data-selected])) {
-  background-color: var(--v2-background-bg-layer-01);
+  background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
   border: 0.5px solid var(--v2-border-border-muted);
 }
 
 [data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"]
   [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
-  background-color: var(--v2-background-bg-layer-02);
+  background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
   border: 0.5px solid var(--v2-border-border-muted);
 }
@@ -211,12 +211,13 @@
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
   [data-slot="tabs-v2-trigger-wrapper"]:hover:not(:disabled):not(:has([data-selected])) {
+  background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
 }
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
   [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
-  background-color: var(--v2-background-bg-layer-02);
+  background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
   border: 0.5px solid var(--v2-border-border-muted);
 }
