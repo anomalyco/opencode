@@ -252,18 +252,22 @@ export function RunFooterMenu(props: {
           }
 
           const active = () => row.index === props.selected()
+          const background = () =>
+            active()
+              ? props.background
+                ? props.theme().selected
+                : props.theme().shade
+              : props.background
+                ? props.theme().shade
+                : transparent
           return (
             <box
               paddingRight={0}
               flexDirection="row"
-              backgroundColor={active() ? props.theme().selected : props.background ? props.theme().shade : transparent}
+              backgroundColor={background()}
             >
               {border() ? (
-                <text
-                  fg={props.theme().highlight}
-                  bg={active() ? props.theme().selected : props.background ? props.theme().shade : transparent}
-                  wrapMode="none"
-                >
+                <text fg={props.theme().highlight} bg={background()} wrapMode="none">
                   {active() ? "▌" : " "}
                 </text>
               ) : undefined}
@@ -272,9 +276,7 @@ export function RunFooterMenu(props: {
                 flexShrink={1}
                 paddingLeft={props.paddingLeft ?? 1}
                 paddingRight={props.paddingRight ?? 0}
-                backgroundColor={
-                  active() ? props.theme().selected : props.background ? props.theme().shade : transparent
-                }
+                backgroundColor={background()}
               >
                 <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
                   <text
