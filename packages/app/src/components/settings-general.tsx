@@ -621,6 +621,26 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
+  const InputSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.input")}</h3>
+
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.sendWithModEnter.title")}
+          description={language.t("settings.general.row.sendWithModEnter.description")}
+        >
+          <div data-action="settings-send-with-mod-enter">
+            <Switch
+              checked={settings.general.sendWithModEnter()}
+              onChange={(checked) => settings.general.setSendWithModEnter(checked)}
+            />
+          </div>
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+
   const NotificationsSection = () => (
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.notifications")}</h3>
@@ -813,6 +833,8 @@ export const SettingsGeneral: Component = () => {
         <GeneralSection />
 
         <AppearanceSection />
+
+        <InputSection />
 
         <NotificationsSection />
 

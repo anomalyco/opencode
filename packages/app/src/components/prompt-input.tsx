@@ -1278,22 +1278,47 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault()
-      if (event.repeat) return
-      if (
-        working() &&
-        prompt
-          .current()
-          .map((part) => ("content" in part ? part.content : ""))
-          .join("")
-          .trim().length === 0 &&
-        imageAttachments().length === 0 &&
-        commentCount() === 0
-      ) {
-        return
+    const modEnter = event.ctrlKey || event.metaKey
+    const sendWithModEnter = settings.general.sendWithModEnter()
+    if (event.key === "Enter") {
+      if (sendWithModEnter) {
+        if (modEnter && !event.shiftKey) {
+          event.preventDefault()
+          if (event.repeat) return
+          if (
+            working() &&
+            prompt
+              .current()
+              .map((part) => ("content" in part ? part.content : ""))
+              .join("")
+              .trim().length === 0 &&
+            imageAttachments().length === 0 &&
+            commentCount() === 0
+          ) {
+            return
+          }
+          void handleSubmit(event)
+        } else if (!modEnter && !event.shiftKey) {
+          addPart({ type: "text", content: "\n", start: 0, end: 0 })
+          event.preventDefault()
+        }
+      } else if (!event.shiftKey) {
+        event.preventDefault()
+        if (event.repeat) return
+        if (
+          working() &&
+          prompt
+            .current()
+            .map((part) => ("content" in part ? part.content : ""))
+            .join("")
+            .trim().length === 0 &&
+          imageAttachments().length === 0 &&
+          commentCount() === 0
+        ) {
+          return
+        }
+        void handleSubmit(event)
       }
-      void handleSubmit(event)
     }
   }
 

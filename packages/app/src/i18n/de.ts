@@ -570,6 +570,7 @@ export const dict = {
   "settings.desktop.wsl.title": "WSL-Integration",
   "settings.desktop.wsl.description": "OpenCode-Server innerhalb von WSL unter Windows ausführen.",
   "settings.general.section.appearance": "Erscheinungsbild",
+  "settings.general.section.input": "Eingabe",
   "settings.general.section.notifications": "Systembenachrichtigungen",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Soundeffekte",
@@ -588,6 +589,9 @@ export const dict = {
   "settings.general.row.font.description": "Die in Codeblöcken verwendete Schriftart anpassen",
   "settings.general.row.terminalFont.title": "Terminal Font",
   "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
+
+  "settings.general.row.sendWithModEnter.title": "Mit Ctrl+Enter senden",
+  "settings.general.row.sendWithModEnter.description": "Verwende Ctrl+Enter (oder Cmd+Enter auf Mac) zum Senden von Nachrichten statt Enter",
   "settings.general.row.uiFont.title": "UI-Schriftart",
   "settings.general.row.uiFont.description": "Die im gesamten Interface verwendete Schriftart anpassen",
   "settings.general.row.followup.title": "Verhalten bei Folgefragen",

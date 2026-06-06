@@ -619,6 +619,7 @@ export const dict = {
   "settings.desktop.wsl.description": "เรียกใช้เซิร์ฟเวอร์ OpenCode ภายใน WSL บน Windows",
 
   "settings.general.section.appearance": "รูปลักษณ์",
+  "settings.general.section.input": "Input",
   "settings.general.section.notifications": "การแจ้งเตือนระบบ",
   "settings.general.section.updates": "การอัปเดต",
   "settings.general.section.sounds": "เสียงเอฟเฟกต์",
@@ -637,6 +638,9 @@ export const dict = {
   "settings.general.row.font.description": "ปรับแต่งฟอนต์ที่ใช้ในบล็อกโค้ด",
   "settings.general.row.terminalFont.title": "Terminal Font",
   "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
+
+  "settings.general.row.sendWithModEnter.title": "ส่งด้วย Ctrl+Enter",
+  "settings.general.row.sendWithModEnter.description": "ใช้ Ctrl+Enter (หรือ Cmd+Enter บน Mac) เพื่อส่งข้อความแทน Enter",
   "settings.general.row.uiFont.title": "ฟอนต์ UI",
   "settings.general.row.uiFont.description": "ปรับแต่งฟอนต์ที่ใช้ทั่วทั้งอินเทอร์เฟซ",
   "settings.general.row.followup.title": "พฤติกรรมการติดตามผล",

@@ -614,6 +614,7 @@ export const dict = {
   "settings.desktop.wsl.description": "在 Windows 上的 WSL 中執行 OpenCode 伺服器。",
 
   "settings.general.section.appearance": "外觀",
+  "settings.general.section.input": "輸入",
   "settings.general.section.notifications": "系統通知",
   "settings.general.section.updates": "更新",
   "settings.general.section.sounds": "音效",
@@ -632,6 +633,9 @@ export const dict = {
   "settings.general.row.font.description": "自訂程式碼區塊使用的字型",
   "settings.general.row.terminalFont.title": "Terminal Font",
   "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
+
+  "settings.general.row.sendWithModEnter.title": "使用 Ctrl+Enter 傳送",
+  "settings.general.row.sendWithModEnter.description": "使用 Ctrl+Enter(Mac 上為 Cmd+Enter)傳送訊息,而不是 Enter",
   "settings.general.row.uiFont.title": "介面字型",
   "settings.general.row.uiFont.description": "自訂整個介面使用的字型",
   "settings.general.row.followup.title": "後續追問行為",
