@@ -13,7 +13,7 @@ export interface RequestSnapshot {
   readonly body: string
 }
 
-/** The normalized HTTP response stored in a cassette. */
+/** @internal */
 export interface ResponseSnapshot {
   /** HTTP status code. */
   readonly status: number
@@ -25,14 +25,14 @@ export interface ResponseSnapshot {
   readonly bodyEncoding?: "text" | "base64"
 }
 
-/** One recorded HTTP request and response pair. */
+/** @internal */
 export interface HttpInteraction {
   readonly transport: "http"
   readonly request: RequestSnapshot
   readonly response: ResponseSnapshot
 }
 
-/** One recorded WebSocket frame in observed transcript order. */
+/** @internal */
 export type WebSocketEvent =
   | { readonly direction: "client" | "server"; readonly kind: "text"; readonly body: string }
   | {
@@ -42,7 +42,7 @@ export type WebSocketEvent =
       readonly bodyEncoding: "base64"
     }
 
-/** One recorded WebSocket connection and its ordered frame transcript. */
+/** @internal */
 export interface WebSocketInteraction {
   readonly transport: "websocket"
   readonly open: {
@@ -85,7 +85,7 @@ export interface RecorderOptions {
   readonly match?: RequestMatcher
 }
 
-/** Handshake identity used to match a custom upstream socket. */
+/** @internal */
 export interface WebSocketRequest {
   /** WebSocket URL. */
   readonly url: string
@@ -93,7 +93,7 @@ export interface WebSocketRequest {
   readonly headers?: Record<string, string>
 }
 
-/** Options shared by WebSocket recorder layers. */
+/** @internal */
 export interface WebSocketRecorderOptions {
   /** Cassette directory. Defaults to `<cwd>/test/fixtures/recordings`. */
   readonly directory?: string

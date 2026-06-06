@@ -19,15 +19,17 @@ export const verifyPackage = async (archive: string) => {
     )
     await writeFile(
       path.join(directory, "consumer.ts"),
-      `import { HttpRecorder, type RecorderOptions } from "@opencode-ai/http-recorder"
-import { HttpClient } from "effect/unstable/http/HttpClient"
-import { Socket } from "effect/unstable/socket/Socket"
+      `import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { NodeSocket } from "@effect/platform-node"
+import { Layer } from "effect"
+import { HttpClient } from "effect/unstable/http"
+import { Socket } from "effect/unstable/socket"
 
-const options: RecorderOptions = { redact: { jsonFields: ["access_token"] } }
-HttpRecorder.layer("consumer/custom", options) satisfies import("effect/Layer").Layer<HttpClient, never, HttpClient>
-HttpRecorder.layerFetch("consumer/fetch", options) satisfies import("effect/Layer").Layer<HttpClient>
-HttpRecorder.layerSocket("consumer/socket", { url: "wss://example.test" }) satisfies import("effect/Layer").Layer<Socket, never, Socket>
-HttpRecorder.layerWebSocket("consumer/websocket", "wss://example.test") satisfies import("effect/Layer").Layer<Socket>
+const options: HttpRecorder.RecorderOptions = { redact: { jsonFields: ["access_token"] } }
+HttpRecorder.http("consumer", options) satisfies Layer.Layer<HttpClient.HttpClient>
+HttpRecorder.socket("consumer/socket", options).pipe(
+  Layer.provide(NodeSocket.layerWebSocket("wss://example.test")),
+) satisfies Layer.Layer<Socket.Socket>
 `,
     )
     await writeFile(
@@ -53,7 +55,7 @@ HttpRecorder.layerWebSocket("consumer/websocket", "wss://example.test") satisfie
         "node",
         "--input-type=module",
         "-e",
-        'import("@opencode-ai/http-recorder").then((module) => { const actual = Object.keys(module.HttpRecorder).sort(); const expected = ["defaultMatcher", "layer", "layerFetch", "layerSocket", "layerWebSocket"]; if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Unexpected public exports: ${actual}`) })',
+        'import("@opencode-ai/http-recorder").then((module) => { const root = Object.keys(module).sort(); const namespace = Object.keys(module.HttpRecorder).sort(); if (JSON.stringify(root) !== JSON.stringify(["HttpRecorder"])) throw new Error(`Unexpected root exports: ${root}`); if (JSON.stringify(namespace) !== JSON.stringify(["http", "socket"])) throw new Error(`Unexpected namespace exports: ${namespace}`) })',
       ],
       directory,
     )

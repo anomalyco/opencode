@@ -1,4 +1,4 @@
-import { NodeFileSystem, NodeSocket } from "@effect/platform-node"
+import { NodeFileSystem } from "@effect/platform-node"
 import { Deferred, Effect, Exit, FiberSet, Layer, Ref, Scope, Semaphore } from "effect"
 import { Socket } from "effect/unstable/socket"
 import * as CassetteService from "./cassette.js"
@@ -6,9 +6,13 @@ import { canonicalizeJson, decodeJson, safeText } from "./matching.js"
 import { makeReplayState, resolveAutoMode } from "./recorder.js"
 import { make, type Redactor } from "./redactor.js"
 import { webSocketInteractions } from "./schema.js"
-import type { WebSocketEvent, WebSocketInteraction, WebSocketRecorderOptions, WebSocketRequest } from "./types.js"
-
-export type { WebSocketRecorderOptions, WebSocketRequest } from "./types.js"
+import type {
+  RecorderOptions,
+  WebSocketEvent,
+  WebSocketInteraction,
+  WebSocketRecorderOptions,
+  WebSocketRequest,
+} from "./types.js"
 
 interface ActiveReplay {
   readonly interaction: WebSocketInteraction
@@ -295,17 +299,14 @@ const recordingLayer = (
   )
 
 /**
- * Wraps an existing Effect socket with cassette recording and replay.
+ * Wraps a provided `Socket.Socket` with cassette recording and replay.
  *
- * Use this when the application supplies custom authentication, proxying,
- * tracing, or another socket transport. The request is used only for matching
- * and redaction; it does not modify the upstream handshake.
+ * Supply the ordinary URL-bound Effect socket layer beneath this decorator.
+ * The cassette name identifies the connection; recorder configuration does not
+ * duplicate the transport URL.
  */
-export const layerSocket = (
-  name: string,
-  request: WebSocketRequest,
-  options: WebSocketRecorderOptions = {},
-): Layer.Layer<Socket.Socket, never, Socket.Socket> => provideCassette(recordingLayer(name, request, options), options)
+export const socket = (name: string, options: RecorderOptions = {}): Layer.Layer<Socket.Socket, never, Socket.Socket> =>
+  provideCassette(recordingLayer(name, { url: "" }, { ...options, compareClientMessagesAsJson: true }), options)
 
 /** @internal */
 export const socketLayer = (
@@ -322,24 +323,4 @@ const provideCassette = (
   layer.pipe(
     Layer.provide(CassetteService.fileSystem({ directory: options.directory })),
     Layer.provide(NodeFileSystem.layer),
-  )
-
-/**
- * Provides a recorded WebSocket backed by Effect's standard Node transport.
- *
- * Locally, a missing cassette is recorded from the live endpoint. Existing
- * cassettes are replayed, and `CI=true` makes a missing cassette fail.
- */
-export const layerWebSocket = (
-  name: string,
-  url: string,
-  options: WebSocketRecorderOptions = {},
-): Layer.Layer<Socket.Socket> =>
-  layerSocket(name, { url }, options).pipe(
-    Layer.provide(
-      NodeSocket.layerWebSocket(url, {
-        protocols: options.protocols,
-        closeCodeIsError: (code) => code !== 1000 && code !== 1005,
-      }),
-    ),
   )

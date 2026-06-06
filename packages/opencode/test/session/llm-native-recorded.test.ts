@@ -289,7 +289,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
         metadata,
         redactor: HttpRecorderInternal.Redactor.make(redact),
       })
-    : HttpRecorder.layerFetch(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
+    : HttpRecorder.http(scenario.cassette, { directory: FIXTURES_DIR, metadata, redact })
   const recordedClient = LLMClient.layer.pipe(
     Layer.provide(Layer.mergeAll(RequestExecutor.layer.pipe(Layer.provide(recordedHttp)), WebSocketExecutor.layer)),
   )

@@ -41,7 +41,7 @@ const cassette =
         directory: path.resolve(import.meta.dir, "fixtures/recordings"),
         mode: "record",
       })
-    : HttpRecorder.layerFetch("session-runner/openai-chat-streams-text", {
+    : HttpRecorder.http("session-runner/openai-chat-streams-text", {
         directory: path.resolve(import.meta.dir, "fixtures/recordings"),
       })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))

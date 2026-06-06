@@ -51,7 +51,7 @@ describe("getUser", () => {
 
       assert.strictEqual(user.id, 1)
       assert.strictEqual(user.name, "Leanne Graham")
-    }).pipe(Effect.provide(HttpRecorder.layerFetch("users/get-one"))),
+    }).pipe(Effect.provide(HttpRecorder.http("users/get-one"))),
   )
 })
 ```
@@ -76,30 +76,16 @@ flowchart TD
   Recorded -->|No, CI| Fail[Fail: cassette missing]
 ```
 
-The recorder is an `HttpClient` layer, so application code does not need to know whether a response is live or replayed.
+Application code does not need to know whether a response is live or replayed.
 
 ## API
 
-| API                          | Use it when                                      |
-| ---------------------------- | ------------------------------------------------ |
-| `layerFetch(name, options)`  | Effect's standard fetch client is sufficient.    |
-| `layer(name, options)`       | You already provide a custom `HttpClient`.       |
-| `layerWebSocket(name, url)`  | Effect's standard Node WebSocket is sufficient.  |
-| `layerSocket(name, request)` | You already provide a custom `Socket.Socket`.    |
-| `defaultMatcher`             | You need the recorder's default request matcher. |
-
-## Use Your Existing Client
-
-`layer` wraps an upstream `HttpClient`, preserving custom transports, middleware, proxies, and tracing:
-
 ```ts
-import { Layer } from "effect"
-import { HttpRecorder } from "@opencode-ai/http-recorder"
-
-const recordedClient = HttpRecorder.layer("users/get-one").pipe(Layer.provide(applicationHttpClientLayer))
+HttpRecorder.http(name, options?)
+HttpRecorder.socket(name, options?)
 ```
 
-Use `layerFetch` when the standard Effect fetch client is sufficient.
+That is the complete public API. `http` provides a fetch-backed recorded `HttpClient`. `socket` decorates a standard Effect `Socket.Socket` supplied beneath it.
 
 ## WebSockets
 
@@ -107,7 +93,8 @@ WebSocket cassettes preserve one ordered transcript of client and server text or
 
 ```ts
 import { assert, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { NodeSocket } from "@effect/platform-node"
+import { Effect, Layer } from "effect"
 import { Socket } from "effect/unstable/socket"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 
@@ -125,12 +112,18 @@ const echo = Effect.gen(function* () {
   )
 })
 
-it.effect("exchanges WebSocket frames", () =>
-  echo.pipe(Effect.provide(HttpRecorder.layerWebSocket("echo/hello", "wss://ws.postman-echo.com/raw"))),
+const recordedSocket = HttpRecorder.socket("echo/hello").pipe(
+  Layer.provide(
+    NodeSocket.layerWebSocket("wss://ws.postman-echo.com/raw", {
+      closeCodeIsError: (code) => code !== 1000,
+    }),
+  ),
 )
+
+it.effect("exchanges WebSocket frames", () => echo.pipe(Effect.provide(recordedSocket)))
 ```
 
-`layerWebSocket` supplies Effect's standard Node WebSocket transport. Use `layerSocket(name, request, options)` to wrap an existing `Socket.Socket` when the application needs a custom transport, authorization headers, proxying, or tracing. The `request` URL and headers are used for redacted cassette matching; the recorder does not modify the upstream handshake.
+The application owns the WebSocket URL and protocols through normal Effect layer wiring. The recorder wraps that socket without duplicating its URL in recorder configuration. Provide separate socket layers for separate endpoints or concurrent connections.
 
 Text frames use the same JSON-field and body redaction as HTTP bodies. Binary frames are stored losslessly as base64. Client and server frame kinds must match during replay.
 
@@ -150,7 +143,7 @@ There is intentionally no public overwrite mode. Deletion makes the set of recor
 Secure defaults remove most headers and redact common credentials in headers, URLs, and JSON bodies. Extend those defaults at layer construction:
 
 ```ts
-HttpRecorder.layerFetch("anthropic/messages", {
+HttpRecorder.http("anthropic/messages", {
   redact: {
     headers: ["x-project-token"],
     allowRequestHeaders: ["anthropic-version"],
@@ -187,7 +180,7 @@ Concurrent requests are recorded in request-start order even when their response
 Supply a custom equivalence rule when a request contains intentionally volatile data:
 
 ```ts
-HttpRecorder.layerFetch("events/create", {
+HttpRecorder.http("events/create", {
   match: (incoming, recorded) =>
     incoming.method === recorded.method && new URL(incoming.url).pathname === new URL(recorded.url).pathname,
 })
@@ -215,7 +208,6 @@ Cassettes are readable JSON files intended to be committed with your tests. HTTP
 - Responses are buffered while recording and replaying, so this beta is not suitable for tests that assert streaming timing, cancellation, or backpressure.
 - WebSocket replay preserves frame chronology and content, not real network timing or backpressure.
 - WebSocket V1 cassettes do not reproduce terminal close codes, close reasons, or transport failures. Failed and interrupted live runs are not recorded.
-- One recorder-provided `Socket.Socket` supports one active run at a time. Create separate layers for concurrent connections.
 - WebSocket transcripts are retained in memory until the connection finishes; avoid using this beta for unbounded sessions.
 - The package currently requires the exact Effect beta listed above.
 - Cassette format version `1` has no migration tooling yet.
