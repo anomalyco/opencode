@@ -11,6 +11,7 @@ import * as Sse from "effect/unstable/encoding/Sse"
 import { EventApi } from "../groups/event"
 
 const log = Log.create({ service: "server" })
+const EVENT_QUEUE_CAPACITY = 2048
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -29,17 +30,18 @@ function eventResponse(events: EventV2.Interface) {
   return Effect.gen(function* () {
     const instance = yield* InstanceState.context
     const workspaceID = yield* InstanceState.workspaceID
+    const shouldForward = (event: EventV2.Payload) =>
+      event.location?.directory === instance.directory &&
+      (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID)
+
     // Listener registration is eager, so events published after this point cannot
     // be lost while the HTTP body fiber is starting or emitting server.connected.
-    const queue = yield* Queue.unbounded<EventV2.Payload>()
-    const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(queue, event)))
+    const queue = yield* Queue.sliding<EventV2.Payload>(EVENT_QUEUE_CAPACITY)
+    const unsubscribe = yield* events.listen((event) =>
+      shouldForward(event) ? Effect.sync(() => Queue.offerUnsafe(queue, event)) : Effect.void,
+    )
     yield* Effect.addFinalizer(() => unsubscribe)
     const stream = Stream.fromQueue(queue).pipe(
-      Stream.filter(
-        (event) =>
-          event.location?.directory === instance.directory &&
-          (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID),
-      ),
       Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
     )
     const disposed = Stream.callback<{ id: string; type: string; properties: unknown }>((queue) => {
