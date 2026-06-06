@@ -3,6 +3,7 @@ import {
   LLMClient,
   LLMError,
   LLMEvent,
+  Message,
   SystemPart,
   isContextOverflowFailure,
   type ProviderErrorEvent,
@@ -31,6 +32,7 @@ import { type RunError, Service, StepLimitExceededError } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
+import MAX_STEPS_NOTICE from "./max-steps.txt"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -172,6 +174,7 @@ export const layer = Layer.effect(
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
+      isLastStep: boolean,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
     ) {
       const session = yield* getSession(sessionID)
@@ -212,13 +215,18 @@ export const layer = Layer.effect(
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      const baseMessages = toLLMMessages(context, model)
+      // Parity with V1: warn the model that the next turn is the last one so
+      // it does not emit tool calls that would be abandoned when the loop
+      // terminates (#30866).
+      const messages = isLastStep ? [...baseMessages, Message.assistant(MAX_STEPS_NOTICE)] : baseMessages
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
-        messages: toLLMMessages(context, model),
+        messages,
         tools: yield* tools.definitions(agent.info?.permissions),
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
@@ -331,31 +339,32 @@ export const layer = Layer.effect(
     type RunTurn = (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
+      isLastStep: boolean,
     ) => Effect.Effect<boolean, RunError>
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion) {
-      return yield* runTurnAttempt(sessionID, promotion).pipe(
+    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, isLastStep) {
+      return yield* runTurnAttempt(sessionID, promotion, isLastStep).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, defect.transition.promotion)
+            return yield* runAfterOverflowCompaction(sessionID, defect.transition.promotion, isLastStep)
           }),
         ),
       )
     })
 
-    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion) {
-      return yield* runTurnAttempt(sessionID, promotion, compaction.compactAfterOverflow).pipe(
+    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, isLastStep) {
+      return yield* runTurnAttempt(sessionID, promotion, isLastStep, compaction.compactAfterOverflow).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined)
-            return yield* runTurn(sessionID, defect.transition.promotion)
+              return yield* runAfterOverflowCompaction(sessionID, undefined, isLastStep)
+            return yield* runTurn(sessionID, defect.transition.promotion, isLastStep)
           }),
         ),
       )
@@ -374,7 +383,8 @@ export const layer = Layer.effect(
       while (openActivity) {
         let needsContinuation = true
         for (let step = 0; step < MAX_STEPS; step++) {
-          needsContinuation = yield* runTurn(input.sessionID, promotion)
+          const isLastStep = step === MAX_STEPS - 1
+          needsContinuation = yield* runTurn(input.sessionID, promotion, isLastStep)
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break
