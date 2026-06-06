@@ -8,8 +8,23 @@ import { createClient, createConfig } from "@/local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
 import type { ResourceSnapshot } from "@/local/llama-skein/gen/types.gen"
 
-// Below this, MCP tools + system prompt fill the window before meaningful work starts.
 const MIN_WORKFLOW_CTX = 65536
+const SYSTEM_RESERVE_MB = 1536  // 1.5 GB held back for OS + driver overhead
+const MAX_CTX = 262144
+
+// Compute the optimal ctx_size from actual hardware data.
+// Uses the real KV estimate for the current ctx_size to derive MB-per-token,
+// then fills remaining VRAM (after model weights + system reserve) with context.
+// Returns null when insufficient data is available.
+function computeRecommendedCtx(m: MemSnapshot, currentCtx: number): number | null {
+  if (m.kvEstMb <= 0 || currentCtx <= 0 || m.modelMb <= 0 || m.totalMb <= 0) return null
+  const kvPerToken = m.kvEstMb / currentCtx
+  const headroomMb = m.totalMb - m.modelMb - SYSTEM_RESERVE_MB
+  if (headroomMb < kvPerToken * MIN_WORKFLOW_CTX) return null
+  const tokens = Math.floor(headroomMb / kvPerToken)
+  const rounded = Math.floor(tokens / 4096) * 4096
+  return Math.max(MIN_WORKFLOW_CTX, Math.min(MAX_CTX, rounded))
+}
 
 const PRESETS = [
   4096, 8192, 12288, 16384, 20480, 24576, 28672, 32768,
@@ -94,28 +109,40 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
     onCleanup(() => clearInterval(id))
   })
 
+  const recommended = createMemo(() => {
+    const m = mem()
+    const cur = current()
+    if (!m || cur <= 0) return null
+    return computeRecommendedCtx(m, cur)
+  })
+
   const options = createMemo(() => {
     const cur = current()
     const m = mem()
-    const sizes = [...new Set([...PRESETS, ...(cur > 0 ? [cur] : [])])].sort((a, b) => a - b)
+    const rec = recommended()
+    const kvPerToken = m && cur > 0 && m.kvEstMb > 0 ? m.kvEstMb / cur : null
+    const extra = new Set(cur > 0 ? [cur] : [])
+    if (rec) extra.add(rec)
+    const sizes = [...new Set([...PRESETS, ...extra])].sort((a, b) => a - b)
     return sizes.map((n) => {
       let description: string | undefined
-      if (n === cur) {
+      if (n === cur && n === rec) {
+        description = "current · recommended"
+      } else if (n === cur) {
         description = "current"
+      } else if (n === rec) {
+        description = "recommended for this model + VRAM"
       } else if (n < MIN_WORKFLOW_CTX) {
         description = "⚠ too small — MCP tools fill this before meaningful work"
-      } else if (n === 131072) {
-        description = "recommended — sweet spot for most MCP workflows"
-      } else if (n > cur) {
+      } else if (n > cur && m && kvPerToken) {
+        const newKvMb = n * kvPerToken
+        const totalNeeded = m.modelMb + newKvMb + SYSTEM_RESERVE_MB
         description = `+${fmtCtxK(n - cur)}`
-        if (m) {
-          const extraKvMb = ((n - cur) / 1024) * 4
-          if (extraKvMb > m.freeMb * 0.8) {
-            description += ` · ⚠ low ${m.label} (${fmtGB(m.freeMb)} GB free)`
-          }
+        if (totalNeeded > m.totalMb) {
+          description += ` · ⚠ exceeds ${m.label} (${fmtGB(m.totalMb)} GB)`
         }
       }
-      return { value: n, title: fmtCtxK(n), description, highlight: n === cur }
+      return { value: n, title: fmtCtxK(n), description, highlight: n === cur || n === rec }
     })
   })
 
