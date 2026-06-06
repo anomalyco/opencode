@@ -49,6 +49,22 @@ describe("file.search", () => {
     }),
   )
 
+  it.live("keeps empty file query candidates", () =>
+    Effect.gen(function* () {
+      expect(Fff.available()).toBe(true)
+      const dir = yield* tmpdir()
+      yield* write(path.join(dir, "README.md"), "hello\n")
+      yield* write(path.join(dir, "src", "main.ts"), "export const main = true\n")
+
+      const search = yield* Search.Service
+      const results = yield* search.file({ cwd: dir, query: "", limit: 10, kind: "all" })
+
+      expect(results).toContain("README.md")
+      expect(results).toContain("src/")
+      expect(results).not.toContain("")
+    }),
+  )
+
   it.live("keeps paging grep results without an explicit limit", () =>
     Effect.gen(function* () {
       expect(Fff.available()).toBe(true)

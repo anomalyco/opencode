@@ -133,13 +133,19 @@ function item(hit: Fff.Hit): Item {
   }
 }
 
-function collectPaths<T>(out: { items: T[]; scores: Array<{ total: number }> }, toPath: (item: T) => string): string[] {
+function collectPaths<T>(
+  out: { items: T[]; scores: Array<{ total: number }> },
+  toPath: (item: T) => string,
+  opts?: { includeZeroScore?: boolean },
+): string[] {
   return Array.from(
     new Set(
       out.items.flatMap((item, idx): string[] => {
         const score = out.scores[idx]
-        if (!score || score.total <= 0) return []
-        return [toPath(item)]
+        if (!score || (!opts?.includeZeroScore && score.total <= 0)) return []
+        const text = toPath(item)
+        if (!text) return []
+        return [text]
       }),
     ),
   )
@@ -154,16 +160,25 @@ function searchFff(
   if (kind === "directory") {
     const out = pick.directorySearch(query, opts)
     if (!out.ok) return out
-    return { ok: true, value: collectPaths(out.value, (entry) => normalize(entry.relativePath)) }
+    return {
+      ok: true,
+      value: collectPaths(out.value, (entry) => normalize(entry.relativePath), { includeZeroScore: !query }),
+    }
   }
   if (kind === "all") {
     const out = pick.mixedSearch(query, opts)
     if (!out.ok) return out
-    return { ok: true, value: collectPaths(out.value, (entry) => normalize(entry.item.relativePath)) }
+    return {
+      ok: true,
+      value: collectPaths(out.value, (entry) => normalize(entry.item.relativePath), { includeZeroScore: !query }),
+    }
   }
   const out = pick.fileSearch(query, opts)
   if (!out.ok) return out
-  return { ok: true, value: collectPaths(out.value, (entry) => normalize(entry.relativePath)) }
+  return {
+    ok: true,
+    value: collectPaths(out.value, (entry) => normalize(entry.relativePath), { includeZeroScore: !query }),
+  }
 }
 
 export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service> = Layer.effect(
@@ -332,7 +347,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
 
     const file: Interface["file"] = Effect.fn("Search.file")(function* (input) {
       const query = input.query.trim()
-      if (!query) return []
       const kind = input.kind ?? "file"
 
       const pick = yield* picker(input.cwd)
