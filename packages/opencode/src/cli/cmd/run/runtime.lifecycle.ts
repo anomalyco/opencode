@@ -145,7 +145,7 @@ function directoryLabel(directory: string) {
       : resolved.startsWith(`${Global.Path.home}${path.sep}`)
         ? resolved.replace(Global.Path.home, "~")
         : resolved
-  return `directory: ${display.replaceAll("\\", "/")}`
+  return display.replaceAll("\\", "/")
 }
 
 function queueSplash(
