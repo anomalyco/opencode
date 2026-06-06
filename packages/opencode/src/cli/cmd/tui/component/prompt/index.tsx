@@ -12,7 +12,8 @@ import type { CommandContext } from "@opentui/keymap"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
+import { tmpdir } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
@@ -1254,14 +1255,28 @@ export function Prompt(props: PromptProps) {
       typeId: promptPartTypeId,
     })
 
+    let url = `data:${file.mime};base64,${file.content}`
+    let filepath = file.filepath
+
+    if (!filepath && file.mime.startsWith("image/")) {
+      const ext = file.mime.split("/")[1] ?? "png"
+      filepath = path.join(tmpdir(), `opencode-paste-${Date.now()}.${ext}`)
+      try {
+        await Bun.write(filepath, Buffer.from(file.content, "base64"))
+        url = pathToFileURL(filepath).href
+      } catch {
+        // fall back to data URL
+      }
+    }
+
     const part: Omit<FilePart, "id" | "messageID" | "sessionID"> = {
       type: "file" as const,
       mime: file.mime,
       filename: file.filename,
-      url: `data:${file.mime};base64,${file.content}`,
+      url,
       source: {
         type: "file",
-        path: file.filepath ?? file.filename ?? "",
+        path: filepath ?? file.filename ?? "",
         text: {
           start: extmarkStart,
           end: extmarkEnd,
