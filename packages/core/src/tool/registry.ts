@@ -20,6 +20,7 @@ import type { SessionV2 } from "../session"
 import { ApplicationTools } from "./application-tools"
 import { ToolOutputStore } from "../tool-output-store"
 import { AgentV2 } from "../agent"
+import { Wildcard } from "../util/wildcard"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
@@ -54,6 +55,8 @@ export type Entry<
   Success extends ToolSchema<any> = ToolSchema<any>,
 > = {
   readonly tool: TypedTool<Parameters, Success>
+  /** Catalog visibility only. Execution authorization remains leaf-owned. */
+  readonly permission?: { readonly action: string; readonly resource: "*" }
   readonly authorize?: (input: AuthorizeInput<Schema.Schema.Type<Parameters>>) => Effect.Effect<void, ToolFailure>
   readonly execute?: (
     input: AuthorizeInput<Schema.Schema.Type<Parameters>>,
@@ -78,7 +81,9 @@ export type Editor = {
 export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
   readonly contribute: (update: State.Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
-  readonly definitions: () => Effect.Effect<ReadonlyArray<ReturnType<typeof Tool.toDefinitions>[number]>>
+  readonly definitions: (
+    permissions?: PermissionV2.Ruleset,
+  ) => Effect.Effect<ReadonlyArray<ReturnType<typeof Tool.toDefinitions>[number]>>
   readonly execute: (input: ExecuteInput) => Effect.Effect<ToolResultValue>
   readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement>
 }
@@ -114,13 +119,19 @@ export const layer = Layer.effect(
       }),
     })
 
-    const definitions = Effect.fn("ToolRegistry.definitions")(function* () {
-      const tools = new Map(Array.from(state.get().entries, ([name, entry]) => [name, entry.tool] as const))
+    const definitions = Effect.fn("ToolRegistry.definitions")(function* (permissions: PermissionV2.Ruleset = []) {
+      const tools = new Map(state.get().entries)
       // Location tools own their names. Application tools fill otherwise-unclaimed names.
       for (const [name, tool] of applications.entries()) {
-        if (!tools.has(name)) tools.set(name, tool.definition)
+        if (!tools.has(name)) tools.set(name, { tool: tool.definition })
       }
-      return Tool.toDefinitions(Object.fromEntries(tools))
+      return Tool.toDefinitions(
+        Object.fromEntries(
+          Array.from(tools)
+            .filter(([name, entry]) => !whollyDisabled(entry.permission ?? defaultPermission(name), permissions))
+            .map(([name, entry]) => [name, entry.tool]),
+        ),
+      )
     })
 
     const entry = (name: string): Entry | undefined => {
@@ -223,6 +234,15 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+function defaultPermission(name: string) {
+  return { action: ["edit", "write", "apply_patch"].includes(name) ? "edit" : name, resource: "*" as const }
+}
+
+function whollyDisabled(permission: { readonly action: string; readonly resource: "*" }, rules: PermissionV2.Ruleset) {
+  const rule = rules.findLast((rule) => Wildcard.match(permission.action, rule.action))
+  return rule?.resource === "*" && rule.effect === "deny"
+}
 
 export const defaultLayer = layer.pipe(
   Layer.provide(ApplicationTools.layer),
