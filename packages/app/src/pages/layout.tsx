@@ -69,6 +69,7 @@ import { DebugBar } from "@/components/debug-bar"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { ServerConnection, useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
+import { submitTuiResponse, nextTuiRequest } from "@opencode-ai/sdk/v2/client"
 import { pathKey } from "@/utils/path-key"
 import {
   displayName,
@@ -248,18 +249,33 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const stop = () => setState("sizing", false)
-    const blur = () => reset()
-    const hide = () => {
-      if (document.visibilityState !== "hidden") return
-      reset()
-    }
-    makeEventListener(window, "pointerup", stop)
-    makeEventListener(window, "pointercancel", stop)
-    makeEventListener(window, "blur", stop)
-    makeEventListener(window, "blur", blur)
-    makeEventListener(document, "visibilitychange", hide)
-  })
+      const stop = () => setState("sizing", false)
+      const blur = () => reset()
+      const hide = () => {
+        if (document.visibilityState !== "hidden") return
+        reset()
+      }
+      makeEventListener(window, "pointerup", stop)
+      makeEventListener(window, "pointercancel", stop)
+      makeEventListener(window, "blur", stop)
+      makeEventListener(window, "blur", blur)
+      makeEventListener(document, "visibilitychange", hide)
+
+      const unsub = serverSDK.event.listen("global", (e) => {
+        if (e.type === "tui.browser.control") {
+          const { command, params } = e.properties as any
+          if (command === "navigate") {
+            browser.openBrowser(params.url)
+          } else if (command === "snapshot") {
+            window.dispatchEvent(new CustomEvent("opencode-browser-control", { detail: { command, params } }))
+          } else {
+            // Click and Type need to be sent to the BrowserView component
+            window.dispatchEvent(new CustomEvent("opencode-browser-control", { detail: { command, params } }))
+          }
+        }
+      })
+      onCleanup(unsub)
+    })
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
