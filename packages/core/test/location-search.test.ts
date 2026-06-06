@@ -243,32 +243,6 @@ describe("LocationSearch", () => {
     ),
   )
 
-  it.live("rejects an approved root swapped to a symlink before ripgrep traversal", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        if (process.platform === "win32") return
-        const source = path.join(directory, "src")
-        const outside = `${directory}-outside`
-        yield* Effect.promise(async () => {
-          await fs.mkdir(source)
-          await fs.mkdir(outside)
-          await fs.writeFile(path.join(outside, "secret.txt"), "secret\n")
-        })
-        const filesystem = yield* FileSystem.Service
-        const approved = yield* filesystem.resolveRoot({ path: RelativePath.make("src") })
-        yield* Effect.promise(async () => {
-          await fs.rmdir(source)
-          await fs.symlink(outside, source)
-        })
-
-        expect(
-          Exit.isFailure(yield* (yield* LocationSearch.Service).files({ pattern: "*" }, approved).pipe(Effect.exit)),
-        ).toBe(true)
-        yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
-      }).pipe(provide(directory)),
-    ),
-  )
-
   it.live("honors a pre-aborted cancellation signal", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

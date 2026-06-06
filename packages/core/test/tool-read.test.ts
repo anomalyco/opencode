@@ -43,7 +43,6 @@ const filesystem = Layer.succeed(
       return Effect.succeed(readResult)
     },
     resolveRoot: () => Effect.die("unused"),
-    revalidateRoot: Effect.succeed,
     list: () => Effect.die("unused"),
     resolveList: () => Effect.die("unused"),
     listResolved: () => Effect.die("unused"),

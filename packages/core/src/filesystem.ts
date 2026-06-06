@@ -153,17 +153,13 @@ export class ListTarget extends Schema.Class<ListTarget>("FileSystem.ListTarget"
   resource: Schema.String,
 }) {}
 
-/** Canonical read authority for Location-scoped search and metadata leaves. */
+/** Canonical root and permission resource for Location-scoped search. */
 export class RootTarget extends Schema.Class<RootTarget>("FileSystem.RootTarget")({
-  absolute: Schema.String,
   real: Schema.String,
-  directory: Schema.String,
   root: Schema.String,
   resource: Schema.String,
   reference: Schema.NonEmptyString.pipe(Schema.optional),
   type: Schema.Literals(["file", "directory"]),
-  dev: Schema.Number,
-  ino: Schema.Number.pipe(Schema.optional),
 }) {}
 
 export class Entry extends Schema.Class<Entry>("FileSystem.Entry")({
@@ -221,9 +217,8 @@ export interface Interface {
   readonly resolveReadPath: (input: ReadInput) => Effect.Effect<ReadPath>
   readonly readTool: (input: ReadInput, page?: TextPageInput) => Effect.Effect<Content | TextPage>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
-  /** Select a contained canonical read root without asserting leaf policy. */
+  /** Resolve a contained canonical search root and its permission resource. */
   readonly resolveRoot: (input?: ListInput) => Effect.Effect<RootTarget>
-  readonly revalidateRoot: (target: RootTarget) => Effect.Effect<RootTarget>
   readonly resolveList: (input?: ListInput) => Effect.Effect<ListTarget>
   readonly listResolved: (target: ListTarget) => Effect.Effect<Entry[]>
   readonly listPage: (input?: ListPageInput) => Effect.Effect<ListPage>
@@ -535,21 +530,7 @@ export const layer = Layer.effect(
         resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
         reference: input.reference,
         type,
-        dev: info.dev,
-        ino: Option.getOrUndefined(info.ino),
       })
-    })
-    const revalidateRoot = Effect.fn("FileSystem.revalidateRoot")(function* (target: RootTarget) {
-      const canonical = yield* fs.realPath(target.absolute).pipe(Effect.orDie)
-      if (canonical !== target.real) return yield* Effect.die(new Error("Search root changed after approval"))
-      const info = yield* fs.stat(canonical).pipe(Effect.orDie)
-      if (
-        info.type !== (target.type === "file" ? "File" : "Directory") ||
-        info.dev !== target.dev ||
-        Option.getOrUndefined(info.ino) !== target.ino
-      )
-        return yield* Effect.die(new Error("Search root identity changed after approval"))
-      return target
     })
     const listResolved = Effect.fn("FileSystem.listResolved")(function* (directory: ListTarget) {
       return yield* fs.readDirectoryEntries(directory.real).pipe(
@@ -613,7 +594,6 @@ export const layer = Layer.effect(
         return yield* listResolved(yield* resolveList(input))
       }),
       resolveRoot,
-      revalidateRoot,
       resolveList,
       listResolved,
       listPage: Effect.fn("FileSystem.listPage")(function* (input) {

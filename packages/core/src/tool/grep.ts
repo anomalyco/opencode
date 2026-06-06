@@ -60,8 +60,8 @@ const definition = Tool.make({
 })
 
 /**
- * Location-scoped grep leaf. FileSystem selects a canonical root for
- * permission metadata; LocationSearch owns containment and ripgrep execution.
+ * Location-scoped grep leaf. FileSystem supplies canonical permission metadata;
+ * LocationSearch resolves the current root and owns containment and ripgrep execution.
  *
  * TODO: Revisit root-specific search permission resources if named-reference policy needs independent allow/deny rules.
  */
@@ -89,7 +89,7 @@ export const layer = Layer.effectDiscard(
                 limit: parameters.limit,
               },
             })
-            return yield* search.grep(parameters, root)
+            return yield* search.grep(parameters)
           }).pipe(
             Effect.catchCause((cause) => {
               const error = Cause.squash(cause)
