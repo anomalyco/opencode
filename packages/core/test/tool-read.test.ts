@@ -203,6 +203,7 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(yield* registry.definitions()).toMatchObject([{ name: "read" }])
+      expect(yield* registry.definitions([{ action: "read", resource: "*", effect: "deny" }])).toEqual([])
       expect(
         yield* registry.execute({
           sessionID,
