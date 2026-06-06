@@ -638,7 +638,10 @@ test("direct footer shows editable prompts and additional queued work while runn
           resources={() => []}
           commands={() => []}
           providers={() => undefined}
-          currentModel={() => undefined}
+          currentModel={() => ({
+            providerID: "opencode",
+            modelID: "a-model-name-long-enough-to-force-responsive-truncation",
+          })}
           variants={() => []}
           currentVariant={() => undefined}
           state={state}
@@ -684,10 +687,14 @@ test("direct footer shows editable prompts and additional queued work while runn
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("interrupt • 1 agent ctrl+x down • ctrl+b background • 1 queued ctrl+x q")
-    expect(app.captureCharFrame()).toContain("2 queued")
-    expect(app.captureCharFrame()).not.toContain("to view")
-    expect(app.captureCharFrame()).not.toContain("edit/remove")
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("esc interrupt")
+    expect(frame).toContain("3 queued")
+    expect(frame).toContain("ctrl+b background")
+    expect(frame).toContain("ctrl+x q 3 queued")
+    expect(frame).toContain("ctrl+x down subagents")
+    expect(frame).toContain("ctrl+p cmd")
+    expect(frame).not.toContain("1 agent")
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()

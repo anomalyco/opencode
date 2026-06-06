@@ -16,7 +16,7 @@ import {
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
 import { withRunSpan } from "./otel"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
-import { entryWriter, sameEntryGroup, separatorRows, spacerWriter } from "./scrollback.writer"
+import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
 import type { RunDiffStyle, RunEntryBody, StreamCommit } from "./types"
 
@@ -426,6 +426,12 @@ export class RunScrollbackStream {
         this.markRendered(await this.finishActive(trailingNewline))
       },
     )
+  }
+
+  public async writeTurnSummary(input: { agent: string; model: string; duration: string }): Promise<void> {
+    await this.complete(false)
+    this.writeSpacer(1)
+    this.renderer.writeToScrollback(turnSummaryWriter({ ...input, theme: this.theme }))
   }
 
   public destroy(): void {

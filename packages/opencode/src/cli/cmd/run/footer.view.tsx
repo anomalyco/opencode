@@ -148,25 +148,9 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
-  const subagentIndicator = createMemo(() => {
-    const count = tabs().length
-    if (count === 0) {
-      return
-    }
-
-    return {
-      count,
-      label: count === 1 ? "agent" : "agents",
-    }
-  })
   const foregroundSubagents = createMemo(
     () => props.backgroundSubagents && tabs().some((item) => item.status === "running" && !item.background),
   )
-  const queuedIndicator = createMemo(() => {
-    const count = queuedPrompts().length
-    if (count === 0) return
-    return { count }
-  })
   const model = createMemo(() => {
     const current = props.currentModel()
     return current ? modelInfo(props.providers(), current) : { model: props.state().model, provider: undefined }
@@ -181,6 +165,33 @@ export function RunFooterView(props: RunFooterViewProps) {
         keymap
           .getCommandBindings({ visibility: "registered", commands: ["command.palette.show"] })
           .get("command.palette.show")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const subagentShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.child.first"] })
+          .get("session.child.first")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const queuedShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.queued_prompts"] })
+          .get("session.queued_prompts")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const backgroundShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.background"] })
+          .get("session.background")?.[0]?.sequence,
         props.tuiConfig,
       ) ?? "",
   )
@@ -200,33 +211,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         props.tuiConfig,
       ) ?? "",
   )
-  const queuedShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.queued_prompts"] })
-          .get("session.queued_prompts")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const subagentShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.child.first"] })
-          .get("session.child.first")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
-  const backgroundShortcut = useKeymapSelector(
-    (keymap: OpenTuiKeymap) =>
-      formatKeySequence(
-        keymap
-          .getCommandBindings({ visibility: "registered", commands: ["session.background"] })
-          .get("session.background")?.[0]?.sequence,
-        props.tuiConfig,
-      ) ?? "",
-  )
   const clearShortcut = useKeymapSelector(
     (keymap: OpenTuiKeymap) =>
       formatKeySequence(
@@ -240,7 +224,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
   const queue = createMemo(() => props.state().queue)
-  const duration = createMemo(() => props.state().duration)
   const usage = createMemo(() => props.state().usage)
   const interruptKey = createMemo(() => interrupt() || clearShortcut() || "ctrl+c")
   const interruptLabel = createMemo(() => (interruptKey() === "escape" ? "esc" : interruptKey()))
@@ -400,21 +383,12 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const activityMeta = createMemo(() => {
     const items: string[] = []
-    const subagents = subagentIndicator()
 
-    if (queue() > 0) {
-      items.push(`${queue()} queued`)
-    }
+    // if (queue() > 0) {
+    //   items.push(`${queue()} queued`)
+    // }
 
-    if (subagents) {
-      items.push(`${subagents.count} ${subagents.label}`)
-    }
-
-    if (duration().length > 0) {
-      items.push(duration())
-    }
-
-    if (hints().command && usage().length > 0) {
+    if (term().width >= 80 && usage().length > 0) {
       items.push(usage())
     }
 
@@ -429,7 +403,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     return {
       model: model().model,
       variant: props.currentVariant(),
-      provider: hints().command ? model().provider : undefined,
+      provider: term().width >= 150 ? model().provider : undefined,
     }
   })
   const statusColor = createMemo(() => {
@@ -447,52 +421,36 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return theme().muted
   })
-  const actionHint = createMemo(() => {
-    if (exiting()) {
-      return
+  const contextHints = createMemo(() => {
+    if (!prompt() || shell() || term().width < 80) {
+      return []
     }
 
-    if (!prompt()) {
+    const items: Array<{ kind: string; key: string; label: string }> = []
+    if (foregroundSubagents() && backgroundShortcut()) {
+      items.push({ kind: "background", key: backgroundShortcut(), label: "background" })
+    }
+    if (queuedPrompts().length > 0 && queuedShortcut()) {
+      items.push({ kind: "queued", key: queuedShortcut(), label: `${queue()} queued` })
+    }
+    if (tabs().length > 0 && subagentShortcut()) {
+      items.push({ kind: "subagents", key: subagentShortcut(), label: "subagents" })
+    }
+
+    const limit = term().width >= 150 ? items.length : term().width >= 120 ? 2 : 1
+    return items.slice(0, limit)
+  })
+  const commandHint = createMemo(() => {
+    if (!prompt() || exiting() || term().width < 95) {
       return
     }
 
     if (shell()) {
-      return {
-        key: "esc",
-        label: "normal",
-      }
+      return { key: "esc", label: "normal" }
     }
 
-    if (!hints().history) {
-      return
-    }
-
-    if (foregroundSubagents() && backgroundShortcut()) {
-      return {
-        key: backgroundShortcut(),
-        label: "background",
-      }
-    }
-
-    if (queuedIndicator() && queuedShortcut()) {
-      return {
-        key: queuedShortcut(),
-        label: "queued",
-      }
-    }
-
-    if (subagentIndicator() && subagentShortcut()) {
-      return {
-        key: subagentShortcut(),
-        label: "subagents",
-      }
-    }
-
-    if (command().length > 0 && hints().command) {
-      return {
-        key: command(),
-        label: "cmd",
-      }
+    if (command()) {
+      return { key: command(), label: "cmd" }
     }
   })
 
@@ -828,6 +786,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   gap={1}
                   flexGrow={1}
                   flexShrink={1}
+                  minWidth={12}
                   paddingLeft={1}
                   paddingRight={1}
                   backgroundColor={theme().surface}
@@ -860,6 +819,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                     paddingRight={1}
                     backgroundColor={theme().shade}
                     flexShrink={1}
+                    maxWidth={12}
                   >
                     <text fg={theme().muted} wrapMode="none" truncate>
                       {activityMeta()}
@@ -867,14 +827,15 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </box>
                 </Show>
 
-                <Show when={hints().command && modelStatus()}>
+                <Show when={term().width >= 120 && modelStatus()}>
                   {(info) => (
                     <box
                       id="run-direct-footer-statusline-model"
                       paddingLeft={1}
                       paddingRight={1}
                       backgroundColor={theme().shade}
-                      flexShrink={0}
+                      flexShrink={1}
+                      maxWidth={term().width >= 150 ? 40 : 24}
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
                         {info().model}
@@ -893,7 +854,25 @@ export function RunFooterView(props: RunFooterViewProps) {
                   )}
                 </Show>
 
-                <Show when={actionHint()}>
+                <For each={contextHints()}>
+                  {(hint) => (
+                    <box
+                      id={`run-direct-footer-statusline-${hint.kind}`}
+                      paddingLeft={1}
+                      paddingRight={1}
+                      backgroundColor={theme().line}
+                      flexShrink={0}
+                      maxWidth={24}
+                    >
+                      <text fg={theme().text} wrapMode="none" truncate>
+                        <span style={{ fg: theme().highlight }}>{hint.key}</span>{" "}
+                        <span style={{ fg: theme().muted }}>{hint.label}</span>
+                      </text>
+                    </box>
+                  )}
+                </For>
+
+                <Show when={commandHint()}>
                   {(hint) => (
                     <box
                       id="run-direct-footer-statusline-hint"
@@ -901,6 +880,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                       paddingRight={1}
                       backgroundColor={theme().line}
                       flexShrink={0}
+                      maxWidth={18}
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
                         <span style={{ fg: theme().highlight }}>{hint().key}</span>{" "}

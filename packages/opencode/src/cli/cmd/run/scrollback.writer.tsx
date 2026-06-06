@@ -333,3 +333,18 @@ export function spacerWriter(): ScrollbackWriter {
     trailingNewline: true,
   })
 }
+
+export function turnSummaryWriter(input: { agent: string; model: string; duration: string; theme: RunTheme }) {
+  return createScrollbackWriter(
+    () => (
+      <box width="100%" height={1} paddingLeft={1}>
+        <text wrapMode="none" truncate>
+          <span style={{ fg: input.theme.footer.highlight }}>▣ </span>
+          <span style={{ fg: input.theme.footer.text }}>{input.agent}</span>
+          <span style={{ fg: input.theme.footer.muted }}> · {input.model} · {input.duration}</span>
+        </text>
+      </box>
+    ),
+    { startOnNewLine: true, trailingNewline: false },
+  )
+}
