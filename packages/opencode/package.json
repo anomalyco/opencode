@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.16.2",
-  "name": "opencode",
+  "name": "rin",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -17,7 +17,7 @@
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "rin": "./bin/opencode"
   },
   "exports": {
     "./*": "./src/*.ts"
