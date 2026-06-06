@@ -24,7 +24,7 @@ function todoText(item: { status: string; content: string }): string {
 }
 
 function todoColor(theme: RunTheme, status: string) {
-  return status === "in_progress" ? theme.footer.warning : theme.block.muted
+  return status === "in_progress" ? theme.block.warning : theme.block.muted
 }
 
 export function entryGroupKey(commit: StreamCommit): string | undefined {
@@ -339,9 +339,9 @@ export function turnSummaryWriter(input: { agent: string; model: string; duratio
     () => (
       <box width="100%" height={1}>
         <text wrapMode="none" truncate>
-          <span style={{ fg: input.theme.footer.highlight }}>▣ </span>
-          <span style={{ fg: input.theme.footer.text }}>{input.agent}</span>
-          <span style={{ fg: input.theme.footer.muted }}> · {input.model} · {input.duration}</span>
+          <span style={{ fg: input.theme.block.highlight }}>▣ </span>
+          <span style={{ fg: input.theme.block.text }}>{input.agent}</span>
+          <span style={{ fg: input.theme.block.muted }}> · {input.model} · {input.duration}</span>
         </text>
       </box>
     ),

@@ -40,6 +40,8 @@ export type RunFooterTheme = {
 }
 
 export type RunBlockTheme = {
+  highlight: ColorInput
+  warning: ColorInput
   text: ColorInput
   muted: ColorInput
   syntax?: SyntaxStyle
@@ -208,13 +210,39 @@ function indexedPalette(colors: TerminalColors, size: number = Math.max(colors.p
   })
 }
 
+function srgbToLinear(value: number): number {
+  if (value <= 0.04045) {
+    return value / 12.92
+  }
+
+  return ((value + 0.055) / 1.055) ** 2.4
+}
+
+function oklab(color: RGBA) {
+  const r = srgbToLinear(color.r)
+  const g = srgbToLinear(color.g)
+  const b = srgbToLinear(color.b)
+
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+
+  return {
+    l: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    a: 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    b: 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  }
+}
+
 function nearestIndexed(indexed: RGBA[], rgba: RGBA): RGBA {
+  const target = oklab(rgba)
   const hit = indexed.reduce(
     (best, item) => {
-      const dr = item.r - rgba.r
-      const dg = item.g - rgba.g
-      const db = item.b - rgba.b
-      const dist = dr * dr + dg * dg + db * db
+      const sample = oklab(item)
+      const dl = sample.l - target.l
+      const da = sample.a - target.a
+      const db = sample.b - target.b
+      const dist = dl * dl * 2 + da * da + db * db
       if (dist >= best.dist) return best
       return {
         dist,
@@ -228,6 +256,11 @@ function nearestIndexed(indexed: RGBA[], rgba: RGBA): RGBA {
   )
 
   return RGBA.clone(hit.item)
+}
+
+function paletteColor(colors: TerminalColors, index: number): RGBA {
+  const value = colors.palette[index]
+  return value ? RGBA.fromHex(value) : ansiToRgba(index)
 }
 
 function splashShadow(indexed: RGBA[], base: RGBA, overlay: RGBA, value: number): RGBA {
@@ -348,13 +381,10 @@ export function generateSystem(colors: TerminalColors, pick: "dark" | "light"): 
   const fg = RGBA.defaultForeground(fg_snapshot)
   const isDark = pick === "dark"
 
-  const indexed = indexedPalette(colors)
-  const color = (index: number) => RGBA.clone(indexed[index]!)
-  const nearest = (rgba: RGBA) => nearestIndexed(indexed, rgba)
+  const color = (index: number) => paletteColor(colors, index)
 
-  const grays = generateGrayScale(bg_snapshot, isDark, nearest)
-  const menu_grays = generateGrayScale(bg_snapshot, isDark, (rgba) => rgba)
-  const textMuted = generateMutedTextColor(bg_snapshot, isDark, nearest)
+  const grays = generateGrayScale(bg_snapshot, isDark, (rgba) => rgba)
+  const textMuted = generateMutedTextColor(bg_snapshot, isDark, (rgba) => rgba)
 
   const ansi = {
     red: color(1),
@@ -387,7 +417,7 @@ export function generateSystem(colors: TerminalColors, pick: "dark" | "light"): 
       background: alpha(bg, 0),
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
-      backgroundMenu: menu_grays[3],
+      backgroundMenu: grays[3],
       borderSubtle: grays[6],
       border: grays[7],
       borderActive: grays[8],
@@ -397,12 +427,12 @@ export function generateSystem(colors: TerminalColors, pick: "dark" | "light"): 
       diffHunkHeader: grays[7],
       diffHighlightAdded: ansi.green_bright,
       diffHighlightRemoved: ansi.red_bright,
-      diffAddedBg: nearest(tint(bg_snapshot, ansi.green, diff_alpha)),
-      diffRemovedBg: nearest(tint(bg_snapshot, ansi.red, diff_alpha)),
+      diffAddedBg: tint(bg_snapshot, ansi.green, diff_alpha),
+      diffRemovedBg: tint(bg_snapshot, ansi.red, diff_alpha),
       diffContextBg: diff_context_bg,
       diffLineNumber: textMuted,
-      diffAddedLineNumberBg: nearest(tint(diff_context_bg, ansi.green, diff_alpha)),
-      diffRemovedLineNumberBg: nearest(tint(diff_context_bg, ansi.red, diff_alpha)),
+      diffAddedLineNumberBg: tint(diff_context_bg, ansi.green, diff_alpha),
+      diffRemovedLineNumberBg: tint(diff_context_bg, ansi.red, diff_alpha),
       markdownText: fg,
       markdownHeading: fg,
       markdownLink: ansi.blue,
@@ -430,6 +460,27 @@ export function generateSystem(colors: TerminalColors, pick: "dark" | "light"): 
   }
 }
 
+function quantizeColor(indexed: RGBA[], rgba: RGBA): RGBA {
+  if (rgba.a === 0 || rgba.intent === "default" || rgba.intent === "indexed") {
+    return RGBA.clone(rgba)
+  }
+
+  return nearestIndexed(indexed, rgba)
+}
+
+function quantizeTheme(theme: TuiThemeCurrent, indexed: RGBA[]): TuiThemeCurrent {
+  const resolved = Object.fromEntries(
+    Object.entries(theme)
+      .filter(([key]) => key !== "thinkingOpacity")
+      .map(([key, value]) => [key, quantizeColor(indexed, value as RGBA)]),
+  ) as Partial<Record<ThemeColor, RGBA>>
+
+  return {
+    ...(resolved as Record<ThemeColor, RGBA>),
+    thinkingOpacity: theme.thinkingOpacity,
+  }
+}
+
 function splashTheme(theme: TuiThemeCurrent, indexed: RGBA[]): RunSplashTheme {
   const left = nearestIndexed(indexed, theme.textMuted)
   const right = nearestIndexed(indexed, theme.text)
@@ -442,71 +493,74 @@ function splashTheme(theme: TuiThemeCurrent, indexed: RGBA[]): RunSplashTheme {
 }
 
 function map(
-  theme: TuiThemeCurrent,
+  footerTheme: TuiThemeCurrent,
+  scrollbackTheme: TuiThemeCurrent,
   splash: RunSplashTheme,
   syntax?: SyntaxStyle,
   subtleSyntax?: SyntaxStyle,
 ): RunTheme {
-  const opaqueSubtleSyntax = opaqueSyntaxStyle(subtleSyntax, theme.background)
+  const opaqueSubtleSyntax = opaqueSyntaxStyle(subtleSyntax, scrollbackTheme.background)
   subtleSyntax?.destroy()
-  const shade = fade(theme.backgroundMenu, theme.background, 0.12, 0.56, 0.72)
-  const surface = fade(theme.backgroundMenu, theme.background, 0.18, 0.76, 0.9)
-  const line = fade(theme.backgroundMenu, theme.background, 0.24, 0.9, 0.98)
+  const shade = fade(footerTheme.backgroundMenu, footerTheme.background, 0.12, 0.56, 0.72)
+  const surface = fade(footerTheme.backgroundMenu, footerTheme.background, 0.18, 0.76, 0.9)
+  const line = fade(footerTheme.backgroundMenu, footerTheme.background, 0.24, 0.9, 0.98)
 
   return {
-    background: theme.background,
+    background: footerTheme.background,
     footer: {
-      highlight: theme.primary,
-      selected: theme.backgroundElement,
-      selectedText: theme.selectedListItemText,
-      warning: theme.warning,
-      success: theme.success,
-      error: theme.error,
-      muted: theme.textMuted,
-      text: theme.text,
+      highlight: footerTheme.primary,
+      selected: footerTheme.backgroundElement,
+      selectedText: footerTheme.selectedListItemText,
+      warning: footerTheme.warning,
+      success: footerTheme.success,
+      error: footerTheme.error,
+      muted: footerTheme.textMuted,
+      text: footerTheme.text,
       shade,
       surface,
-      pane: theme.backgroundMenu,
-      border: theme.border,
+      pane: footerTheme.backgroundMenu,
+      border: footerTheme.border,
       line,
     },
     entry: {
       system: {
-        body: theme.textMuted,
+        body: scrollbackTheme.textMuted,
       },
       user: {
-        body: theme.primary,
+        body: scrollbackTheme.primary,
       },
       assistant: {
-        body: theme.text,
+        body: scrollbackTheme.text,
       },
       reasoning: {
-        body: theme.textMuted,
+        body: scrollbackTheme.textMuted,
       },
       tool: {
-        body: theme.text,
-        start: theme.textMuted,
+        body: scrollbackTheme.text,
+        start: scrollbackTheme.textMuted,
       },
       error: {
-        body: theme.error,
+        body: scrollbackTheme.error,
       },
     },
     splash,
     block: {
-      text: theme.text,
-      muted: theme.textMuted,
+      highlight: scrollbackTheme.primary,
+      warning: scrollbackTheme.warning,
+      text: scrollbackTheme.text,
+      muted: scrollbackTheme.textMuted,
       syntax,
       subtleSyntax: opaqueSubtleSyntax,
-      diffAdded: theme.diffAdded,
-      diffRemoved: theme.diffRemoved,
+      diffAdded: scrollbackTheme.diffAdded,
+      diffRemoved: scrollbackTheme.diffRemoved,
       diffAddedBg: transparent,
       diffRemovedBg: transparent,
       diffContextBg: transparent,
-      diffHighlightAdded: theme.diffHighlightAdded,
-      diffHighlightRemoved: theme.diffHighlightRemoved,
-      diffLineNumber: theme.diffLineNumber,
-      diffAddedLineNumberBg: theme.diffAddedLineNumberBg,
-      diffRemovedLineNumberBg: theme.diffRemovedLineNumberBg,
+      diffHighlightAdded: scrollbackTheme.diffHighlightAdded,
+      diffHighlightRemoved: scrollbackTheme.diffHighlightRemoved,
+      diffLineNumber: scrollbackTheme.diffLineNumber,
+      diffAddedLineNumberBg: scrollbackTheme.diffAddedLineNumberBg,
+      diffRemovedLineNumberBg: scrollbackTheme.diffRemovedLineNumberBg,
     },
   }
 }
@@ -564,6 +618,8 @@ export const RUN_THEME_FALLBACK: RunTheme = {
     rightShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashRight, 0.14),
   },
   block: {
+    highlight: seed.highlight,
+    warning: seed.warning,
     text: seed.text,
     muted: seed.muted,
     diffAdded: seed.success,
@@ -594,15 +650,22 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const pick = colors.defaultBackground
       ? mode(RGBA.fromHex(colors.defaultBackground))
       : (renderer.themeMode ?? mode(RGBA.fromHex(bg)))
-    const theme = resolveTheme(generateSystem(colors, pick), pick)
+    const footerTheme = resolveTheme(generateSystem(colors, pick), pick)
     const indexed = indexedPalette(colors, 256)
+    const scrollbackTheme = quantizeTheme(footerTheme, indexed)
     const shared = await import("@opencode-ai/tui/context/theme")
     const syntaxTheme: SharedSyntaxTheme = {
-      ...theme,
+      ...scrollbackTheme,
       _hasSelectedListItemText: true,
     }
     const syntax = shared.generateSyntax(syntaxTheme)
-    return map(theme, splashTheme(theme, indexed), syntax, shared.generateSubtleSyntax(syntaxTheme))
+    return map(
+      footerTheme,
+      scrollbackTheme,
+      splashTheme(scrollbackTheme, indexed),
+      syntax,
+      shared.generateSubtleSyntax(syntaxTheme),
+    )
   } catch {
     return RUN_THEME_FALLBACK
   }

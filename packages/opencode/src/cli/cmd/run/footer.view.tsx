@@ -441,7 +441,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     return items.slice(0, limit)
   })
   const commandHint = createMemo(() => {
-    if (!prompt() || exiting() || term().width < 95) {
+    if (!prompt() || term().width < 95) {
       return
     }
 
