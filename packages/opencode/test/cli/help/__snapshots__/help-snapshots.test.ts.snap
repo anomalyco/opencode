@@ -27,7 +27,7 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 manage MCP (Model Context Protocol) servers
 
 Commands:
-  opencode mcp add            add an MCP server
+  opencode mcp add [name]     add an MCP server
   opencode mcp list           list MCP servers and their status                        [aliases: ls]
   opencode mcp auth [name]    authenticate with an OAuth-enabled MCP server
   opencode mcp logout [name]  remove OAuth credentials for an MCP server
@@ -425,16 +425,22 @@ Options:
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp add --help 1`] = `
-"opencode mcp add
+"opencode mcp add [name]
 
 add an MCP server
+
+Positionals:
+  name  name of the MCP server                                                              [string]
 
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+      --pure        run without external plugins                                           [boolean]
+      --url         URL for a remote MCP server                                             [string]
+      --env         environment variable for a local MCP server (KEY=VALUE)                  [array]
+      --header      HTTP header for a remote MCP server (KEY=VALUE)                          [array]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp auth --help 1`] = `
