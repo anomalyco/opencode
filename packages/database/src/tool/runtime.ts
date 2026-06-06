@@ -51,6 +51,7 @@ const buildAndImport = Effect.fn("ToolRuntime.buildAndImport")(function* (name: 
         entrypoints: [filePath],
         outdir,
         format: "esm",
+        target: "bun",
       })
       if (out.logs.length > 0) {
         throw new AggregateError(out.logs, out.logs.map((l) => l.message).join("; "))
