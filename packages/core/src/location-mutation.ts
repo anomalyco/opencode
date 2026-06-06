@@ -43,16 +43,6 @@ export const externalDirectoryPermission = (input: ExternalDirectoryAuthorizatio
 export interface Target {
   /** Canonical existing path, or missing path below a canonical directory. */
   readonly canonical: string
-  readonly exists: boolean
-  readonly type?:
-    | "File"
-    | "Directory"
-    | "SymbolicLink"
-    | "BlockDevice"
-    | "CharacterDevice"
-    | "FIFO"
-    | "Socket"
-    | "Unknown"
   /** Permission resource: Location-relative for internal paths, canonical for external paths. */
   readonly resource: string
   readonly externalDirectory?: ExternalDirectoryAuthorization
@@ -71,8 +61,15 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 interface ResolvedPath {
   readonly canonical: string
-  readonly exists: boolean
-  readonly type?: Target["type"]
+  readonly type?:
+    | "File"
+    | "Directory"
+    | "SymbolicLink"
+    | "BlockDevice"
+    | "CharacterDevice"
+    | "FIFO"
+    | "Socket"
+    | "Unknown"
   readonly directory: string
 }
 
@@ -95,7 +92,6 @@ export const layer = Layer.effect(
         const info = yield* fs.stat(existing)
         return {
           canonical: existing,
-          exists: true,
           type: info.type,
           directory: info.type === "Directory" ? existing : path.dirname(existing),
         } satisfies ResolvedPath
@@ -111,7 +107,6 @@ export const layer = Layer.effect(
           }
           return {
             canonical: path.resolve(canonical, path.relative(anchor, absolute)),
-            exists: false,
             directory: canonical,
           } satisfies ResolvedPath
         }
@@ -141,8 +136,6 @@ export const layer = Layer.effect(
       const externalResource = slash(path.join(externalDirectory, "*"))
       return {
         canonical: resolved.canonical,
-        exists: resolved.exists,
-        type: resolved.type,
         resource,
         externalDirectory: external
           ? {

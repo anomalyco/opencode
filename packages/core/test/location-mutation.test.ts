@@ -40,7 +40,6 @@ describe("LocationMutation", () => {
 
         expect(target).toMatchObject({
           canonical: yield* Effect.promise(() => fs.realpath(targetPath)),
-          exists: true,
           resource: "hello.txt",
         })
         expect(target.externalDirectory).toBeUndefined()
@@ -57,7 +56,6 @@ describe("LocationMutation", () => {
 
         expect(target).toMatchObject({
           canonical: path.join(root, "src", "new.txt"),
-          exists: false,
           resource: "src/new.txt",
         })
       }).pipe(provide(directory)),
@@ -103,7 +101,6 @@ describe("LocationMutation", () => {
         expect(yield* (yield* LocationMutation.Service).resolve({ path: "linked/new.txt" })).toMatchObject({
           canonical: path.join(yield* Effect.promise(() => fs.realpath(directory)), "actual", "new.txt"),
           resource: "actual/new.txt",
-          exists: false,
         })
       }).pipe(provide(directory)),
     ),
@@ -151,7 +148,7 @@ describe("LocationMutation", () => {
           yield* Effect.promise(() => fs.writeFile(targetPath, "existing"))
           const target = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
           const root = yield* Effect.promise(() => fs.realpath(outside))
-          expect(target).toMatchObject({ canonical: path.join(root, "existing.txt"), exists: true })
+          expect(target).toMatchObject({ canonical: path.join(root, "existing.txt") })
           expect(target.externalDirectory?.directory).toBe(root)
         }).pipe(provide(directory)),
       ),

@@ -64,6 +64,10 @@ const filesystem = Layer.effect(
           ),
       writeWithDirs: (target, content, mode) =>
         Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
+      writeFile: (target, content, options) =>
+        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFile(target, content, options))),
+      writeFileString: (target, content, options) =>
+        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFileString(target, content, options))),
     })
   }),
 ).pipe(Layer.provide(FSUtil.defaultLayer))
@@ -73,18 +77,18 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
-  const planning = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const commits = FileMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(planning))
+  const resolution = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
+  const mutation = FileMutation.layer.pipe(Layer.provide(filesystem))
   const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const edit = EditTool.layer.pipe(
     Layer.provide(registry),
-    Layer.provide(planning),
-    Layer.provide(commits),
+    Layer.provide(resolution),
+    Layer.provide(mutation),
     Layer.provide(filesystem),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
-  }).pipe(Effect.provide(Layer.mergeAll(registry, planning, commits, edit)))
+  }).pipe(Effect.provide(Layer.mergeAll(registry, resolution, mutation, edit)))
 }
 
 const call = (input: typeof EditTool.Parameters.Type, id = "call-edit") => ({

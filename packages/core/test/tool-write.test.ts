@@ -61,13 +61,13 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
-  const planning = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const commits = FileMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(planning))
+  const resolution = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
+  const mutation = FileMutation.layer.pipe(Layer.provide(filesystem))
   const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-  const write = WriteTool.layer.pipe(Layer.provide(registry), Layer.provide(planning), Layer.provide(commits))
+  const write = WriteTool.layer.pipe(Layer.provide(registry), Layer.provide(resolution), Layer.provide(mutation))
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
-  }).pipe(Effect.provide(Layer.mergeAll(registry, planning, commits, write)))
+  }).pipe(Effect.provide(Layer.mergeAll(registry, resolution, mutation, write)))
 }
 
 const call = (input: typeof WriteTool.Parameters.Type, id = "call-write") => ({

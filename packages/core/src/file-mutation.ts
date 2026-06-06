@@ -4,15 +4,19 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { dirname } from "path"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { FSUtil } from "./fs-util"
-import type { LocationMutation } from "./location-mutation"
+
+export interface Target {
+  readonly canonical: string
+  readonly resource: string
+}
 
 export interface WriteInput {
-  readonly target: LocationMutation.Target
+  readonly target: Target
   readonly content: string | Uint8Array
 }
 
 export interface TextWriteInput {
-  readonly target: LocationMutation.Target
+  readonly target: Target
   readonly content: string
 }
 
@@ -21,7 +25,7 @@ export interface ConditionalWriteInput extends WriteInput {
 }
 
 export interface RemoveInput {
-  readonly target: LocationMutation.Target
+  readonly target: Target
 }
 
 export class StaleContentError extends Schema.TaggedErrorClass<StaleContentError>()("FileMutation.StaleContentError", {
@@ -72,18 +76,18 @@ export const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const withTargetLock =
-      (target: LocationMutation.Target) =>
+      (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         locks.withLock(target.canonical)(Effect.uninterruptible(effect))
 
-    const writeResult = (target: LocationMutation.Target, existed: boolean): WriteResult => ({
+    const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
       target: target.canonical,
       resource: target.resource,
       existed,
     })
 
-    const removeResult = (target: LocationMutation.Target, existed: boolean): RemoveResult => ({
+    const removeResult = (target: Target, existed: boolean): RemoveResult => ({
       operation: "remove",
       target: target.canonical,
       resource: target.resource,
@@ -119,12 +123,14 @@ export const layer = Layer.effect(
     const create = Effect.fn("FileMutation.create")((input: WriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          yield* fs.ensureDir(dirname(input.target.canonical))
           const write =
             typeof input.content === "string"
               ? fs.writeFileString(input.target.canonical, input.content, { flag: "wx" })
               : fs.writeFile(input.target.canonical, input.content, { flag: "wx" })
           yield* write.pipe(
+            Effect.catchReason("PlatformError", "NotFound", () =>
+              fs.ensureDir(dirname(input.target.canonical)).pipe(Effect.andThen(write)),
+            ),
             Effect.catchReason("PlatformError", "AlreadyExists", () =>
               Effect.fail(new TargetExistsError({ path: input.target.canonical })),
             ),
@@ -141,7 +147,9 @@ export const layer = Layer.effect(
           if (!sameBytes(current, input.expected)) {
             return yield* new StaleContentError({ path: input.target.canonical })
           }
-          yield* fs.writeWithDirs(input.target.canonical, input.content)
+          yield* typeof input.content === "string"
+            ? fs.writeFileString(input.target.canonical, input.content)
+            : fs.writeFile(input.target.canonical, input.content)
           return writeResult(input.target, true)
         }),
       ),
@@ -150,8 +158,10 @@ export const layer = Layer.effect(
     const remove = Effect.fn("FileMutation.remove")((input: RemoveInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const existed = yield* fs.exists(input.target.canonical)
-          yield* fs.remove(input.target.canonical)
+          const existed = yield* fs.remove(input.target.canonical).pipe(
+            Effect.as(true),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
+          )
           return removeResult(input.target, existed)
         }),
       ),

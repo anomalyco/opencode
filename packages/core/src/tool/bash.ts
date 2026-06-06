@@ -114,6 +114,7 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
     const mutation = yield* LocationMutation.Service
+    const fs = yield* FSUtil.Service
     const appProcess = yield* AppProcess.Service
     const resources = yield* ToolOutputStore.Service
     const config = yield* Config.Service
@@ -133,7 +134,7 @@ export const layer = Layer.effectDiscard(
             )
             yield* assertPermission({ action: name, resources: [parameters.command], save: [parameters.command] })
 
-            if (!target.exists || target.type !== "Directory")
+            if ((yield* fs.stat(target.canonical)).type !== "Directory")
               throw new Error(`Working directory is not a directory: ${target.canonical}`)
 
             const entries = yield* config.entries()
