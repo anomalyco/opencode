@@ -35,27 +35,40 @@ type ProviderOption =
       type: "custom"
     })
 
+const popularProviders = ["opencode", "opencode-go", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
+const popularProviderSet = new Set(popularProviders)
+
 export function providerOptions(list: { id: string; name: string }[]): ProviderOption[] {
+  const popular = list.filter((x) => popularProviderSet.has(x.id))
+  const rest = list.filter((x) => !popularProviderSet.has(x.id))
+
+  const toOption = (provider: { id: string; name: string }, category: string) => ({
+    type: "provider" as const,
+    title: provider.name,
+    value: provider.id,
+    providerID: provider.id,
+    description: {
+      opencode: "(Recommended)",
+      anthropic: "(API key)",
+      openai: "(ChatGPT Plus/Pro or API key)",
+      "opencode-go": "Low cost subscription for everyone",
+    }[provider.id],
+    category,
+  })
+
   return [
     ...pipe(
-      list,
+      popular,
+      sortBy((x) => popularProviders.indexOf(x.id)),
+      map((provider) => toOption(provider, "Popular")),
+    ),
+    ...pipe(
+      rest,
       sortBy(
         (x) => x.name.toLowerCase(),
         (x) => x.id,
       ),
-      map((provider) => ({
-        type: "provider" as const,
-        title: provider.name,
-        value: provider.id,
-        providerID: provider.id,
-        description: {
-          opencode: "(Recommended)",
-          anthropic: "(API key)",
-          openai: "(ChatGPT Plus/Pro or API key)",
-          "opencode-go": "Low cost subscription for everyone",
-        }[provider.id],
-        category: "Providers",
-      })),
+      map((provider) => toOption(provider, "Providers")),
     ),
     {
       type: "custom",

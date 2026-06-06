@@ -14,21 +14,41 @@ describe("providerOptions", () => {
     expect(providerOptions([{ id: "mistral", name: "Mistral" }])[0]?.category).toBe("Providers")
   })
 
-  test("sorts provider entries alphabetically and keeps Other last", () => {
+  test("sorts popular providers first in defined order, then rest alphabetically, and keeps Other last", () => {
     const options = providerOptions([
       { id: "openai", name: "OpenAI" },
-      { id: "custom-z", name: "OpenAI" },
+      { id: "custom-z", name: "Zebra Provider" },
       { id: "anthropic", name: "Anthropic" },
       { id: "google", name: "Google" },
+      { id: "mistral", name: "Mistral" },
+      { id: "aws", name: "AWS Bedrock" },
     ])
 
     expect(options.map((option) => option.value)).toEqual([
+      // Popular providers in defined order
       "anthropic",
-      "google",
-      "custom-z",
       "openai",
+      "google",
+      // Non-popular providers sorted alphabetically by name
+      "aws",
+      "mistral",
+      "custom-z",
+      // Other always last
       "__opencode_custom_provider__",
     ])
+  })
+
+  test("assigns Popular category to popular providers and Providers to others", () => {
+    const options = providerOptions([
+      { id: "openai", name: "OpenAI" },
+      { id: "mistral", name: "Mistral" },
+    ])
+
+    const openai = options.find((o) => o.value === "openai")
+    const mistral = options.find((o) => o.value === "mistral")
+
+    expect(openai?.category).toBe("Popular")
+    expect(mistral?.category).toBe("Providers")
   })
 
   test("does not collide with a configured provider named other", () => {
