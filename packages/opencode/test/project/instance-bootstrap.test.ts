@@ -86,7 +86,7 @@ it.live("CLI bootstrap runs InstanceBootstrap before callback", () =>
 it.live("CLI bootstrap disposes the instance when the callback rejects", () =>
   Effect.gen(function* () {
     const tmp = yield* bootstrapFixture
-    const disposed = yield* waitDisposed(tmp.directory).pipe(Effect.forkScoped)
+    const disposed = yield* waitDisposed(tmp.directory).pipe(Effect.forkScoped({ startImmediately: true }))
 
     const exit = yield* Effect.promise(() =>
       cliBootstrap(tmp.directory, async () => Promise.reject(new Error("boom"))),

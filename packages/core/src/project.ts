@@ -2,7 +2,7 @@ export * as ProjectV2 from "./project"
 export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { eq } from "drizzle-orm"
+import { asc, desc, eq } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath, withStatics } from "./schema"
 import { FSUtil } from "./fs-util"
@@ -76,11 +76,10 @@ export const layer = Layer.effect(
         .select({ directory: ProjectDirectoryTable.directory })
         .from(ProjectDirectoryTable)
         .where(eq(ProjectDirectoryTable.project_id, input.projectID))
+        .orderBy(desc(ProjectDirectoryTable.time_created), asc(ProjectDirectoryTable.directory))
         .all()
         .pipe(Effect.orDie)
-      return rows
-        .toSorted((a, b) => a.directory.localeCompare(b.directory))
-        .map((row) => AbsolutePath.make(row.directory))
+      return rows.map((row) => AbsolutePath.make(row.directory))
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {

@@ -21,17 +21,27 @@ export class UrlSource extends Schema.Class<UrlSource>("SkillV2.UrlSource")({
   url: Schema.String,
 }) {}
 
-export const Source = Schema.Union([DirectorySource, UrlSource]).pipe(
+export class EmbeddedSource extends Schema.Class<EmbeddedSource>("SkillV2.EmbeddedSource")({
+  type: Schema.Literal("embedded"),
+  skill: Schema.suspend(() => Info),
+}) {}
+
+export const Source = Schema.Union([DirectorySource, UrlSource, EmbeddedSource]).pipe(
   Schema.toTaggedUnion("type"),
   withStatics(() => ({
-    equals: (a: DirectorySource | UrlSource, b: DirectorySource | UrlSource) => {
+    equals: (a: DirectorySource | UrlSource | EmbeddedSource, b: DirectorySource | UrlSource | EmbeddedSource) => {
       if (a.type !== b.type) return false
       if (a.type === "directory" && b.type === "directory") return a.path === b.path
       if (a.type === "url" && b.type === "url") return a.url === b.url
+      if (a.type === "embedded" && b.type === "embedded") return a.skill.name === b.skill.name
       return false
     },
-    key: (source: DirectorySource | UrlSource) =>
-      source.type === "directory" ? `directory:${source.path}` : `url:${source.url}`,
+    key: (source: DirectorySource | UrlSource | EmbeddedSource) =>
+      source.type === "directory"
+        ? `directory:${source.path}`
+        : source.type === "url"
+          ? `url:${source.url}`
+          : `embedded:${source.skill.name}`,
   })),
 )
 export type Source = typeof Source.Type
@@ -43,6 +53,9 @@ export class Info extends Schema.Class<Info>("SkillV2.Info")({
   location: AbsolutePath,
   content: Schema.String,
 }) {}
+
+export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
+  skills.filter((skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
 
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
@@ -64,7 +77,6 @@ export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
   readonly sources: () => Effect.Effect<Source[]>
   readonly list: () => Effect.Effect<Info[]>
-  readonly forAgent: (agent: AgentV2.ID) => Effect.Effect<Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Skill") {}
@@ -72,7 +84,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const agent = yield* AgentV2.Service
     const discovery = yield* SkillDiscovery.Service
     const fs = yield* FSUtil.Service
 
@@ -89,6 +100,7 @@ export const layer = Layer.effect(
 
     const load = Effect.fn("SkillV2.load")(function* (source: Source) {
       const skills: Info[] = []
+      if (source.type === "embedded") return [source.skill]
       const directories = source.type === "directory" ? [source.path] : yield* discovery.pull(source.url)
       for (const directory of directories) {
         const files = yield* fs
@@ -122,6 +134,8 @@ export const layer = Layer.effect(
       return skills
     })
 
+    // QUESTION(Dax): Should local skill sources invalidate on filesystem watch
+    // events, following the reload policy chosen for other context sources?
     const cache = new Map<string, Info[]>()
     const list = Effect.fn("SkillV2.list")(function* () {
       const skills = new Map<string, Info>()
@@ -140,18 +154,8 @@ export const layer = Layer.effect(
         return state.get().sources
       }),
       list,
-      forAgent: Effect.fn("SkillV2.forAgent")(function* (id) {
-        const current = yield* agent.get(id)
-        if (!current) return []
-        return (yield* list()).filter(
-          (skill) => PermissionV2.evaluate("skill", skill.name, current.permissions).effect !== "deny",
-        )
-      }),
     })
   }),
 )
 
-export const locationLayer = layer.pipe(
-  Layer.provide(SkillDiscovery.defaultLayer),
-  Layer.provideMerge(AgentV2.locationLayer),
-)
+export const locationLayer = layer.pipe(Layer.provide(SkillDiscovery.defaultLayer))

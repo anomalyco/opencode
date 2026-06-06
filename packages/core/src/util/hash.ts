@@ -9,4 +9,8 @@ export namespace Hash {
   export function short(input: string): string {
     return fast(input).substring(0, 14)
   }
+  
+  export function sha256(input: string | Buffer): string {
+    return createHash("sha256").update(input).digest("hex")
+  }
 }

@@ -33,6 +33,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
           Config.Service.of({
             entries: () =>
               Effect.succeed([
+                new Config.Directory({ type: "directory", path: AbsolutePath.make("/repo/.opencode") }),
                 new Config.Document({
                   type: "document",
                   info: decode({
@@ -50,12 +51,19 @@ describe("ConfigSkillPlugin.Plugin", () => {
             transform,
             sources: () => Effect.succeed(sources),
             list: () => Effect.succeed([]),
-            forAgent: () => Effect.succeed([]),
           }),
         ),
       )
 
       expect(sources).toEqual([
+        new SkillV2.DirectorySource({
+          type: "directory",
+          path: AbsolutePath.make(path.join("/repo/.opencode", "skill")),
+        }),
+        new SkillV2.DirectorySource({
+          type: "directory",
+          path: AbsolutePath.make(path.join("/repo/.opencode", "skills")),
+        }),
         new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }),
         new SkillV2.DirectorySource({
           type: "directory",
