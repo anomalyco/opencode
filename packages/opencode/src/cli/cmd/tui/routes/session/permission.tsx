@@ -11,8 +11,7 @@ import { useProject } from "../../context/project"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Locale } from "@opencode-ai/tui/util/locale"
-import { ShellID } from "@/tool/shell/id"
-import { webSearchProviderLabel } from "@/tool/websearch"
+import { webSearchProviderLabel } from "@opencode-ai/tui/util/tool-display"
 import { getScrollAcceleration } from "@opencode-ai/tui/util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
@@ -277,7 +276,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               }
             }
 
-            if (permission === ShellID.ToolID) {
+            if (permission === "bash") {
               const title =
                 typeof data.description === "string" && data.description ? data.description : "Shell command"
               const command = typeof data.command === "string" ? data.command : ""

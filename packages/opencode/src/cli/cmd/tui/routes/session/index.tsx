@@ -35,21 +35,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@opencode-ai/tui/util/locale"
-import type { Tool } from "@/tool/tool"
-import type { ReadTool } from "@/tool/read"
-import type { WriteTool } from "@/tool/write"
-import { ShellTool } from "@/tool/shell"
-import { ShellID } from "@/tool/shell/id"
-import type { GlobTool } from "@/tool/glob"
-import { TodoWriteTool } from "@/tool/todo"
-import type { GrepTool } from "@/tool/grep"
-import type { EditTool } from "@/tool/edit"
-import type { ApplyPatchTool } from "@/tool/apply_patch"
-import type { WebFetchTool } from "@/tool/webfetch"
-import { webSearchProviderLabel, type WebSearchTool } from "@/tool/websearch"
-import type { TaskTool } from "@/tool/task"
-import type { QuestionTool } from "@/tool/question"
-import type { SkillTool } from "@/tool/skill"
+import { webSearchProviderLabel } from "@opencode-ai/tui/util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useEditorContext } from "@tui/context/editor"
@@ -1717,7 +1703,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const ctx = use()
-  const sync = useSync()
+  const display = createMemo(() => toolDisplay(props.part.tool))
 
   // Hide tool if showDetails is false and tool completed successfully
   const shouldHide = createMemo(() => {
@@ -1736,11 +1722,6 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     get output() {
       return props.part.state.status === "completed" ? props.part.state.output : undefined
     },
-    get permission() {
-      const permissions = sync.data.permission[props.message.sessionID] ?? []
-      const permissionIndex = permissions.findIndex((x) => x.tool?.callID === props.part.callID)
-      return permissions[permissionIndex]
-    },
     get tool() {
       return props.part.tool
     },
@@ -1752,43 +1733,43 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   return (
     <Show when={!shouldHide()}>
       <Switch>
-        <Match when={props.part.tool === ShellID.ToolID}>
+        <Match when={display() === "bash"}>
           <Shell {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "glob"}>
+        <Match when={display() === "glob"}>
           <Glob {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "read"}>
+        <Match when={display() === "read"}>
           <Read {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "grep"}>
+        <Match when={display() === "grep"}>
           <Grep {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "webfetch"}>
+        <Match when={display() === "webfetch"}>
           <WebFetch {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "websearch"}>
+        <Match when={display() === "websearch"}>
           <WebSearch {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "write"}>
+        <Match when={display() === "write"}>
           <Write {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "edit"}>
+        <Match when={display() === "edit"}>
           <Edit {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "task"}>
+        <Match when={display() === "task"}>
           <Task {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "apply_patch"}>
+        <Match when={display() === "apply_patch"}>
           <ApplyPatch {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "todowrite"}>
+        <Match when={display() === "todowrite"}>
           <TodoWrite {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "question"}>
+        <Match when={display() === "question"}>
           <Question {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "skill"}>
+        <Match when={display() === "skill"}>
           <Skill {...toolprops} />
         </Match>
         <Match when={true}>
@@ -1799,15 +1780,14 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   )
 }
 
-type ToolProps<T> = {
-  input: Partial<Tool.InferParameters<T>>
-  metadata: Partial<Tool.InferMetadata<T>>
-  permission: Record<string, any>
+type ToolProps = {
+  input: Record<string, unknown>
+  metadata: Record<string, unknown>
   tool: string
   output?: string
   part: ToolPart
 }
-function GenericTool(props: ToolProps<any>) {
+function GenericTool(props: ToolProps) {
   const { theme } = useTheme()
   const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
@@ -1849,7 +1829,7 @@ function InlineTool(props: {
   icon: string
   iconColor?: RGBA
   color?: RGBA
-  complete: any
+  complete: unknown
   pending: string
   spinner?: boolean
   subagent?: boolean
@@ -1933,7 +1913,7 @@ export function InlineToolRow(props: {
   denied?: boolean
   error?: string
   errorExpanded?: boolean
-  complete: any
+  complete: unknown
   pending: string
   spinner?: boolean
   subagent?: boolean
@@ -2056,12 +2036,12 @@ function BlockTool(props: {
   )
 }
 
-function Shell(props: ToolProps<typeof ShellTool>) {
+function Shell(props: ToolProps) {
   const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
   const ctx = use()
   const isRunning = createMemo(() => props.part.state.status === "running")
-  const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  const output = createMemo(() => stripAnsi(stringValue(props.metadata.output)?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
@@ -2072,13 +2052,13 @@ function Shell(props: ToolProps<typeof ShellTool>) {
   })
 
   const workdirDisplay = createMemo(() => {
-    const workdir = props.input.workdir
+    const workdir = stringValue(props.input.workdir)
     if (!workdir || workdir === ".") return undefined
     return pathFormatter.format(workdir)
   })
 
   const title = createMemo(() => {
-    const desc = props.input.description ?? "Shell"
+    const desc = stringValue(props.input.description) ?? "Shell"
     const wd = workdirDisplay()
     if (!wd) return `# ${desc}`
     if (desc.includes(wd)) return `# ${desc}`
@@ -2087,7 +2067,7 @@ function Shell(props: ToolProps<typeof ShellTool>) {
 
   return (
     <Switch>
-      <Match when={props.metadata.output !== undefined}>
+      <Match when={stringValue(props.metadata.output) !== undefined}>
         <BlockTool
           title={title()}
           part={props.part}
@@ -2095,7 +2075,7 @@ function Shell(props: ToolProps<typeof ShellTool>) {
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <text fg={theme.text}>$ {props.input.command}</text>
+            <text fg={theme.text}>$ {stringValue(props.input.command)}</text>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
@@ -2106,60 +2086,65 @@ function Shell(props: ToolProps<typeof ShellTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
-          {props.input.command}
+        <InlineTool icon="$" pending="Writing command..." complete={stringValue(props.input.command)} part={props.part}>
+          {stringValue(props.input.command)}
         </InlineTool>
       </Match>
     </Switch>
   )
 }
 
-function Write(props: ToolProps<typeof WriteTool>) {
+function Write(props: ToolProps) {
   const { theme, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
   const code = createMemo(() => {
-    if (!props.input.content) return ""
-    return props.input.content
+    return stringValue(props.input.content) ?? ""
   })
 
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + pathFormatter.format(props.input.filePath)} part={props.part}>
+        <BlockTool title={"# Wrote " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
               fg={theme.text}
-              filetype={filetype(props.input.filePath!)}
+              filetype={filetype(stringValue(props.input.filePath))}
               syntaxStyle={syntax()}
               content={code()}
             />
           </line_number>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part}>
-          Write {pathFormatter.format(props.input.filePath)}
+        <InlineTool
+          icon="←"
+          pending="Preparing write..."
+          complete={stringValue(props.input.filePath)}
+          part={props.part}
+        >
+          Write {pathFormatter.format(stringValue(props.input.filePath))}
         </InlineTool>
       </Match>
     </Switch>
   )
 }
 
-function Glob(props: ToolProps<typeof GlobTool>) {
+function Glob(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
-      Glob "{props.input.pattern}" <Show when={props.input.path}>in {pathFormatter.format(props.input.path)} </Show>
-      <Show when={props.metadata.count}>
-        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
+    <InlineTool icon="✱" pending="Finding files..." complete={stringValue(props.input.pattern)} part={props.part}>
+      Glob "{stringValue(props.input.pattern)}"{" "}
+      <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
+      <Show when={numberValue(props.metadata.count)}>
+        ({numberValue(props.metadata.count)} {numberValue(props.metadata.count) === 1 ? "match" : "matches"})
       </Show>
     </InlineTool>
   )
 }
 
-function Read(props: ToolProps<typeof ReadTool>) {
+function Read(props: ToolProps) {
   const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
   const isRunning = createMemo(() => props.part.state.status === "running")
@@ -2175,11 +2160,11 @@ function Read(props: ToolProps<typeof ReadTool>) {
       <InlineTool
         icon="→"
         pending="Reading file..."
-        complete={props.input.filePath}
+        complete={stringValue(props.input.filePath)}
         spinner={isRunning()}
         part={props.part}
       >
-        Read {pathFormatter.format(props.input.filePath)} {input(props.input, ["filePath"])}
+        Read {pathFormatter.format(stringValue(props.input.filePath))} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath, index) => (
@@ -2194,48 +2179,49 @@ function Read(props: ToolProps<typeof ReadTool>) {
   )
 }
 
-function Grep(props: ToolProps<typeof GrepTool>) {
+function Grep(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
-      Grep "{props.input.pattern}" <Show when={props.input.path}>in {pathFormatter.format(props.input.path)} </Show>
-      <Show when={props.metadata.matches}>
-        ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
+    <InlineTool icon="✱" pending="Searching content..." complete={stringValue(props.input.pattern)} part={props.part}>
+      Grep "{stringValue(props.input.pattern)}"{" "}
+      <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
+      <Show when={numberValue(props.metadata.matches)}>
+        ({numberValue(props.metadata.matches)} {numberValue(props.metadata.matches) === 1 ? "match" : "matches"})
       </Show>
     </InlineTool>
   )
 }
 
-function WebFetch(props: ToolProps<typeof WebFetchTool>) {
+function WebFetch(props: ToolProps) {
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={props.input.url} part={props.part}>
-      WebFetch {props.input.url}
+    <InlineTool icon="%" pending="Fetching from the web..." complete={stringValue(props.input.url)} part={props.part}>
+      WebFetch {stringValue(props.input.url)}
     </InlineTool>
   )
 }
 
-function WebSearch(props: ToolProps<typeof WebSearchTool>) {
-  const metadata = () => props.metadata as { numResults?: number; provider?: unknown }
+function WebSearch(props: ToolProps) {
   return (
-    <InlineTool icon="◈" pending="Searching web..." complete={props.input.query} part={props.part}>
-      {webSearchProviderLabel(metadata().provider)} "{props.input.query}"{" "}
-      <Show when={metadata().numResults}>({metadata().numResults} results)</Show>
+    <InlineTool icon="◈" pending="Searching web..." complete={stringValue(props.input.query)} part={props.part}>
+      {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"{" "}
+      <Show when={numberValue(props.metadata.numResults)}>({numberValue(props.metadata.numResults)} results)</Show>
     </InlineTool>
   )
 }
 
-function Task(props: ToolProps<typeof TaskTool>) {
+function Task(props: ToolProps) {
   const { theme } = useTheme()
   const { navigate } = useRoute()
   const sync = useSync()
   const dialog = useDialog()
 
   onMount(() => {
-    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      void sync.session.sync(props.metadata.sessionId)
+    const sessionID = stringValue(props.metadata.sessionId)
+    if (sessionID && !sync.data.message[sessionID]?.length) void sync.session.sync(sessionID)
   })
 
-  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
+  const sessionID = createMemo(() => stringValue(props.metadata.sessionId))
+  const messages = createMemo(() => sync.data.message[sessionID() ?? ""] ?? [])
 
   const tools = createMemo(() => {
     return messages().flatMap((msg) =>
@@ -2249,7 +2235,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
     tools().findLast((x) => (x.state.status === "running" || x.state.status === "completed") && x.state.title),
   )
 
-  const status = createMemo(() => sync.data.session_status[props.metadata.sessionId ?? ""])
+  const status = createMemo(() => sync.data.session_status[sessionID() ?? ""])
   const isRunning = createMemo(() => {
     const value = status()
     return (
@@ -2271,11 +2257,12 @@ function Task(props: ToolProps<typeof TaskTool>) {
   })
 
   const content = createMemo(() => {
-    if (!props.input.description) return ""
+    const description = stringValue(props.input.description)
+    if (!description) return ""
     let content = [
       formatSubagentTitle(
-        Locale.titlecase(props.input.subagent_type ?? "General"),
-        props.input.description,
+        Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"),
+        description,
         props.metadata.background === true,
       ),
     ]
@@ -2304,12 +2291,12 @@ function Task(props: ToolProps<typeof TaskTool>) {
       subagent={true}
       color={retry() ? theme.error : undefined}
       spinner={isRunning()}
-      complete={props.input.description}
+      complete={stringValue(props.input.description)}
       pending="Delegating..."
       part={props.part}
       onClick={() => {
-        if (props.metadata.sessionId) {
-          navigate({ type: "session", sessionID: props.metadata.sessionId })
+        if (sessionID()) {
+          navigate({ type: "session", sessionID: sessionID()! })
         }
         const status = retry()
         if (status) void DialogAlert.show(dialog, "Retry Error", status.message)
@@ -2337,7 +2324,7 @@ export function formatCompletedSubagentDetail(toolcalls: number, duration: strin
   return `${formatSubagentToolcalls(toolcalls)} · ${duration}`
 }
 
-function Edit(props: ToolProps<typeof EditTool>) {
+function Edit(props: ToolProps) {
   const ctx = use()
   const { theme, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
@@ -2349,14 +2336,14 @@ function Edit(props: ToolProps<typeof EditTool>) {
     return ctx.width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(props.input.filePath))
+  const ft = createMemo(() => filetype(stringValue(props.input.filePath)))
 
-  const diffContent = createMemo(() => props.metadata.diff)
+  const diffContent = createMemo(() => stringValue(props.metadata.diff) ?? "")
 
   return (
     <Switch>
-      <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + pathFormatter.format(props.input.filePath)} part={props.part}>
+      <Match when={stringValue(props.metadata.diff) !== undefined}>
+        <BlockTool title={"← Edit " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -2378,24 +2365,24 @@ function Edit(props: ToolProps<typeof EditTool>) {
               removedLineNumberBg={theme.diffRemovedLineNumberBg}
             />
           </box>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
-          Edit {pathFormatter.format(props.input.filePath)} {input({ replaceAll: props.input.replaceAll })}
+        <InlineTool icon="←" pending="Preparing edit..." complete={stringValue(props.input.filePath)} part={props.part}>
+          Edit {pathFormatter.format(stringValue(props.input.filePath))} {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
     </Switch>
   )
 }
 
-function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
+function ApplyPatch(props: ToolProps) {
   const ctx = use()
   const { theme, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
 
-  const files = createMemo(() => props.metadata.files ?? [])
+  const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
 
   const view = createMemo(() => {
     const diffStyle = ctx.tui.diff_style
@@ -2466,15 +2453,14 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   )
 }
 
-function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
+function TodoWrite(props: ToolProps) {
+  const todos = createMemo(() => parseTodos(props.input.todos))
   return (
     <Switch>
-      <Match when={props.metadata.todos?.length}>
+      <Match when={parseTodos(props.metadata.todos).length}>
         <BlockTool title="# Todos" part={props.part}>
           <box>
-            <For each={props.input.todos ?? []}>
-              {(todo) => <TodoItem status={todo.status} content={todo.content} />}
-            </For>
+            <For each={todos()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
           </box>
         </BlockTool>
       </Match>
@@ -2487,9 +2473,11 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
   )
 }
 
-function Question(props: ToolProps<typeof QuestionTool>) {
+function Question(props: ToolProps) {
   const { theme } = useTheme()
-  const count = createMemo(() => props.input.questions?.length ?? 0)
+  const questions = createMemo(() => parseQuestions(props.input.questions))
+  const answers = createMemo(() => parseQuestionAnswers(props.metadata.answers))
+  const count = createMemo(() => questions().length)
 
   function format(answer?: ReadonlyArray<string>) {
     if (!answer?.length) return "(no answer)"
@@ -2498,14 +2486,14 @@ function Question(props: ToolProps<typeof QuestionTool>) {
 
   return (
     <Switch>
-      <Match when={props.metadata.answers}>
+      <Match when={answers()}>
         <BlockTool title="# Questions" part={props.part}>
           <box gap={1}>
-            <For each={props.input.questions ?? []}>
+            <For each={questions()}>
               {(q, i) => (
                 <box flexDirection="column">
                   <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{format(props.metadata.answers?.[i()])}</text>
+                  <text fg={theme.text}>{format(answers()?.[i()])}</text>
                 </box>
               )}
             </For>
@@ -2521,20 +2509,19 @@ function Question(props: ToolProps<typeof QuestionTool>) {
   )
 }
 
-function Skill(props: ToolProps<typeof SkillTool>) {
+function Skill(props: ToolProps) {
   return (
-    <InlineTool icon="→" pending="Loading skill..." complete={props.input.name} part={props.part}>
-      Skill "{props.input.name}"
+    <InlineTool icon="→" pending="Loading skill..." complete={stringValue(props.input.name)} part={props.part}>
+      Skill "{stringValue(props.input.name)}"
     </InlineTool>
   )
 }
 
-function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
+function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
   const { theme } = useTheme()
   const errors = createMemo(() => {
     const normalized = Filesystem.normalizePath(typeof props.filePath === "string" ? props.filePath : "")
-    const arr = props.diagnostics?.[normalized] ?? []
-    return arr.filter((x) => x.severity === 1).slice(0, 3)
+    return parseDiagnostics(props.diagnostics, normalized)
   })
 
   return (
@@ -2552,13 +2539,102 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
   )
 }
 
-function input(input: Record<string, any>, omit?: string[]): string {
+function input(input: Record<string, unknown>, omit?: string[]): string {
   const primitives = Object.entries(input).filter(([key, value]) => {
     if (omit?.includes(key)) return false
     return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
   })
   if (primitives.length === 0) return ""
   return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : undefined
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+const toolDisplays = new Set([
+  "bash",
+  "glob",
+  "read",
+  "grep",
+  "webfetch",
+  "websearch",
+  "write",
+  "edit",
+  "task",
+  "apply_patch",
+  "todowrite",
+  "question",
+  "skill",
+])
+
+export function toolDisplay(tool: string) {
+  return toolDisplays.has(tool) ? tool : "generic"
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return
+  return value as Record<string, unknown>
+}
+
+export function parseApplyPatchFiles(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const file = recordValue(item)
+    if (!file) return []
+    const type = stringValue(file.type)
+    const relativePath = stringValue(file.relativePath)
+    const filePath = stringValue(file.filePath)
+    const patch = stringValue(file.patch)
+    const deletions = numberValue(file.deletions)
+    if (!type || !relativePath || !filePath || patch === undefined || deletions === undefined) return []
+    return [{ type, relativePath, filePath, patch, deletions, movePath: stringValue(file.movePath) }]
+  })
+}
+
+export function parseTodos(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const todo = recordValue(item)
+    const status = stringValue(todo?.status)
+    const content = stringValue(todo?.content)
+    return status && content ? [{ status, content }] : []
+  })
+}
+
+export function parseQuestions(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const question = stringValue(recordValue(item)?.question)
+    return question ? [{ question }] : []
+  })
+}
+
+export function parseQuestionAnswers(value: unknown) {
+  if (!Array.isArray(value)) return
+  return value.map((answer) =>
+    Array.isArray(answer) ? answer.filter((item): item is string => typeof item === "string") : [],
+  )
+}
+
+export function parseDiagnostics(value: unknown, filePath: string) {
+  const diagnostics = recordValue(value)?.[filePath]
+  if (!Array.isArray(diagnostics)) return []
+  return diagnostics
+    .flatMap((item) => {
+      const diagnostic = recordValue(item)
+      const start = recordValue(recordValue(diagnostic?.range)?.start)
+      const line = numberValue(start?.line)
+      const character = numberValue(start?.character)
+      const message = stringValue(diagnostic?.message)
+      if (diagnostic?.severity !== 1 || line === undefined || character === undefined || !message) return []
+      return [{ range: { start: { line, character } }, message }]
+    })
+    .slice(0, 3)
 }
 
 function filetype(input?: string) {

@@ -194,7 +194,12 @@ refactor(tui): move presentation utilities and primitives
 
 ## Section 3: Remove Backend Tool Implementation Imports
 
-Status: Pending.
+Status: Completed. Legacy and V2 tool renderers now dispatch on SDK wire names,
+accept `Record<string, unknown>` input and metadata, and use local guards for
+nested presentation data. Web-search labels and structured metadata extraction
+are TUI-owned, unknown tools retain the generic fallback, and no TUI source
+imports backend tool implementations. The route components remain in the legacy
+tree until the SDK state and route move in Section 6.
 
 Make tool rendering depend only on SDK wire data and local presentation logic.
 
@@ -585,7 +590,7 @@ Compiled checks:
 
 - [x] Section 1: Create the package skeleton
 - [x] Section 2: Move presentation utilities and leaf UI
-- [ ] Section 3: Remove backend tool implementation imports
+- [x] Section 3: Remove backend tool implementation imports
 - [ ] Section 4: Make runtime inputs explicit
 - [ ] Section 5: Separate resolved TUI config from host config loading
 - [ ] Section 6: Move SDK state, routes, and backend operations

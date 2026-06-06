@@ -8,6 +8,12 @@ import {
   formatSubagentTitle,
   formatSubagentToolcalls,
   InlineToolRow,
+  parseApplyPatchFiles,
+  parseDiagnostics,
+  parseQuestionAnswers,
+  parseQuestions,
+  parseTodos,
+  toolDisplay,
 } from "../../../src/cli/cmd/tui/routes/session/index"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
@@ -162,6 +168,44 @@ async function renderFrame(component: () => JSX.Element, options: { width: numbe
 }
 
 describe("TUI inline tool wrapping", () => {
+  test("falls back for unknown tool names", () => {
+    expect(toolDisplay("bash")).toBe("bash")
+    expect(toolDisplay("plugin_tool")).toBe("generic")
+  })
+
+  test("filters malformed nested tool wire data", () => {
+    expect(
+      parseApplyPatchFiles([
+        null,
+        { type: "add" },
+        { type: "add", relativePath: "a.ts", filePath: "a.ts", patch: "diff", deletions: 0 },
+      ]),
+    ).toEqual([
+      { type: "add", relativePath: "a.ts", filePath: "a.ts", patch: "diff", deletions: 0, movePath: undefined },
+    ])
+    expect(parseTodos([null, { status: "pending" }, { status: "pending", content: "Safe" }])).toEqual([
+      { status: "pending", content: "Safe" },
+    ])
+    expect(parseQuestions([{}, { question: 1 }, { question: "Continue?" }])).toEqual([{ question: "Continue?" }])
+    expect(parseQuestionAnswers([null, ["yes", 1], "no"])).toEqual([[], ["yes"], []])
+    expect(parseQuestionAnswers({})).toBeUndefined()
+  })
+
+  test("ignores diagnostics with malformed nested ranges", () => {
+    expect(
+      parseDiagnostics(
+        {
+          "a.ts": [
+            { severity: 1, message: "missing range" },
+            { severity: 1, message: "bad line", range: { start: { line: "0", character: 1 } } },
+            { severity: 1, message: "valid", range: { start: { line: 2, character: 3 } } },
+          ],
+        },
+        "a.ts",
+      ),
+    ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
+  })
+
   test("formats completed subagent toolcall details", () => {
     expect(formatCompletedSubagentDetail(0, "501ms")).toBe("501ms")
     expect(formatCompletedSubagentDetail(1, "501ms")).toBe("1 toolcall · 501ms")

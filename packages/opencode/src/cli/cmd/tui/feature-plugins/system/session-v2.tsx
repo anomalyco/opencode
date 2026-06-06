@@ -11,7 +11,7 @@ import { RGBA, TextAttributes, type BoxRenderable, type SyntaxStyle } from "@ope
 import { useBindings } from "../../keymap"
 import { Locale } from "@opencode-ai/tui/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import { webSearchProviderLabel } from "@/tool/websearch"
+import { toolDisplayMetadata, webSearchProviderLabel } from "@opencode-ai/tui/util/tool-display"
 import path from "path"
 import stripAnsi from "strip-ansi"
 import type {
@@ -459,7 +459,7 @@ function AssistantTool(props: { part: SessionMessageAssistantTool; sessionID: st
       return input()
     },
     get metadata() {
-      return props.part.provider?.metadata ?? {}
+      return toolDisplayMetadata(props.part.state)
     },
     get output() {
       return props.part.state.status === "pending" ? undefined : toolOutput(props.part.state.content)

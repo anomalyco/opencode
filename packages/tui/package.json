@@ -25,6 +25,7 @@
     "./util/revert-diff": "./src/util/revert-diff.ts",
     "./util/scroll": "./src/util/scroll.ts",
     "./util/signal": "./src/util/signal.ts",
+    "./util/tool-display": "./src/util/tool-display.ts",
     "./util/transcript": "./src/util/transcript.ts",
     "./ui/border": "./src/ui/border.ts",
     "./ui/link": "./src/ui/link.tsx",
