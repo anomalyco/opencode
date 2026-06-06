@@ -149,9 +149,9 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 manage AI providers and credentials
 
 Commands:
-  opencode providers list         list providers and credentials                       [aliases: ls]
-  opencode providers login [url]  log in to a provider
-  opencode providers logout       log out from a configured provider
+  opencode providers list               list providers and credentials                 [aliases: ls]
+  opencode providers login [url]        log in to a provider
+  opencode providers logout [provider]  log out from a configured provider
 
 Options:
   -h, --help        show help                                                              [boolean]
@@ -504,9 +504,12 @@ Options:
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers logout --help 1`] = `
-"opencode providers logout
+"opencode providers logout [provider]
 
 log out from a configured provider
+
+Positionals:
+  provider  provider id or name to log out from                                             [string]
 
 Options:
   -h, --help        show help                                                              [boolean]
