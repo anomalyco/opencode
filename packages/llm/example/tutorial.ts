@@ -1,5 +1,5 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { LLM, LLMClient, ProviderID, Tool } from "@opencode-ai/llm"
+import { LLM, LLMClient, Message, ProviderID, Tool, ToolRuntime } from "@opencode-ai/llm"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
@@ -84,9 +84,9 @@ const streamText = LLM.stream(request).pipe(
   Stream.runDrain,
 )
 
-// 5. Tools are typed with Effect Schema. Passing tools to `LLMClient.stream`
-// adds their definitions to the request and dispatches matching tool calls.
-// Add `stopWhen` to opt into follow-up model rounds after tool results.
+// 5. Tools are typed with Effect Schema. Provider turns remain explicit:
+// advertise definitions on the request, stream one turn, dispatch local calls,
+// then persist/build follow-up history in the enclosing product flow.
 const tools = {
   get_weather: Tool.make({
     description: "Get current weather for a city.",
@@ -96,24 +96,33 @@ const tools = {
   }),
 }
 
-const streamWithTools = LLM.stream({
-  request: LLM.request({
+const streamWithTools = Effect.gen(function* () {
+  const request = LLM.request({
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
     generation: { maxTokens: 80, temperature: 0 },
-  }),
-  tools,
-  stopWhen: LLM.stepCountIs(3),
-}).pipe(
-  Stream.tap((event) =>
-    Effect.sync(() => {
-      if (event.type === "tool-call") console.log("tool call", event.name, event.input)
-      if (event.type === "tool-result") console.log("tool result", event.name, event.result)
-      if (event.type === "text-delta") process.stdout.write(event.text)
-    }),
-  ),
-  Stream.runDrain,
-)
+    tools: Tool.toDefinitions(tools),
+  })
+  const events = Array.from(yield* LLM.stream(request).pipe(Stream.runCollect))
+  for (const event of events) {
+    if (event.type === "tool-call") console.log("tool call", event.name, event.input)
+    if (event.type === "text-delta") process.stdout.write(event.text)
+    if (event.type !== "tool-call" || event.providerExecuted) continue
+    const dispatched = yield* ToolRuntime.dispatch(tools, event)
+    console.log("tool result", event.name, dispatched.result)
+
+    // A durable agent would persist these messages before starting another
+    // raw model turn. This tutorial keeps the boundary visible instead.
+    const followUp = LLM.updateRequest(request, {
+      messages: [
+        ...request.messages,
+        Message.assistant([event]),
+        Message.tool({ ...event, result: dispatched.result }),
+      ],
+    })
+    console.log("follow-up history messages:", followUp.messages.length)
+  }
+})
 
 // 6. `generateObject` is the structured-output helper. It forces a synthetic
 // tool call internally, so the same call site works across providers instead of

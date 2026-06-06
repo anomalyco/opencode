@@ -91,6 +91,7 @@ OpenCode Zen работает как любой другой провайдер 
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`   | `@ai-sdk/google`            |
 | Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -103,7 +104,7 @@ OpenCode Zen работает как любой другой провайдер 
 | Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| Nemotron 3 Super Free  | nemotron-3-super-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
 [идентификатор модели](/docs/config/#models) в вашей конфигурации OpenCode
@@ -131,7 +132,7 @@ https://opencode.ai/zen/v1/models
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | DeepSeek V4 Flash Free            | Free   | Free    | Free        | -            |
 | MiMo-V2.5 Free                    | Free   | Free    | Free        | -            |
-| Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
+| Nemotron 3 Ultra Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | GLM 5.1                           | $1.40  | $4.40   | $0.26       | -            |
@@ -139,6 +140,7 @@ https://opencode.ai/zen/v1/models
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10       | -            |
 | Kimi K2.6                         | $0.95  | $4.00   | $0.16       | -            |
 | Qwen3.7 Max                       | $2.50  | $7.50   | $0.50       | $3.125       |
+| Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04       | $0.50        |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
 | DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03       | -            |
@@ -188,7 +190,7 @@ https://opencode.ai/zen/v1/models
 
 - DeepSeek V4 Flash Free доступна в OpenCode ограниченное время. Команда использует это время, чтобы собирать отзывы и улучшать модель.
 - MiMo-V2.5 Free доступна в OpenCode ограниченное время. Команда использует это время, чтобы собирать отзывы и улучшать модель.
-- Nemotron 3 Super Free доступна в OpenCode ограниченное время. Команда использует это время, чтобы собирать отзывы и улучшать модель.
+- Nemotron 3 Ultra Free доступна в OpenCode ограниченное время. Команда использует это время, чтобы собирать отзывы и улучшать модель.
 - Big Pickle — это скрытая модель, которая доступна бесплатно в OpenCode ограниченное время. Команда использует это время, чтобы собирать отзывы и улучшать модель.
 
 <a href={email}>Свяжитесь с нами</a>, если у вас есть вопросы.
@@ -243,7 +245,7 @@ https://opencode.ai/zen/v1/models
 - Big Pickle: во время бесплатного периода собранные данные могут использоваться для улучшения модели.
 - DeepSeek V4 Flash Free: во время бесплатного периода собранные данные могут использоваться для улучшения модели.
 - MiMo-V2.5 Free: во время бесплатного периода собранные данные могут использоваться для улучшения модели.
-- Nemotron 3 Super Free (бесплатные эндпоинты NVIDIA): предоставляется в соответствии с [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Только для пробного использования, не для продакшена и не для чувствительных данных. NVIDIA логирует запросы и ответы, чтобы улучшать свои модели и сервисы. Не отправляйте персональные или конфиденциальные данные.
+- Nemotron 3 Ultra Free (бесплатные эндпоинты NVIDIA): только для пробного использования — не отправляйте персональные или конфиденциальные данные. Использование логируется в целях безопасности и для улучшения продуктов и сервисов NVIDIA. Логируемые данные сессии, используемые в целях улучшения, не связаны с вашей личностью или каким-либо постоянным идентификатором. Подробнее о наших практиках обработки данных см. в нашей [Политике конфиденциальности](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Взаимодействуя с этим эндпоинтом, вы соглашаетесь на сбор, запись и использование нами такой информации, а также с [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - OpenAI APIs: запросы хранятся 30 дней в соответствии с [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: запросы хранятся 30 дней в соответствии с [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 
