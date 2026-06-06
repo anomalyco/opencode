@@ -1178,6 +1178,13 @@ export function smallOptions(model: Provider.Model) {
     return { veniceParameters: { disableThinking: true } }
   }
 
+  if (model.providerID.startsWith("opencode")) {
+    return mergeDeep(
+      { include: INCLUDE_ENCRYPTED_REASONING, reasoningSummary: "auto" },
+      small,
+    )
+  }
+
   return small
 }
 

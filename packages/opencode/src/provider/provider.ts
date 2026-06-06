@@ -1869,7 +1869,15 @@ export const layer = Layer.effect(
       if (cfg.small_model) {
         const parsed = parseModel(cfg.small_model)
         return yield* getModel(parsed.providerID, parsed.modelID).pipe(
-          Effect.catchTag("ProviderModelNotFoundError", () => Effect.succeed(undefined)),
+          Effect.catchTag("ProviderModelNotFoundError", (err) => {
+            log.warn("configured small_model not found, falling back to main model", {
+              configured: cfg.small_model,
+              providerID: parsed.providerID,
+              modelID: parsed.modelID,
+              error: err.message,
+            })
+            return Effect.succeed(undefined)
+          }),
         )
       }
 

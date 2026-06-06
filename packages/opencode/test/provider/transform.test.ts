@@ -3900,6 +3900,38 @@ describe("ProviderTransform.smallOptions - google thinking controls", () => {
   })
 })
 
+describe("ProviderTransform.smallOptions - opencode provider", () => {
+  const createOpencodeModel = (id: string) =>
+    ({
+      id: `opencode/${id}`,
+      providerID: "opencode",
+      api: {
+        id: id,
+        url: "https://api.opencode.ai/zen/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+      release_date: "2026-01-01",
+      variants: {},
+    }) as any
+
+  test("returns include and reasoningSummary for opencode reasoning models", () => {
+    expect(ProviderTransform.smallOptions(createOpencodeModel("big-pickle"))).toEqual({
+      include: ["reasoning.encrypted_content"],
+      reasoningSummary: "auto",
+    })
+  })
+
+  test("returns base options when opencode model has no reasoning", () => {
+    const model = { ...createOpencodeModel("non-reasoning"), capabilities: { reasoning: false } }
+    expect(ProviderTransform.smallOptions(model)).toEqual({
+      include: ["reasoning.encrypted_content"],
+      reasoningSummary: "auto",
+    })
+  })
+})
+
 describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({
