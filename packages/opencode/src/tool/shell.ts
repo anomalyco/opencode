@@ -21,6 +21,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { commandParts } from "@opencode-ai/core/util/bash"
 
 export { Parameters } from "./shell/prompt"
 
@@ -122,6 +123,10 @@ function source(node: Node) {
 
 function commands(node: Node) {
   return node.descendantsOfType("command").filter((child): child is Node => Boolean(child))
+}
+
+function commandsFromTree(root: Node): { parts: Part[]; source: string }[] {
+  return commands(root).map((node) => ({ parts: parts(node), source: source(node) }))
 }
 
 function unquote(text: string) {
@@ -254,8 +259,8 @@ function tail(text: string, maxLines: number, maxBytes: number) {
   }
 }
 
-const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boolean) {
-  const tree = yield* Effect.promise(() => parser().then((p) => (ps ? p.ps : p.bash).parse(command)))
+const parsePowerShell = Effect.fn("ShellTool.parsePowerShell")(function* (command: string) {
+  const tree = yield* Effect.promise(() => parser().then((p) => p.ps.parse(command)))
   if (!tree) throw new Error("Failed to parse command")
   return tree
 })
@@ -319,20 +324,12 @@ const parser = lazy(async () => {
       return treePath
     },
   })
-  const { default: bashWasm } = await import("tree-sitter-bash/tree-sitter-bash.wasm" as string, {
-    with: { type: "wasm" },
-  })
   const { default: psWasm } = await import("tree-sitter-powershell/tree-sitter-powershell.wasm" as string, {
     with: { type: "wasm" },
   })
-  const bashPath = resolveWasm(bashWasm)
-  const psPath = resolveWasm(psWasm)
-  const [bashLanguage, psLanguage] = await Promise.all([Language.load(bashPath), Language.load(psPath)])
-  const bash = new Parser()
-  bash.setLanguage(bashLanguage)
   const ps = new Parser()
-  ps.setLanguage(psLanguage)
-  return { bash, ps }
+  ps.setLanguage(await Language.load(resolveWasm(psWasm)))
+  return { ps }
 })
 
 export const ShellTool = Tool.define(
@@ -376,7 +373,7 @@ export const ShellTool = Tool.define(
     })
 
     const collect = Effect.fn("ShellTool.collect")(function* (
-      root: Node,
+      extracted: ReadonlyArray<{ parts: Part[]; source: string }>,
       cwd: string,
       ps: boolean,
       shell: string,
@@ -389,8 +386,7 @@ export const ShellTool = Tool.define(
       }
       const shellKind = ShellID.toKind(Shell.name(shell))
 
-      for (const node of commands(root)) {
-        const command = parts(node)
+      for (const { parts: command, source: pattern } of extracted) {
         const tokens = command.map((item) => item.text)
         const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
 
@@ -405,7 +401,7 @@ export const ShellTool = Tool.define(
         }
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {
-          scan.patterns.add(source(node))
+          scan.patterns.add(pattern)
           scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
         }
       }
@@ -619,10 +615,16 @@ export const ShellTool = Tool.define(
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {
-                  const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
-                    Effect.sync(() => tree.delete()),
-                  )
-                  const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
+                  let extracted: ReadonlyArray<{ parts: Part[]; source: string }>
+                  if (ps) {
+                    const tree = yield* Effect.acquireRelease(parsePowerShell(params.command), (tree) =>
+                      Effect.sync(() => tree.delete()),
+                    )
+                    extracted = commandsFromTree(tree.rootNode)
+                  } else {
+                    extracted = commandParts(params.command)
+                  }
+                  const scan = yield* collect(extracted, cwd, ps, shell, instanceCtx)
                   if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
                   yield* ask(ctx, scan, params)
                 }),
