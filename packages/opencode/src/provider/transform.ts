@@ -61,11 +61,44 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+export function supportsAssistantPrefill(model: Provider.Model): boolean {
+  const id = `${model.id} ${model.api.id}`.toLowerCase()
+  if (!id.includes("claude")) return true
+  return ![
+    "opus-4-6",
+    "opus-4.6",
+    "opus-4-7",
+    "opus-4.7",
+    "opus-4-8",
+    "opus-4.8",
+    "sonnet-4-6",
+    "sonnet-4.6",
+    "sonnet-4-7",
+    "sonnet-4.7",
+    "sonnet-4-8",
+    "sonnet-4.8",
+  ].some((version) => id.includes(version))
+}
+
+function stripTrailingAssistant(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>): ModelMessage[] {
+  const stripAllAssistantPrefill = !supportsAssistantPrefill(model)
+  const stripThinkingTextPrefill = options.thinking != null && `${model.id} ${model.api.id}`.toLowerCase().includes("claude")
+  if (!stripAllAssistantPrefill && !stripThinkingTextPrefill) return msgs
+
+  while (msgs.length > 0) {
+    const last = msgs[msgs.length - 1]
+    if (last.role !== "assistant") break
+    if (!stripAllAssistantPrefill && Array.isArray(last.content) && last.content.some((part) => part.type === "tool-call")) break
+    msgs = msgs.slice(0, -1)
+  }
+  return msgs
+}
+
 // TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
-  _options: Record<string, unknown>,
+  options: Record<string, unknown>,
 ): ModelMessage[] {
   const sanitizeToolResultOutput = (content: ToolResultPart) => {
     if (content.output.type === "text" || content.output.type === "error-text") {
@@ -283,6 +316,8 @@ function normalizeMessages(
     })
   }
 
+  msgs = stripTrailingAssistant(msgs, model, options)
+
   if (
     typeof model.capabilities.interleaved === "object" &&
     model.capabilities.interleaved.field &&
@@ -371,6 +406,43 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
   return msgs
 }
 
+function addAnthropicLeadingUserBoundary(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  if (!["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) return msgs
+
+  const first = msgs.findIndex((msg) => msg.role !== "system")
+  if (first === -1) return msgs
+
+  const msg = msgs[first]
+  if (msg?.role !== "assistant" || !Array.isArray(msg.content)) return msgs
+
+  const toolCallIDs = msg.content
+    .filter((part) => part.type === "tool-call")
+    .map((part) => part.toolCallId)
+  if (toolCallIDs.length === 0) return msgs
+
+  const next = msgs[first + 1]
+  if (next?.role !== "tool" || !Array.isArray(next.content)) return msgs
+
+  const toolResultIDs = new Set(
+    next.content.filter((part) => part.type === "tool-result").map((part) => part.toolCallId),
+  )
+  if (!toolCallIDs.every((id) => toolResultIDs.has(id))) return msgs
+
+  return [
+    ...msgs.slice(0, first),
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Previous user turn was omitted from the compacted conversation; continue from the following tool exchange.",
+        },
+      ],
+    } satisfies ModelMessage,
+    ...msgs.slice(first),
+  ]
+}
+
 function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
   return msgs.map((msg) => {
     if (msg.role !== "user" || !Array.isArray(msg.content)) return msg
@@ -430,6 +502,7 @@ function mapProviderOptions(
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  msgs = addAnthropicLeadingUserBoundary(msgs, model)
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
