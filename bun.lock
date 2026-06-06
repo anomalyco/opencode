@@ -492,7 +492,7 @@
       "name": "opencode",
       "version": "1.16.2",
       "bin": {
-        "opencode": "./bin/opencode",
+        "rin": "./bin/opencode",
       },
       "dependencies": {
         "@actions/core": "1.11.1",
