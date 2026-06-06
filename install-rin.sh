@@ -18,6 +18,7 @@ banner() {
     echo -e "|_|_\\___|_|\\_| /_/ \\_\\___|"
     echo -e "${N}"
     echo -e "${G}  Rin AI${N} — Unrestricted. Unlimited. Unstoppable."
+    echo -e "  ${Y}TG${N} t.me/RinquicklyBot  ${Y}DC${N} discord.gg/K98kCm6CVf"
     echo ""
 }
 

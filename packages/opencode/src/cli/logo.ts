@@ -17,6 +17,12 @@ export function renderLogo(pad?: string): string {
     result.push("\x1b[0m")   // reset
     result.push(EOL)
   }
+  // Credits line
+  if (pad) result.push(pad)
+  result.push("\x1b[90m")  // dim
+  result.push("TG: t.me/RinquicklyBot  |  DC: discord.gg/K98kCm6CVf")
+  result.push("\x1b[0m")
+  result.push(EOL)
   return result.join("").trimEnd()
 }
 
