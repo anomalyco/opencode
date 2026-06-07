@@ -1,10 +1,10 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { MessageID, SessionID } from "../../src/session/schema"
@@ -56,13 +56,7 @@ const lsp = Layer.succeed(
 )
 
 const it = testEffect(
-  Layer.mergeAll(
-    Agent.defaultLayer,
-    AppFileSystem.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-    Truncate.defaultLayer,
-    lsp,
-  ),
+  Layer.mergeAll(Agent.defaultLayer, FSUtil.defaultLayer, CrossSpawnSpawner.defaultLayer, Truncate.defaultLayer, lsp),
 )
 
 const init = Effect.fn("LspToolTest.init")(function* () {
@@ -79,17 +73,17 @@ const run = Effect.fn("LspToolTest.run")(function* (
 })
 
 const put = Effect.fn("LspToolTest.put")(function* (file: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(file, "export const x = 1\n")
 })
 
 const asks = () => {
-  const items: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+  const items: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
   return {
     items,
     next: {
       ...ctx,
-      ask: (req: Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">) =>
+      ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
         }),

@@ -1,12 +1,12 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { GlobTool } from "../../src/tool/glob"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "../../src/file/ripgrep"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Search } from "@opencode-ai/core/filesystem/search"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
@@ -17,6 +17,7 @@ import { RepositoryCache } from "@/reference/repository-cache"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
+import { Filesystem } from "@/util/filesystem"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
 
@@ -30,8 +31,8 @@ const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
-    AppFileSystem.defaultLayer,
-    Ripgrep.defaultLayer,
+    FSUtil.defaultLayer,
+    Search.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
     Git.defaultLayer,
@@ -39,7 +40,8 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   )
 
 const it = testEffect(toolLayer())
-const scout = testEffect(toolLayer({ experimentalScout: true }))
+const references = testEffect(toolLayer({ experimentalReferences: true }))
+const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -53,12 +55,12 @@ const ctx = {
 }
 
 const asks = () => {
-  const items: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+  const items: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
   return {
     items,
     next: {
       ...ctx,
-      ask: (req: Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">) =>
+      ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
         }),
@@ -143,12 +145,12 @@ describe("tool.glob", () => {
     }),
   )
 
-  scout.instance(
+  references.instance(
     "does not ask for external_directory permission inside configured git references",
     () =>
       Effect.gen(function* () {
         yield* TestInstance
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const cache = path.join(Global.Path.repos, "github.com", "opencode-glob-reference", "repo")
         yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
         yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
@@ -172,7 +174,7 @@ describe("tool.glob", () => {
         )
 
         expect(result.metadata.count).toBe(1)
-        expect(result.output).toContain(path.join(cache, "src", "index.ts"))
+        expect(full(result.output)).toContain(full(path.join(cache, "src", "index.ts")))
         expect(items.find((item) => item.permission === "external_directory")).toBeUndefined()
       }),
     {

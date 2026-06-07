@@ -35,9 +35,6 @@ export interface Settings {
     showCustomAgents: boolean
     newLayoutDesigns?: boolean
   }
-  updates: {
-    startup: boolean
-  }
   appearance: {
     fontSize: number
     mono: string
@@ -122,9 +119,6 @@ const defaultSettings: Settings = {
     showSessionProgressBar: true,
     showCustomAgents: false,
   },
-  updates: {
-    startup: true,
-  },
   appearance: {
     fontSize: 14,
     mono: "",
@@ -156,6 +150,7 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
 
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
+  gate: false,
   init: () => {
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
 
@@ -247,12 +242,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newLayoutDesigns: withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault),
         setNewLayoutDesigns(value: boolean) {
           setStore("general", "newLayoutDesigns", value)
-        },
-      },
-      updates: {
-        startup: withFallback(() => store.updates?.startup, defaultSettings.updates.startup),
-        setStartup(value: boolean) {
-          setStore("updates", "startup", value)
         },
       },
       appearance: {

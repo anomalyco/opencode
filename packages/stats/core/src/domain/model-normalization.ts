@@ -13,6 +13,8 @@ export const MODEL_AUTHOR_RULES = [
   { match: "qwen", author: "qwen" },
 ] as const
 export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
+export const RETIRED_STAT_MODELS = ["big-pickle"]
+export const RETIRED_STAT_PROVIDERS = ["opencode"]
 
 export function normalizeInferenceModel(value: string | undefined) {
   return (value || "unknown").replace(/(-free|:global)+$/, "") || "unknown"
@@ -27,7 +29,7 @@ export function modelAuthor(value: string | undefined) {
 
 export function statModel(model: string | undefined, providerModel: string | undefined) {
   const normalized = normalizeInferenceModel(model)
-  if (normalized.toLowerCase() === "big-pickle") return normalizeInferenceModel(providerModel)
+  if (RETIRED_STAT_MODELS.includes(normalized.toLowerCase())) return normalizeInferenceModel(providerModel)
   return normalized
 }
 
@@ -42,6 +44,6 @@ export function statProvider(
   const providerModelAuthor = modelAuthor(providerModel)
   if (providerModelAuthor && providerModelAuthor !== "unknown") return providerModelAuthor
   if (modelAuthorValue !== "unknown") return modelAuthorValue
-  if (provider && provider.toLowerCase() !== "opencode") return provider
+  if (provider && !RETIRED_STAT_PROVIDERS.includes(provider.toLowerCase())) return provider
   return modelAuthorValue
 }

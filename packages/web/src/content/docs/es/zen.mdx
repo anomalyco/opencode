@@ -91,6 +91,7 @@ También puedes acceder a nuestros modelos a través de los siguientes endpoints
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`   | `@ai-sdk/google`            |
 | Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -103,7 +104,7 @@ También puedes acceder a nuestros modelos a través de los siguientes endpoints
 | Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| Nemotron 3 Super Free  | nemotron-3-super-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
 El [identificador del modelo](/docs/config/#models) en tu configuración de OpenCode
@@ -131,7 +132,7 @@ Admitimos un modelo de pago por uso. A continuación se muestran los precios **p
 | Big Pickle                        | Free    | Free    | Free             | -                  |
 | DeepSeek V4 Flash Free            | Free    | Free    | Free             | -                  |
 | MiMo-V2.5 Free                    | Free    | Free    | Free             | -                  |
-| Nemotron 3 Super Free             | Free    | Free    | Free             | -                  |
+| Nemotron 3 Ultra Free             | Free    | Free    | Free             | -                  |
 | MiniMax M2.7                      | $0.30   | $1.20   | $0.06            | $0.375             |
 | MiniMax M2.5                      | $0.30   | $1.20   | $0.06            | $0.375             |
 | GLM 5.1                           | $1.40   | $4.40   | $0.26            | -                  |
@@ -139,6 +140,7 @@ Admitimos un modelo de pago por uso. A continuación se muestran los precios **p
 | Kimi K2.5                         | $0.60   | $3.00   | $0.10            | -                  |
 | Kimi K2.6                         | $0.95   | $4.00   | $0.16            | -                  |
 | Qwen3.7 Max                       | $2.50   | $7.50   | $0.50            | $3.125             |
+| Qwen3.7 Plus                      | $0.40   | $1.60   | $0.04            | $0.50              |
 | Qwen3.6 Plus                      | $0.50   | $3.00   | $0.05            | $0.625             |
 | Qwen3.5 Plus                      | $0.20   | $1.20   | $0.02            | $0.25              |
 | DeepSeek V4 Flash                 | $0.14   | $0.28   | $0.03            | -                  |
@@ -188,7 +190,7 @@ Los modelos gratuitos:
 
 - DeepSeek V4 Flash Free está disponible en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
 - MiMo-V2.5 Free está disponible en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
-- Nemotron 3 Super Free está disponible en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
+- Nemotron 3 Ultra Free está disponible en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
 - Big Pickle es un modelo stealth que es gratuito en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
 
 <a href={email}>Contáctanos</a> si tienes alguna pregunta.
@@ -243,7 +245,7 @@ Todos nuestros modelos están alojados en US. Nuestros proveedores siguen una po
 - Big Pickle: Durante su período gratuito, los datos recopilados pueden usarse para mejorar el modelo.
 - DeepSeek V4 Flash Free: Durante su período gratuito, los datos recopilados pueden usarse para mejorar el modelo.
 - MiMo-V2.5 Free: Durante su período gratuito, los datos recopilados pueden usarse para mejorar el modelo.
-- Nemotron 3 Super Free (endpoints gratuitos de NVIDIA): Se ofrece bajo los [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Solo para uso de prueba, no para producción ni datos sensibles. NVIDIA registra los prompts y las salidas para mejorar sus modelos y servicios. No envíes datos personales ni confidenciales.
+- Nemotron 3 Ultra Free (endpoints gratuitos de NVIDIA): Solo para uso de prueba — no envíes datos personales ni confidenciales. Tu uso se registra con fines de seguridad y para mejorar los productos y servicios de NVIDIA. Los datos de sesión registrados con fines de mejora no están vinculados a tu identidad ni a ningún identificador persistente. Para obtener más información sobre nuestras prácticas de procesamiento de datos, consulta nuestra [Política de privacidad](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Al interactuar con este endpoint, aceptas que recopilemos, registremos y usemos dicha información, así como los [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - OpenAI APIs: Las solicitudes se conservan durante 30 días de acuerdo con [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Las solicitudes se conservan durante 30 días de acuerdo con [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 

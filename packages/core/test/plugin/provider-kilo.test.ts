@@ -25,21 +25,21 @@ describe("KiloPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const kilo = provider("kilo", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
-          options: { headers: { Existing: "value" }, body: {}, aisdk: { provider: {}, request: {} } },
+          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
+          request: { headers: { Existing: "value" }, body: {} },
         })
         catalog.provider.update(kilo.id, (draft) => {
-          draft.endpoint = kilo.endpoint
-          draft.options = kilo.options
+          draft.api = kilo.api
+          draft.request = kilo.request
         })
         catalog.provider.update(provider("openrouter").id, () => {})
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo"))).options.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo"))).request.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter)).options.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter)).request.headers).toEqual({})
     }),
   )
 
@@ -51,21 +51,21 @@ describe("KiloPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("kilo", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
+          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
+          draft.api = item.api
         })
       })
 
       const result = yield* catalog.provider.get(ProviderV2.ID.make("kilo"))
-      expect(result.options.headers).toEqual({
+      expect(result.request.headers).toEqual({
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
       })
-      expect(result.options.headers).not.toHaveProperty("http-referer")
-      expect(result.options.headers).not.toHaveProperty("x-title")
-      expect(result.options.headers).not.toHaveProperty("X-Source")
+      expect(result.request.headers).not.toHaveProperty("http-referer")
+      expect(result.request.headers).not.toHaveProperty("x-title")
+      expect(result.request.headers).not.toHaveProperty("X-Source")
     }),
   )
 
@@ -77,24 +77,24 @@ describe("KiloPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const kilo = provider("kilo", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
+          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
         })
         catalog.provider.update(kilo.id, (draft) => {
-          draft.endpoint = kilo.endpoint
+          draft.api = kilo.api
         })
         const custom = provider("custom-kilo", {
-          endpoint: { type: "aisdk", package: "kilo" },
+          api: { type: "aisdk", package: "kilo" },
         })
         catalog.provider.update(custom.id, (draft) => {
-          draft.endpoint = custom.endpoint
+          draft.api = custom.api
         })
       })
 
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo"))).options.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo"))).request.headers).toEqual({
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("custom-kilo"))).options.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("custom-kilo"))).request.headers).toEqual({})
     }),
   )
 })
