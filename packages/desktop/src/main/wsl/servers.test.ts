@@ -10,6 +10,13 @@ import {
 let persistedServers: unknown[] = []
 let releaseOpencodeResolve: (() => void) | undefined
 
+mock.module("electron", () => ({
+  app: {
+    getPath: () => "/tmp/opencode-desktop-test",
+    isPackaged: false,
+  },
+}))
+
 mock.module("../store", () => ({
   getStore: () => ({
     get: () => ({ servers: persistedServers }),
@@ -138,6 +145,22 @@ test("ignores stale background OpenCode checks after removing a WSL server", asy
   }))
 
   await controller.addServer("Debian")
+  await waitFor(() => !!releaseOpencodeResolve)
+  await controller.removeServer("wsl:Debian")
+  releaseOpencodeResolve?.()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  expect(controller.getState().servers).toEqual([])
+  expect(controller.getState().opencodeChecks).toEqual({})
+})
+
+test("ignores stale startup OpenCode checks after removing a WSL server", async () => {
+  persistedServers = [{ id: "wsl:Debian", distro: "Debian" }]
+  releaseOpencodeResolve = undefined
+  const { createWslServersController } = await import("./servers")
+  const controller = createWslServersController("1.16.2", async () => new Promise<never>(() => undefined))
+
+  await controller.initialize()
   await waitFor(() => !!releaseOpencodeResolve)
   await controller.removeServer("wsl:Debian")
   releaseOpencodeResolve?.()

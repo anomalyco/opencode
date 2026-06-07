@@ -123,10 +123,14 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
     setOpencodeCheck(distro, await checkOpencode(distro, opts))
   }
 
+  const hasServer = (id: string, distro: string) => {
+    return state.servers.some((item) => item.config.id === id && item.config.distro === distro)
+  }
+
   const refreshOpencodeCheckBackground = (id: string, distro: string) => {
     void checkOpencode(distro)
       .then((check) => {
-        if (!state.servers.some((item) => item.config.id === id && item.config.distro === distro)) return
+        if (!hasServer(id, distro)) return
         setOpencodeCheck(distro, check)
       })
       .catch((error) => {
@@ -138,14 +142,19 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
   const refreshOpencodeChecks = async () => {
     await Promise.all(
       state.servers.map((item) =>
-        refreshOpencodeCheck(item.config.distro).catch((error) => {
-          const message = error instanceof Error ? error.message : String(error)
-          logger?.error("wsl opencode check failed", {
-            id: item.config.id,
-            distro: item.config.distro,
-            message,
+        checkOpencode(item.config.distro)
+          .then((check) => {
+            if (!hasServer(item.config.id, item.config.distro)) return
+            setOpencodeCheck(item.config.distro, check)
           })
-        }),
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error)
+            logger?.error("wsl opencode check failed", {
+              id: item.config.id,
+              distro: item.config.distro,
+              message,
+            })
+          }),
       ),
     )
   }
