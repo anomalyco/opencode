@@ -1,7 +1,7 @@
 import { createResource, Show, createMemo, createSignal, onMount, type Accessor, type JSX } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { debounce, leadingAndTrailing } from "@solid-primitives/scheduled"
+
 import type { Message, Part, Session as SdkSession } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../../context/theme"
 import { useSDK } from "../../context/sdk"
@@ -56,7 +56,21 @@ export function prefetchPreviews(sdk: Sdk, sync: Sync, sessionIDs: readonly stri
 export function createLeadingTrailingSignal<T>(initial: T, ms: number): [Accessor<T>, (v: T) => void, (v: T) => void] {
   const [get, set] = createSignal(initial)
   const setNow = (v: T) => set(() => v)
-  const schedule = leadingAndTrailing(debounce, setNow, ms)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let pending: T | undefined
+  const schedule = (v: T) => {
+    if (timer) {
+      pending = v
+      return
+    }
+    set(() => v)
+    timer = setTimeout(() => {
+      timer = undefined
+      const next = pending
+      if (next !== undefined) set(() => next)
+      pending = undefined
+    }, ms)
+  }
   return [get, setNow, schedule]
 }
 
