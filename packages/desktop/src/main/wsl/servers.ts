@@ -11,7 +11,7 @@ import type {
   WslServersEvent,
   WslServersState,
 } from "../../preload/types"
-import { WSL_SERVERS_KEY } from "../constants"
+import { WSL_SERVERS_KEY } from "../store-keys"
 import { getStore } from "../store"
 import { expectOpencodeVersion, pendingRestartAfterWslInstall, wslServerIdsToStartOnInitialize } from "./startup"
 import { clearWslDistroState, wslServerIdToRestart } from "./policy"
@@ -43,18 +43,33 @@ type ControllerLogger = {
   error: (message: string, meta?: unknown) => void
 }
 
+type WslServersControllerOptions = {
+  logger?: ControllerLogger
+  readServers?: () => WslServerConfig[]
+  writeServers?: (servers: WslServerConfig[]) => void
+  resolveOpencode?: typeof resolveWslOpencode
+  readCommandVersion?: typeof readWslCommandVersion
+}
+
 export type WslServersController = ReturnType<typeof createWslServersController>
 
 export function wslServerIdForDistro(distro: string) {
   return `wsl:${distro}`
 }
 
-export function createWslServersController(appVersion: string, spawnSidecar: SpawnSidecar, logger?: ControllerLogger) {
+export function createWslServersController(
+  appVersion: string,
+  spawnSidecar: SpawnSidecar,
+  options?: WslServersControllerOptions,
+) {
   let state: WslServersState = initialState()
   const listeners = new Set<(event: WslServersEvent) => void>()
   const sidecars = new Map<string, RunningSidecar>()
   const startAttempts = new Map<string, number>()
   let jobAbort: AbortController | undefined
+  const logger = options?.logger
+  const readServers = options?.readServers ?? readPersistedServers
+  const writeServers = options?.writeServers ?? writePersistedServers
 
   const emit = () => {
     for (const listener of listeners) listener({ type: "state", state })
@@ -66,7 +81,7 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
   }
 
   const persistServers = (servers: WslServerConfig[]) => {
-    getStore().set(WSL_SERVERS_KEY, { servers })
+    writeServers(servers)
   }
 
   const updateServer = (id: string, update: (item: WslServerItem) => WslServerItem) => {
@@ -89,7 +104,7 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
   }
 
   const refreshFromStore = () => {
-    const persisted = readPersistedServers()
+    const persisted = readServers()
     const items: WslServerItem[] = persisted.map((config) => {
       const existing = state.servers.find((item) => item.config.id === config.id)
       return {
@@ -114,8 +129,8 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
   }
 
   const checkOpencode = async (distro: string, opts?: { signal?: AbortSignal }) => {
-    const resolved = await resolveWslOpencode(distro, opts)
-    const version = resolved ? await readWslCommandVersion(resolved, distro, opts) : null
+    const resolved = await (options?.resolveOpencode ?? resolveWslOpencode)(distro, opts)
+    const version = resolved ? await (options?.readCommandVersion ?? readWslCommandVersion)(resolved, distro, opts) : null
     return opencodeCheck(distro, resolved, version, appVersion)
   }
 
@@ -349,7 +364,7 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
         id,
         distro,
       }
-      persistServers([...readPersistedServers(), config])
+      persistServers([...readServers(), config])
       setState({
         servers: [...state.servers, { config, runtime: { kind: "starting" } }],
       })
@@ -361,7 +376,7 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
       const distro = state.servers.find((item) => item.config.id === id)?.config.distro
       invalidateStartAttempt(id)
       await stopServerInternal(id)
-      const remaining = readPersistedServers().filter((item) => item.id !== id)
+      const remaining = readServers().filter((item) => item.id !== id)
       persistServers(remaining)
       setState({
         servers: state.servers.filter((item) => item.config.id !== id),
@@ -407,6 +422,10 @@ function readPersistedServers(): WslServerConfig[] {
     return list.flatMap(normalizePersistedServer)
   }
   return []
+}
+
+function writePersistedServers(servers: WslServerConfig[]) {
+  getStore().set(WSL_SERVERS_KEY, { servers })
 }
 
 function normalizePersistedServer(value: unknown): WslServerConfig[] {

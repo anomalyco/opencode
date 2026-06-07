@@ -145,8 +145,10 @@ const main = Effect.gen(function* () {
       })
     },
     {
-      log: (message, meta) => logger.log(message, meta),
-      error: (message, meta) => logger.error(message, meta),
+      logger: {
+        log: (message, meta) => logger.log(message, meta),
+        error: (message, meta) => logger.error(message, meta),
+      },
     },
   )
   const stopSidecars = async () => {

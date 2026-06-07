@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { clearWslDistroState, requireWslIpcString, wslServerIdToRestart, wslTerminalArgs } from "./policy"
 import {
   expectOpencodeVersion,
@@ -6,44 +6,10 @@ import {
   pollWslHealth,
   wslServerIdsToStartOnInitialize,
 } from "./startup"
+import { createWslServersController, type WslServerConfig } from "./servers"
 
-let persistedServers: unknown[] = []
+let persistedServers: WslServerConfig[] = []
 let releaseOpencodeResolve: (() => void) | undefined
-
-mock.module("electron", () => ({
-  app: {
-    getPath: () => "/tmp/opencode-desktop-test",
-    isPackaged: false,
-  },
-}))
-
-mock.module("../store", () => ({
-  getStore: () => ({
-    get: () => ({ servers: persistedServers }),
-    set: (_key: string, value: { servers?: unknown[] }) => {
-      persistedServers = value.servers ?? []
-    },
-  }),
-}))
-
-mock.module("./runtime", () => ({
-  installWslDistro: async () => ({ code: 0, signal: null, stdout: "", stderr: "" }),
-  installWslOpencode: async () => ({ code: 0, signal: null, stdout: "", stderr: "" }),
-  installWslRuntimeElevated: async () => ({ code: 0, signal: null, stdout: "", stderr: "" }),
-  listInstalledWslDistros: async () => [],
-  listOnlineWslDistros: async () => [],
-  openWslTerminal: async () => undefined,
-  probeWslDistro: async (name: string) => ({ name, canExecute: true, hasBash: true, hasCurl: true, error: null }),
-  probeWslRuntime: async () => ({ available: true, version: "WSL version: 2", error: null }),
-  readWslCommandVersion: async () => "1.16.2",
-  resolveWslOpencode: async () => {
-    await new Promise<void>((resolve) => {
-      releaseOpencodeResolve = resolve
-    })
-    return "/home/me/.opencode/bin/opencode"
-  },
-  summarize: (value: string) => value.trim(),
-}))
 
 test("starts every configured WSL server on initialization", () => {
   expect(
@@ -133,16 +99,19 @@ test("derives a required Windows restart from the post-install runtime probe", (
 test("ignores stale background OpenCode checks after removing a WSL server", async () => {
   persistedServers = []
   releaseOpencodeResolve = undefined
-  const { createWslServersController } = await import("./servers")
-  const controller = createWslServersController("1.16.2", async () => ({
-    listener: {
-      stop: () => undefined,
-      onExit: () => undefined,
-    },
-    url: "http://127.0.0.1:4096",
-    username: "opencode",
-    password: "secret",
-  }))
+  const controller = createWslServersController(
+    "1.16.2",
+    async () => ({
+      listener: {
+        stop: () => undefined,
+        onExit: () => undefined,
+      },
+      url: "http://127.0.0.1:4096",
+      username: "opencode",
+      password: "secret",
+    }),
+    testControllerOptions(),
+  )
 
   await controller.addServer("Debian")
   await waitFor(() => !!releaseOpencodeResolve)
@@ -157,8 +126,11 @@ test("ignores stale background OpenCode checks after removing a WSL server", asy
 test("ignores stale startup OpenCode checks after removing a WSL server", async () => {
   persistedServers = [{ id: "wsl:Debian", distro: "Debian" }]
   releaseOpencodeResolve = undefined
-  const { createWslServersController } = await import("./servers")
-  const controller = createWslServersController("1.16.2", async () => new Promise<never>(() => undefined))
+  const controller = createWslServersController(
+    "1.16.2",
+    async () => new Promise<never>(() => undefined),
+    testControllerOptions(),
+  )
 
   await controller.initialize()
   await waitFor(() => !!releaseOpencodeResolve)
@@ -176,4 +148,20 @@ async function waitFor(check: () => boolean) {
     await new Promise((resolve) => setTimeout(resolve, 0))
   }
   throw new Error("Timed out waiting for condition")
+}
+
+function testControllerOptions() {
+  return {
+    readServers: () => persistedServers,
+    writeServers: (servers: WslServerConfig[]) => {
+      persistedServers = servers
+    },
+    readCommandVersion: async () => "1.16.2",
+    resolveOpencode: async () => {
+      await new Promise<void>((resolve) => {
+        releaseOpencodeResolve = resolve
+      })
+      return "/home/me/.opencode/bin/opencode"
+    },
+  }
 }
