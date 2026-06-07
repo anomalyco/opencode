@@ -8,9 +8,9 @@ describe("tui thread", () => {
   test("loads the public TUI API and legacy hosts lazily", async () => {
     const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
 
-    expect(source).toContain('await import("@opencode-ai/tui")')
+    expect(source).toMatch(/await import\(["']@opencode-ai\/tui["']\)/)
     expect(source).toContain('await import("../tui/host")')
-    expect(source).toContain('await import("@/plugin/tui/runtime")')
+    expect(source).toMatch(/await import\(["']@\/plugin\/tui\/runtime["']\)/)
     expect(source).not.toContain('import("./app")')
   })
 
