@@ -131,7 +131,11 @@ export function registerIpcHandlers(deps: Deps) {
       })
       if (result.canceled) return null
       const files = await Promise.all(
-        result.filePaths.map(async (filePath) => ({ path: filePath, name: basename(filePath), size: (await stat(filePath)).size })),
+        result.filePaths.map(async (filePath) => ({
+          path: filePath,
+          name: basename(filePath),
+          size: (await stat(filePath)).size,
+        })),
       )
       assertAttachmentBudget(files)
       const token = pickedFiles.add(event.sender.id, result.filePaths)

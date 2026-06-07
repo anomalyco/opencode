@@ -11,7 +11,9 @@ import {
 
 describe("assertAttachmentBudget", () => {
   test("accepts selections within the media ingest limit", () => {
-    expect(() => assertAttachmentBudget([{ size: MAX_ATTACHMENT_BYTES / 2 }, { size: MAX_ATTACHMENT_BYTES / 2 }])).not.toThrow()
+    expect(() =>
+      assertAttachmentBudget([{ size: MAX_ATTACHMENT_BYTES / 2 }, { size: MAX_ATTACHMENT_BYTES / 2 }]),
+    ).not.toThrow()
   })
 
   test("rejects the selection before files are read when its total exceeds the limit", () => {

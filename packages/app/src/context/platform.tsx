@@ -50,7 +50,10 @@ type PlatformBase = {
   notify(title: string, description?: string, href?: string): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
-  openAttachmentPickerDialog?(opts: OpenAttachmentPickerOptions, onFile: (file: File) => Promise<unknown>): Promise<void>
+  openAttachmentPickerDialog?(
+    opts: OpenAttachmentPickerOptions,
+    onFile: (file: File) => Promise<unknown>,
+  ): Promise<void>
 
   /** Open a native save file picker dialog (desktop only) */
   saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>

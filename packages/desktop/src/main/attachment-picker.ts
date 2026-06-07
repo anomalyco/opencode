@@ -17,7 +17,8 @@ export function createPickedFileAuthorizations(
     },
     async read(sender: number, token: string, path: string) {
       const selection = selections.get(token)
-      if (selection?.sender !== sender || !selection.paths.delete(path)) throw new Error("File was not selected by the picker")
+      if (selection?.sender !== sender || !selection.paths.delete(path))
+        throw new Error("File was not selected by the picker")
       const bytes = await read(path, selection.remaining)
       selection.remaining -= bytes.byteLength
       if (selection.paths.size === 0) selections.delete(token)
@@ -39,7 +40,8 @@ export async function readAttachment(filePath: string, maxBytes = MAX_ATTACHMENT
   const file = await open(filePath, "r")
   try {
     const info = await file.stat()
-    if (info.size > maxBytes) throw new Error(`Selected attachments exceed the ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB limit`)
+    if (info.size > maxBytes)
+      throw new Error(`Selected attachments exceed the ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB limit`)
     const bytes = Buffer.allocUnsafe(info.size)
     let offset = 0
     while (offset < info.size) {
