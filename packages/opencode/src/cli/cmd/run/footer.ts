@@ -103,6 +103,7 @@ type RunFooterOptions = {
 const PERMISSION_ROWS = 12
 const QUESTION_ROWS = 14
 const COMMAND_ROWS = RUN_COMMAND_PANEL_ROWS
+const SKILL_ROWS = RUN_COMMAND_PANEL_ROWS
 const SUBAGENT_ROWS = RUN_SUBAGENT_PANEL_ROWS
 const MODEL_ROWS = RUN_COMMAND_PANEL_ROWS
 const VARIANT_ROWS = RUN_COMMAND_PANEL_ROWS
@@ -712,9 +713,11 @@ export class RunFooter implements FooterApi {
           ? this.base + QUESTION_ROWS
           : this.promptRoute.type === "command"
             ? 1 + COMMAND_ROWS
-            : this.promptRoute.type === "model"
-              ? 1 + MODEL_ROWS
-              : this.promptRoute.type === "variant"
+            : this.promptRoute.type === "skill"
+              ? 1 + SKILL_ROWS
+              : this.promptRoute.type === "model"
+                ? 1 + MODEL_ROWS
+                : this.promptRoute.type === "variant"
                 ? 1 + VARIANT_ROWS
                 : this.promptRoute.type === "queued-menu"
                   ? 1 + this.subagentMenuRows

@@ -1,7 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type ColorInput } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { transparent, type RunFooterTheme } from "./theme"
+import * as Locale from "@/util/locale"
 
 export const FOOTER_MENU_ROWS = 8
 
@@ -128,6 +130,7 @@ export function RunFooterMenu(props: {
   background?: boolean
   headerColor?: ColorInput
 }) {
+  const term = useTerminalDimensions()
   const limit = () => props.limit ?? FOOTER_MENU_ROWS
   const border = () => props.border ?? true
   const [groupOffset, setGroupOffset] = createSignal(0)
@@ -205,6 +208,22 @@ export function RunFooterMenu(props: {
 
     return " ".repeat(Math.max(1, descriptionColumn() - Bun.stringWidth(item.display)))
   }
+  const descriptionText = (item: RunFooterMenuItem) => {
+    if (!item.description) {
+      return
+    }
+
+    const footerWidth = item.footer ? Bun.stringWidth(item.footer) + 1 : 0
+    const available =
+      term().width -
+      (border() ? 1 : 0) -
+      (props.paddingLeft ?? 1) -
+      (props.paddingRight ?? 0) -
+      descriptionColumn() -
+      footerWidth -
+      4
+    return Locale.truncate(item.description, Math.max(12, available))
+  }
   return (
     <box
       id={props.id ?? "run-direct-footer-menu"}
@@ -280,21 +299,37 @@ export function RunFooterMenu(props: {
                 backgroundColor={background()}
               >
                 <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
-                  <text
-                    fg={active() ? props.theme().selectedText : props.theme().text}
-                    attributes={active() ? TextAttributes.BOLD : undefined}
-                    wrapMode="none"
-                    truncate
-                    flexGrow={1}
-                  >
-                    {row.item.display}
+                  <box flexDirection="row" gap={0} flexGrow={1} flexShrink={1}>
+                    <text
+                      fg={active() ? props.theme().selectedText : props.theme().text}
+                      attributes={active() ? TextAttributes.BOLD : undefined}
+                      wrapMode="none"
+                      truncate
+                      flexShrink={0}
+                    >
+                      {row.item.display}
+                    </text>
                     {row.item.description ? (
-                      <span style={{ fg: active() ? props.theme().selectedText : props.theme().muted }}>
-                        {descriptionPad(row.item)}
-                        {row.item.description}
-                      </span>
+                      <>
+                        <text
+                          fg={active() ? props.theme().selectedText : props.theme().muted}
+                          wrapMode="none"
+                          flexShrink={0}
+                        >
+                          {descriptionPad(row.item)}
+                        </text>
+                        <text
+                          fg={active() ? props.theme().selectedText : props.theme().muted}
+                          wrapMode="none"
+                          truncate
+                          flexGrow={1}
+                          flexShrink={1}
+                        >
+                          {descriptionText(row.item)}
+                        </text>
+                      </>
                     ) : undefined}
-                  </text>
+                  </box>
                   {row.item.footer ? (
                     <text
                       fg={active() ? props.theme().selectedText : props.theme().muted}

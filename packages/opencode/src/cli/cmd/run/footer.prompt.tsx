@@ -46,6 +46,7 @@ type Auto = RunFooterMenuItem & {
 type SlashOption = RunFooterMenuItem & {
   kind: "slash"
   name: string
+  action?: "skill-menu"
 }
 
 type PromptOption = Auto | SlashOption
@@ -71,6 +72,7 @@ type PromptInput = {
   onInputClear: () => void
   onExitRequest?: () => boolean
   onExit: () => void
+  onSkillMenu: () => void
   onRows: (rows: number) => void
   onStatus: (text: string) => void
 }
@@ -102,6 +104,7 @@ function clonePrompt(prompt: RunPrompt): RunPrompt {
     text: prompt.text,
     parts: structuredClone(prompt.parts),
     ...(prompt.mode ? { mode: prompt.mode } : {}),
+    ...(prompt.command ? { command: prompt.command } : {}),
   }
 }
 
@@ -173,6 +176,22 @@ function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
   }
 
   return { type: "command" as const, command: { name: head.name, arguments: head.arguments } }
+}
+
+function selectedCommand(text: string, command: RunPrompt["command"]) {
+  if (!command) {
+    return
+  }
+
+  const head = slashHead(text)
+  if (!head || head.name !== command.name) {
+    return
+  }
+
+  return {
+    name: command.name,
+    arguments: head.arguments,
+  }
 }
 
 export function RunPromptBody(props: {
@@ -395,13 +414,33 @@ export function createPromptState(input: PromptInput): PromptState {
     { initialValue: [] as Auto[] },
   )
   const mentionOptions = createMemo(() => [...agents(), ...files(), ...resources()])
+  const skillCommands = createMemo(() => (input.commands() ?? []).filter((item) => item.source === "skill"))
+  const hasSkillsCommand = createMemo(() =>
+    (input.commands() ?? []).some((item) => item.source !== "skill" && item.name === "skills"),
+  )
   const slashOptions = createMemo<SlashOption[]>(() => {
     const builtins = [
       { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
     const hidden = new Set(builtins.map((item) => item.name))
+    const showSkillMenu = !shell() && skillCommands().length > 0 && !hasSkillsCommand()
+    if (showSkillMenu) {
+      hidden.add("skills")
+    }
+
     return [
+      ...(showSkillMenu
+        ? [
+            {
+              kind: "slash",
+              action: "skill-menu" as const,
+              name: "skills",
+              display: "/skills",
+              description: "browse available skills",
+            } satisfies SlashOption,
+          ]
+        : []),
       ...(input.commands() ?? [])
         .filter((item) => item.source !== "skill" && !hidden.has(item.name))
         .map(
@@ -678,16 +717,18 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     syncParts()
+    const command = shell() ? undefined : selectedCommand(area.plainText, draft.command)
     draft = shell()
       ? {
-        text: area.plainText,
-        parts: structuredClone(parts),
-        mode: "shell",
-      }
+          text: area.plainText,
+          parts: structuredClone(parts),
+          mode: "shell",
+        }
       : {
-        text: area.plainText,
-        parts: structuredClone(parts),
-      }
+          text: area.plainText,
+          parts: structuredClone(parts),
+          ...(command ? { command } : {}),
+        }
   }
 
   const push = (value: RunPrompt) => {
@@ -773,6 +814,12 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (next.kind === "slash") {
+      if (next.action === "skill-menu") {
+        cancelAutocomplete()
+        input.onSkillMenu()
+        return
+      }
+
       const cursor = area.cursorOffset
       const head = slashHead(area.plainText)
       const local = !shell() && (next.name === "new" || next.name === "exit")
@@ -881,6 +928,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const baseBindingsEnabled = () => {
     const current = input.view()
     if (current === "command") return false
+    if (current === "skill") return false
     if (current === "model") return false
     if (current === "variant") return false
     if (current === "queued-menu") return false
@@ -1076,19 +1124,22 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    if (next.mode !== "shell" && isExitCommand(next.text)) {
+    const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command)
+    if (!command && next.mode !== "shell" && isExitCommand(next.text)) {
       input.onExit()
       return
     }
 
     const parsed =
-      next.mode === "shell" || isNewCommand(next.text) ? undefined : parseSlashCommand(next.text, input.commands())
+      command || next.mode === "shell" || isNewCommand(next.text)
+        ? undefined
+        : parseSlashCommand(next.text, input.commands())
     if (parsed?.type === "pending") {
       input.onStatus("loading commands")
       return
     }
 
-    const submit = parsed?.type === "command" ? { ...next, command: parsed.command } : next
+    const submit = command ? { ...next, command } : parsed?.type === "command" ? { ...next, command: parsed.command } : next
     const shellMode = next.mode === "shell"
 
     resetDraft()

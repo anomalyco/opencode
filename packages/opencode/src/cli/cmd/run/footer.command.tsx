@@ -14,6 +14,7 @@ type PanelEntry = RunFooterMenuItem & {
 
 type CommandEntry =
   | (PanelEntry & { action: "model" })
+  | (PanelEntry & { action: "skill" })
   | (PanelEntry & { action: "queued" })
   | (PanelEntry & { action: "subagent" })
   | (PanelEntry & { action: "variant.cycle" })
@@ -31,6 +32,10 @@ type ModelEntry = PanelEntry & {
 type VariantEntry = PanelEntry & {
   variant: string | undefined
   current: boolean
+}
+
+type SkillEntry = PanelEntry & {
+  name: string
 }
 
 type SubagentEntry = PanelEntry & {
@@ -332,6 +337,7 @@ export function RunCommandMenuBody(props: {
   variantCycle: string
   onClose: () => void
   onModel: () => void
+  onSkill: () => void
   onSubagent: () => void
   onQueued: () => void
   onVariant: () => void
@@ -342,6 +348,7 @@ export function RunCommandMenuBody(props: {
 }) {
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
+  const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const entries = createMemo<CommandEntry[]>(() => {
     const builtins = ["new"]
     return [
@@ -350,6 +357,19 @@ export function RunCommandMenuBody(props: {
         category: "Suggested",
         display: "Switch model",
       },
+      ...(props.commands() === undefined || skills().length > 0
+        ? [
+            {
+              action: "skill" as const,
+              category: "Suggested",
+              display: "Skills",
+              footer: "/skills",
+              keywords: `skill skills ${skills()
+                .map((item) => `${item.name} ${item.description ?? ""}`)
+                .join(" ")}`.trim(),
+            },
+          ]
+        : []),
       ...(props.queued().length > 0
         ? [
             {
@@ -428,6 +448,11 @@ export function RunCommandMenuBody(props: {
   const pick = (item: CommandEntry) => {
     if (item.action === "model") {
       props.onModel()
+      return
+    }
+
+    if (item.action === "skill") {
+      props.onSkill()
       return
     }
 
@@ -709,6 +734,85 @@ export function RunQueuedPromptSelectBody(props: {
         rows={menu.rows}
         limit={SUBAGENT_LIST_ROWS}
         empty="No queued prompts"
+        border={false}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        grouped={false}
+        background
+      />
+    </PanelShell>
+  )
+}
+
+export function RunSkillSelectBody(props: {
+  theme: Accessor<RunFooterTheme>
+  commands: Accessor<RunCommand[] | undefined>
+  onClose: () => void
+  onSelect: (name: string) => void
+}) {
+  let field: InputRenderable | undefined
+  const [query, setQuery] = createSignal("")
+  const entries = createMemo<SkillEntry[]>(() =>
+    (props.commands() ?? [])
+      .filter((item) => item.source === "skill")
+      .map((item) => ({
+        category: "",
+        display: item.name,
+        description: item.description?.replace(/\s+/g, " ").trim() || undefined,
+        keywords: `skill ${item.name} ${item.description ?? ""}`,
+        name: item.name,
+      }))
+      .sort((a, b) => a.display.localeCompare(b.display)),
+  )
+  const items = createMemo<SkillEntry[]>(() => match(query(), entries()))
+  const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
+  const select = () => {
+    const item = items()[menu.selected()]
+    if (!item) {
+      return
+    }
+
+    props.onSelect(item.name)
+  }
+
+  createEffect(() => {
+    query()
+    menu.reset()
+  })
+
+  useKeyboard((event) => {
+    if (event.defaultPrevented) {
+      return
+    }
+
+    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  })
+
+  return (
+    <PanelShell
+      id="run-direct-footer-skill-panel"
+      title="Skills"
+      query={query()}
+      count={items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={(input) => {
+        field = input
+      }}
+      onQuery={setQuery}
+      dark
+      chrome="minimal"
+    >
+      <RunFooterMenu
+        id="run-direct-footer-skill-list"
+        theme={props.theme}
+        items={items}
+        selected={menu.selected}
+        offset={menu.offset}
+        rows={() => PANEL_LIST_ROWS}
+        limit={PANEL_LIST_ROWS}
+        empty={props.commands() ? "No skills found" : "Skills loading"}
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}

@@ -181,6 +181,7 @@ export type FooterPromptRoute =
   | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
+  | { type: "skill" }
   | { type: "model" }
   | { type: "variant" }
 
