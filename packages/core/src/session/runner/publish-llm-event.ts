@@ -218,6 +218,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
+  const assistantMessageIDForTool = (callID: string) => {
+    const tool = tools.get(callID)
+    return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(`Unknown tool call: ${callID}`)
+  }
+
   const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
     event: LLMEvent,
     outputPaths: ReadonlyArray<string> = [],
@@ -408,5 +413,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,
     startAssistant,
+    assistantMessageID: assistantMessageIDForTool,
   }
 }

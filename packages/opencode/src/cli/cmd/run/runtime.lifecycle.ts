@@ -11,7 +11,7 @@
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Session as SessionApi } from "@/session/session"
-import { registerOpencodeKeymap } from "@/cli/cmd/tui/keymap"
+import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
 import * as Locale from "@/util/locale"
 import { withRunSpan } from "./otel"
 import { resolveInteractiveStdin } from "./runtime.stdin"
