@@ -44,37 +44,39 @@
 
 ---
 
+<div dir="rtl">
+
 ### نصب
 
 ```bash
 # سریع و ساده
 curl -fsSL https://opencode.ai/install | bash
 
-# پکیج منیجر ها
+# پکیج منیجرها
 npm i -g opencode-ai@latest        # یا bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
+scoop install opencode             # ویندوز
+choco install opencode             # ویندوز
 brew install anomalyco/tap/opencode # macOS و لینوکس (پیشنهادی، همیشه به‌روز)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (نسخه پایدار)
+brew install opencode              # macOS و لینوکس (فرمول رسمی brew، به‌روزرسانی کمتر)
+sudo pacman -S opencode            # Arch Linux (پایدار)
 paru -S opencode-bin               # Arch Linux (آخرین نسخه از AUR)
 mise use -g opencode               # هر سیستم‌عاملی
 nix run nixpkgs#opencode           # یا github:anomalyco/opencode برای آخرین نسخه dev
 ```
 
 > [!TIP]
-> قبل از نصب، نسخه‌های قدیمی‌تر از ۰.۱.x را حذف کنید.
+> قبل از نصب، نسخه‌های قدیمی‌تر از 0.1.x را حذف کنید.
 
 ### اپلیکیشن دسکتاپ (بتا)
 
 OpenCode به‌صورت اپلیکیشن دسکتاپ هم در دسترس است. می‌توانید آن را مستقیماً از [صفحه releases](https://github.com/anomalyco/opencode/releases) یا [opencode.ai/download](https://opencode.ai/download) دانلود کنید.
 
-| پلتفرم                    | دانلود                             |
-| ------------------------- | ---------------------------------- |
-| macOS (Apple Silicon)     | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)             | `opencode-desktop-mac-x64.dmg`     |
-| ویندوز                    | `opencode-desktop-windows-x64.exe` |
-| لینوکس                    | `.deb`، `.rpm` یا `.AppImage`      |
+| پلتفرم                | دانلود                             |
+| --------------------- | ---------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
+| ویندوز                | `opencode-desktop-windows-x64.exe` |
+| لینوکس                | `.deb` یا `.rpm` یا `.AppImage`    |
 
 ```bash
 # macOS (Homebrew)
@@ -87,10 +89,10 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 اسکریپت نصب برای انتخاب مسیر نصب، ترتیب اولویت زیر را رعایت می‌کند:
 
-1. `$OPENCODE_INSTALL_DIR` — مسیر سفارشی
-2. `$XDG_BIN_DIR` — مسیر سازگار با مشخصات XDG Base Directory
-3. `$HOME/bin` — مسیر استاندارد باینری کاربر (اگر وجود داشته باشد یا قابل ساخت باشد)
-4. `$HOME/.opencode/bin` — مسیر پیش‌فرض
+1. `$OPENCODE_INSTALL_DIR` - مسیر نصب سفارشی
+2. `$XDG_BIN_DIR` - مسیر سازگار با مشخصات XDG Base Directory
+3. `$HOME/bin` - مسیر استاندارد باینری کاربر (اگر وجود داشته باشد یا قابل ساخت باشد)
+4. `$HOME/.opencode/bin` - مسیر پیش‌فرض
 
 ```bash
 # نمونه‌ها
@@ -100,15 +102,16 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### ایجنت‌ها
 
-OpenCode دو ایجنت توکار دارد که می‌توانید با کلید `Tab` بین آن‌ها جابه‌جا شوید:
+OpenCode دو ایجنت توکار دارد که می‌توانید با کلید `Tab` بین آن‌ها جابه‌جا شوید.
 
-- **build** — ایجنت پیش‌فرض با دسترسی کامل، مناسب برای توسعه
-- **plan** — ایجنت فقط‌خواندنی برای تحلیل و بررسی کد
+- **build** - ایجنت پیش‌فرض با دسترسی کامل، مناسب برای توسعه
+- **plan** - ایجنت فقط‌خواندنی برای تحلیل و بررسی کد
   - به‌صورت پیش‌فرض ویرایش فایل را رد می‌کند
   - قبل از اجرای دستورات bash اجازه می‌گیرد
   - ایده‌آل برای بررسی کدبیس‌های ناآشنا یا برنامه‌ریزی تغییرات
 
-همچنین یک ساب‌ایجنت **general** برای جست‌وجوهای پیچیده و وظایف چندمرحله‌ای وجود دارد که به‌صورت داخلی استفاده می‌شود و می‌توانید با `@general` در پیام‌ها آن را فراخوانی کنید.
+همچنین یک ساب‌ایجنت **general** برای جست‌وجوهای پیچیده و وظایف چندمرحله‌ای وجود دارد.
+این ایجنت به‌صورت داخلی استفاده می‌شود و می‌توان با `@general` در پیام‌ها آن را فراخوانی کرد.
 
 برای اطلاعات بیشتر درباره [ایجنت‌ها](https://opencode.ai/docs/agents) مستندات را بخوانید.
 
@@ -126,4 +129,6 @@ OpenCode دو ایجنت توکار دارد که می‌توانید با کل�
 
 ---
 
-**به جامعه ما بپیوندید:** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**به جامعه ما بپیوندید** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+</div>
