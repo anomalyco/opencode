@@ -155,13 +155,14 @@ async function renderFooter(
     tuiConfig?: RunTuiConfig
     commands?: RunCommand[]
     theme?: () => RunTheme
+    state?: Partial<FooterState>
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean
   } = {},
 ) {
   const [view] = createSignal<FooterView>({ type: "prompt" })
   const [subagents] = createSignal<FooterSubagentState>({ tabs: [], details: {}, permissions: [], questions: [] })
-  const state = footerState()
+  const state = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
   let offKeymap: (() => void) | undefined
 
@@ -720,6 +721,23 @@ test("direct footer shows editable prompts and additional queued work while runn
     app.renderer.currentFocusedEditor?.blur()
     offKeymap?.()
     app.renderer.destroy()
+  }
+})
+
+test("direct footer omits interrupt key hint when interrupt is unbound", async () => {
+  const app = await renderFooter({
+    tuiConfig: createTuiResolvedConfig({ keybinds: { session_interrupt: "none", input_clear: "ctrl+l" } }),
+    state: { phase: "running" },
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("interrupt")
+    expect(frame).not.toContain("ctrl+l")
+  } finally {
+    app.cleanup()
   }
 })
 

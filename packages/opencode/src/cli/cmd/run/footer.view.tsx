@@ -227,8 +227,13 @@ export function RunFooterView(props: RunFooterViewProps) {
   const exiting = createMemo(() => props.state().exit > 0)
   const queue = createMemo(() => props.state().queue)
   const usage = createMemo(() => props.state().usage)
-  const interruptKey = createMemo(() => interrupt() || clearShortcut() || "ctrl+c")
-  const interruptLabel = createMemo(() => (interruptKey() === "escape" ? "esc" : interruptKey()))
+  const interruptLabel = createMemo(() => {
+    if (!interrupt()) {
+      return
+    }
+
+    return interrupt() === "escape" ? "esc" : interrupt()
+  })
   const runTheme = createMemo(() => props.theme())
   const theme = createMemo(() => runTheme().footer)
   const block = createMemo(() => runTheme().block)
@@ -805,7 +810,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                     flexShrink={1}
                   >
                     <Show when={busy() && !exiting()} fallback={statusText()}>
-                      <span style={{ fg: armed() ? statusColor() : theme().muted }}>{interruptLabel()} </span>
+                      <Show when={interruptLabel()}>
+                        {(label) => <span style={{ fg: armed() ? statusColor() : theme().muted }}>{label()} </span>}
+                      </Show>
                       {statusText()}
                     </Show>
                   </text>
