@@ -17,7 +17,7 @@ import { Tool } from "./tool"
 
 export interface Interface {
   readonly sessions: Session.Interface
-  readonly tools: Tool.Service
+  readonly tools: Tool.Interface
 }
 
 /** Intentional public native API for Effect applications embedding OpenCode. */
@@ -88,7 +88,7 @@ export const layer = Layer.effect(
     const tools = yield* ApplicationTools.Service
     const validation = yield* SessionModelValidation
     return Service.of({
-      tools: { attach: tools.attach },
+      tools: { register: tools.register },
       sessions: {
         create: (input) =>
           sessions.create({

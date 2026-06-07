@@ -15,6 +15,7 @@ import { WriteTool } from "@opencode-ai/core/tool/write"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_write_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -64,14 +65,20 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   const resolution = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
   const mutation = FileMutation.layer.pipe(Layer.provide(filesystem))
   const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-  const write = WriteTool.layer.pipe(Layer.provide(registry), Layer.provide(resolution), Layer.provide(mutation))
+  const write = WriteTool.layer.pipe(
+    Layer.provide(registry),
+    Layer.provide(permission),
+    Layer.provide(resolution),
+    Layer.provide(mutation),
+  )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
   }).pipe(Effect.provide(Layer.mergeAll(registry, resolution, mutation, write)))
 }
 
-const call = (input: typeof WriteTool.Parameters.Type, id = "call-write") => ({
+const call = (input: typeof WriteTool.Input.Type, id = "call-write") => ({
   sessionID,
+  ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "write", input },
 })
 
@@ -85,8 +92,8 @@ describe("WriteTool", () => {
         reset()
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
-            expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["write"])
-            const settled = yield* registry.settle(call({ path: "src/new.txt", content: "created" }))
+            expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write"])
+            const settled = yield* settleTool(registry, call({ path: "src/new.txt", content: "created" }))
             expect(settled).toEqual({
               result: { type: "text", value: "Created file successfully: src/new.txt" },
               output: {
@@ -102,7 +109,7 @@ describe("WriteTool", () => {
             expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "src", "new.txt"), "utf8"))).toBe(
               "created",
             )
-            expect(assertions).toEqual([{ sessionID, action: "edit", resources: ["src/new.txt"], save: ["*"] }])
+            expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["src/new.txt"], save: ["*"] }])
             expect(writes).toEqual([path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt")])
           }),
         )
@@ -118,7 +125,7 @@ describe("WriteTool", () => {
         reset()
         return Effect.promise(() => fs.writeFile(path.join(tmp.path, "existing.txt"), "before")).pipe(
           Effect.andThen(
-            withTool(tmp.path, (registry) => registry.settle(call({ path: "existing.txt", content: "after" }))),
+            withTool(tmp.path, (registry) => settleTool(registry, call({ path: "existing.txt", content: "after" }))),
           ),
           Effect.andThen((settled) =>
             Effect.gen(function* () {
@@ -149,8 +156,11 @@ describe("WriteTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                yield* registry.settle(call({ path: "preserved.txt", content: "after" }, "call-preserved"))
-                yield* registry.settle(call({ path: "deduplicated.txt", content: "\uFEFFafter" }, "call-deduplicated"))
+                yield* settleTool(registry, call({ path: "preserved.txt", content: "after" }, "call-preserved"))
+                yield* settleTool(
+                  registry,
+                  call({ path: "deduplicated.txt", content: "\uFEFFafter" }, "call-deduplicated"),
+                )
 
                 expect(yield* Effect.promise(() => fs.readFile(preserved, "utf8"))).toBe("\uFEFFafter")
                 expect(yield* Effect.promise(() => fs.readFile(deduplicated, "utf8"))).toBe("\uFEFFafter")
@@ -169,7 +179,7 @@ describe("WriteTool", () => {
       (tmp) => {
         reset()
         const target = path.join(tmp.path, "absolute.txt")
-        return withTool(tmp.path, (registry) => registry.execute(call({ path: target, content: "inside" }))).pipe(
+        return withTool(tmp.path, (registry) => executeTool(registry, call({ path: target, content: "inside" }))).pipe(
           Effect.andThen((result) =>
             Effect.gen(function* () {
               expect(result).toEqual({ type: "text", value: "Created file successfully: absolute.txt" })
@@ -189,7 +199,9 @@ describe("WriteTool", () => {
       ([active, outside]) => {
         reset()
         const target = path.join(outside.path, "external.txt")
-        return withTool(active.path, (registry) => registry.settle(call({ path: target, content: "external" }))).pipe(
+        return withTool(active.path, (registry) =>
+          settleTool(registry, call({ path: target, content: "external" })),
+        ).pipe(
           Effect.andThen((settled) =>
             Effect.gen(function* () {
               const canonicalTarget = path.join(yield* Effect.promise(() => fs.realpath(outside.path)), "external.txt")
@@ -227,7 +239,9 @@ describe("WriteTool", () => {
           reset()
           denyAction = "external_directory"
           expect(
-            yield* withTool(active.path, (registry) => registry.execute(call({ path: external, content: "blocked" }))),
+            yield* withTool(active.path, (registry) =>
+              executeTool(registry, call({ path: external, content: "blocked" })),
+            ),
           ).toEqual({
             type: "error",
             value: `Unable to write ${external}`,
@@ -239,7 +253,7 @@ describe("WriteTool", () => {
           denyAction = "edit"
           expect(
             yield* withTool(active.path, (registry) =>
-              registry.execute(call({ path: "denied.txt", content: "blocked" })),
+              executeTool(registry, call({ path: "denied.txt", content: "blocked" })),
             ),
           ).toEqual({
             type: "error",
@@ -259,7 +273,7 @@ describe("WriteTool", () => {
 test("keeps the locked write schema, semantics docstring, and deferred UX TODOs visible", async () => {
   const source = (await fs.readFile(new URL("../src/tool/write.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
   const definition = await Effect.runPromise(
-    withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => registry.definitions()),
+    withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => toolDefinitions(registry)),
   )
   const schema = definition[0]?.inputSchema as { readonly properties?: Record<string, unknown> }
 

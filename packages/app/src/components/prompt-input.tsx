@@ -57,7 +57,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
-import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
+import { ACCEPTED_FILE_TYPES, pickAttachmentFiles } from "./prompt-input/files"
 import {
   canNavigateHistoryAtCursor,
   navigatePromptHistory,
@@ -73,6 +73,8 @@ import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
+import { useDirectoryPicker } from "./directory-picker"
+import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
 import { useQueryOptions } from "@/context/server-sync"
@@ -140,6 +142,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const pickDirectory = useDirectoryPicker()
   const settings = useSettings()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
@@ -468,7 +471,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const pick = () => {
     if (server.isLocal()) {
-      fileInputRef?.click()
+      pickAttachmentFiles({
+        picker: platform.openAttachmentPickerDialog,
+        directory: () => sdk.directory,
+        fallback: () => fileInputRef?.click(),
+        onFile: addAttachment,
+        onError: (error) =>
+          showToast({
+            variant: "error",
+            title: language.t("common.requestFailed"),
+            description: error instanceof Error ? error.message : String(error),
+          }),
+      })
       return
     }
     void import("@/components/dialog-select-file").then((module) =>
@@ -1094,7 +1108,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
-  const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
+  const { addAttachment, addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
@@ -1385,7 +1399,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     server.projects.touch(worktree)
     navigate(`/${base64Encode(worktree)}/session`)
   }
-  const addProject = async () => {
+  const addProject = () => {
     const conn = server.current
     if (!conn) return
     const select = (result: string | string[] | null) => {
@@ -1393,15 +1407,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (!directory) return
       selectProject(directory)
     }
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      select(await platform.openDirectoryPickerDialog({ title: language.t("command.project.open") }))
-      return
-    }
-    void import("@/components/dialog-select-directory").then((x) => {
-      dialog.show(
-        () => <x.DialogSelectDirectory onSelect={select} server={conn} />,
-        () => select(null),
-      )
+    pickDirectory({
+      server: conn,
+      title: language.t("command.project.open"),
+      onSelect: select,
     })
   }
 
