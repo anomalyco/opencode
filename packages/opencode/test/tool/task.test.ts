@@ -242,6 +242,70 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("execute records child metadata before honoring interruption", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const metadataStarted = defer<void>()
+      const releaseMetadata = defer<void>()
+      let metadataSessionId: string | undefined
+      let promptStarted = false
+
+      const fiber = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {
+              promptOps: stubOps({
+                onPrompt: () => {
+                  promptStarted = true
+                },
+              }),
+            },
+            messages: [],
+            metadata: (input) =>
+              Effect.gen(function* () {
+                metadataStarted.resolve(undefined)
+                yield* Effect.promise(() => releaseMetadata.promise)
+                const sessionId = input.metadata?.sessionId
+                if (typeof sessionId === "string") metadataSessionId = sessionId
+              }),
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.forkChild)
+
+      yield* Effect.promise(() => metadataStarted.promise)
+      const interruptStarted = defer<void>()
+      const interrupter = yield* Effect.gen(function* () {
+        interruptStarted.resolve(undefined)
+        yield* Fiber.interrupt(fiber)
+      }).pipe(Effect.forkChild)
+      yield* Effect.promise(() => interruptStarted.promise)
+      yield* Effect.yieldNow
+      releaseMetadata.resolve(undefined)
+
+      const exit = yield* Fiber.await(fiber)
+      yield* Fiber.await(interrupter)
+
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(1)
+      expect(metadataSessionId).toBe(kids[0]?.id)
+      expect(promptStarted).toBe(false)
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
   it.instance("execute asks by default and skips checks when bypassed", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -671,7 +735,10 @@ describe("tool.task", () => {
       expect(waited.info?.status).toBe("completed")
 
       const beforeCompletion = yield* Effect.promise(() =>
-        Promise.race([looped.promise.then(() => true), new Promise<false>((done) => setTimeout(() => done(false), 400))]),
+        Promise.race([
+          looped.promise.then(() => true),
+          new Promise<false>((done) => setTimeout(() => done(false), 400)),
+        ]),
       )
       expect(beforeCompletion).toBe(false)
 

@@ -417,12 +417,17 @@ export const layer = Layer.effect(
           callID: part.callID,
           extra: { bypassAgentCheck: true, promptOps },
           messages: msgs,
-          metadata: (val: { title?: string; metadata?: Record<string, any> }) =>
+          metadata: (val: { title?: string; metadata?: Record<string, unknown> }) =>
             Effect.gen(function* () {
+              if (part.state.status !== "running") return
               part = yield* sessions.updatePart({
                 ...part,
                 type: "tool",
-                state: { ...part.state, ...val },
+                state: {
+                  ...part.state,
+                  ...(val.title === undefined ? {} : { title: val.title }),
+                  ...(val.metadata === undefined ? {} : { metadata: { ...part.state.metadata, ...val.metadata } }),
+                },
               } satisfies MessageV2.ToolPart)
             }),
           ask: (req: any) =>
