@@ -18,7 +18,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { useDirectoryPicker } from "@/components/directory-picker"
 import { DialogSelectServer, useServerManagementController } from "@/components/dialog-select-server"
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, useServer } from "@/context/server"
@@ -125,6 +125,7 @@ function HomeDesign() {
   const sync = useServerSync()
   const layout = useLayout()
   const platform = usePlatform()
+  const pickDirectory = useDirectoryPicker()
   const dialog = useDialog()
   const navigate = useNavigate()
   const server = useServer()
@@ -314,26 +315,19 @@ function HomeDesign() {
     navigateOnServer(conn, `/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
-  async function chooseProject(conn: ServerConnection.Any) {
+  function chooseProject(conn: ServerConnection.Any) {
     function resolve(result: string | string[] | null) {
       addProjects(conn, homeProjectDirectories(result))
     }
 
     const server = global.createServerCtx(conn)
 
-    if (platform.openDirectoryPickerDialog && server.isLocal) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
-        multiple: true,
-      })
-      resolve(result)
-      return
-    }
-
-    dialog.show(
-      () => <DialogSelectDirectory multiple={true} onSelect={resolve} server={conn} />,
-      () => resolve(null),
-    )
+    pickDirectory({
+      server: conn,
+      title: language.t("command.project.open"),
+      multiple: true,
+      onSelect: resolve,
+    })
   }
 
   function openSettings() {
@@ -1101,6 +1095,7 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
 function LegacyHome() {
   const sync = useServerSync()
   const platform = usePlatform()
+  const pickDirectory = useDirectoryPicker()
   const dialog = useDialog()
   const navigate = useNavigate()
   const global = useGlobal()
@@ -1128,7 +1123,7 @@ function LegacyHome() {
     navigate(`/${base64Encode(directory)}`)
   }
 
-  async function chooseProject() {
+  function chooseProject() {
     const s = server.current
     if (!s) return
 
@@ -1142,18 +1137,12 @@ function LegacyHome() {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
-        multiple: true,
-      })
-      resolve(result)
-    } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} server={s} />,
-        () => resolve(null),
-      )
-    }
+    pickDirectory({
+      server: s,
+      title: language.t("command.project.open"),
+      multiple: true,
+      onSelect: resolve,
+    })
   }
 
   return (
