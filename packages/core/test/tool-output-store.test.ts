@@ -43,34 +43,6 @@ const withStore = <A, E, R>(
 const it = testEffect(Layer.empty)
 
 describe("ToolOutputStore", () => {
-  it.live("returns under-limit text unchanged without writing a file", () =>
-    withStore(({ store }) =>
-      Effect.gen(function* () {
-        expect(yield* store.truncate({ sessionID, toolCallID: "call-short", content: "one\ntwo" })).toEqual({
-          content: "one\ntwo",
-          truncated: false,
-        })
-      }),
-    ),
-  )
-
-  it.live("stores full output at an absolute managed path", () =>
-    withStore(({ root, store, fs }) =>
-      Effect.gen(function* () {
-        const content = "HEAD-" + "x".repeat(500) + "-TAIL"
-        const result = yield* store.truncate({ sessionID, toolCallID: "call-large", content, maxBytes: 300 })
-        expect(result.truncated).toBe(true)
-        if (!result.truncated) throw new Error("expected truncation")
-        expect(path.isAbsolute(result.outputPath)).toBe(true)
-        expect(result.outputPath).toStartWith(path.join(root, "tool-output", "tool_"))
-        expect(result.content).toContain(result.outputPath)
-        expect(result.content).toContain("HEAD-")
-        expect(result.content).toContain("-TAIL")
-        expect(yield* fs.readFileString(result.outputPath)).toBe(content)
-      }),
-    ),
-  )
-
   it.live("bounds aggregate text and structured output with one managed file", () =>
     withStore(({ store, fs }) =>
       Effect.gen(function* () {
@@ -166,6 +138,29 @@ describe("ToolOutputStore", () => {
     ),
   )
 
+  it.live("rejects inline media whose aggregate size exceeds the settlement limit", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const exit = yield* store
+          .bound({
+            sessionID,
+            toolCallID: "call-files-too-large",
+            output: {
+              structured: {},
+              content: [
+                { type: "file", source: { type: "data", data: "a".repeat(3 * 1024 * 1024) }, mime: "image/png" },
+                { type: "file", source: { type: "data", data: "b".repeat(3 * 1024 * 1024) }, mime: "image/png" },
+              ],
+            },
+          })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit))
+          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.MediaLimitError")
+      }),
+    ),
+  )
+
   it.live("fails oversized settlement when complete retention cannot be written", () =>
     withStore(({ root, store, fs }) =>
       Effect.gen(function* () {
@@ -244,9 +239,12 @@ describe("ToolOutputStore", () => {
       ({ store }) =>
         Effect.gen(function* () {
           expect(yield* store.limits()).toEqual({ maxLines: 2, maxBytes: 1_000 })
-          expect(
-            (yield* store.truncate({ sessionID, toolCallID: "call-config", content: "one\ntwo\nthree" })).truncated,
-          ).toBe(true)
+          const result = yield* store.bound({
+            sessionID,
+            toolCallID: "call-config",
+            output: { structured: {}, content: [{ type: "text", text: "one\ntwo\nthree" }] },
+          })
+          expect(result.outputPaths).toHaveLength(1)
         }),
       new Config.Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
     ),
@@ -255,9 +253,12 @@ describe("ToolOutputStore", () => {
   it.live("cleans expired managed files and preserves unrelated files", () =>
     withStore(({ root, store, fs }) =>
       Effect.gen(function* () {
-        const old = yield* store.write({ sessionID, toolCallID: "old", content: "old" })
-        const recent = yield* store.write({ sessionID, toolCallID: "recent", content: "recent" })
+        const old = path.join(root, "tool-output", "tool_old")
+        const recent = path.join(root, "tool-output", "tool_recent")
         const unrelated = path.join(root, "tool-output", "keep.txt")
+        yield* fs.ensureDir(path.join(root, "tool-output"))
+        yield* fs.writeFileString(old, "old")
+        yield* fs.writeFileString(recent, "recent")
         yield* fs.writeFileString(unrelated, "keep")
         const expired = new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000)
         yield* fs.utimes(old, expired, expired)

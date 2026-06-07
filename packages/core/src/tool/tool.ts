@@ -25,8 +25,6 @@ export interface Tool<Input extends SchemaType<any>, Output extends SchemaType<a
 }
 
 export type AnyTool = Tool<any, any>
-export type Name = string
-
 export const Failure = ToolFailure
 export type Failure = ToolFailure
 
@@ -54,7 +52,7 @@ type Config<Input extends SchemaType<any>, Output extends SchemaType<any>> = {
 }
 
 type Runtime = {
-  permission?: string
+  readonly permission?: string
   readonly definition: (name: string) => ReturnType<typeof LlmTool.toDefinitions>[number]
   readonly settle: (call: ToolCall, context: Context) => Effect.Effect<ToolOutput, ToolFailure>
 }
@@ -65,11 +63,17 @@ export function make<Input extends SchemaType<any>, Output extends SchemaType<an
   config: Config<Input, Output>,
 ): Tool<Input, Output> {
   const tool = Object.freeze({}) as Tool<Input, Output>
+  const definitions = new Map<string, ReturnType<typeof LlmTool.toDefinitions>[number]>()
   runtimes.set(tool, {
-    definition: (name) =>
-      LlmTool.toDefinitions({
+    definition: (name) => {
+      const cached = definitions.get(name)
+      if (cached) return cached
+      const definition = LlmTool.toDefinitions({
         [name]: LlmTool.make({ description: config.description, parameters: config.input, success: config.output }),
-      })[0],
+      })[0]
+      definitions.set(name, definition)
+      return definition
+    },
     settle: (call, context) =>
       Schema.decodeUnknownEffect(config.input)(call.input).pipe(
         Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
@@ -116,8 +120,9 @@ export const withPermission = <Input extends SchemaType<any>, Output extends Sch
   tool: Tool<Input, Output>,
   permission: string,
 ) => {
-  runtimeOf(tool).permission = permission
-  return tool
+  const decorated = Object.freeze({}) as Tool<Input, Output>
+  runtimes.set(decorated, { ...runtimeOf(tool), permission })
+  return decorated
 }
 
 export const permission = (tool: AnyTool, name: string) => runtimeOf(tool).permission ?? name

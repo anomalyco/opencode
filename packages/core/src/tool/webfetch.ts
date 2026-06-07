@@ -35,7 +35,6 @@ const Success = Schema.Struct({
   contentType: Schema.String,
   format: Parameters.fields.format,
   output: Schema.String,
-  truncated: Schema.Boolean,
 })
 
 type Format = (typeof Parameters.Type)["format"]
@@ -178,7 +177,6 @@ export const layer = Layer.effectDiscard(
                 contentType,
                 format: input.format,
                 output: content,
-                truncated: false,
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to fetch ${input.url}` }))),
         }),

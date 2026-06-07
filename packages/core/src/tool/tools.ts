@@ -5,7 +5,7 @@ import { Tool } from "./tool"
 
 export interface Interface {
   readonly register: (
-    tools: Readonly<Record<Tool.Name, Tool.AnyTool>>,
+    tools: Readonly<Record<string, Tool.AnyTool>>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
 }
 

@@ -84,17 +84,6 @@ export const layer = Layer.effectDiscard(
           execute: (input, context) => {
             return Effect.gen(function* () {
               const resolved = yield* filesystem.resolveReadPath(input)
-              if (resolved.type === "directory") {
-                yield* permission.assert({
-                  action: name,
-                  resources: [resolved.resource],
-                  save: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
-                })
-                return yield* filesystem.listPage(input)
-              }
               yield* permission.assert({
                 action: name,
                 resources: [resolved.resource],
@@ -103,6 +92,7 @@ export const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
+              if (resolved.type === "directory") return yield* filesystem.listPage(input)
               const content = yield* filesystem.readTool(input, {
                 offset: input.offset,
                 limit: input.limit,

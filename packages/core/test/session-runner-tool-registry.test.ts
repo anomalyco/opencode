@@ -87,6 +87,33 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  it.effect("keeps permission decoration isolated between registrations", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const shared = make()
+      yield* service.register({ first: shared })
+      yield* service.register({ second: Tool.withPermission(shared, "edit") })
+      Tool.withPermission(shared, "question")
+
+      expect(
+        (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map(
+          (definition) => definition.name,
+        ),
+      ).toEqual(["first"])
+    }),
+  )
+
+  it.effect("reuses model definitions across provider turns", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ echo: make() })
+      const first = yield* toolDefinitions(service)
+      const second = yield* toolDefinitions(service)
+
+      expect(second[0]).toBe(first[0])
+    }),
+  )
+
   it.effect("removes a scoped registration", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service

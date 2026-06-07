@@ -179,7 +179,6 @@ const callMcp = <F extends Schema.Struct.Fields>(
 const Success = Schema.Struct({
   provider: Provider,
   text: Schema.String,
-  truncated: Schema.Boolean,
 })
 
 export const layer = Layer.effectDiscard(
@@ -237,7 +236,6 @@ export const layer = Layer.effectDiscard(
               return {
                 provider,
                 text: text ?? NO_RESULTS,
-                truncated: false,
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to search the web for ${input.query}` })))
           },

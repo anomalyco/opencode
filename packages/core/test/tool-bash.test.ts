@@ -13,7 +13,6 @@ import { AppProcess } from "@opencode-ai/core/process"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { BashTool } from "@opencode-ai/core/tool/bash"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
@@ -28,7 +27,6 @@ const runs: Array<{
   readonly shell?: string | boolean
   readonly options?: AppProcess.RunOptions
 }> = []
-const truncations: ToolOutputStore.TruncateInput[] = []
 let denyAction: string | undefined
 let result: AppProcess.RunResult = {
   command: "mock",
@@ -40,8 +38,6 @@ let result: AppProcess.RunResult = {
 }
 let runFailure: AppProcess.AppProcessError | undefined
 let afterPermission = (_input: PermissionV2.AssertInput): Effect.Effect<void> => Effect.void
-let truncate = (input: ToolOutputStore.TruncateInput): Effect.Effect<ToolOutputStore.TruncateResult> =>
-  Effect.succeed({ content: input.content, truncated: false })
 
 const permission = Layer.succeed(
   PermissionV2.Service,
@@ -71,16 +67,6 @@ const appProcess = Layer.succeed(
       }),
   } as unknown as AppProcess.Interface),
 )
-const resources = Layer.succeed(
-  ToolOutputStore.Service,
-  ToolOutputStore.Service.of({
-    limits: () => Effect.die("unused"),
-    write: () => Effect.die("unused"),
-    truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
-    bound: (input) => Effect.succeed({ output: input.output, outputPaths: [] }),
-    cleanup: () => Effect.die("unused"),
-  }),
-)
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
@@ -91,7 +77,6 @@ const config = Layer.succeed(
 const reset = () => {
   assertions.length = 0
   runs.length = 0
-  truncations.length = 0
   denyAction = undefined
   runFailure = undefined
   afterPermission = () => Effect.void
@@ -103,7 +88,6 @@ const reset = () => {
     stdoutTruncated: false,
     stderrTruncated: false,
   }
-  truncate = (input) => Effect.succeed({ content: input.content, truncated: false })
 }
 
 const withTool = <A, E, R>(
@@ -124,7 +108,6 @@ const withTool = <A, E, R>(
     Layer.provide(mutation),
     Layer.provide(filesystem),
     Layer.provide(processLayer),
-    Layer.provide(resources),
     Layer.provide(config),
   )
   return Effect.gen(function* () {
@@ -337,18 +320,12 @@ describe("BashTool", () => {
     ),
   )
 
-  it.live("keeps non-zero exits useful and exposes managed overflow by path", () =>
+  it.live("keeps non-zero exits useful", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
         result = { ...result, exitCode: 7, stdout: Buffer.from("HEAD full output TAIL") }
-        truncate = (_input) =>
-          Effect.succeed({
-            content: "HEAD\n\n... output truncated; full content saved to /tmp/tool-output/tool_opaque ...\n\nTAIL",
-            truncated: true,
-            outputPath: "/tmp/tool-output/tool_opaque",
-          })
         return withTool(tmp.path, (registry) => settleTool(registry, call({ command: "false" }, "call-overflow"))).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
@@ -363,7 +340,6 @@ describe("BashTool", () => {
                 output: "HEAD full output TAIL",
                 truncated: false,
               })
-              expect(truncations).toEqual([])
             }),
           ),
         )

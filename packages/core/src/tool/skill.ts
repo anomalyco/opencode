@@ -22,7 +22,6 @@ export const Success = Schema.Struct({
   name: Schema.String,
   directory: Schema.String,
   output: Schema.String,
-  truncated: Schema.Boolean,
 })
 
 export const description = [
@@ -96,7 +95,6 @@ export const layer = Layer.effectDiscard(
                   name: skill.name,
                   directory,
                   output: toModelOutput(skill, files),
-                  truncated: false,
                 }
               }).pipe(Effect.mapError((error) => unableToLoad(input.name, error)))
             }),

@@ -20,7 +20,7 @@ export interface Entry {
 
 export interface Interface {
   readonly register: (
-    tools: Readonly<Record<Tool.Name, Tool.AnyTool>>,
+    tools: Readonly<Record<string, Tool.AnyTool>>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
   readonly entries: () => ReadonlyMap<string, Entry>
 }
@@ -44,6 +44,7 @@ export const layer = Layer.effect(
     return Service.of({
       register: Effect.fn("ApplicationTools.register")(function* (tools) {
         const entries = Object.entries(tools)
+        if (entries.length === 0) return
         yield* Effect.forEach(entries, ([name]) => Tool.validateName(name), { discard: true })
         const registrations = entries.map(([name, tool]) => [name, { identity: {}, tool }] as const)
         const transform = yield* state.transform()

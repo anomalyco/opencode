@@ -4,7 +4,6 @@ import * as TestClock from "effect/testing/TestClock"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebFetchTool } from "@opencode-ai/core/tool/webfetch"
 import { testEffect } from "./lib/effect"
@@ -13,11 +12,8 @@ import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/to
 const sessionID = SessionV2.ID.make("ses_webfetch_test")
 const requests: Array<{ readonly url: string; readonly headers: Record<string, string> }> = []
 const assertions: PermissionV2.AssertInput[] = []
-const truncations: ToolOutputStore.TruncateInput[] = []
 let respond = (_request: HttpClientRequest.HttpClientRequest) =>
   Effect.succeed(new Response("hello", { headers: { "content-type": "text/plain" } }))
-let truncate = (input: ToolOutputStore.TruncateInput): Effect.Effect<ToolOutputStore.TruncateResult> =>
-  Effect.succeed({ content: input.content, truncated: false })
 
 const http = Layer.succeed(
   HttpClient.HttpClient,
@@ -39,38 +35,20 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const resources = Layer.succeed(
-  ToolOutputStore.Service,
-  ToolOutputStore.Service.of({
-    limits: () => Effect.die("unused"),
-    write: () => Effect.die("unused"),
-    truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
-    bound: (input) => Effect.succeed({ output: input.output, outputPaths: [] }),
-    cleanup: () => Effect.die("unused"),
-  }),
-)
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const webfetch = WebFetchTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(permission),
-  Layer.provide(http),
-  Layer.provide(resources),
-)
-const it = testEffect(Layer.mergeAll(registry, permission, http, resources, webfetch))
+const webfetch = WebFetchTool.layer.pipe(Layer.provide(registry), Layer.provide(permission), Layer.provide(http))
+const it = testEffect(Layer.mergeAll(registry, permission, http, webfetch))
 const fetchWebfetch = WebFetchTool.layer.pipe(
   Layer.provide(registry),
   Layer.provide(permission),
   Layer.provide(FetchHttpClient.layer),
-  Layer.provide(resources),
 )
-const live = testEffect(Layer.mergeAll(registry, permission, FetchHttpClient.layer, resources, fetchWebfetch))
+const live = testEffect(Layer.mergeAll(registry, permission, FetchHttpClient.layer, fetchWebfetch))
 
 const reset = () => {
   requests.length = 0
   assertions.length = 0
-  truncations.length = 0
   respond = () => Effect.succeed(new Response("hello", { headers: { "content-type": "text/plain" } }))
-  truncate = (input) => Effect.succeed({ content: input.content, truncated: false })
 }
 
 const call = (input: typeof WebFetchTool.Parameters.Type, id = "call-webfetch") => ({
@@ -105,7 +83,7 @@ describe("WebFetchTool contribution", () => {
       expect(yield* settleTool(registry, call({ url, format: "text", timeout: 4 }))).toEqual({
         result: { type: "text", value: "hello" },
         output: {
-          structured: { url, contentType: "text/plain", format: "text", output: "hello", truncated: false },
+          structured: { url, contentType: "text/plain", format: "text", output: "hello" },
           content: [{ type: "text", text: "hello" }],
         },
       })
@@ -198,24 +176,6 @@ describe("WebFetchTool contribution", () => {
     }),
   )
 
-  it.effect("exposes managed overflow through a path", () =>
-    Effect.gen(function* () {
-      reset()
-      truncate = (_input) =>
-        Effect.succeed({
-          content: "HEAD\n\n... output truncated; full content saved to /tmp/tool-output/tool_opaque ...\n\nTAIL",
-          truncated: true,
-          outputPath: "/tmp/tool-output/tool_opaque",
-        })
-      const registry = yield* ToolRegistry.Service
-      const settled = yield* settleTool(registry, call({ url: "https://1.1.1.1", format: "html" }, "call-overflow"))
-
-      expect(settled.result).toEqual({ type: "text", value: "hello" })
-      expect(settled.output?.structured).toMatchObject({ output: "hello", truncated: false })
-      expect(truncations).toEqual([])
-    }),
-  )
-
   it.effect("rejects declared and streamed oversized bodies", () =>
     Effect.gen(function* () {
       reset()
@@ -257,7 +217,6 @@ describe("WebFetchTool contribution", () => {
         type: "error",
         value: "Unable to fetch https://1.1.1.1/file",
       })
-      expect(truncations).toEqual([])
     }),
   )
 

@@ -23,7 +23,7 @@ export interface Interface {
   readonly materialize: (permissions?: PermissionV2.Ruleset) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (
-    tools: Readonly<Record<Tool.Name, Tool.AnyTool>>,
+    tools: Readonly<Record<string, Tool.AnyTool>>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
 }
 
@@ -46,19 +46,9 @@ const registryLayer = Layer.effect(
     type Registration = { readonly identity: object; readonly tool: Tool.AnyTool }
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
 
-    const tools = () => {
-      const result = new Map(
-        Array.from(local).flatMap(([name, registrations]) => {
-          const registration = registrations.at(-1)
-          return registration ? [[name, registration.registration] as const] : []
-        }),
-      )
-      for (const [name, registration] of applications.entries()) if (!result.has(name)) result.set(name, registration)
-      return result
-    }
-
     const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, advertised?: object) {
-      const registration = tools().get(input.call.name)
+      const registration =
+        local.get(input.call.name)?.at(-1)?.registration ?? applications.entries().get(input.call.name)
       if (!registration)
         return {
           result: {
@@ -93,6 +83,7 @@ const registryLayer = Layer.effect(
     return Service.of({
       register: Effect.fn("ToolRegistry.register")(function* (tools) {
         const entries = Object.entries(tools)
+        if (entries.length === 0) return
         yield* Effect.forEach(entries, ([name]) => Tool.validateName(name), { discard: true })
         const token = {}
         for (const [name, tool] of entries)
@@ -108,11 +99,13 @@ const registryLayer = Layer.effect(
         )
       }),
       materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions = []) {
-        const registrations = new Map(
-          Array.from(tools()).filter(
-            ([name, registration]) => !whollyDisabled(Tool.permission(registration.tool, name), permissions),
-          ),
-        )
+        const registrations = new Map(applications.entries())
+        for (const [name, entries] of local) {
+          const registration = entries.at(-1)?.registration
+          if (registration) registrations.set(name, registration)
+        }
+        for (const [name, registration] of registrations)
+          if (whollyDisabled(Tool.permission(registration.tool, name), permissions)) registrations.delete(name)
         return {
           definitions: Array.from(registrations, ([name, registration]) => Tool.definition(name, registration.tool)),
           settle: (input) => {

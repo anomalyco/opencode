@@ -69,12 +69,12 @@ The record key is the effective model-facing name. A reusable tool value has no 
 ```ts
 interface Tools {
   readonly register: (
-    tools: Readonly<Record<Tool.Name, Tool.AnyTool>>,
+    tools: Readonly<Record<string, Tool.AnyTool>>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
 }
 ```
 
-`Tool.Name` uses a conservative provider-neutral grammar and is validated at registration. Provider-specific restrictions that cannot be validated generically fail during request preparation with an explicit model-compatibility error.
+Tool names use a conservative provider-neutral grammar and are validated at registration. Provider-specific restrictions that cannot be validated generically fail during request preparation with an explicit model-compatibility error.
 
 Process application tools and Location tools expose the same `register` operation but retain separate services and stores. Registration placement determines scope, precedence, and authority; it does not change the tool type.
 
