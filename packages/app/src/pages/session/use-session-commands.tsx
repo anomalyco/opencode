@@ -547,6 +547,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
+      disabled: desktopV2() && !settings.general.showCustomAgents(),
       onSelect: () => local.agent.move(1),
     }),
     agentCommand({
@@ -554,6 +555,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.agent.cycle.reverse"),
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
+      disabled: desktopV2() && !settings.general.showCustomAgents(),
       onSelect: () => local.agent.move(-1),
     }),
   ]
