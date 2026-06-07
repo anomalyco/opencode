@@ -70,7 +70,7 @@ export const layer = Layer.effectDiscard(
       return files.filter((file): file is File => file !== undefined)
     })
 
-    yield* registry.contribute({
+    yield* registry.register({
       key,
       load: observe().pipe(
         Effect.map((files) =>

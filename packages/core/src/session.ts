@@ -425,20 +425,12 @@ export const layer = Layer.effect(
   }),
 )
 
-const DefaultDatabase = Database.defaultLayer
-const DefaultEvents = EventV2.layer.pipe(Layer.provide(DefaultDatabase))
-const DefaultProjector = SessionProjector.layer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
-const DefaultStore = SessionStore.layer.pipe(Layer.provide(DefaultDatabase))
 export const defaultLayer = layer.pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      DefaultDatabase,
-      DefaultEvents,
-      DefaultProjector,
-      DefaultStore,
-      SessionExecution.noopLayer,
-      ProjectV2.defaultLayer,
-    ),
-  ),
+  Layer.provide(SessionExecution.noopLayer),
+  Layer.provide(SessionStore.defaultLayer),
+  Layer.provide(SessionProjector.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(ProjectV2.defaultLayer),
   Layer.orDie,
 )

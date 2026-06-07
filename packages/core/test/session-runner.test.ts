@@ -173,7 +173,7 @@ const skillBaselines = new Map<AgentV2.ID, string>()
 const systemContext = Layer.effectDiscard(
   SystemContextRegistry.Service.pipe(
     Effect.flatMap((registry) =>
-      registry.contribute({
+      registry.register({
         key: systemContextKey,
         load: Effect.sync(() =>
           SystemContext.combine(

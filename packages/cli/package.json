@@ -20,8 +20,12 @@
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/server": "workspace:*",
+    "@opencode-ai/tui": "workspace:*",
+    "@opentui/core": "catalog:",
+    "@opentui/solid": "catalog:",
     "@parcel/watcher": "2.5.1",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "solid-js": "catalog:"
   },
   "devDependencies": {
     "@opencode-ai/script": "workspace:*",

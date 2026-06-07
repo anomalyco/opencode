@@ -1,8 +1,12 @@
 #!/usr/bin/env bun
 
+import { $ } from "bun"
+import fs from "fs"
 import { rm } from "fs/promises"
 import path from "path"
 import { Script } from "@opencode-ai/script"
+import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
+import pkg from "../package.json"
 import { modelsData } from "./generate"
 
 const dir = path.resolve(import.meta.dirname, "..")
@@ -13,7 +17,9 @@ await rm("dist", { recursive: true, force: true })
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
+const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
+const plugin = createSolidTransformPlugin()
 
 const allTargets: {
   os: string
@@ -43,6 +49,12 @@ const targets = singleFlag
     })
   : allTargets
 
+if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+
+const localParserWorker = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
+const rootParserWorker = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
+const parserWorker = fs.realpathSync(fs.existsSync(localParserWorker) ? localParserWorker : rootParserWorker)
+
 for (const item of targets) {
   const target = [
     binary,
@@ -56,8 +68,9 @@ for (const item of targets) {
   const name = target.replace(binary, "cli")
   console.log(`building ${name}`)
   const result = await Bun.build({
-    entrypoints: ["./src/index.ts"],
+    entrypoints: ["./src/index.ts", parserWorker],
     tsconfig: "./tsconfig.json",
+    plugins: [plugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
@@ -79,6 +92,11 @@ for (const item of targets) {
       OPENCODE_MODELS_DEV: modelsData,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
+      OTUI_TREE_SITTER_WORKER_PATH:
+        (item.os === "win32" ? '"B:/~BUN/root/' : '"/$bunfs/root/') +
+        path.relative(dir, parserWorker).replaceAll("\\", "/") +
+        '"',
+      ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
     },
   })
 

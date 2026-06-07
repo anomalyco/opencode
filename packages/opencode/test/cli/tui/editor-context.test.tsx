@@ -3,9 +3,12 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, expect, spyOn, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { EditorContextProvider, useEditorContext } from "../../../src/cli/cmd/tui/context/editor"
+import { EditorContextProvider, useEditorContext } from "@opencode-ai/tui/context/editor"
 import { tmpdir } from "../../fixture/fixture"
 import { FakeWebSocket } from "../../lib/websocket"
+import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
+import { TuiPlatformProvider, type TuiPlatform } from "@opencode-ai/tui/platform"
+import { discoverEditorConnection } from "../../../src/cli/tui/platform"
 
 const originalClaudePort = process.env.CLAUDE_CODE_SSE_PORT
 const originalOpencodePort = process.env.OPENCODE_EDITOR_SSE_PORT
@@ -31,10 +34,19 @@ function mountEditorContext(WebSocketImpl?: typeof WebSocket) {
       return null
     }
 
+    const value = process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT
     return (
-      <EditorContextProvider WebSocketImpl={WebSocketImpl}>
-        <Consumer />
-      </EditorContextProvider>
+      <TestTuiEnvironmentProvider
+        cwd={process.cwd()}
+        paths={{ home: os.homedir() }}
+        editor={{ port: value ? Number.parseInt(value, 10) : undefined }}
+      >
+        <TuiPlatformProvider value={platform}>
+          <EditorContextProvider WebSocketImpl={WebSocketImpl}>
+            <Consumer />
+          </EditorContextProvider>
+        </TuiPlatformProvider>
+      </TestTuiEnvironmentProvider>
     )
   })
 
@@ -42,6 +54,18 @@ function mountEditorContext(WebSocketImpl?: typeof WebSocket) {
     editor,
     dispose,
   }
+}
+
+const platform: TuiPlatform = {
+  files: {
+    readText: (file) => Bun.file(file).text(),
+    readBytes: (file) => Bun.file(file).bytes(),
+    mime: () => Promise.resolve("application/octet-stream"),
+  },
+  editor: {
+    open: () => Promise.resolve(undefined),
+    connection: discoverEditorConnection,
+  },
 }
 
 function createWebSocketImpl(...sockets: FakeWebSocket[]) {

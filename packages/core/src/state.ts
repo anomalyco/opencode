@@ -4,7 +4,7 @@ import { Effect, Scope, Semaphore } from "effect"
 import type { Draft, Objectish } from "immer"
 
 /**
- * A replayable contribution applied to an editor during rebuild.
+ * A replayable transform applied to an editor during rebuild.
  *
  * Transforms are intentionally synchronous and mutation-shaped: domain editors
  * hide the draft representation while preserving concise plugin/config code.
@@ -39,15 +39,17 @@ export interface Interface<State extends Objectish, Editor> {
    * registration order. Closing the owning Scope removes the slot and rebuilds.
    */
   readonly transform: () => Effect.Effect<(transform: Transform<Editor>) => Effect.Effect<void>, never, Scope.Scope>
+  /** Registers and applies a replayable transform in the current Scope. */
+  readonly update: (update: Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
   /**
-   * Mutates the current materialized state directly.
+   * Mutates the current materialized state directly, once.
    *
-   * This is not replayable contribution state: a later rebuild starts again
+   * This is not replayable transform state: a later rebuild starts again
    * from `initial()` plus active transforms, so direct edits must be reserved
    * for current-state adjustments that are intentionally outside the transform
    * fold.
    */
-  readonly update: (update: (editor: Editor) => Effect.Effect<void>, reason?: string) => Effect.Effect<void>
+  readonly mutate: (update: (editor: Editor) => Effect.Effect<void>, reason?: string) => Effect.Effect<void>
 }
 
 export function create<State extends Objectish, Editor>(options: Options<State, Editor>): Interface<State, Editor> {
@@ -69,7 +71,7 @@ export function create<State extends Objectish, Editor>(options: Options<State, 
     yield* commit(next)
   })
 
-  return {
+  const result: Interface<State, Editor> = {
     get: () => state,
     transform: Effect.fn("State.transform")(function* () {
       const scope = yield* Scope.Scope
@@ -96,10 +98,15 @@ export function create<State extends Objectish, Editor>(options: Options<State, 
         }),
       )
     }),
-    update: Effect.fn("State.update")(function* (update, reason) {
+    update: Effect.fn("State.update")(function* (update) {
+      const transform = yield* result.transform()
+      yield* transform(update)
+    }),
+    mutate: Effect.fn("State.mutate")(function* (update, reason) {
       const api = options.editor(state as Draft<State>)
       yield* update(api)
       if (options.finalize) yield* options.finalize(api, reason)
     }, semaphore.withPermit),
   }
+  return result
 }

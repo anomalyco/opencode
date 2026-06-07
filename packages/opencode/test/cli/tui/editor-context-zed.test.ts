@@ -8,7 +8,7 @@ import {
   offsetToPosition,
   resolveZedDbPath,
   resolveZedSelection,
-} from "../../../src/cli/cmd/tui/context/editor-zed"
+} from "../../../src/cli/tui/editor-zed"
 import { tmpdir } from "../../fixture/fixture"
 
 const originalZedTerm = process.env.ZED_TERM

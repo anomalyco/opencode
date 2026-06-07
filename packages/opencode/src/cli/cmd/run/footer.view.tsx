@@ -13,7 +13,7 @@
 import { useTerminalDimensions } from "@opentui/solid"
 import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import "opentui-spinner/solid"
-import { createColors, createFrames } from "../tui/ui/spinner"
+import { createColors, createFrames } from "@opencode-ai/tui/ui/spinner"
 import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
@@ -33,7 +33,7 @@ import {
   useBindings,
   useKeymapSelector,
   type OpenTuiKeymap,
-} from "@/cli/cmd/tui/keymap"
+} from "@opencode-ai/tui/keymap"
 import type {
   FooterPromptRoute,
   FooterQueuedPrompt,
