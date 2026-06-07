@@ -13,10 +13,11 @@ import { SessionProjector } from "../session/projector"
 import { SessionStore } from "../session/store"
 import { ApplicationTools } from "../tool/application-tools"
 import { Session } from "./session"
+import { Tool } from "./tool"
 
 export interface Interface {
   readonly sessions: Session.Interface
-  readonly tools: import("./tool").Service
+  readonly tools: Tool.Interface
 }
 
 /** Intentional public native API for Effect applications embedding OpenCode. */
