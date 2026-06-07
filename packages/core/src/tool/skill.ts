@@ -14,11 +14,11 @@ import { Tools } from "./tools"
 export const name = "skill"
 const FILE_LIMIT = 10
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   name: Schema.String.annotate({ description: "The name of the skill from the available skills list" }),
 })
 
-export const Success = Schema.Struct({
+export const Output = Schema.Struct({
   name: Schema.String,
   directory: Schema.String,
   output: Schema.String,
@@ -66,8 +66,8 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description,
-          input: Parameters,
-          output: Success,
+          input: Input,
+          output: Output,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: output.output })],
           execute: (input, context) =>
             Effect.gen(function* () {

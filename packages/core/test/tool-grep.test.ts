@@ -151,7 +151,7 @@ function provideLive(directory: string, projectReferences = references({})) {
 }
 
 describe("GrepTool", () => {
-  it.effect("registers the grep contribution", () =>
+  it.effect("registers grep", () =>
     Effect.gen(function* () {
       reset()
       expect(yield* toolDefinitions(yield* ToolRegistry.Service)).toMatchObject([{ name: "grep" }])

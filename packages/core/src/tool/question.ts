@@ -20,14 +20,14 @@ Usage notes:
 - Answers are returned as arrays of labels; set \`multiple: true\` to allow selecting more than one
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label`
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   questions: Schema.Array(QuestionV2.Prompt).annotate({ description: "Questions to ask" }),
 })
 
-export const Success = Schema.Struct({
+export const Output = Schema.Struct({
   answers: Schema.Array(QuestionV2.Answer),
 })
-export type Success = typeof Success.Type
+export type Output = typeof Output.Type
 
 export const toModelOutput = (
   questions: ReadonlyArray<QuestionV2.Prompt>,
@@ -52,8 +52,8 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description,
-          input: Parameters,
-          output: Success,
+          input: Input,
+          output: Output,
           toModelOutput: ({ input, output }) => [
             toolText({ type: "text", text: toModelOutput(input.questions, output.answers) }),
           ],

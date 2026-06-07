@@ -61,30 +61,40 @@ export function create<State extends Objectish, Editor>(options: Options<State, 
     state = next
   })
 
-  const rebuild = Effect.fn("State.rebuild")(function* () {
+  const rebuild = Effect.fnUntraced(function* () {
     const next = options.initial()
     const api = options.editor(next as Draft<State>)
     for (const transform of transforms)
       yield* Effect.sync(() => transform.update(api)).pipe(Effect.withSpan("State.rebuild.update", {}))
     yield* commit(next)
-  }, semaphore.withPermit)
+  })
 
   return {
     get: () => state,
     transform: Effect.fn("State.transform")(function* () {
-      const transform = { update: (_editor: Editor) => {} }
-      transforms = [...transforms, transform]
       const scope = yield* Scope.Scope
-      yield* Scope.addFinalizer(
-        scope,
-        Effect.sync(() => {
-          transforms = transforms.filter((item) => item !== transform)
-        }).pipe(Effect.andThen(rebuild())),
+      return yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const transform = { update: (_editor: Editor) => {} }
+          transforms = [...transforms, transform]
+          yield* Scope.addFinalizer(
+            scope,
+            semaphore.withPermit(
+              Effect.sync(() => {
+                transforms = transforms.filter((item) => item !== transform)
+              }).pipe(Effect.andThen(rebuild())),
+            ),
+          )
+          return (update: Transform<Editor>) =>
+            Effect.uninterruptible(
+              semaphore.withPermit(
+                Effect.sync(() => {
+                  transform.update = update
+                }).pipe(Effect.andThen(rebuild())),
+              ),
+            )
+        }),
       )
-      return Effect.fnUntraced(function* (update: Transform<Editor>) {
-        transform.update = update
-        yield* rebuild()
-      })
     }),
     update: Effect.fn("State.update")(function* (update, reason) {
       const api = options.editor(state as Draft<State>)

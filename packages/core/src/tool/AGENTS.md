@@ -56,3 +56,4 @@ Producer capture limits are separate. For example, Bash keeps `AppProcess.maxOut
 
 - Plugin boot has not been redesigned to register canonical tools through `Tools.Service`; do not redesign it as part of leaf migrations.
 - MCP and future Session-scoped registrations still need an explicit canonical registration design.
+- The public Session result shape currently exposes managed `outputPaths`; full storage encapsulation requires a future opaque managed-output reference design.

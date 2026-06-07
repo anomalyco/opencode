@@ -20,7 +20,7 @@ const LocationInput = Schema.Struct({
   }),
 })
 const Input = LocationInput
-const Success = Schema.Union([FileSystem.Content, FileSystem.TextPage, FileSystem.ListPage])
+const Output = Schema.Union([FileSystem.Content, FileSystem.TextPage, FileSystem.ListPage])
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -35,7 +35,7 @@ export const layer = Layer.effectDiscard(
           description:
             "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page relative to the current location. Absolute paths are accepted only for managed tool-output files.",
           input: Input,
-          output: Success,
+          output: Output,
           toModelOutput: ({ input, output }) => {
             if (!("type" in output) || output.type !== "binary" || !SUPPORTED_IMAGE_MIMES.has(output.mime)) return []
             return [

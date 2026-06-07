@@ -12,7 +12,7 @@ import { Tools } from "./tools"
 
 export const name = "apply_patch"
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   patchText: Schema.String.annotate({
     description: "The full patch text describing add, update, and delete operations",
   }),
@@ -24,10 +24,10 @@ export const Applied = Schema.Struct({
   target: Schema.String,
 })
 
-export const Success = Schema.Struct({ applied: Schema.Array(Applied) })
-export type Success = typeof Success.Type
+export const Output = Schema.Struct({ applied: Schema.Array(Applied) })
+export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Success) =>
+export const toModelOutput = (output: Output) =>
   [
     "Applied patch sequentially:",
     ...output.applied.map(
@@ -57,8 +57,8 @@ export const layer = Layer.effectDiscard(
           Tool.make({
             description:
               "Apply one patch containing add, update, and delete file operations. All targets are resolved and approved before target contents are read. Operations apply sequentially; if a later operation fails, earlier operations remain applied and the failure reports them explicitly. Moves and atomic rollback are not supported yet.",
-            input: Parameters,
-            output: Success,
+            input: Input,
+            output: Output,
             toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
             execute: (input, context) => {
               const applied: Array<typeof Applied.Type> = []

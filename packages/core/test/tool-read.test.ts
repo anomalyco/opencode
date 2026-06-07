@@ -163,7 +163,7 @@ describe("ReadTool", () => {
         ...toolIdentity,
         call: { type: "tool-call", id: "call-image-settle", name: "read", input: { path: "pixel.png" } },
       })
-      expect(settled.output?.structured).toEqual({})
+      expect(settled.output?.structured).toMatchObject({ type: "binary", mime: "image/png", encoding: "base64" })
       expect(settled.output?.content).toMatchObject([
         { type: "text", text: "Image read successfully" },
         { type: "file", mime: "image/png", source: { type: "data", data: png } },
@@ -194,7 +194,7 @@ describe("ReadTool", () => {
       })
 
       expect(settled.outputPaths).toBeUndefined()
-      expect(settled.output?.structured).toEqual({})
+      expect(settled.output?.structured).toMatchObject({ type: "binary", mime: "image/png", encoding: "base64" })
       expect(settled.result).toEqual({
         type: "content",
         value: [

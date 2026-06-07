@@ -18,7 +18,7 @@ export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 export const MAX_TIMEOUT_MS = 10 * 60 * 1_000
 export const MAX_CAPTURE_BYTES = 1024 * 1024
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
   workdir: Schema.String.pipe(Schema.optional).annotate({
     description: "Working directory. Defaults to the active Location; relative paths resolve from that Location.",
@@ -33,7 +33,7 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-const Success = Schema.Struct({
+const Output = Schema.Struct({
   command: Schema.String,
   cwd: Schema.String,
   exitCode: Schema.Number.pipe(Schema.optional),
@@ -46,7 +46,7 @@ const Success = Schema.Struct({
   warnings: Schema.Array(Schema.String).pipe(Schema.optional),
 })
 
-type Success = typeof Success.Type
+type Output = typeof Output.Type
 
 const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
 
@@ -62,7 +62,7 @@ const captureNotice = (stdoutTruncated: boolean, stderrTruncated: boolean) => {
   return undefined
 }
 
-const modelOutput = (output: Success) => {
+const modelOutput = (output: Output) => {
   const warnings = output.warnings?.length
     ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}`
     : ""
@@ -117,8 +117,8 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows.`,
-          input: Parameters,
-          output: Success,
+          input: Input,
+          output: Output,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: modelOutput(output) })],
           execute: (input, context) =>
             Effect.gen(function* () {

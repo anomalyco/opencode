@@ -33,7 +33,7 @@ Optional controls support result count, live crawling ('fallback' or 'preferred'
 
 The current year is ${new Date().getFullYear()}. Use this year when searching for recent information or current events.`
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
   numResults: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_NUM_RESULTS))).annotate({
     description: `Number of search results to return (default: 8, maximum: ${MAX_NUM_RESULTS})`,
@@ -176,7 +176,7 @@ const callMcp = <F extends Schema.Struct.Fields>(
     )
   })
 
-const Success = Schema.Struct({
+const Output = Schema.Struct({
   provider: Provider,
   text: Schema.String,
 })
@@ -192,8 +192,8 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description,
-          input: Parameters,
-          output: Success,
+          input: Input,
+          output: Output,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: output.text })],
           execute: (input, context) => {
             const provider = selectProvider(context.sessionID, config, config.provider)

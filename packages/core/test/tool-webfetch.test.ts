@@ -51,7 +51,7 @@ const reset = () => {
   respond = () => Effect.succeed(new Response("hello", { headers: { "content-type": "text/plain" } }))
 }
 
-const call = (input: typeof WebFetchTool.Parameters.Type, id = "call-webfetch") => ({
+const call = (input: typeof WebFetchTool.Input.Type, id = "call-webfetch") => ({
   sessionID,
   ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "webfetch", input },
@@ -59,7 +59,7 @@ const call = (input: typeof WebFetchTool.Parameters.Type, id = "call-webfetch") 
 
 describe("WebFetchTool helpers", () => {
   test("defaults format and rejects invalid timeout controls", () => {
-    const decode = Schema.decodeUnknownSync(WebFetchTool.Parameters)
+    const decode = Schema.decodeUnknownSync(WebFetchTool.Input)
     expect(decode({ url: "https://example.com" })).toEqual({ url: "https://example.com", format: "markdown" })
     expect(() => decode({ url: "https://example.com", timeout: 0 })).toThrow()
     expect(() => decode({ url: "https://example.com", timeout: WebFetchTool.MAX_TIMEOUT_SECONDS + 1 })).toThrow()
@@ -72,7 +72,7 @@ describe("WebFetchTool helpers", () => {
   })
 })
 
-describe("WebFetchTool contribution", () => {
+describe("WebFetchTool registration", () => {
   it.effect("registers and fetches an ordinary hostname HTTP URL without rewriting it", () =>
     Effect.gen(function* () {
       reset()

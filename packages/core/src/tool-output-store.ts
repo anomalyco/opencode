@@ -11,7 +11,6 @@ import type { ToolOutput } from "@opencode-ai/llm"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024
-export const MAX_INLINE_MEDIA_BYTES = 5 * 1024 * 1024
 export const RETENTION = Duration.days(7)
 
 export const MANAGED_DIRECTORY = "tool-output"
@@ -32,13 +31,7 @@ export class StorageError extends Schema.TaggedErrorClass<StorageError>()("ToolO
   cause: Schema.Defect,
 }) {}
 
-export class MediaLimitError extends Schema.TaggedErrorClass<MediaLimitError>()("ToolOutputStore.MediaLimitError", {
-  mime: Schema.String,
-  bytes: Schema.Int,
-  limit: Schema.Int,
-}) {}
-
-export type Error = StorageError | MediaLimitError
+export type Error = StorageError
 
 export interface Interface {
   readonly limits: () => Effect.Effect<{ readonly maxLines: number; readonly maxBytes: number }>
@@ -139,37 +132,33 @@ export const layer = Layer.effect(
     const bound = Effect.fn("ToolOutputStore.bound")(function* (input: BoundInput) {
       const outputLimits = yield* limits()
       const media = input.output.content.filter((item) => item.type === "file")
-      let mediaBytes = 0
-      for (const item of media) {
-        if (item.source.type !== "data") continue
-        mediaBytes += Buffer.byteLength(item.source.data, "utf-8")
-        if (mediaBytes > MAX_INLINE_MEDIA_BYTES)
-          return yield* new MediaLimitError({ mime: item.mime, bytes: mediaBytes, limit: MAX_INLINE_MEDIA_BYTES })
-      }
-      const contextual = {
-        structured: media.length > 0 ? {} : input.output.structured,
-        content: input.output.content.filter((item) => item.type === "text"),
-      }
-      const encoded = yield* Effect.try({
-        try: () => JSON.stringify(contextual, null, 2),
-        catch: (cause) => new StorageError({ operation: "encode", cause }),
-      })
-      if (lineCount(encoded) <= outputLimits.maxLines && Buffer.byteLength(encoded, "utf-8") <= outputLimits.maxBytes)
+      const text = input.output.content.filter((item) => item.type === "text")
+      const contextual =
+        input.output.content.length === 0
+          ? yield* Effect.try({
+              try: () => JSON.stringify(input.output.structured, null, 2) ?? String(input.output.structured),
+              catch: (cause) => new StorageError({ operation: "encode", cause }),
+            })
+          : text.map((item) => item.text).join("")
+      if (
+        lineCount(contextual) <= outputLimits.maxLines &&
+        Buffer.byteLength(contextual, "utf-8") <= outputLimits.maxBytes
+      )
         return {
-          output: { structured: contextual.structured, content: input.output.content },
+          output: input.output,
           outputPaths: [],
         }
 
-      const outputPath = yield* write(encoded)
+      const outputPath = yield* write(contextual)
       const marker = `... output truncated; full content saved to ${outputPath} ...`
 
       return {
         output: {
-          structured: {},
+          structured: input.output.structured,
           content: [
             {
               type: "text" as const,
-              text: boundedPreview(encoded, marker, outputLimits.maxLines, outputLimits.maxBytes),
+              text: boundedPreview(contextual, marker, outputLimits.maxLines, outputLimits.maxBytes),
             },
             ...media,
           ],

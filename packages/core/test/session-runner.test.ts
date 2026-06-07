@@ -2955,6 +2955,22 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe("unexpected tool defect")
 
       expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Call defect" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-defect",
+              state: {
+                status: "error",
+                error: { type: "unknown", message: "Tool execution failed: unexpected tool defect" },
+              },
+            },
+          ],
+        },
+      ])
     }),
   )
 

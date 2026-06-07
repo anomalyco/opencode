@@ -320,6 +320,11 @@ export const layer = Layer.effect(
             yield* FiberSet.clear(toolFibers)
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           }
+          if (settled._tag === "Failure" && !Cause.hasInterrupts(settled.cause)) {
+            const failure = Cause.squash(settled.cause)
+            const message = failure instanceof Error ? failure.message : String(failure)
+            yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
+          }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !publisher.hasProviderError())

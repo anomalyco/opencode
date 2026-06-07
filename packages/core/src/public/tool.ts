@@ -4,7 +4,7 @@ import { Effect, Scope } from "effect"
 import type { AnyTool, RegistrationError } from "../tool/tool"
 
 export { Failure, RegistrationError, make } from "../tool/tool"
-export type { AnyTool, Content, Context } from "../tool/tool"
+export type { AnyTool, Content, Context, Definition } from "../tool/tool"
 
 export interface Interface {
   /**

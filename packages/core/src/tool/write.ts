@@ -18,7 +18,7 @@ import { Tools } from "./tools"
 export const name = "write"
 
 // TODO: Revisit whether model-facing mutation schemas should prefer absolute `filePath` naming for trained-in compatibility after evaluating model behavior.
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   path: Schema.String.annotate({
     description:
       "File path to write. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval. Named project references are read-oriented and are not accepted.",
@@ -26,15 +26,15 @@ export const Parameters = Schema.Struct({
   content: Schema.String.annotate({ description: "Content to write to the file" }),
 })
 
-export const Success = Schema.Struct({
+export const Output = Schema.Struct({
   operation: Schema.Literal("write"),
   target: Schema.String,
   resource: Schema.String,
   existed: Schema.Boolean,
 })
-export type Success = typeof Success.Type
+export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Success) =>
+export const toModelOutput = (output: Output) =>
   `${output.existed ? "Wrote" : "Created"} file successfully: ${output.resource}`
 
 /** Deferred V2 write UX integrations remain visible at the model-facing seam. */
@@ -56,8 +56,8 @@ export const layer = Layer.effectDiscard(
           Tool.make({
             description:
               "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval. Named project references are read-oriented and are not accepted.",
-            input: Parameters,
-            output: Success,
+            input: Input,
+            output: Output,
             toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
             execute: (input, context) =>
               Effect.gen(function* () {
