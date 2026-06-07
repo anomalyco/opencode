@@ -334,6 +334,7 @@ export const dict = {
   "prompt.editor.preview": "Preview",
   "prompt.editor.showPreview": "Show preview",
   "prompt.editor.hidePreview": "Hide preview",
+  "prompt.editor.discardChanges": "Discard changes",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",

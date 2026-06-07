@@ -47,6 +47,8 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
     back: undefined as HTMLDivElement | undefined,
     menu: undefined as HTMLDivElement | undefined,
   }
+  let closing = false
+  let shouldSaveOnClose = true
 
   const fit = () => {
     if (!ref.box) return
@@ -65,7 +67,15 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
   }
 
   const save = () => {
+    closing = true
+    shouldSaveOnClose = false
     props.save(state.text)
+    dialog.close()
+  }
+
+  const discard = () => {
+    closing = true
+    shouldSaveOnClose = false
     dialog.close()
   }
 
@@ -213,6 +223,12 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
     requestAnimationFrame(reveal)
   })
 
+  onCleanup(() => {
+    if (closing || !shouldSaveOnClose) return
+    shouldSaveOnClose = false
+    props.save(state.text)
+  })
+
   return (
     <Dialog
       title={<div class="pl-3">{language.t("prompt.editor.title")}</div>}
@@ -223,7 +239,7 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
         transition: "width 180ms cubic-bezier(0.16, 1, 0.3, 1)",
       }}
     >
-      <div class="flex min-h-0 flex-1 flex-col gap-4 px-1 pb-1">
+      <div class="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4">
         <div
           class="relative overflow-hidden rounded-xl border border-border-weak-base bg-surface-raised-base shadow-xs-border-base"
           classList={{
@@ -416,8 +432,8 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
             >
               {language.t(state.preview ? "prompt.editor.hidePreview" : "prompt.editor.showPreview")}
             </Button>
-            <Button size="large" variant="ghost" class="min-w-20" onClick={() => dialog.close()}>
-              {language.t("common.cancel")}
+            <Button size="large" variant="ghost" class="min-w-20" onClick={discard}>
+              {language.t("prompt.editor.discardChanges")}
             </Button>
             <Button size="large" variant="primary" class="min-w-20 shadow-xs-border-base" onClick={save}>
               {language.t("common.save")}

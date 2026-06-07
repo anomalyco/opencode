@@ -295,6 +295,7 @@ export const dict = {
   "prompt.action.send": "傳送",
   "prompt.action.stop": "停止",
   "prompt.editor.title": "編輯提示詞",
+  "prompt.editor.discardChanges": "放棄更改",
 
   "prompt.toast.pasteUnsupported.title": "不支援的附件",
   "prompt.toast.pasteUnsupported.description": "此處僅能附加圖片、PDF 或文字檔案。",

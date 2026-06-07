@@ -356,6 +356,7 @@ export const dict = {
   "prompt.editor.preview": "预览",
   "prompt.editor.showPreview": "显示预览",
   "prompt.editor.hidePreview": "隐藏预览",
+  "prompt.editor.discardChanges": "放弃更改",
   "prompt.toast.pasteUnsupported.title": "不支持的附件",
   "prompt.toast.pasteUnsupported.description": "此处仅能附加图片、PDF 或文本文件。",
   "prompt.toast.modelAgentRequired.title": "请选择智能体和模型",
