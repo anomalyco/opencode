@@ -252,7 +252,6 @@ export function SessionSwitcherDialog() {
       ref={(value) => (select = value)}
       title="Sessions"
       options={options()}
-      skipFilter={true}
       current={currentSessionID()}
       onFilter={setSearch}
       onMove={(option) => {
