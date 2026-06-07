@@ -33,7 +33,7 @@ through legacy `SessionPrompt.loop(...)`:
 Prompt admission now uses a durable `session_input` inbox rather than immediate
 transcript projection. `steer` inputs coalesce into the active activity at the
 next safe provider-turn boundary. `queue` inputs form a FIFO of future activities
-that open one at a time. A location-scoped `SessionRunCoordinator` coalesces process-local wakeups
+that open one at a time. A process-global `SessionRunCoordinator` coalesces process-local wakeups
 around settlement races. Explicit `run` resumes perform at least one provider
 attempt; advisory `wake` notifications call the provider only for eligible inbox
 work. Steers coalesce into the active activity at
@@ -55,7 +55,7 @@ Next reviewed slices:
 - integrate the new BackgroundJob service with V2 tool execution: support background
   bash jobs and background agent dispatch with durable status observation,
   completion delivery, and explicit cancellation / continuation semantics
-- add compaction, interruption, retries, and stale-owner fencing
+- add compaction, durable/clustered interruption, retries, and stale-owner fencing
   only as their slices become concrete
 
 ### Deferred durable activity recovery

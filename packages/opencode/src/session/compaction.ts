@@ -24,6 +24,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
+import { buildPrompt } from "@opencode-ai/core/session/compaction"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -43,42 +44,6 @@ const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 8_000
-const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
-<template>
-## Goal
-- [single-sentence task summary]
-
-## Constraints & Preferences
-- [user constraints, preferences, specs, or "(none)"]
-
-## Progress
-### Done
-- [completed work or "(none)"]
-
-### In Progress
-- [current work or "(none)"]
-
-### Blocked
-- [blockers or "(none)"]
-
-## Key Decisions
-- [decision and why, or "(none)"]
-
-## Next Steps
-- [ordered next actions or "(none)"]
-
-## Critical Context
-- [important technical facts, errors, open questions, or "(none)"]
-
-## Relevant Files
-- [file or directory path: why it matters, or "(none)"]
-</template>
-
-Rules:
-- Keep every section, even when empty.
-- Use terse bullets, not prose paragraphs.
-- Preserve exact file paths, commands, error strings, and identifiers when known.
-- Do not mention the summary process or that context was compacted.`
 type Turn = {
   start: number
   end: number
@@ -122,19 +87,6 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
     if (userIndex === undefined) return []
     return [{ userIndex, assistantIndex, summary: summaryText(msg) }]
   })
-}
-
-function buildPrompt(input: { previousSummary?: string; context: string[] }) {
-  const anchor = input.previousSummary
-    ? [
-        "Update the anchored summary below using the conversation history above.",
-        "Preserve still-true details, remove stale details, and merge in the new facts.",
-        "<previous-summary>",
-        input.previousSummary,
-        "</previous-summary>",
-      ].join("\n")
-    : "Create a new anchored summary from the conversation history above."
-  return [anchor, SUMMARY_TEMPLATE, ...input.context].join("\n\n")
 }
 
 function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
@@ -410,6 +362,18 @@ export const layer = Layer.effect(
         stripMedia: true,
         toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
       })
+      const tailIndex = selected.tail_start_id
+        ? history.findIndex((message) => message.info.id === selected.tail_start_id)
+        : -1
+      const recent =
+        tailIndex < 0
+          ? ""
+          : JSON.stringify(
+              yield* MessageV2.toModelMessagesEffect(history.slice(tailIndex), model, {
+                stripMedia: true,
+                toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
+              }),
+            )
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -572,12 +536,15 @@ export const layer = Layer.effect(
           },
         )
         if (flags.experimentalEventSystem) {
-          yield* events.publish(SessionEvent.Compaction.Ended, {
-            sessionID: input.sessionID,
-            timestamp: DateTime.makeUnsafe(Date.now()),
-            text: summary ?? "",
-            include: selected.tail_start_id,
-          })
+          if (summary)
+            yield* events.publish(SessionEvent.Compaction.Ended, {
+              sessionID: input.sessionID,
+              messageID: SessionMessage.ID.make(input.parentID),
+              timestamp: DateTime.makeUnsafe(Date.now()),
+              reason: input.auto ? "auto" : "manual",
+              text: summary ?? "",
+              recent,
+            })
         }
         yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
       }
@@ -610,7 +577,7 @@ export const layer = Layer.effect(
       if (flags.experimentalEventSystem) {
         yield* events.publish(SessionEvent.Compaction.Started, {
           sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
+          messageID: SessionMessage.ID.make(msg.id),
           timestamp: DateTime.makeUnsafe(Date.now()),
           reason: input.auto ? "auto" : "manual",
         })

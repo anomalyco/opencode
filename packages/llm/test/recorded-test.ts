@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import * as path from "node:path"
@@ -21,16 +22,16 @@ const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
 type RecordedEnv = RequestExecutorService | WebSocketExecutorService | LLMClientService
 
 type RecordedTestsOptions = RecordedGroupOptions & {
-  readonly options?: HttpRecorder.RecordReplayOptions
+  readonly options?: HttpRecorder.RecorderOptions
 }
 
 type RecordedCaseOptions = RunnerCaseOptions & {
-  readonly options?: HttpRecorder.RecordReplayOptions
+  readonly options?: HttpRecorder.RecorderOptions
 }
 
 const mergeOptions = (
-  base: HttpRecorder.RecordReplayOptions | undefined,
-  override: HttpRecorder.RecordReplayOptions | undefined,
+  base: HttpRecorder.RecorderOptions | undefined,
+  override: HttpRecorder.RecorderOptions | undefined,
 ) => {
   if (!base) return override
   if (!override) return base
@@ -38,6 +39,24 @@ const mergeOptions = (
     ...base,
     ...override,
     metadata: base.metadata || override.metadata ? { ...base.metadata, ...override.metadata } : undefined,
+    redact:
+      base.redact || override.redact
+        ? {
+            ...base.redact,
+            ...override.redact,
+            headers: [...(base.redact?.headers ?? []), ...(override.redact?.headers ?? [])],
+            allowRequestHeaders: [
+              ...(base.redact?.allowRequestHeaders ?? []),
+              ...(override.redact?.allowRequestHeaders ?? []),
+            ],
+            allowResponseHeaders: [
+              ...(base.redact?.allowResponseHeaders ?? []),
+              ...(override.redact?.allowResponseHeaders ?? []),
+            ],
+            queryParameters: [...(base.redact?.queryParameters ?? []), ...(override.redact?.queryParameters ?? [])],
+            jsonFields: [...(base.redact?.jsonFields ?? []), ...(override.redact?.jsonFields ?? [])],
+          }
+        : undefined,
   }
 }
 
@@ -45,23 +64,24 @@ export const recordedTests = (options: RecordedTestsOptions) =>
   recordedEffectGroup<RecordedEnv, never, RecordedTestsOptions, RecordedCaseOptions>({
     duplicateLabel: "recorded cassette",
     options,
-    cassetteExists: (cassette) => HttpRecorder.hasCassetteSync(cassette, { directory: FIXTURES_DIR }),
+    cassetteExists: (cassette) => HttpRecorderInternal.hasCassetteSync(cassette, { directory: FIXTURES_DIR }),
     layer: ({ cassette, metadata, options, caseOptions, recording }) => {
       const recorderOptions = mergeOptions(options.options, caseOptions.options)
       const recorderMetadata = {
         ...recorderOptions?.metadata,
         ...metadata,
       }
-      const mode = recorderOptions?.mode ?? (recording ? "record" : "replay")
-      const cassetteService = HttpRecorder.Cassette.fileSystem({ directory: FIXTURES_DIR }).pipe(
+      const mode = recording ? "record" : "replay"
+      const cassetteService = HttpRecorderInternal.Cassette.fileSystem({ directory: FIXTURES_DIR }).pipe(
         Layer.provide(NodeFileSystem.layer),
       )
       const requestExecutor = RequestExecutor.layer.pipe(
         Layer.provide(
-          HttpRecorder.recordingLayer(cassette, {
-            ...recorderOptions,
+          HttpRecorderInternal.recordingLayer(cassette, {
             mode,
             metadata: recorderMetadata,
+            redactor: HttpRecorderInternal.Redactor.make(recorderOptions?.redact),
+            match: recorderOptions?.match,
           }).pipe(Layer.provide(FetchHttpClient.layer)),
         ),
       )

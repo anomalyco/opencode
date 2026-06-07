@@ -60,19 +60,19 @@ export function run(commands: Spec.Any, handlers: ReadonlyArray<LazyHandler>, op
 }
 
 function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): ProvidedCommand {
-  const spec: Command.Command.Any = Object.keys(node.commands).length
-    ? (node.spec as Command.Command<string, unknown>).pipe(
-        Command.withSubcommands(Object.values(node.commands).map((child) => provide(child, handlers))),
+  const handler = handlers.find((handler) => handler.spec === node.spec)
+  const spec = handler
+    ? node.spec.pipe(
+        Command.withHandler((input) =>
+          Effect.gen(function* () {
+            yield* Effect.flatMap(Effect.promise(handler.load), (module) => module.default(input))
+          }),
+        ),
       )
     : node.spec
-  const handler = handlers.find((handler) => handler.spec === node.spec)
-  if (!handler) return spec as ProvidedCommand
+  if (!Object.keys(node.commands).length) return spec as ProvidedCommand
   return spec.pipe(
-    Command.withHandler((input) =>
-      Effect.gen(function* () {
-        yield* Effect.flatMap(Effect.promise(handler.load), (module) => module.default(input))
-      }),
-    ),
+    Command.withSubcommands(Object.values(node.commands).map((child) => provide(child, handlers))),
   ) as ProvidedCommand
 }
 

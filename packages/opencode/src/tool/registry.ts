@@ -34,7 +34,7 @@ import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
@@ -101,7 +101,7 @@ export const layer: Layer.Layer<
   | EventV2Bridge.Service
   | HttpClient.HttpClient
   | ChildProcessSpawner
-  | Ripgrep.Service
+  | Search.Service
   | Format.Service
   | Truncate.Service
   | RuntimeFlags.Service
@@ -112,7 +112,6 @@ export const layer: Layer.Layer<
     const config = yield* Config.Service
     const plugin = yield* Plugin.Service
     const agents = yield* Agent.Service
-    const skill = yield* Skill.Service
     const truncate = yield* Truncate.Service
     const flags = yield* RuntimeFlags.Service
 
@@ -276,25 +275,6 @@ export const layer: Layer.Layer<
       return (yield* all()).map((tool) => tool.id)
     })
 
-    const describeSkill = Effect.fn("ToolRegistry.describeSkill")(function* (agent: Agent.Info) {
-      const list = yield* skill.available(agent)
-      if (list.length === 0) return "No skills are currently available."
-      return [
-        "Load a specialized skill that provides domain-specific instructions and workflows.",
-        "",
-        "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
-        "",
-        "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
-        "",
-        'Tool output includes a `<skill_content name="...">` block with the loaded content.',
-        "",
-        "The following skills provide specialized sets of instructions for particular tasks",
-        "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
-        "",
-        Skill.fmt(list, { verbose: false }),
-      ].join("\n")
-    })
-
     const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
       const items = (yield* agents.list()).filter((item) => item.mode !== "primary")
       const filtered = items.filter(
@@ -340,11 +320,7 @@ export const layer: Layer.Layer<
               : undefined
           return {
             id: tool.id,
-            description: [
-              output.description,
-              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
-              tool.id === SkillTool.id ? yield* describeSkill(input.agent) : undefined,
-            ]
+            description: [output.description, tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined]
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
@@ -386,7 +362,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
-      Layer.provide(Ripgrep.defaultLayer),
+      Layer.provide(Search.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
     .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)),

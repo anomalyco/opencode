@@ -86,6 +86,7 @@ export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Sessio
   input: Schema.Record(Schema.String, Schema.Unknown),
   attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
   content: ToolOutput.Content.pipe(Schema.Array),
+  outputPaths: SessionEvent.Tool.Success.data.fields.outputPaths,
   structured: ToolOutput.Structured,
   result: SessionEvent.Tool.Success.data.fields.result,
 }) {}
@@ -172,7 +173,7 @@ export class Compaction extends Schema.Class<Compaction>("Session.Message.Compac
   type: Schema.Literal("compaction"),
   reason: SessionEvent.Compaction.Started.data.fields.reason,
   summary: Schema.String,
-  include: Schema.String.pipe(Schema.optional),
+  recent: Schema.String,
   ...Base,
 }) {}
 
