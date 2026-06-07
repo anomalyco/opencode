@@ -67,13 +67,17 @@ function Bar(props: { segs: Seg[]; percent?: number | null; theme: any; onClick?
   return (
     <text onMouseUp={props.onClick}>
       <For each={props.segs}>
-        {(s) => <span style={{ fg: s.color }}>{(s.filled ? "█" : "░").repeat(Math.max(0, s.chars))}</span>}
+        {(s) => <span style={{ fg: s.color }}>{(s.filled ? "▓" : "░").repeat(Math.max(0, s.chars))}</span>}
       </For>
       <Show when={props.percent != null}>
         {"  "}<span style={{ fg: t.textMuted }}>{props.percent}%</span>
       </Show>
     </text>
   )
+}
+
+function emptySegs(t: any): Seg[] {
+  return [{ chars: BAR_WIDTH, color: t.textMuted, filled: false }]
 }
 
 function tokenSegs(percent: number, t: any): Seg[] {
@@ -198,13 +202,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     <box>
       {/* ── Context ── */}
       <text fg={theme().text} attributes={TextAttributes.BOLD} {...clickProps()}>Context</text>
+      <Bar
+        segs={state().percent !== null ? tokenSegs(state().percent!, theme()) : emptySegs(theme())}
+        percent={state().percent}
+        theme={theme()}
+        onClick={canOpenDialog() ? openCtxDialog : undefined}
+      />
       <Show when={state().percent !== null}>
-        <Bar
-          segs={tokenSegs(state().percent!, theme())}
-          percent={state().percent}
-          theme={theme()}
-          onClick={canOpenDialog() ? openCtxDialog : undefined}
-        />
         <text fg={theme().textMuted} {...clickProps()}>
           {state().tokens.toLocaleString()}
           {" / "}
