@@ -13,7 +13,7 @@
 import { useTerminalDimensions } from "@opentui/solid"
 import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import "opentui-spinner/solid"
-import { createColors, createFrames } from "../tui/ui/spinner"
+import { createColors, createFrames } from "@opencode-ai/tui/ui/spinner"
 import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
@@ -33,7 +33,7 @@ import {
   useBindings,
   useKeymapSelector,
   type OpenTuiKeymap,
-} from "@/cli/cmd/tui/keymap"
+} from "@opencode-ai/tui/keymap"
 import type {
   FooterPromptRoute,
   FooterQueuedPrompt,
@@ -52,7 +52,7 @@ import type {
   RunResource,
   RunTuiConfig,
 } from "./types"
-import { RUN_THEME_FALLBACK, type RunTheme } from "./theme"
+import type { RunTheme } from "./theme"
 import { modelInfo } from "./variant.shared"
 
 const EMPTY_BORDER = {
@@ -83,7 +83,7 @@ type RunFooterViewProps = {
   view?: () => FooterView
   subagent?: () => FooterSubagentState
   queuedPrompts?: () => FooterQueuedPrompt[]
-  theme?: RunTheme
+  theme: () => RunTheme
   diffStyle?: RunDiffStyle
   tuiConfig: RunTuiConfig
   backgroundSubagents: boolean
@@ -237,7 +237,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const duration = createMemo(() => props.state().duration)
   const usage = createMemo(() => props.state().usage)
   const interruptKey = createMemo(() => interrupt() || "/exit")
-  const runTheme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
+  const runTheme = createMemo(() => props.theme())
   const theme = createMemo(() => runTheme().footer)
   const block = createMemo(() => runTheme().block)
   const spin = createMemo(() => {

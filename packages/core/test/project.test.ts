@@ -65,7 +65,7 @@ describe("Project directories schemas", () => {
     }),
   )
 
-  it.effect("lists stored project directories only for the requested project", () =>
+  it.effect("lists stored project directories newest first for the requested project", () =>
     Effect.gen(function* () {
       const project = yield* ProjectV2.Service
       const { db } = yield* Database.Service
@@ -82,16 +82,16 @@ describe("Project directories schemas", () => {
       yield* db
         .insert(ProjectDirectoryTable)
         .values([
-          { project_id: projectID, directory: AbsolutePath.make("/repo/z"), type: "root" },
-          { project_id: projectID, directory: AbsolutePath.make("/repo/a"), type: "main" },
-          { project_id: otherID, directory: AbsolutePath.make("/other"), type: "main" },
+          { project_id: projectID, directory: AbsolutePath.make("/repo/z"), type: "root", time_created: 2 },
+          { project_id: projectID, directory: AbsolutePath.make("/repo/a"), type: "main", time_created: 1 },
+          { project_id: otherID, directory: AbsolutePath.make("/other"), type: "main", time_created: 3 },
         ])
         .run()
         .pipe(Effect.orDie)
 
       expect(yield* project.directories({ projectID })).toEqual([
-        AbsolutePath.make("/repo/a"),
         AbsolutePath.make("/repo/z"),
+        AbsolutePath.make("/repo/a"),
       ])
     }),
   )

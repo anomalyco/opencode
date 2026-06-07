@@ -58,6 +58,9 @@ let logpath = ""
 export function file() {
   return logpath
 }
+export function getLevel(): Level {
+  return level
+}
 let write = (msg: any) => {
   process.stderr.write(msg)
   return msg.length

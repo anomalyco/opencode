@@ -6,16 +6,13 @@
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
 import { Context, Effect, Layer } from "effect"
-import { createBindingLookup } from "@opentui/keymap/extras"
-import { TuiConfig } from "@/cli/cmd/tui/config/tui"
-import { TuiKeybind } from "@/cli/cmd/tui/config/keybind"
+import { resolve } from "@opencode-ai/tui/config"
+import { TuiConfig } from "@/config/tui"
 import { makeRuntime } from "@/effect/run-service"
 import { reusePendingTask } from "./runtime.shared"
 import { resolveSession, sessionHistory } from "./session.shared"
 import type { RunDiffStyle, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
 import { pickVariant } from "./variant.shared"
-
-const DEFAULT_LEADER_TIMEOUT = 2000
 
 export type ModelInfo = {
   providers: RunProvider[]
@@ -70,13 +67,8 @@ function emptySessionInfo(): SessionInfo {
 }
 
 function defaultRunTuiConfig(): RunTuiConfig {
-  const keybinds = TuiKeybind.parse({})
   return {
-    keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
-      commandMap: TuiKeybind.CommandMap,
-      bindingDefaults: TuiKeybind.bindingDefaults(),
-    }),
-    leader_timeout: DEFAULT_LEADER_TIMEOUT,
+    ...resolve({}, { terminalSuspend: process.platform !== "win32" }),
     diff_style: "auto",
   }
 }

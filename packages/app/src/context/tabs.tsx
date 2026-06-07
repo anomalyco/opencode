@@ -1,4 +1,6 @@
+import type { Session } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { ServerConnection, useServer } from "./server"
@@ -17,6 +19,14 @@ export type Tab = SessionTab
 
 export const tabHref = (tab: Tab) => `/${tab.dirBase64}/session/${tab.sessionId}`
 export const tabKey = (tab: Tab) => `${tab.server}\n${tabHref(tab)}`
+
+export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: Session) {
+  const dirBase64 = base64Encode(session.directory)
+  return tabs.some(
+    (tab) =>
+      tab.type === "session" && tab.server === server && tab.dirBase64 === dirBase64 && tab.sessionId === session.id,
+  )
+}
 
 export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   name: "Tabs",
