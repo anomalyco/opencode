@@ -78,7 +78,7 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
-import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./terminal-win32"
+import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 
 const appGlobalBindingCommands = [
@@ -194,24 +194,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             },
           }),
         ),
-        (renderer) =>
-          Effect.sync(() => destroyRenderer(renderer)),
+        (renderer) => Effect.sync(() => destroyRenderer(renderer)),
       )
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const unguard = win32InstallCtrlCGuard()
-          win32DisableProcessedInput()
-          return unguard
-        }),
-        (unguard) =>
-          Effect.sync(() => {
-            try {
-              unguard?.()
-            } catch (error) {
-              console.error("Failed to restore terminal guard", error)
-            }
-          }),
-      )
+      win32DisableProcessedInput()
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
         Effect.sync(() => registerOpencodeKeymap(keymap, renderer, input.config)),
