@@ -107,7 +107,7 @@ export const SettingsServersV2: Component = () => {
                 type="button"
                 variant="ghost-muted"
                 size="small"
-                icon={<IconV2 name="arrow-left" size="large" />}
+                icon={<IconV2 name="outline-chevron-down" size="large" style={{ transform: "rotate(-90deg)" }} />}
                 aria-label={language.t("common.goBack")}
                 onClick={backToList}
               />
