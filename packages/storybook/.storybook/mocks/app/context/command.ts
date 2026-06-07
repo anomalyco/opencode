@@ -8,15 +8,8 @@ const keybinds: Record<string, string> = {
   "model.variant.cycle": "mod+shift+m",
 }
 
-export type CommandOption = {
-  id: string
-  title: string
-  keybind?: string
-}
-
 export function formatKeybind(config: string) {
-  if (!config || config === "none") return ""
-  return config.split(",", 1)[0]
+  return config === "none" ? "" : config
 }
 
 export function useCommand() {
