@@ -583,10 +583,14 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
       return RUN_THEME_FALLBACK
     }
 
-    const pick = renderer.themeMode ?? mode(RGBA.fromHex(bg))
+    // Palette-only terminal reloads can leave renderer.themeMode stale, but
+    // ANSI slot zero is not the terminal background when OSC 11 is absent.
+    const pick = colors.defaultBackground
+      ? mode(RGBA.fromHex(colors.defaultBackground))
+      : (renderer.themeMode ?? mode(RGBA.fromHex(bg)))
     const theme = resolveTheme(generateSystem(colors, pick), pick)
     const indexed = indexedPalette(colors, 256)
-    const shared = await import("../tui/context/theme")
+    const shared = await import("@opencode-ai/tui/context/theme")
     const syntaxTheme: SharedSyntaxTheme = {
       ...theme,
       _hasSelectedListItemText: true,

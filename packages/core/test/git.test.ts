@@ -99,7 +99,7 @@ describe("Git worktrees", () => {
       expect(linked?.directory).toBe(AbsolutePath.make(yield* Effect.promise(() => fs.realpath(worktree))))
       expect(linked?.store).toBe(repo.store)
       if (!linked) throw new Error("Linked worktree not found")
-      yield* git.worktreeRemove({ repo: linked, directory: worktree })
+      yield* git.worktreeRemove({ repo: linked, directory: worktree, force: false })
       expect((yield* git.worktreeList(repo)).some((entry) => entry.endsWith("-git-worktree"))).toBe(false)
     }),
   )

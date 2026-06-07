@@ -568,6 +568,17 @@ const scenarios: Scenario[] = [
     .get("/experimental/session", "experimental.session.list")
     .at((ctx) => ({ path: "/experimental/session?roots=false&archived=false", headers: ctx.headers() }))
     .json(200, array),
+  http.protected
+    .post("/experimental/session/{sessionID}/background", "experimental.session.background")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Background route owner" }))
+    .at((ctx) => ({
+      path: route("/experimental/session/{sessionID}/background", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === false, "background route should be a no-op without running subagents")
+    }),
   http.protected.get("/experimental/resource", "experimental.resource.list").json(),
   http.protected
     .post("/sync/history", "sync.history.list")
@@ -661,6 +672,7 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({ path: "/api/fs/read?path=hello.txt", headers: ctx.headers() }))
     .json(200, locationData(object)),
   http.protected.get("/api/fs/list", "v2.fs.list").json(200, locationData(array)),
+  http.protected.get("/reference", "reference.list").json(200, array),
   http.protected
     .get("/api/provider/{providerID}", "v2.provider.get")
     .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
@@ -676,18 +688,18 @@ const scenarios: Scenario[] = [
     array(body.data)
   }),
   http.protected
-    .get("/api/session/{sessionID}/permission/request", "v2.session.permission.list")
+    .get("/api/session/{sessionID}/permission", "v2.session.permission.list")
     .seeded((ctx) => ctx.session({ title: "Permission list owner" }))
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/permission/request", { sessionID: ctx.state.id }),
+      path: route("/api/session/{sessionID}/permission", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
     }))
     .json(200, data(array)),
   http.protected
-    .post("/api/session/{sessionID}/permission/request/{requestID}/reply", "v2.session.permission.reply")
+    .post("/api/session/{sessionID}/permission/{requestID}/reply", "v2.session.permission.reply")
     .seeded((ctx) => ctx.session({ title: "Permission owner" }))
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/permission/request/{requestID}/reply", {
+      path: route("/api/session/{sessionID}/permission/{requestID}/reply", {
         sessionID: ctx.state.id,
         requestID: "per_httpapi_missing",
       }),
@@ -696,10 +708,10 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
-    .post("/api/session/{sessionID}/question/request/{requestID}/reply", "v2.session.question.reply")
+    .post("/api/session/{sessionID}/question/{requestID}/reply", "v2.session.question.reply")
     .seeded((ctx) => ctx.session({ title: "Question reply owner" }))
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/question/request/{requestID}/reply", {
+      path: route("/api/session/{sessionID}/question/{requestID}/reply", {
         sessionID: ctx.state.id,
         requestID: "que_httpapi_missing",
       }),
@@ -708,10 +720,10 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
-    .post("/api/session/{sessionID}/question/request/{requestID}/reject", "v2.session.question.reject")
+    .post("/api/session/{sessionID}/question/{requestID}/reject", "v2.session.question.reject")
     .seeded((ctx) => ctx.session({ title: "Question reject owner" }))
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/question/request/{requestID}/reject", {
+      path: route("/api/session/{sessionID}/question/{requestID}/reject", {
         sessionID: ctx.state.id,
         requestID: "que_httpapi_missing",
       }),
@@ -829,8 +841,9 @@ const scenarios: Scenario[] = [
     .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.cursor.invalid")
+    .seeded((ctx) => ctx.session({ title: "Invalid message cursor owner" }))
     .at((ctx) => ({
-      path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
+      path: `${route("/api/session/{sessionID}/message", { sessionID: ctx.state.id })}?${new URLSearchParams({
         cursor: cursor({ id: "msg_httpapi_missing", time: 0, order: "desc", direction: "next" }),
         order: "asc",
       })}`,
@@ -839,8 +852,9 @@ const scenarios: Scenario[] = [
     .status(400, undefined, "none"),
   http.protected
     .post("/api/session/{sessionID}/prompt", "v2.session.prompt.invalid")
+    .seeded((ctx) => ctx.session({ title: "Invalid prompt owner" }))
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/prompt", { sessionID: "ses_httpapi_missing" }),
+      path: route("/api/session/{sessionID}/prompt", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
       body: {},
     }))

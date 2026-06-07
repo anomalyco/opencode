@@ -3,7 +3,7 @@ import { For } from "solid-js"
 import { ProjectAvatar, PROJECT_AVATAR_VARIANTS } from "./project-avatar-v2"
 
 const docs = `### Overview
-Saturated 16px project avatar with color variants and optional unread ring.
+Saturated 16px project avatar with color variants and optional unread dot.
 
 ### API
 - Required: \`fallback\` string.
@@ -12,7 +12,7 @@ Saturated 16px project avatar with color variants and optional unread ring.
 ### Variants
 - Color: orange, yellow, cyan, green, red, pink, blue, purple, gray.
 - Image vs initial content state.
-- Unread ring when \`unread\` is set.
+- Unread dot with corner mask when \`unread\` is set.
 
 ### Theming
 - Uses \`--v2-avatar-bg-*\` and \`--v2-avatar-border-*\` tokens with inset box-shadow borders.
@@ -68,6 +68,16 @@ export const Unread = {
     variant: "orange",
     unread: true,
   },
+}
+
+export const AllVariantsUnread = {
+  render: () => (
+    <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
+      <For each={PROJECT_AVATAR_VARIANTS}>
+        {(variant) => <ProjectAvatar fallback={variant[0].toUpperCase()} variant={variant} unread />}
+      </For>
+    </div>
+  ),
 }
 
 export const Loading = {

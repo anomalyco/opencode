@@ -1,4 +1,5 @@
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
+import { Git } from "@opencode-ai/core/git"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceState } from "@/effect/instance-state"
@@ -28,7 +29,10 @@ function badRequest<A, R>(effect: Effect.Effect<A, ProjectCopy.Error, R>) {
       (error) =>
         new ApiProjectCopyError({
           name: "ProjectCopyError",
-          data: { message: message(error) },
+          data: {
+            message: message(error),
+            forceRequired: error instanceof Git.WorktreeError ? error.forceRequired : undefined,
+          },
         }),
     ),
   )
@@ -77,7 +81,7 @@ export const projectCopyHandlers = HttpApiBuilder.group(InstanceHttpApi, "projec
           messages: [
             {
               role: "user",
-              content: `Generate a short filesystem-safe name for a project working copy based on this context:\n${text}`,
+              content: `Generate a short 3-4 word name that describes this task:\n${text}`,
             },
           ],
         })
@@ -86,7 +90,8 @@ export const projectCopyHandlers = HttpApiBuilder.group(InstanceHttpApi, "projec
           Stream.map((event) => event.text),
           Stream.mkString,
         )
-      return slugify(result) || Slug.create()
+      const output = result.trim()
+      return output ? slugify(output.split(/\s+/).slice(0, 4).join(" ")) : Slug.create()
     })
 
     const create = Effect.fn("ProjectCopyHttpApi.create")(function* (ctx: {

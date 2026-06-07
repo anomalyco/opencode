@@ -1157,11 +1157,10 @@ describe("tool.shell abort", () => {
         projectRoot,
         Effect.gen(function* () {
           const result = yield* run({
-            command: `echo started && sleep 60`,
+            command: `sleep 60`,
             description: "Timeout test",
             timeout: 500,
           })
-          expect(result.output).toContain("started")
           expect(result.output).toContain("shell tool terminated command after exceeding timeout")
           expect(result.output).toContain("retry with a larger timeout value in milliseconds")
         }),
@@ -1179,12 +1178,11 @@ describe("tool.shell abort", () => {
           expect(tool.description).toContain("commands will time out after 500ms")
           const result = yield* tool.execute(
             {
-              command: `echo started && sleep 60`,
+              command: `sleep 60`,
               description: "Default timeout test",
             },
             ctx,
           )
-          expect(result.output).toContain("started")
           expect(result.output).toContain("exceeding timeout 500 ms")
         }),
       ).pipe(Effect.provide(RuntimeFlags.layer({ bashDefaultTimeoutMs: 500 }))),

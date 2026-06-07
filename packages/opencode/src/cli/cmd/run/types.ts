@@ -12,7 +12,7 @@
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
 import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import type { TuiConfig } from "@opencode-ai/tui/config"
 
 export type RunFilePart = {
   type: "file"
@@ -68,6 +68,7 @@ export type RunInput = {
   files: RunFilePart[]
   initialInput?: string
   thinking: boolean
+  backgroundSubagents: boolean
   demo?: boolean
 }
 
@@ -184,6 +185,7 @@ export type FooterSubagentTab = {
   label: string
   description: string
   status: "running" | "completed" | "error"
+  background?: boolean
   title?: string
   toolCalls?: number
   lastUpdatedAt: number

@@ -190,6 +190,56 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("commits local operational state inside a new synchronized event transaction", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<string>()
+      const aggregateID = EventV2.ID.create()
+      yield* events.project(SyncMessage, () => Effect.sync(() => received.push("projector")))
+
+      yield* events.publish(
+        SyncMessage,
+        { id: aggregateID, text: "hello" },
+        { commit: (seq) => Effect.sync(() => received.push(`commit:${seq}`)) },
+      )
+
+      expect(received).toEqual(["projector", "commit:0"])
+    }),
+  )
+
+  it.effect("rolls back the synchronized event and projector when the local commit fails", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_commit_probe (value text NOT NULL)")
+      yield* db.run("DELETE FROM event_commit_probe")
+      yield* events.project(SyncMessage, () =>
+        db.run("INSERT INTO event_commit_probe (value) VALUES ('projected')").pipe(Effect.orDie, Effect.asVoid),
+      )
+
+      const exit = yield* events
+        .publish(SyncMessage, { id: aggregateID, text: "hello" }, { commit: () => Effect.die("commit failed") })
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("commit failed")
+      expect(yield* db.all("SELECT value FROM event_commit_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+    }),
+  )
+
+  it.effect("rejects local commit hooks on live-only events", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const exit = yield* events.publish(Message, { text: "hello" }, { commit: () => Effect.void }).pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Local commit hooks require a synchronized event")
+    }),
+  )
+
   it.effect("runs projectors before publishing to streams", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
