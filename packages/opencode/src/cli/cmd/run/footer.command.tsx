@@ -14,6 +14,7 @@ type PanelEntry = RunFooterMenuItem & {
 
 type CommandEntry =
   | (PanelEntry & { action: "model" })
+  | (PanelEntry & { action: "editor" })
   | (PanelEntry & { action: "skill" })
   | (PanelEntry & { action: "queued" })
   | (PanelEntry & { action: "subagent" })
@@ -337,6 +338,7 @@ export function RunCommandMenuBody(props: {
   variantCycle: string
   onClose: () => void
   onModel: () => void
+  onEditor: () => void
   onSkill: () => void
   onSubagent: () => void
   onQueued: () => void
@@ -350,70 +352,77 @@ export function RunCommandMenuBody(props: {
   const [query, setQuery] = createSignal("")
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const entries = createMemo<CommandEntry[]>(() => {
-    const builtins = ["new"]
+    const builtins = ["editor", "new"]
     return [
       {
+        action: "editor",
+        category: "Session",
+        display: "Open editor",
+        footer: "/editor",
+        keywords: "editor compose draft external editor",
+      },
+      {
         action: "model",
-        category: "Suggested",
+        category: "Agent",
         display: "Switch model",
       },
       ...(props.commands() === undefined || skills().length > 0
         ? [
-            {
-              action: "skill" as const,
-              category: "Suggested",
-              display: "Skills",
-              footer: "/skills",
-              keywords: `skill skills ${skills()
-                .map((item) => `${item.name} ${item.description ?? ""}`)
-                .join(" ")}`.trim(),
-            },
-          ]
+          {
+            action: "skill" as const,
+            category: "Prompt",
+            display: "Skills",
+            footer: "/skills",
+            keywords: `skill skills ${skills()
+              .map((item) => `${item.name} ${item.description ?? ""}`)
+              .join(" ")}`.trim(),
+          },
+        ]
         : []),
       ...(props.queued().length > 0
         ? [
-            {
-              action: "queued" as const,
-              category: "Suggested",
-              display: "Manage queued prompts",
-              footer: `${props.queued().length} queued`,
-              keywords: props
-                .queued()
-                .map((item) => item.prompt.text)
-                .join(" "),
-            },
-          ]
+          {
+            action: "queued" as const,
+            category: "Agent",
+            display: "Manage queued prompts",
+            footer: `${props.queued().length} queued`,
+            keywords: props
+              .queued()
+              .map((item) => item.prompt.text)
+              .join(" "),
+          },
+        ]
         : []),
       ...(props.subagents().length > 0
         ? [
-            {
-              action: "subagent" as const,
-              category: "Suggested",
-              display: "View subagents",
-              footer: `${props.subagents().length} active`,
-              keywords: props
-                .subagents()
-                .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
-                .join(" "),
-            },
-          ]
+          {
+            action: "subagent" as const,
+            category: "Session",
+            display: "View subagents",
+            footer: `${props.subagents().length} active`,
+            keywords: props
+              .subagents()
+              .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
+              .join(" "),
+          },
+        ]
         : []),
       {
         action: "variant.cycle",
-        category: "Suggested",
+        category: "Agent",
         display: "Variant cycle",
         footer: props.variantCycle,
         keywords: "variant cycle",
       },
       ...(props.variants().length > 0
         ? [
-            {
-              action: "variant.list" as const,
-              category: "Suggested",
-              display: "Switch model variant",
-              keywords: `variant variants ${props.variants().join(" ")}`,
-            },
-          ]
+          {
+            action: "variant.list" as const,
+            category: "Agent",
+            display: "Switch model variant",
+            keywords: `variant variants ${props.variants().join(" ")}`,
+          },
+        ]
         : []),
       {
         action: "slash",
@@ -448,6 +457,11 @@ export function RunCommandMenuBody(props: {
   const pick = (item: CommandEntry) => {
     if (item.action === "model") {
       props.onModel()
+      return
+    }
+
+    if (item.action === "editor") {
+      props.onEditor()
       return
     }
 

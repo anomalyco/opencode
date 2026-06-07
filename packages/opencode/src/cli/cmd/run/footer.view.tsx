@@ -97,6 +97,7 @@ type RunFooterViewProps = {
   onCycle: () => void
   onInterrupt: () => boolean
   onBackground?: () => void
+  onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
   onRequestExit?: (fn: (() => boolean) | undefined) => void
@@ -360,6 +361,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     onSubmit: props.onSubmit,
     onCycle: props.onCycle,
     onInterrupt: props.onInterrupt,
+    onEditorOpen: props.onEditorOpen,
     onInputClear: props.onInputClear,
     onExitRequest: props.onExitRequest,
     onExit: props.onExit,
@@ -698,6 +700,10 @@ export function RunFooterView(props: RunFooterViewProps) {
                             variantCycle={variantCycle()}
                             onClose={closePanel}
                             onModel={openModel}
+                            onEditor={() => {
+                              closePanel()
+                              void composer.openEditor()
+                            }}
                             onSkill={openSkillMenu}
                             onSubagent={openSubagentMenu}
                             onQueued={openQueuedMenu}
@@ -860,7 +866,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                     paddingRight={1}
                     backgroundColor={statuslineBackground()}
                     flexShrink={1}
-                    maxWidth={12}
                   >
                     <text fg={theme().muted} wrapMode="none" truncate>
                       {activityMeta()}

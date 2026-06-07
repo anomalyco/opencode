@@ -23,6 +23,7 @@ import {
   pushPromptHistory,
 } from "./prompt.shared"
 import { OPENCODE_BASE_MODE, useBindings } from "@opencode-ai/tui/keymap"
+import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
 import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunResource, RunTuiConfig } from "./types"
@@ -46,7 +47,7 @@ type Auto = RunFooterMenuItem & {
 type SlashOption = RunFooterMenuItem & {
   kind: "slash"
   name: string
-  action?: "skill-menu"
+  action?: "skill-menu" | "editor"
 }
 
 type PromptOption = Auto | SlashOption
@@ -69,6 +70,7 @@ type PromptInput = {
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
   onInterrupt: () => boolean
+  onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
   onExit: () => void
@@ -88,6 +90,7 @@ export type PromptState = {
   requestExit: () => boolean
   onSubmit: () => void
   submitText: (text: string) => void
+  openEditor: (input?: { value?: string }) => Promise<void>
   onKeyDown: (event: KeyEvent) => void
   onContentChange: () => void
   replaceDraft: (text: string) => void
@@ -420,6 +423,13 @@ export function createPromptState(input: PromptInput): PromptState {
   )
   const slashOptions = createMemo<SlashOption[]>(() => {
     const builtins = [
+      {
+        kind: "slash",
+        action: "editor" as const,
+        name: "editor",
+        display: "/editor",
+        description: "compose in your external editor",
+      } satisfies SlashOption,
       { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
@@ -807,6 +817,32 @@ export function createPromptState(input: PromptInput): PromptState {
     area.focus()
   }
 
+  const openEditor = async (inputValue?: { value?: string }) => {
+    input.onInputClear()
+    syncDraft()
+    hide()
+
+    const current = clonePrompt(draft)
+    try {
+      const content = await input.onEditorOpen({
+        value: inputValue?.value ?? current.text,
+      })
+      if (content === undefined) {
+        return
+      }
+
+      restore({
+        text: content,
+        parts: realignEditorPromptParts(content, current.parts),
+        ...(current.mode ? { mode: current.mode } : {}),
+        ...(current.command ? { command: current.command } : {}),
+      })
+    } catch {
+      restore(current)
+      input.onStatus("failed to open editor")
+    }
+  }
+
   const select = (item?: PromptOption) => {
     const next = item ?? options()[menu.selected()]
     if (!next || !area || area.isDestroyed) {
@@ -814,6 +850,13 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (next.kind === "slash") {
+      if (next.action === "editor") {
+        void openEditor({
+          value: resolveEditorSlashValue(area.plainText),
+        })
+        return
+      }
+
       if (next.action === "skill-menu") {
         cancelAutocomplete()
         input.onSkillMenu()
@@ -968,6 +1011,22 @@ export function createPromptState(input: PromptInput): PromptState {
       },
     ],
     bindings: input.tuiConfig.keybinds.get("session.interrupt"),
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: input.prompt() && !visible(),
+    commands: [
+      {
+        name: "prompt.editor",
+        title: "Open editor",
+        category: "Prompt",
+        run() {
+          void openEditor()
+        },
+      },
+    ],
+    bindings: input.tuiConfig.keybinds.get("prompt.editor"),
   }))
 
   useBindings(() => ({
@@ -1232,6 +1291,7 @@ export function createPromptState(input: PromptInput): PromptState {
     requestExit,
     onSubmit,
     submitText,
+    openEditor,
     onKeyDown,
     onContentChange: () => {
       input.onInputClear()

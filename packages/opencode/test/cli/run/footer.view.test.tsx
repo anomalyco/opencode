@@ -197,6 +197,7 @@ async function renderFooter(
           onQuestionReject={() => {}}
           onCycle={input.onCycle ?? (() => {})}
           onInterrupt={() => false}
+          onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
           onModelSelect={() => {}}
@@ -328,6 +329,7 @@ test("direct command panel renders grouped command palette", async () => {
           variantCycle="ctrl+t"
           onClose={() => {}}
           onModel={() => {}}
+          onEditor={() => {}}
           onSkill={() => {}}
           onSubagent={() => {}}
           onQueued={() => {}}
@@ -470,6 +472,7 @@ test("direct command panel shows subagent entry when available", async () => {
           variantCycle="ctrl+t"
           onClose={() => {}}
           onModel={() => {}}
+          onEditor={() => {}}
           onSkill={() => {}}
           onSubagent={() => {}}
           onQueued={() => {}}
@@ -858,6 +861,7 @@ test("direct footer shows editable prompts and additional queued work while runn
           onQuestionReject={() => {}}
           onCycle={() => {}}
           onInterrupt={() => false}
+          onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
           onModelSelect={() => {}}
@@ -914,6 +918,21 @@ test("direct footer omits interrupt key hint when interrupt is unbound", async (
 
     expect(frame).toContain("interrupt")
     expect(frame).not.toContain("ctrl+l")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer shows full usage metadata when room is available", async () => {
+  const app = await renderFooter({
+    state: { usage: "159.6K (16%) · $4.23" },
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("159.6K (16%) · $4.23")
   } finally {
     app.cleanup()
   }

@@ -12,8 +12,9 @@ import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Global } from "@opencode-ai/core/global"
-import { Session as SessionApi } from "@/session/session"
+import { openEditor } from "@opencode-ai/tui/editor"
 import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
+import { Session as SessionApi } from "@/session/session"
 import * as Locale from "@/util/locale"
 import { withRunSpan } from "./otel"
 import { resolveInteractiveStdin } from "./runtime.stdin"
@@ -238,6 +239,8 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
         await renderer.idle().catch(() => {})
 
         const { RunFooter } = await footerTask
+        let closed = false
+        let sigintRegistered = false
 
         const footer = new RunFooter(renderer, {
           directory: input.directory,
@@ -264,15 +267,54 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           onVariantSelect: input.onVariantSelect,
           onInterrupt: input.onInterrupt,
           onBackground: input.onBackground,
+          onEditorOpen: async ({ value }) => {
+            if (closed || renderer.isDestroyed) {
+              return
+            }
+
+            await renderer.idle().catch(() => {})
+            const ignore = () => {}
+            detachSigint()
+            process.on("SIGINT", ignore)
+            try {
+              return await openEditor({
+                value,
+                cwd: input.directory,
+                renderer,
+                stdin: source.stdin,
+              })
+            } finally {
+              process.off("SIGINT", ignore)
+              attachSigint()
+            }
+          },
           onSubagentSelect: input.onSubagentSelect,
         })
 
         const sigint = () => {
           footer.requestExit()
         }
-        process.on("SIGINT", sigint)
 
-        let closed = false
+        const attachSigint = () => {
+          if (closed || sigintRegistered) {
+            return
+          }
+
+          process.on("SIGINT", sigint)
+          sigintRegistered = true
+        }
+
+        const detachSigint = () => {
+          if (!sigintRegistered) {
+            return
+          }
+
+          process.off("SIGINT", sigint)
+          sigintRegistered = false
+        }
+
+        attachSigint()
+
         const close = async (next: {
           showExit: boolean
           sessionTitle?: string
@@ -291,7 +333,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
               "session.id": next.sessionID || input.getSessionID?.() || input.sessionID || undefined,
             },
             async () => {
-              process.off("SIGINT", sigint)
+              detachSigint()
               let wroteExit = false
 
               try {
