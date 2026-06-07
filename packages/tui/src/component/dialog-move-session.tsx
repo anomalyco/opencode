@@ -7,7 +7,8 @@ import { useDialog } from "../ui/dialog"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { useSync } from "../context/sync"
-import { abbreviateHome, useTuiEnvironment } from "../runtime"
+import { abbreviateHome } from "../runtime"
+import { useTuiPaths } from "../context/runtime"
 import { Locale } from "../util/locale"
 import { errorMessage } from "../util/error"
 import { useToast } from "../ui/toast"
@@ -32,7 +33,7 @@ export function DialogMoveSession(props: {
   const sync = useSync()
   const projectContext = useProject()
   const toast = useToast()
-  const environment = useTuiEnvironment()
+  const paths = useTuiPaths()
   const [working, setWorking] = createSignal(Boolean(props.initialRemoving))
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
@@ -101,7 +102,7 @@ export function DialogMoveSession(props: {
     })
     const titleWidth = Math.max(1, Math.min(116, dimensions().width - 2) - 12)
     return list.map((item) => {
-      const title = abbreviateHome(item.location, environment.paths.home)
+      const title = abbreviateHome(item.location, paths.home)
       const suffix = item.location === item.root ? undefined : path.sep + path.relative(item.root, item.location)
       const visible = Locale.truncateLeft(title, titleWidth)
       const split = suffix ? Math.max(0, visible.length - suffix.length) : visible.length

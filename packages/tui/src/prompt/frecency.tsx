@@ -2,7 +2,7 @@ import path from "path"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "../context/helper"
-import { useTuiEnvironment } from "../runtime"
+import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
 
 type FrecencyEntry = { path: string; frequency: number; lastOpen: number }
@@ -38,8 +38,8 @@ function calculateFrecency(entry?: { frequency: number; lastOpen: number }) {
 export const { use: useFrecency, provider: FrecencyProvider } = createSimpleContext({
   name: "Frecency",
   init: () => {
-    const environment = useTuiEnvironment()
-    const frecencyPath = path.join(environment.paths.state, "frecency.jsonl")
+    const paths = useTuiPaths()
+    const frecencyPath = path.join(paths.state, "frecency.jsonl")
     onMount(async () => {
       const lines = parseFrecency(await readText(frecencyPath).catch(() => ""))
       setStore(
@@ -55,7 +55,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     const [store, setStore] = createStore({ data: {} as Record<string, { frequency: number; lastOpen: number }> })
 
     function updateFrecency(filePath: string) {
-      const absolutePath = path.resolve(environment.cwd, filePath)
+      const absolutePath = path.resolve(paths.cwd, filePath)
       const newEntry = { frequency: (store.data[absolutePath]?.frequency || 0) + 1, lastOpen: Date.now() }
       setStore("data", absolutePath, newEntry)
       appendText(frecencyPath, JSON.stringify({ path: absolutePath, ...newEntry }) + "\n").catch(() => {})
@@ -72,7 +72,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     }
 
     return {
-      getFrecency: (filePath: string) => calculateFrecency(store.data[path.resolve(environment.cwd, filePath)]),
+      getFrecency: (filePath: string) => calculateFrecency(store.data[path.resolve(paths.cwd, filePath)]),
       updateFrecency,
       data: () => store.data,
     }

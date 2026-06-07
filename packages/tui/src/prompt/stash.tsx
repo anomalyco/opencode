@@ -2,7 +2,7 @@ import path from "path"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../context/helper"
-import { useTuiEnvironment } from "../runtime"
+import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
 import type { PromptInfo } from "./history"
 
@@ -32,8 +32,8 @@ export function parsePromptStash(text: string) {
 export const { use: usePromptStash, provider: PromptStashProvider } = createSimpleContext({
   name: "PromptStash",
   init: () => {
-    const environment = useTuiEnvironment()
-    const stashPath = path.join(environment.paths.state, "prompt-stash.jsonl")
+    const paths = useTuiPaths()
+    const stashPath = path.join(paths.state, "prompt-stash.jsonl")
     onMount(async () => {
       const lines = parsePromptStash(await readText(stashPath).catch(() => ""))
       setStore("entries", lines)

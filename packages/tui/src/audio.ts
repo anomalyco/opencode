@@ -1,7 +1,5 @@
 import { Audio, type AudioErrorContext, type AudioPlayOptions, type AudioSound, type AudioVoice } from "@opentui/core"
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "tui.audio" })
+import { readFile } from "node:fs/promises"
 
 let audio: Audio | null | undefined
 const sounds = new Map<string, Promise<AudioSound | null>>()
@@ -11,12 +9,12 @@ function getAudio() {
   try {
     const next = Audio.create({ autoStart: false })
     next.on("error", (error: Error, context: AudioErrorContext) => {
-      log.debug("tui audio error", { error, context })
+      console.debug("tui audio error", { error, context })
     })
     audio = next
     return next
   } catch (error) {
-    log.debug("failed to create tui audio", { error })
+    console.debug("failed to create tui audio", { error })
     audio = null
     return null
   }
@@ -27,11 +25,10 @@ export function loadSoundFile(file: string) {
   if (!current) return Promise.resolve(null)
   const cached = sounds.get(file)
   if (cached) return cached
-  const task = Bun.file(file)
-    .bytes()
+  const task = readFile(file)
     .then((bytes) => current.loadSound(bytes))
     .catch((error) => {
-      log.debug("failed to load tui sound", { file, error })
+      console.debug("failed to load tui sound", { file, error })
       return null
     })
   sounds.set(file, task)
@@ -54,5 +51,3 @@ export function dispose() {
   audio = undefined
   sounds.clear()
 }
-
-export * as TuiAudio from "./audio"

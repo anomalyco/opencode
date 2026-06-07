@@ -8,6 +8,6 @@ export default Runtime.handler(Commands, () =>
     const daemon = yield* Daemon.Service
     const transport = yield* daemon.transport()
     const { runTui } = yield* Effect.promise(() => import("../../tui"))
-    yield* Effect.promise(() => runTui(transport))
+    yield* runTui(transport)
   }),
 )

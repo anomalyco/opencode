@@ -24,7 +24,41 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useKV } from "./kv"
 import { useTuiConfig } from "../config"
-import { useOptionalTuiPlatform } from "../platform"
+import { Global } from "@opencode-ai/core/global"
+import { Glob } from "@opencode-ai/core/util/glob"
+import { readFile } from "node:fs/promises"
+import path from "node:path"
+
+export type ThemeSource = Readonly<{
+  discover(): Promise<Record<string, unknown>>
+  subscribeRefresh?(refresh: () => void): () => void
+}>
+
+const themeSource: ThemeSource = {
+  async discover() {
+    const directories = [Global.Path.config]
+    for (let current = process.cwd(); ; current = path.dirname(current)) {
+      directories.push(path.join(current, ".opencode"))
+      if (path.dirname(current) === current) break
+    }
+    return discoverThemes(directories)
+  },
+  subscribeRefresh(refresh) {
+    process.on("SIGUSR2", refresh)
+    return () => process.off("SIGUSR2", refresh)
+  },
+}
+
+export async function discoverThemes(directories: string[]) {
+  const result: Record<string, unknown> = {}
+  for (const directory of directories) {
+      const files = await Glob.scan("themes/*.json", { cwd: directory, absolute: true, dot: true, symlink: true })
+      for (const file of files) {
+        result[path.basename(file, ".json")] = JSON.parse(await readFile(file, "utf8")) as unknown
+      }
+  }
+  return result
+}
 
 export {
   DEFAULT_THEMES,
@@ -67,11 +101,11 @@ subscribeThemes((themes) => setStore("themes", themes))
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
-  init: (props: { mode: "dark" | "light" }) => {
+  init: (props: { mode: "dark" | "light"; source?: ThemeSource }) => {
     const renderer = useRenderer()
     const config = useTuiConfig()
     const kv = useKV()
-    const platform = useOptionalTuiPlatform()
+    const themes = props.source ?? themeSource
     const pick = (value: unknown) => {
       if (value === "dark" || value === "light") return value
       return
@@ -96,7 +130,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     function syncCustomThemes() {
-      return (platform?.themes?.discover() ?? Promise.resolve({}))
+      return themes
+        .discover()
         .then((themes) => {
           setCustomThemes(
             Object.entries(themes).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
@@ -207,7 +242,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         }, delay),
       )
     }
-    const unsubscribeRefresh = platform?.themes?.subscribeRefresh?.(refresh)
+    let unsubscribeRefresh: (() => void) | undefined
+    unsubscribeRefresh = themes.subscribeRefresh?.(refresh)
 
     onCleanup(() => {
       renderer.off(CliRenderEvents.THEME_MODE, handle)

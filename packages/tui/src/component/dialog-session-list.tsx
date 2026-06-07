@@ -8,7 +8,7 @@ import { useProject } from "../context/project"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { useLocal } from "../context/local"
-import { useTuiEnvironment } from "../runtime"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
@@ -27,7 +27,6 @@ export function DialogSessionList() {
   const { theme } = useTheme()
   const sdk = useSDK()
   const local = useLocal()
-  const environment = useTuiEnvironment()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
@@ -174,7 +173,7 @@ export function DialogSessionList() {
       const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
 
       let footer: JSX.Element | string = ""
-      if (environment.capabilities.workspaces) {
+      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
         if (x.workspaceID) {
           footer = workspace ? (
             <WorkspaceLabel

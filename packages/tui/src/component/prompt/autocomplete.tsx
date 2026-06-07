@@ -10,7 +10,7 @@ import { useProject } from "../../context/project"
 import { useSDK } from "../../context/sdk"
 import { useSync } from "../../context/sync"
 import { getScrollAcceleration } from "../../util/scroll"
-import { useTuiEnvironment } from "../../runtime"
+import { useTuiPaths } from "../../context/runtime"
 import { useTuiConfig } from "../../config"
 import { useTheme, selectedForeground } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
@@ -92,7 +92,7 @@ export function Autocomplete(props: {
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const tuiConfig = useTuiConfig()
-  const environment = useTuiEnvironment()
+  const paths = useTuiPaths()
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
@@ -236,7 +236,7 @@ export function Autocomplete(props: {
   }
 
   function createFilePart(item: string, lineRange?: { startLine: number; endLine?: number }) {
-    const baseDir = (sync.path.directory || environment.cwd).replace(/\/+$/, "")
+    const baseDir = (sync.path.directory || paths.cwd).replace(/\/+$/, "")
     const fullPath = path.isAbsolute(item) ? item : path.join(baseDir, item)
     const urlObj = pathToFileURL(fullPath)
     const filename =
@@ -306,7 +306,7 @@ export function Autocomplete(props: {
   })
 
   function normalizeMentionPath(filePath: string) {
-    const baseDir = sync.path.directory || environment.cwd
+    const baseDir = sync.path.directory || paths.cwd
     const absolute = path.resolve(filePath)
     const relative = path.relative(baseDir, absolute)
 

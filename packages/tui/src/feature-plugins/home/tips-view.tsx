@@ -2,7 +2,6 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, For, type Accessor } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "../../context/theme"
 import { useCommandShortcut } from "../../keymap"
-import { useTuiEnvironment } from "../../runtime"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
 
@@ -97,7 +96,6 @@ function configShortcut(api: TuiPluginApi, command: string): TipShortcut {
 
 export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   const theme = useTheme().theme
-  const environment = useTuiEnvironment()
   const tipOffset = Math.random()
   const shortcuts: Shortcuts = {
     agentCycle: useCommandShortcut("agent.cycle"),
@@ -136,12 +134,10 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   }
   const tip = createMemo(() => {
     if (props.connected === false) return NO_MODELS_TIP
-    const tips = [...TIPS, environment.capabilities.terminalSuspend ? TERMINAL_SUSPEND_TIP : INPUT_UNDO_TIP].flatMap(
-      (item) => {
-        const value = typeof item === "string" ? item : item(shortcuts)
-        return value ? [value] : []
-      },
-    )
+    const tips = [...TIPS, process.platform !== "win32" ? TERMINAL_SUSPEND_TIP : INPUT_UNDO_TIP].flatMap((item) => {
+      const value = typeof item === "string" ? item : item(shortcuts)
+      return value ? [value] : []
+    })
     return tips[Math.floor(tipOffset * tips.length)] ?? NO_MODELS_TIP
   }, NO_MODELS_TIP)
   // Solid can expose a memo's initial value while a pure computation is pending.

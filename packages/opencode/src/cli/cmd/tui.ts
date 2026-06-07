@@ -11,7 +11,6 @@ import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network
 import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "@opencode-ai/tui/context/sdk"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "../tui/win32"
 import { writeHeapSnapshot } from "v8"
 import {
   OPENCODE_PROCESS_ROLE,
@@ -20,7 +19,7 @@ import {
   sanitizedProcessEnv,
 } from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "../tui/validate-session"
-import { resolveTuiRuntime } from "../tui/runtime"
+import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -113,15 +112,9 @@ export const TuiThreadCommand = cmd({
         describe: "agent to use",
       }),
   handler: async (args) => {
-    const { TuiConfig } = await import("@/config/tui")
-    // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
-    // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
     try {
-      // Must be the very first thing — disables CTRL_C_EVENT before any Worker
-      // spawn or async work so the OS cannot kill the process group.
-      win32DisableProcessedInput()
-
+      const { TuiConfig } = await import("@/config/tui")
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
         process.exitCode = 1
@@ -189,7 +182,6 @@ export const TuiThreadCommand = cmd({
 
       const prompt = await input(args.prompt)
       const config = await TuiConfig.get()
-      const runtime = resolveTuiRuntime(config)
 
       const network = resolveNetworkOptionsNoConfig(args)
       const external =
@@ -230,42 +222,43 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
-        const { createTuiRenderer, tui } = await import("@opencode-ai/tui")
-        const { createLegacyTuiHost } = await import("../tui/host")
+        const { Effect } = await import("effect")
+        const { run } = await import("../tui/layer")
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
-        const renderer = await createTuiRenderer(config, runtime)
-        const handle = tui({
-          ...runtime,
-          url: transport.url,
-          renderer,
-          async onSnapshot() {
-            const tui = writeHeapSnapshot("tui.heapsnapshot")
-            const server = await client.call("snapshot", undefined)
-            return [tui, server]
-          },
-          config,
-          host: createLegacyTuiHost(renderer),
-          pluginHost: createLegacyTuiPluginHost(),
-          directory: cwd,
-          fetch: transport.fetch,
-          events: transport.events,
-          args: {
-            continue: args.continue,
-            sessionID: args.session,
-            agent: args.agent,
-            model: args.model,
-            prompt,
-            fork: args.fork,
-          },
-        })
-        await handle.done
+        await Effect.runPromise(
+          run({
+            url: transport.url,
+            async onSnapshot() {
+              const tui = writeHeapSnapshot("tui.heapsnapshot")
+              const server = await client.call("snapshot", undefined)
+              return [tui, server]
+            },
+            config,
+            pluginHost: createLegacyTuiPluginHost(),
+            directory: cwd,
+            fetch: transport.fetch,
+            events: transport.events,
+            args: {
+              continue: args.continue,
+              sessionID: args.session,
+              agent: args.agent,
+              model: args.model,
+              prompt,
+              fork: args.fork,
+            },
+          }),
+        )
       } finally {
         await stop()
       }
+      process.exit(0)
     } finally {
-      unguard?.()
+      try {
+        unguard?.()
+      } catch (error) {
+        Log.Default.warn("failed to restore terminal guard", { error: errorMessage(error) })
+      }
     }
-    process.exit(0)
   },
 })
 // scratch

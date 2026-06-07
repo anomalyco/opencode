@@ -10,7 +10,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { RGBA, TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { useBindings } from "../../keymap"
 import { Locale } from "../../util/locale"
-import { useTuiEnvironment } from "../../runtime"
+import { useTuiPaths } from "../../context/runtime"
 import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
 import { toolDisplayMetadata, webSearchProviderLabel } from "../../util/tool-display"
 import path from "path"
@@ -1122,7 +1122,7 @@ function input(input: Record<string, unknown>, omit?: string[]) {
 }
 
 function usePathNormalizer() {
-  const cwd = useTuiEnvironment().cwd
+  const cwd = useTuiPaths().cwd
   return (input?: string) => normalizePath(input, cwd)
 }
 

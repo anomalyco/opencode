@@ -2,9 +2,9 @@ import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Option, Schema, SchemaGetter } from "effect"
 import { isRecord } from "../util/record"
-import { useTuiEnvironment } from "../runtime"
-import { useOptionalTuiPlatform } from "../platform"
+import { useTuiPaths } from "./runtime"
 import { createSimpleContext } from "./helper"
+import { editorIntegration } from "../editor"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -104,11 +104,20 @@ type EditorConnection = {
   source: string
 }
 
+export type EditorIntegration = Readonly<{
+  connection?(directory: string): EditorConnection | undefined
+  selection?(directory: string): Promise<unknown>
+}>
+
 export const { use: useEditorContext, provider: EditorContextProvider } = createSimpleContext({
   name: "EditorContext",
-  init: (props: { WebSocketImpl?: typeof WebSocket }) => {
-    const environment = useTuiEnvironment()
-    const platform = useOptionalTuiPlatform()
+  init: (props: { integration?: EditorIntegration; WebSocketImpl?: typeof WebSocket }) => {
+    const paths = useTuiPaths()
+    const editor = props.integration ?? editorIntegration
+    const value = process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT
+    const parsedPort = value ? Number.parseInt(value, 10) : undefined
+    const port = parsedPort && Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : undefined
+    const zedTerminal = process.env.ZED_TERM === "true" || process.env.TERM_PROGRAM?.toLowerCase() === "zed"
     const mentionListeners = new Set<(mention: EditorMention) => void>()
     const WebSocketImpl = props.WebSocketImpl ?? WebSocket
     const [store, setStore] = createStore<{
@@ -130,7 +139,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     let requestID = 0
     let zedSelection: Promise<void> | undefined
     let lastZedSelectionKey: string | undefined
-    let directory = environment.cwd
+    let directory = paths.cwd
     let preserveSelectionOnReconnect = false
     const pending = new Map<number, string>()
 
@@ -163,20 +172,20 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     const connect = () => {
       if (closed) return
 
-      const connection = resolveEditorConnection(directory, environment.editor.port, platform?.editor?.connection)
+      const connection = resolveEditorConnection(directory, port, editor.connection)
       if (!connection) {
-        if (!environment.editor.zedTerminal) {
+        if (!zedTerminal) {
+          setStore("status", "disabled")
+          scheduleReconnect()
+          return
+        }
+        if (!editor.selection) {
           setStore("status", "disabled")
           scheduleReconnect()
           return
         }
 
-        if (!platform?.editor?.selection) {
-          setStore("status", "disabled")
-          scheduleReconnect()
-          return
-        }
-        zedSelection ??= platform.editor
+        zedSelection ??= editor
           .selection(directory)
           .then((result) => {
             if (closed || socket) return
@@ -278,7 +287,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     }
 
     const reconnectWithDirectory = (nextDirectory?: string) => {
-      const resolved = nextDirectory || environment.cwd
+      const resolved = nextDirectory || paths.cwd
       const sameDirectory = directory === resolved
       clearSelectionForReconnect({ resetZedSelectionKey: !sameDirectory })
       if (sameDirectory) return
@@ -311,8 +320,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     return {
       enabled() {
         return Boolean(
-          resolveEditorConnection(directory, environment.editor.port, platform?.editor?.connection) ||
-            (environment.editor.zedTerminal && platform?.editor?.selection),
+          resolveEditorConnection(directory, port, editor.connection) || (zedTerminal && editor.selection),
         )
       },
       connected() {

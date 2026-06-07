@@ -26,7 +26,7 @@ function wordmark(pad = "") {
   })
 }
 
-export function sessionExitSummary(input: { title: string; sessionID?: string }) {
+export function sessionEpilogue(input: { title: string; sessionID?: string }) {
   const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
   return [
     ...wordmark("  "),

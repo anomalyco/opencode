@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -15,12 +16,13 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "node:path"
+import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
 import { SplitBorder } from "../../ui/border"
-import { useTuiEnvironment } from "../../runtime"
+import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
@@ -41,6 +43,7 @@ import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
 import { useEditorContext } from "../../context/editor"
+import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
@@ -59,17 +62,17 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
-import { useExit } from "../../context/exit"
+import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
+import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
-import { sessionExitSummary } from "../../util/presentation"
 import { useTuiConfig } from "../../config"
-import { useTuiPlatform } from "../../platform"
+import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
@@ -171,19 +174,30 @@ function use() {
 }
 
 export function Session() {
-  const platform = useTuiPlatform()
+  const setEpilogue = useEpilogue()
+  const clipboard = useClipboard()
+  const writeExport = async (file: string, content: string) => {
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, content)
+  }
   const pluginRuntime = usePluginRuntime()
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const sync = useSync()
   const event = useEvent()
   const project = useProject()
-  const environment = useTuiEnvironment()
+  const paths = useTuiPaths()
   const tuiConfig = useTuiConfig()
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
+
+  createEffect(() => {
+    const title = Locale.truncate(session()?.title ?? "", 50)
+    setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
+  })
+  onCleanup(() => setEpilogue())
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
     return sync.data.session
@@ -353,13 +367,6 @@ export function Session() {
     })
   })
 
-  const exit = useExit()
-
-  createEffect(() => {
-    const title = Locale.truncate(session()?.title ?? "", 50)
-    return exit.message.set(sessionExitSummary({ title, sessionID: session()?.id }))
-  })
-
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
     const children = scroll.getChildren()
@@ -460,8 +467,7 @@ export function Session() {
       },
       run: async () => {
         const copy = (url: string) =>
-          platform.clipboard
-            ?.write?.(url)
+          clipboard.write?.(url)
             .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
             .catch(() => toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }))
         const url = session()?.share?.url
@@ -896,8 +902,7 @@ export function Session() {
           return
         }
 
-        platform.clipboard
-          ?.write?.(text)
+        clipboard.write?.(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
         dialog.clear()
@@ -925,7 +930,7 @@ export function Session() {
               providers: sync.data.provider,
             },
           )
-          await platform.clipboard?.write?.(transcript)
+          await clipboard.write?.(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
@@ -972,30 +977,32 @@ export function Session() {
 
           if (options.openWithoutSaving) {
             // Just open in editor without saving
-            await platform.editor?.open({
+            await openEditor({
+              renderer,
               value: transcript,
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
-                environment.cwd,
+                paths.cwd,
             })
           } else {
-            const exportDir = environment.cwd
+            const exportDir = paths.cwd
             const filename = options.filename.trim()
             const filepath = path.join(exportDir, filename)
 
-            await platform.export?.write(filepath, transcript)
+            await writeExport(filepath, transcript)
 
             // Open with EDITOR if available
-            const result = await platform.editor?.open({
+            const result = await openEditor({
+              renderer,
               value: transcript,
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
-                environment.cwd,
+                paths.cwd,
             })
             if (result !== undefined) {
-              await platform.export?.write(filepath, result)
+              await writeExport(filepath, result)
             }
 
             toast.show({ message: `Session exported to ${filename}`, variant: "success" })
@@ -2510,9 +2517,12 @@ function Skill(props: ToolProps) {
 
 function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
   const { theme } = useTheme()
-  const environment = useTuiEnvironment()
+  const terminalEnvironment = useTuiTerminalEnvironment()
   const errors = createMemo(() => {
-    const normalized = normalizePath(typeof props.filePath === "string" ? props.filePath : "", environment.platform)
+    const normalized = normalizePath(
+      typeof props.filePath === "string" ? props.filePath : "",
+      terminalEnvironment.platform,
+    )
     return parseDiagnostics(props.diagnostics, normalized)
   })
 
