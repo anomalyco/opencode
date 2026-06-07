@@ -1,6 +1,64 @@
-- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
+# opencode-trade Agent Architecture
+
+## Language Requirement
+
+**IMPORTANT**: Always respond in Japanese. This is the highest priority rule that must be strictly followed at all times.
+
+## エージェント構成
+
+### 1. **Hermes-Agent (司令塔)** — wag-air (Mac)
+- **役割**: 全体の進捗管理、タスク分割、リサーチ・実装・検証フロー制御
+- **責任**:
+  - 参考URL (QuantConnect, Kaggle, MQL5等) の定期リサーチ
+  - 新ロジック検証後の統合判定
+  - 3ノード間の同期（Tailscale SSH）
+  - Codeberg へのコミット・PRレビュー指示
+- **使用ツール**: shell scripts, Python orchestration
+- **成果物**: ROADMAP.md, SPRINT.md
+
+### 2. **Opencode-Agent (実装エンジニア)** — orchestrated by Hermes
+- **役割**: MQL5/Python コード実装（Qwen3-coder-max主力）
+- **責任**:
+  - Expert_Main.mq5, Include/*.mqh の実装・最適化
+  - Python データ収集スクリプト作成・実行
+  - ONNX 推論エンドポイント統合
+  - ユニットテスト（backtesting logs）
+- **禁止事項**: 直接コード編集（F001）
+- **入力**: Hermes → 「MQL5実装タスク」日本語指示書
+- **出力**: PR with code + test results
+
+### 3. **Research-Agent** — web_search + fetch enabled
+- **役割**: QuantConnect, Kaggle, MQL5 CodeBase からの知見抽出
+- **責任**:
+  - XAUUSD/SP500 ロジック検索・分析
+  - バックテスト結果の信頼度判定
+  - VIX異常検知の実装例リサーチ
+- **入力**: Hermes → 「XAUUSD での Breakout + Pullback 統合ロジックの事例調査」
+- **出力**: RESEARCH_LOG.md (URL, スクリーンショット, 要約)
+
+### 4. **Review-Agent** — GLM-5 / GPT-5 (HARD_TASK only)
+- **役割**: コード品質・セキュリティ・数値安定性レビュー
+- **責任**:
+  - Memory leak / division by zero チェック
+  - MT5 Order execution のレース条件検証
+  - Python numpy/pandas numerical stability
+- **入力**: Opencode → merged PR
+- **出力**: REVIEW_NOTES.md (承認 or 差し戻し理由)
+
+---
+
+## タスク流 (Typical Sprint)
+
+```
+Hermes (司令塔)
+  ↓ [新ロジック案] → Research-Agent
+  ↓ [検証済み概要] → Opencode-Agent
+  ↓ [実装完了] → Review-Agent
+  ↓ [合格] → Git push + backtesting
+  → Hermes: 結果を SPRINT.md に記録
+```
+
+---
 
 ## Commits and PR Titles
 

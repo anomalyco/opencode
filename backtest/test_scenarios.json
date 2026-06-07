@@ -1,0 +1,46 @@
+{
+  "test_scenarios": [
+    {
+      "name": "breakout_xauusd_2024",
+      "symbol": "XAUUSD",
+      "strategy": "BreakoutSignal",
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "initial_deposit": 1000000,
+      "leverage": 100,
+      "expected_results": {
+        "sharpe_ratio": 1.5,
+        "max_drawdown": -0.15,
+        "win_rate": 0.55
+      }
+    },
+    {
+      "name": "pullback_sp500_2024",
+      "symbol": "SP500",
+      "strategy": "PullbackSignal",
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "initial_deposit": 1000000,
+      "leverage": 100,
+      "expected_results": {
+        "sharpe_ratio": 1.2,
+        "max_drawdown": -0.12,
+        "win_rate": 0.60
+      }
+    },
+    {
+      "name": "ml_universal_2023_2024",
+      "symbol": "XAUUSD",
+      "strategy": "MLModel",
+      "start_date": "2023-01-01",
+      "end_date": "2024-12-31",
+      "initial_deposit": 1000000,
+      "leverage": 100,
+      "expected_results": {
+        "sharpe_ratio": 1.8,
+        "max_drawdown": -0.10,
+        "win_rate": 0.58
+      }
+    }
+  ]
+}
