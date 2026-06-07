@@ -5,6 +5,7 @@ import { SessionRunner } from "../runner"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionExecution } from "../execution"
+import { logFailure } from "../logging"
 
 /** Current-process routing for implicit-local Locations. Future remote placement belongs here. */
 export const layer = Layer.effect(
@@ -20,11 +21,7 @@ export const layer = Layer.effect(
           Effect.provide(locations.get(session.location)),
         )
       }),
-      onFailure: (sessionID, cause) =>
-        Effect.logError("Failed to drain Session").pipe(
-          Effect.annotateLogs("sessionID", sessionID),
-          Effect.annotateLogs("cause", cause),
-        ),
+      onFailure: (sessionID, cause) => logFailure("Failed to drain Session", sessionID, cause),
     })
 
     return SessionExecution.Service.of({

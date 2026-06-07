@@ -25,6 +25,7 @@ import { fromRow } from "./session/info"
 import { SessionRunner } from "./session/runner/index"
 import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
+import { logFailure } from "./session/logging"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
@@ -177,10 +178,7 @@ export const layer = Layer.effect(
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void
-            : Effect.logError("Failed to wake Session").pipe(
-                Effect.annotateLogs("sessionID", admitted.sessionID),
-                Effect.annotateLogs("cause", cause),
-              ),
+            : logFailure("Failed to wake Session", admitted.sessionID, cause),
         ),
         Effect.ignore,
         Effect.forkIn(scope, { startImmediately: true }),
