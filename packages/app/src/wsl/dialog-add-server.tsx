@@ -53,13 +53,19 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
   const addableInstalledDistros = createMemo(() => {
     return visibleInstalledDistros().filter((item) => !existingServerDistros().has(item.name))
   })
+  const readyAddableInstalledDistros = createMemo(() =>
+    addableInstalledDistros().filter((item) => {
+      const probe = current()?.distroProbes[item.name]
+      return item.version !== 1 && !!probe && probe.canExecute && probe.hasBash && probe.hasCurl
+    }),
+  )
   const selectedDistro = createMemo(() => {
-    if (store.selectedDistro && addableInstalledDistros().some((item) => item.name === store.selectedDistro)) {
+    if (store.selectedDistro && readyAddableInstalledDistros().some((item) => item.name === store.selectedDistro)) {
       return store.selectedDistro
     }
     const distro = defaultInstalledDistro()
-    if (distro && !existingServerDistros().has(distro.name)) return distro.name
-    return addableInstalledDistros()[0]?.name ?? null
+    if (distro && readyAddableInstalledDistros().some((item) => item.name === distro.name)) return distro.name
+    return readyAddableInstalledDistros()[0]?.name ?? null
   })
   const selectedProbe = createMemo(() => {
     const distro = selectedDistro()
@@ -566,7 +572,16 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                               missingTools().length === 0
                             const needsAttention = () =>
                               !alreadyAdded() && (item.version === 1 || (!!probe() && !ready()))
-                            const expanded = () => selected() && needsAttention()
+                            const statusBadge = () => {
+                              if (ready()) return language.t("wsl.onboarding.readyStatus")
+                              if (!needsAttention()) return null
+                              if (item.version === 1) return language.t("wsl.onboarding.wsl1")
+                              if (!probe()?.canExecute) return language.t("wsl.onboarding.needsSetup")
+                              if (missingTools().length === 1) {
+                                return language.t("wsl.onboarding.missingToolBadge", { tool: missingTools()[0]! })
+                              }
+                              return language.t("wsl.onboarding.missingToolsBadge", { count: missingTools().length })
+                            }
                             const meta = () => {
                               if (alreadyAdded()) return language.t("wsl.onboarding.alreadyAddedToOpencode")
                               if (selected() && current()?.job?.kind === "probe-distro")
@@ -587,145 +602,81 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                               ].filter((value): value is string => !!value)
                               return parts.join(" - ") || language.t("wsl.onboarding.installed")
                             }
+                            const selectReadyDistro = () => {
+                              if (!ready() || busy()) return
+                              selectDistro(item.name)
+                            }
                             return (
                               <div class="border-b border-border-weak-base last:border-b-0">
                                 <div
-                                  role={alreadyAdded() ? undefined : "button"}
-                                  tabIndex={alreadyAdded() ? undefined : 0}
-                                  aria-disabled={alreadyAdded() || busy() ? true : undefined}
-                                  class="min-w-0 px-3 py-3 flex items-center justify-between gap-3 transition-colors"
+                                  role={ready() ? "button" : undefined}
+                                  tabIndex={ready() ? 0 : undefined}
+                                  aria-disabled={!ready() || busy() ? true : undefined}
+                                  class="min-w-0 px-4 py-3 transition-colors"
                                   classList={{
-                                    "opacity-60": alreadyAdded(),
-                                    "cursor-pointer hover:bg-surface-base-hover": !alreadyAdded() && !busy(),
+                                    "cursor-pointer hover:bg-surface-base-hover": ready() && !busy(),
                                   }}
-                                  onClick={() => {
-                                    if (alreadyAdded() || busy()) return
-                                    selectDistro(item.name)
-                                  }}
+                                  onClick={selectReadyDistro}
                                   onKeyDown={(event) => {
-                                    if (alreadyAdded() || busy()) return
+                                    if (!ready() || busy()) return
                                     if (event.key !== "Enter" && event.key !== " ") return
                                     event.preventDefault()
-                                    selectDistro(item.name)
+                                    selectReadyDistro()
                                   }}
                                 >
-                                  <div class="min-w-0 flex items-start gap-3">
-                                    <div
-                                      class="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-border-strong-base flex items-center justify-center"
-                                      classList={{
-                                        "border-icon-success-base": selected() && !alreadyAdded(),
-                                      }}
-                                      aria-hidden="true"
-                                    >
+                                  <div class="flex min-w-0 items-center justify-between gap-4">
+                                    <div class="min-w-0 flex items-start gap-3">
                                       <div
-                                        class="h-2 w-2 rounded-full bg-icon-success-base"
-                                        classList={{ hidden: !selected() || alreadyAdded() }}
-                                      />
-                                    </div>
-                                    <div class="min-w-0 flex flex-col gap-1">
-                                      <div class="text-12-medium text-text-strong truncate">{item.name}</div>
-                                      <div class="text-11-regular text-text-weak truncate">{meta()}</div>
-                                    </div>
-                                  </div>
-                                  <div class="shrink-0 text-right">
-                                    <Show when={alreadyAdded()}>
-                                      <span class="text-12-regular text-text-weak">
-                                        {language.t("wsl.onboarding.alreadyAdded")}
-                                      </span>
-                                    </Show>
-                                    <Show when={!alreadyAdded() && ready()}>
-                                      <span class="text-12-medium text-icon-success-base">
-                                        {language.t("wsl.onboarding.readyStatus")}
-                                      </span>
-                                    </Show>
-                                    <Show when={!alreadyAdded() && needsAttention()}>
-                                      <div class="flex flex-col items-end gap-1 text-v2-state-fg-warning">
-                                        <div class="flex items-center gap-2 text-12-medium">
-                                          <span>{language.t("wsl.onboarding.needsAttention")}</span>
-                                          <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
-                                        </div>
-                                        <Show when={!expanded()}>
-                                          <span class="text-12-medium text-text-strong">
-                                            {language.t("wsl.onboarding.viewIssues")}
-                                          </span>
-                                        </Show>
+                                        class="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-border-strong-base flex items-center justify-center"
+                                        classList={{
+                                          "border-icon-success-base": selected() && !alreadyAdded(),
+                                        }}
+                                        aria-hidden="true"
+                                      >
+                                        <div
+                                          class="h-2 w-2 rounded-full bg-icon-success-base"
+                                          classList={{ hidden: !selected() || alreadyAdded() }}
+                                        />
                                       </div>
-                                    </Show>
+                                      <div class="min-w-0 flex flex-col gap-1">
+                                        <div class="flex min-w-0 items-center gap-3">
+                                          <div class="truncate text-12-medium text-text-strong">{item.name}</div>
+                                          <Show when={!alreadyAdded() && statusBadge()}>
+                                            {(label) => (
+                                              <span
+                                                class="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-11-medium"
+                                                classList={{
+                                                  "border-v2-state-border-warning bg-v2-state-fg-warning/10 text-v2-state-fg-warning":
+                                                    needsAttention(),
+                                                  "border-v2-state-border-success bg-v2-state-bg-success text-icon-success-base":
+                                                    ready(),
+                                                }}
+                                              >
+                                                <Show when={needsAttention() && missingTools().length === 1}>
+                                                  <span class="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-10-medium">
+                                                    !
+                                                  </span>
+                                                </Show>
+                                                {label()}
+                                              </span>
+                                            )}
+                                          </Show>
+                                        </div>
+                                        <div class="text-11-regular text-text-weak truncate">{meta()}</div>
+                                      </div>
+                                    </div>
+                                    <div class="shrink-0 text-right">
+                                      <Show when={alreadyAdded()}>
+                                        <span class="text-12-regular text-text-weak">
+                                          {language.t("wsl.onboarding.alreadyAdded")}
+                                        </span>
+                                      </Show>
+                                      <Show when={!alreadyAdded() && ready()}>
+                                        <Icon name="chevron-right" size="small" class="text-text-weak" />
+                                      </Show>
+                                    </div>
                                   </div>
                                 </div>
-                                <Show when={expanded()}>
-                                  <div class="mx-3 mb-3 rounded-md border border-v2-state-border-warning bg-v2-state-fg-warning/10 px-3 py-3 flex flex-col gap-3">
-                                    <div class="flex items-start gap-3">
-                                      <Icon name="warning" class="mt-0.5 shrink-0 text-v2-state-fg-warning" />
-                                      <div class="min-w-0 flex flex-col gap-1">
-                                        <div class="text-12-medium text-text-strong">
-                                          <Show
-                                            when={missingTools().length > 0}
-                                            fallback={distroProblemMessage() ?? language.t("wsl.onboarding.needsSetup")}
-                                          >
-                                            {language.t("wsl.onboarding.missingRequiredTools")}
-                                          </Show>
-                                        </div>
-                                        <div class="text-11-regular text-text-weak">
-                                          <Show when={missingTools().length > 0} fallback={distroProblemMessage()}>
-                                            {language.t("wsl.onboarding.toolsRequiredDetail", {
-                                              tools: formatToolList(missingTools()),
-                                            })}
-                                          </Show>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div class="flex flex-wrap items-center justify-between gap-3">
-                                      <div class="flex flex-wrap items-center gap-2">
-                                        <For
-                                          each={[
-                                            { name: "bash", ok: !!probe()?.hasBash },
-                                            { name: "curl", ok: !!probe()?.hasCurl },
-                                          ]}
-                                        >
-                                          {(tool) => (
-                                            <span class="inline-flex h-7 items-center gap-2 rounded-md border border-border-weak-base bg-background-base px-2.5 text-12-regular text-text-strong">
-                                              <span>{tool.name}</span>
-                                              <Show
-                                                when={tool.ok}
-                                                fallback={
-                                                  <>
-                                                    <span class="h-1.5 w-1.5 rounded-full bg-v2-state-fg-warning" />
-                                                    <span class="text-text-weak">
-                                                      {language.t("wsl.onboarding.toolMissing")}
-                                                    </span>
-                                                  </>
-                                                }
-                                              >
-                                                <Icon name="check" size="small" class="text-icon-success-base" />
-                                              </Show>
-                                            </span>
-                                          )}
-                                        </For>
-                                      </div>
-                                      <div class="flex items-center gap-2">
-                                        <Button
-                                          variant="secondary"
-                                          size="small"
-                                          icon="terminal"
-                                          disabled={busy() || !selectedInstalled()}
-                                          onClick={() => runSelectedDistro((distro) => api.openTerminal(distro))}
-                                        >
-                                          {language.t("wsl.onboarding.openTerminal")}
-                                        </Button>
-                                        <Button
-                                          variant="secondary"
-                                          size="small"
-                                          icon="refresh"
-                                          disabled={busy() || !selectedDistro()}
-                                          onClick={() => runSelectedDistro((distro) => api.probeDistro(distro))}
-                                        >
-                                          {language.t("wsl.onboarding.checkAgain")}
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </Show>
                               </div>
                             )
                           }}

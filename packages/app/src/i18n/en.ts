@@ -435,6 +435,8 @@ export const dict = {
   "wsl.onboarding.readyStatus": "Ready",
   "wsl.onboarding.wsl1": "WSL 1",
   "wsl.onboarding.missingToolsMeta": "Missing {{tools}}",
+  "wsl.onboarding.missingToolBadge": "Missing {{tool}}",
+  "wsl.onboarding.missingToolsBadge": "{{count}} tools missing",
   "wsl.onboarding.needsSetup": "Needs setup",
   "wsl.onboarding.wsl2Required": "WSL 2 is required.",
   "wsl.onboarding.wsl1Unsupported": "This distro uses WSL 1. OpenCode requires WSL 2.",
