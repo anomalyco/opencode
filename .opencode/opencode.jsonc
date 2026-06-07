@@ -4,14 +4,70 @@
     "SOUL.md",
     ".rules"
   ],
-  "provider": {},
+  "provider": {
+    "google-ai-studio": {
+      "npm": "@ai-sdk/google",
+      "name": "Google AI Studio",
+      "options": {
+        "apiKey": "{file:../.secrets/google-ai-studio-key}"
+      },
+      "models": {
+        "gemini-2.5-pro": {
+          "name": "Gemini 2.5 Pro"
+        },
+        "gemini-2.5-flash": {
+          "name": "Gemini 2.5 Flash"
+        },
+        "gemini-2.5-flash-lite": {
+          "name": "Gemini 2.5 Flash-Lite"
+        }
+      }
+    },
+    "alibaba-coding-plan": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Alibaba Cloud Coding Plan (International)",
+      "options": {
+        "baseURL": "https://coding-intl.dashscope.aliyuncs.com/v1",
+        "apiKey": "{file:../.secrets/alibaba-cloud-key}"
+      },
+      "models": {
+        "qwen3.6-plus": {
+          "name": "Qwen 3.6 Plus"
+        },
+        "qwen3.5-plus": {
+          "name": "Qwen 3.5 Plus"
+        },
+        "qwen3-max-2026-01-23": {
+          "name": "Qwen 3 Max"
+        },
+        "qwen3-coder-next": {
+          "name": "Qwen 3 Coder Next"
+        },
+        "qwen3-coder-plus": {
+          "name": "Qwen 3 Coder Plus"
+        },
+        "glm-5": {
+          "name": "GLM 5"
+        },
+        "glm-4.7": {
+          "name": "GLM 4.7"
+        },
+        "kimi-k2.5": {
+          "name": "Kimi K2.5"
+        },
+        "MiniMax-M2.5": {
+          "name": "MiniMax M2.5"
+        }
+      }
+    }
+  },
   "permission": {},
   "reference": {
-    "effect": "github.com/Effect-TS/effect-smol",
+    "effect": "github.com/Effect-TS/effect-smol"
   },
   "mcp": {},
   "tools": {
     "github-triage": false,
-    "github-pr-search": false,
-  },
+    "github-pr-search": false
+  }
 }

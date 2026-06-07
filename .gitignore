@@ -4,6 +4,7 @@ node_modules
 .sst
 .env
 .env.local
+.secrets/
 .idea
 .vscode
 .codex
