@@ -1,8 +1,9 @@
 import { app, ipcMain } from "electron"
 import type { IpcMainInvokeEvent } from "electron"
-import type { WslServersController } from "./servers"
+import type { WslServerAccessConfig, WslServersController } from "./servers"
 import { requireWslIpcString } from "./policy"
 import type { WslServersState } from "../../preload/types"
+import { decodeWslServerAccessConfig } from "./access-config"
 
 export function registerWslIpcHandlers(controller: WslServersController) {
   if (process.platform !== "win32") {
@@ -58,8 +59,11 @@ export function registerWslIpcHandlers(controller: WslServersController) {
   ipcMain.handle("wsl-servers-open-terminal", (_event: IpcMainInvokeEvent, name: string) =>
     controller.openTerminal(requireWslIpcString("distro", name)),
   )
-  ipcMain.handle("wsl-servers-add", (_event: IpcMainInvokeEvent, distro: string) =>
-    controller.addServer(requireWslIpcString("distro", distro)),
+  ipcMain.handle("wsl-servers-add", (_event: IpcMainInvokeEvent, distro: string, config?: WslServerAccessConfig) =>
+    controller.addServer(requireWslIpcString("distro", distro), decodeWslServerAccessConfig(config)),
+  )
+  ipcMain.handle("wsl-servers-update", (_event: IpcMainInvokeEvent, id: string, config: WslServerAccessConfig) =>
+    controller.updateServer(requireWslIpcString("server id", id), decodeWslServerAccessConfig(config)),
   )
   ipcMain.handle("wsl-servers-remove", (_event: IpcMainInvokeEvent, id: string) =>
     controller.removeServer(requireWslIpcString("server id", id)),
@@ -102,6 +106,7 @@ function registerUnavailableWslIpcHandlers() {
   ipcMain.handle("wsl-servers-install-opencode", unavailable)
   ipcMain.handle("wsl-servers-open-terminal", unavailable)
   ipcMain.handle("wsl-servers-add", unavailable)
+  ipcMain.handle("wsl-servers-update", unavailable)
   ipcMain.handle("wsl-servers-remove", unavailable)
   ipcMain.handle("wsl-servers-start", unavailable)
 }

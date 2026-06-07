@@ -13,15 +13,22 @@ export type WslSidecar = {
   password: string
 }
 
+export type WslSidecarOptions = {
+  port?: number
+  password?: string
+  onLine?: (line: WslCommandLine) => void
+  healthTimeoutMs?: number
+}
+
 export async function spawnWslSidecar(
   distro: string,
-  opts: { onLine?: (line: WslCommandLine) => void; healthTimeoutMs?: number } = {},
+  opts: WslSidecarOptions = {},
 ): Promise<WslSidecar> {
   const opencode = await resolveWslOpencode(distro)
   if (!opencode) throw new Error(`OpenCode is not installed in ${distro}`)
 
-  const port = await allocatePort()
-  const password = randomUUID()
+  const port = opts.port ?? (await allocatePort())
+  const password = opts.password ?? randomUUID()
   const username = "opencode"
   const script = [
     "set -euo pipefail",

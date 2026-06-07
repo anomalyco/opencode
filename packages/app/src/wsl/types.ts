@@ -35,6 +35,8 @@ export type WslOpencodeCheck = {
 export type WslServerConfig = {
   id: string
   distro: string
+  port?: number
+  password?: string
 }
 
 export type WslServerRuntime =
@@ -81,7 +83,13 @@ export type WslServersPlatform = {
   probeOpencode(name: string): Promise<void>
   installOpencode(name: string): Promise<void>
   openTerminal(name: string): Promise<void>
-  addServer(distro: string): Promise<WslServerConfig>
+  addServer(distro: string, config?: WslServerAccessConfig): Promise<WslServerConfig>
+  updateServer(id: string, config: WslServerAccessConfig): Promise<WslServerConfig>
   removeServer(id: string): Promise<void>
   startServer(id: string): Promise<void>
+}
+
+export type WslServerAccessConfig = {
+  port?: number | null
+  password?: string | null
 }

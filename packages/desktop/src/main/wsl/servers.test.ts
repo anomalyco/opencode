@@ -7,6 +7,7 @@ import {
   wslServerIdsToStartOnInitialize,
 } from "./startup"
 import { createWslServersController, type WslServerConfig } from "./servers"
+import { decodePersistedWslServerAccessConfig, decodeWslServerAccessConfig } from "./access-config"
 
 let persistedServers: WslServerConfig[] = []
 let releaseOpencodeResolve: (() => void) | undefined
@@ -165,3 +166,21 @@ function testControllerOptions() {
     },
   }
 }
+
+test("decodes WSL sidecar access config", () => {
+  expect(decodeWslServerAccessConfig({ port: 4096, password: " secret " })).toEqual({
+    port: 4096,
+    password: "secret",
+  })
+  expect(decodeWslServerAccessConfig({ port: null, password: " " })).toEqual({})
+  expect(() => decodeWslServerAccessConfig({ port: 70000 })).toThrow()
+  expect(() => decodeWslServerAccessConfig({ port: "4096" })).toThrow()
+})
+
+test("drops invalid persisted WSL sidecar access config", () => {
+  expect(decodePersistedWslServerAccessConfig({ port: 4096, password: "secret" })).toEqual({
+    port: 4096,
+    password: "secret",
+  })
+  expect(decodePersistedWslServerAccessConfig({ port: 70000, password: "secret" })).toEqual({})
+})

@@ -8,6 +8,7 @@ export type {
   WslOnlineDistro,
   WslOpencodeCheck,
   WslRuntimeCheck,
+  WslServerAccessConfig,
   WslServerConfig,
   WslServerItem,
   WslServerRuntime,

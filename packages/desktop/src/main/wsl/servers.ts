@@ -5,6 +5,7 @@ import type {
   WslOnlineDistro,
   WslOpencodeCheck,
   WslRuntimeCheck,
+  WslServerAccessConfig,
   WslServerConfig,
   WslServerItem,
   WslServerRuntime,
@@ -15,6 +16,7 @@ import { WSL_SERVERS_KEY } from "../store-keys"
 import { getStore } from "../store"
 import { expectOpencodeVersion, pendingRestartAfterWslInstall, wslServerIdsToStartOnInitialize } from "./startup"
 import { clearWslDistroState, wslServerIdToRestart } from "./policy"
+import { decodePersistedWslServerAccessConfig, decodeWslServerAccessConfig } from "./access-config"
 import {
   installWslDistro,
   installWslOpencode,
@@ -36,7 +38,7 @@ type RunningSidecar = {
   password: string
 }
 
-type SpawnSidecar = (distro: string) => Promise<RunningSidecar>
+type SpawnSidecar = (distro: string, config?: WslServerAccessConfig) => Promise<RunningSidecar>
 
 type ControllerLogger = {
   log: (message: string, meta?: unknown) => void
@@ -202,7 +204,10 @@ export function createWslServersController(
     setRuntime(id, { kind: "starting" })
     logger?.log("wsl sidecar starting", { id, distro: item.config.distro })
     try {
-      const sidecar = await spawnSidecar(item.config.distro)
+      const sidecar = await spawnSidecar(item.config.distro, {
+        port: item.config.port,
+        password: item.config.password,
+      })
       if (!isCurrentStartAttempt(id, attempt)) {
         try {
           sidecar.listener.stop()
@@ -355,7 +360,7 @@ export function createWslServersController(
       await openWslTerminal(name)
     },
 
-    async addServer(distro: string): Promise<WslServerConfig> {
+    async addServer(distro: string, input: WslServerAccessConfig = {}): Promise<WslServerConfig> {
       const id = wslServerIdForDistro(distro)
       if (state.servers.some((item) => item.config.id === id)) {
         throw new Error(`${distro} is already added`)
@@ -363,12 +368,29 @@ export function createWslServersController(
       const config: WslServerConfig = {
         id,
         distro,
+        ...decodeWslServerAccessConfig(input),
       }
       persistServers([...readServers(), config])
       setState({
         servers: [...state.servers, { config, runtime: { kind: "starting" } }],
       })
       void startServer(id)
+      return config
+    },
+
+    async updateServer(id: string, input: WslServerAccessConfig): Promise<WslServerConfig> {
+      const existing = state.servers.find((item) => item.config.id === id)
+      if (!existing) throw new Error(`WSL server not found: ${id}`)
+      const config = {
+        id: existing.config.id,
+        distro: existing.config.distro,
+        ...decodeWslServerAccessConfig(input),
+      }
+      persistServers(readPersistedServers().map((item) => (item.id === id ? config : item)))
+      setState({
+        servers: state.servers.map((item) => (item.config.id === id ? { ...item, config } : item)),
+      })
+      await startServer(id)
       return config
     },
 
@@ -438,6 +460,7 @@ function normalizePersistedServer(value: unknown): WslServerConfig[] {
     {
       id,
       distro,
+      ...decodePersistedWslServerAccessConfig(record),
     },
   ]
 }
@@ -489,6 +512,7 @@ export type {
   WslRuntimeCheck,
   WslDistroProbe,
   WslOpencodeCheck,
+  WslServerAccessConfig,
   WslServerConfig,
   WslServerItem,
   WslServerRuntime,
