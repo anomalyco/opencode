@@ -14,6 +14,18 @@ describe("providerOptions", () => {
     expect(providerOptions([{ id: "mistral", name: "Mistral" }])[0]?.category).toBe("Providers")
   })
 
+  test("keeps popular providers first and sorts the rest alphabetically", () => {
+    expect(
+      providerOptions([
+        { id: "openai", name: "OpenAI" },
+        { id: "custom-z", name: "Zebra Provider" },
+        { id: "anthropic", name: "Anthropic" },
+        { id: "mistral", name: "Mistral" },
+        { id: "aws", name: "AWS Bedrock" },
+      ]).map((option) => option.value),
+    ).toEqual(["openai", "anthropic", "aws", "mistral", "custom-z", "__opencode_custom_provider__"])
+  })
+
   test("does not collide with a configured provider named other", () => {
     const values = providerOptions([{ id: "other", name: "Other Provider" }]).map((option) => option.value)
     expect(new Set(values).size).toBe(values.length)
