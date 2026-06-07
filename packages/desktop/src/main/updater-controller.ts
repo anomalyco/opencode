@@ -5,11 +5,7 @@ export type { UpdaterState } from "@opencode-ai/app/updater"
 export type UpdaterReadyRecord = { version: string }
 
 export type UpdaterBackend = {
-  checkForUpdates(): Promise<
-    | { isUpdateAvailable?: boolean; updateInfo?: { version?: string } }
-    | null
-    | undefined
-  >
+  checkForUpdates(): Promise<{ isUpdateAvailable?: boolean; updateInfo?: { version?: string } } | null | undefined>
   downloadUpdate(): Promise<unknown>
   quitAndInstall(): void
 }
@@ -58,7 +54,9 @@ export function createUpdaterController(input: {
       await input.persistence.set({ version })
       return transition({ status: "ready", version })
     })()
-      .catch((error) => transition({ status: "error", message: error instanceof Error ? error.message : String(error) }))
+      .catch((error) =>
+        transition({ status: "error", message: error instanceof Error ? error.message : String(error) }),
+      )
       .finally(() => {
         pending = undefined
       })

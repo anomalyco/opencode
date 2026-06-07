@@ -42,10 +42,7 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
   })
 }
 
-export async function showUpdaterDialog(
-  controller: ReturnType<typeof setupAutoUpdater>,
-  alertOnFail: boolean,
-) {
+export async function showUpdaterDialog(controller: ReturnType<typeof setupAutoUpdater>, alertOnFail: boolean) {
   const state = await controller.check()
   if (state.status === "error") {
     if (!alertOnFail) return

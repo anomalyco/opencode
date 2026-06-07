@@ -250,8 +250,8 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   }
 
   async function installUpdate() {
-    await platform
-      .updater?.install()
+    await platform.updater
+      ?.install()
       .then(() => setStore("actionError", undefined))
       .catch((err) => {
         setStore("actionError", formatError(err, language.t))
