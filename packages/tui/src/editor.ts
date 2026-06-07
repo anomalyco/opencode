@@ -9,6 +9,20 @@ import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 
 type EditorStdio = "inherit" | "pipe" | "ignore" | number | Stream
 
+export function normalizePromptContent(content: string) {
+  if (content.endsWith("\r\n")) {
+    const body = content.slice(0, -2)
+    return !body.includes("\n") && !body.includes("\r") ? body : content
+  }
+
+  if (content.endsWith("\n")) {
+    const body = content.slice(0, -1)
+    return !body.includes("\n") && !body.includes("\r") ? body : content
+  }
+
+  return content
+}
+
 export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
   const editor = process.env.VISUAL || process.env.EDITOR
   if (!editor) return

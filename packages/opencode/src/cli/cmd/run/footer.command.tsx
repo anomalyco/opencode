@@ -353,7 +353,7 @@ export function RunCommandMenuBody(props: {
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const entries = createMemo<CommandEntry[]>(() => {
     const builtins = ["editor", "new"]
-    return [
+    const session: CommandEntry[] = [
       {
         action: "editor",
         category: "Session",
@@ -361,12 +361,31 @@ export function RunCommandMenuBody(props: {
         footer: "/editor",
         keywords: "editor compose draft external editor",
       },
+      ...(props.subagents().length > 0
+        ? [
+          {
+            action: "subagent" as const,
+            category: "Session",
+            display: "View subagents",
+            footer: `${props.subagents().length} active`,
+            keywords: props
+              .subagents()
+              .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
+              .join(" "),
+          },
+        ]
+        : []),
       {
-        action: "model",
-        category: "Agent",
-        display: "Switch model",
+        action: "slash",
+        category: "Session",
+        name: "new",
+        display: "New session",
+        footer: "/new",
+        keywords: "new session clear",
       },
-      ...(props.commands() === undefined || skills().length > 0
+    ]
+    const prompt: CommandEntry[] =
+      props.commands() === undefined || skills().length > 0
         ? [
           {
             action: "skill" as const,
@@ -378,7 +397,13 @@ export function RunCommandMenuBody(props: {
               .join(" ")}`.trim(),
           },
         ]
-        : []),
+        : []
+    const agent: CommandEntry[] = [
+      {
+        action: "model",
+        category: "Agent",
+        display: "Switch model",
+      },
       ...(props.queued().length > 0
         ? [
           {
@@ -389,20 +414,6 @@ export function RunCommandMenuBody(props: {
             keywords: props
               .queued()
               .map((item) => item.prompt.text)
-              .join(" "),
-          },
-        ]
-        : []),
-      ...(props.subagents().length > 0
-        ? [
-          {
-            action: "subagent" as const,
-            category: "Session",
-            display: "View subagents",
-            footer: `${props.subagents().length} active`,
-            keywords: props
-              .subagents()
-              .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
               .join(" "),
           },
         ]
@@ -424,31 +435,30 @@ export function RunCommandMenuBody(props: {
           },
         ]
         : []),
-      {
-        action: "slash",
-        category: "Session",
-        name: "new",
-        display: "New session",
-        footer: "/new",
-        keywords: "new session clear",
-      },
-      ...(props.commands() ?? [])
-        .filter((item) => item.source !== "skill" && !builtins.includes(item.name))
-        .map(
-          (item) =>
-            ({
-              action: "slash",
-              category: item.source === "mcp" ? "MCP Commands" : "Project Commands",
-              name: item.name,
-              display: item.name,
-              footer: `/${item.name}`,
-              keywords:
-                item.source === "mcp"
-                  ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
-                  : `/${item.name} ${item.name} ${item.description ?? ""}`,
-            }) satisfies CommandEntry,
-        )
-        .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display)),
+    ]
+    const commands = (props.commands() ?? [])
+      .filter((item) => item.source !== "skill" && !builtins.includes(item.name))
+      .map(
+        (item) =>
+          ({
+            action: "slash",
+            category: item.source === "mcp" ? "MCP Commands" : "Project Commands",
+            name: item.name,
+            display: item.name,
+            footer: `/${item.name}`,
+            keywords:
+              item.source === "mcp"
+                ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
+                : `/${item.name} ${item.name} ${item.description ?? ""}`,
+          }) satisfies CommandEntry,
+      )
+      .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display))
+
+    return [
+      ...session,
+      ...prompt,
+      ...agent,
+      ...commands,
       { action: "exit", category: "System", display: "Exit", footer: "/exit", keywords: "/exit exit" },
     ]
   })

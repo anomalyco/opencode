@@ -8,6 +8,7 @@
 import { pathToFileURL } from "bun"
 import { StyledText, fg, type ColorInput, type KeyEvent, type TextareaRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
+import { normalizePromptContent } from "@opencode-ai/tui/editor"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
@@ -830,10 +831,11 @@ export function createPromptState(input: PromptInput): PromptState {
       if (content === undefined) {
         return
       }
+      const normalized = normalizePromptContent(content)
 
       restore({
-        text: content,
-        parts: realignEditorPromptParts(content, current.parts),
+        text: normalized,
+        parts: realignEditorPromptParts(normalized, current.parts),
         ...(current.mode ? { mode: current.mode } : {}),
         ...(current.command ? { command: current.command } : {}),
       })

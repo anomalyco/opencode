@@ -26,7 +26,7 @@ import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
-import { openEditor } from "../../editor"
+import { normalizePromptContent, openEditor } from "../../editor"
 import { destroyRenderer } from "../../util/renderer"
 import { promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
@@ -442,8 +442,9 @@ export function Prompt(props: PromptProps) {
               paths.cwd,
           })
           if (!content) return
+          const normalized = normalizePromptContent(content)
 
-          input.setText(content)
+          input.setText(normalized)
 
           // Update positions for nonTextParts based on their location in new content
           // Filter out parts whose virtual text was deleted
@@ -460,7 +461,7 @@ export function Prompt(props: PromptProps) {
 
               if (!virtualText) return part
 
-              const newStart = content.indexOf(virtualText)
+               const newStart = normalized.indexOf(virtualText)
               // if the virtual text is deleted, remove the part
               if (newStart === -1) return null
 
@@ -495,14 +496,14 @@ export function Prompt(props: PromptProps) {
             })
             .filter((part) => part !== null)
 
-          setStore("prompt", {
-            input: content,
-            // keep only the non-text parts because the text parts were
-            // already expanded inline
-            parts: updatedNonTextParts,
-          })
-          restoreExtmarksFromParts(updatedNonTextParts)
-          input.cursorOffset = Bun.stringWidth(content)
+           setStore("prompt", {
+             input: normalized,
+             // keep only the non-text parts because the text parts were
+             // already expanded inline
+             parts: updatedNonTextParts,
+           })
+           restoreExtmarksFromParts(updatedNonTextParts)
+           input.cursorOffset = Bun.stringWidth(normalized)
         },
       },
       {
