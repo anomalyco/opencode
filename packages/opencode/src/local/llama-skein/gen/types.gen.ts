@@ -110,6 +110,10 @@ export type Model = {
     loaded?: boolean;
     context_length?: number;
     max_output_tokens?: number;
+    /**
+     * Inference backend type.
+     */
+    backend?: 'llamacpp' | 'mlx' | 'vllm';
 };
 
 export type ConfigInfoResponse = {
@@ -128,6 +132,10 @@ export type ConfigModelInfo = {
 export type ConfigModelRequest = {
     id: string;
     cmd: string;
+    /**
+     * Inference backend type. Controls backend-specific behaviours (e.g. slot cancellation is llamacpp-only). mlx targets Apple Silicon; vllm targets NVIDIA (CUDA); AMD ROCm requires building vllm from source. Default: llamacpp.
+     */
+    backend?: 'llamacpp' | 'mlx' | 'vllm';
     name?: string;
     description?: string;
     aliases?: Array<string>;
@@ -136,6 +144,10 @@ export type ConfigModelRequest = {
 
 export type ConfigModelPatchRequest = {
     cmd?: string;
+    /**
+     * Inference backend type. Controls backend-specific behaviours (e.g. slot cancellation is llamacpp-only). mlx targets Apple Silicon; vllm targets NVIDIA (CUDA); AMD ROCm requires building vllm from source. Default: llamacpp.
+     */
+    backend?: 'llamacpp' | 'mlx' | 'vllm';
     name?: string;
     description?: string;
     aliases?: Array<string>;
