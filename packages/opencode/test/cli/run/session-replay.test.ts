@@ -185,6 +185,72 @@ function runningToolMessage(id: string): SessionMessages[number] {
   }
 }
 
+function shellUserMessage(id: string): SessionMessages[number] {
+  return {
+    info: {
+      id,
+      sessionID: "session-1",
+      role: "user",
+      time: {
+        created: 1,
+      },
+      agent: "build",
+      model: {
+        providerID: "openai",
+        modelID: "gpt-5",
+      },
+    },
+    parts: [
+      {
+        id: `${id}-text`,
+        sessionID: "session-1",
+        messageID: id,
+        type: "text",
+        text: "The following tool was executed by the user",
+        synthetic: true,
+      },
+    ],
+  }
+}
+
+function shellAssistantMessage(id: string, parentID: string): SessionMessages[number] {
+  return {
+    info: assistantInfo(id, {
+      parentID,
+      time: {
+        created: 200,
+        completed: 3000,
+      },
+    }),
+    parts: [
+      {
+        id: `${id}-tool`,
+        sessionID: "session-1",
+        messageID: id,
+        type: "tool",
+        callID: `${id}-call`,
+        tool: "bash",
+        state: {
+          status: "completed",
+          input: {
+            command: "ls",
+          },
+          output: "account.ts\n",
+          title: "",
+          metadata: {
+            output: "account.ts\n",
+            description: "",
+          },
+          time: {
+            start: 200,
+            end: 3000,
+          },
+        },
+      },
+    ],
+  }
+}
+
 describe("run session replay", () => {
   test("replays persisted user, assistant, and turn summary history into scrollback commits", () => {
     const out = replaySession({
@@ -301,6 +367,29 @@ describe("run session replay", () => {
       expect.objectContaining({
         phase: "running",
         status: "running bash",
+      }),
+    )
+  })
+
+  test("does not replay turn summaries for shell-mode commands", () => {
+    const out = replaySession({
+      messages: [
+        shellUserMessage("msg-shell-user-1"),
+        shellAssistantMessage("msg-shell-assistant-1", "msg-shell-user-1"),
+      ],
+      permissions: [],
+      questions: [],
+      thinking: true,
+      limits: {},
+    })
+
+    expect(out.commits.some((commit) => commit.summary)).toBe(false)
+    expect(out.commits).toContainEqual(
+      expect.objectContaining({
+        kind: "tool",
+        text: "account.ts\n",
+        tool: "bash",
+        toolState: "completed",
       }),
     )
   })

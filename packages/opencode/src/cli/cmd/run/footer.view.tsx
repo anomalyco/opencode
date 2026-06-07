@@ -403,7 +403,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return stateStatus()
     }
 
-    return shell() ? "Shell mode" : "Ready"
+    return shell() ? "Shell mode" : ""
   })
   const activityMeta = createMemo(() => {
     if (!responsive().statusline.showActivityMeta || usage().length === 0) {
@@ -951,17 +951,17 @@ export function RunFooterView(props: RunFooterViewProps) {
             vertical: "┃",
           }}
         >
-            <RunFooterSubagentBody
-              active={inspecting}
-              theme={runTheme}
-              tab={selectedTab}
-              index={selectedIndex}
-              total={() => tabs().length}
-              detail={detail}
-              width={width}
-              diffStyle={props.diffStyle}
-              onCycle={cycleTab}
-              onClose={closeTab}
+          <RunFooterSubagentBody
+            active={inspecting}
+            theme={runTheme}
+            tab={selectedTab}
+            index={selectedIndex}
+            total={() => tabs().length}
+            detail={detail}
+            width={width}
+            diffStyle={props.diffStyle}
+            onCycle={cycleTab}
+            onClose={closeTab}
           />
         </box>
       </Show>
