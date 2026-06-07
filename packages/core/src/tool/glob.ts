@@ -1,10 +1,12 @@
 export * as GlobTool from "./glob"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
-import { Cause, Effect, Layer, Schema } from "effect"
+import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { Effect, Layer, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { LocationSearch } from "../location-search"
-import { ToolRegistry } from "./registry"
+import { PermissionV2 } from "../permission"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const name = "glob"
 
@@ -36,14 +38,6 @@ export const toModelOutput = (output: ModelOutput) => {
   return lines.join("\n")
 }
 
-const definition = Tool.make({
-  description:
-    "Find files by glob pattern within the active Location or a named project reference. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
-  parameters: Parameters,
-  success: LocationSearch.FilesResult,
-  toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
-})
-
 /**
  * Location-scoped glob leaf. FileSystem supplies canonical permission metadata;
  * LocationSearch resolves the current root and owns containment and traversal.
@@ -52,39 +46,42 @@ const definition = Tool.make({
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
+    const tools = yield* Tools.Service
     const filesystem = yield* FileSystem.Service
     const search = yield* LocationSearch.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        execute: ({ parameters, assertPermission }) =>
-          Effect.gen(function* () {
-            const root = yield* filesystem.resolveRoot({ path: parameters.path, reference: parameters.reference })
-            yield* assertPermission({
-              action: name,
-              resources: [parameters.pattern],
-              save: ["*"],
-              metadata: {
-                root: root.resource,
-                reference: parameters.reference,
-                path: parameters.path,
-                limit: parameters.limit,
-              },
-            })
-            return yield* search.files(parameters)
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.fail(
-                new ToolFailure({
-                  message: `Unable to find files matching ${parameters.pattern}`,
-                  error: Cause.squash(cause),
-                }),
-              ),
+    yield* tools
+      .register({
+        [name]: Tool.make({
+          description:
+            "Find files by glob pattern within the active Location or a named project reference. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
+          input: Parameters,
+          output: LocationSearch.FilesResult,
+          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const root = yield* filesystem.resolveRoot({ path: input.path, reference: input.reference })
+              yield* permission.assert({
+                action: name,
+                resources: [input.pattern],
+                save: ["*"],
+                metadata: {
+                  root: root.resource,
+                  reference: input.reference,
+                  path: input.path,
+                  limit: input.limit,
+                },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+              })
+              return yield* search.files(input)
+            }).pipe(
+              Effect.mapError(() => new ToolFailure({ message: `Unable to find files matching ${input.pattern}` })),
             ),
-          ),
-      }),
-    )
+        }),
+      })
+      .pipe(Effect.orDie)
   }),
 )

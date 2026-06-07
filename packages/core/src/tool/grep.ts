@@ -1,11 +1,13 @@
 export * as GrepTool from "./grep"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
-import { Cause, Effect, Layer, Schema } from "effect"
+import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { Effect, Layer, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { LocationSearch } from "../location-search"
 import { Ripgrep } from "../ripgrep"
-import { ToolRegistry } from "./registry"
+import { PermissionV2 } from "../permission"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const name = "grep"
 
@@ -51,14 +53,6 @@ export const toModelOutput = (output: Success) => {
   return lines.join("\n")
 }
 
-const definition = Tool.make({
-  description:
-    "Search file contents by regular expression within the active Location, a named project reference, or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
-  parameters: Parameters,
-  success: LocationSearch.GrepResult,
-  toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
-})
-
 /**
  * Location-scoped grep leaf. FileSystem supplies canonical permission metadata;
  * LocationSearch resolves the current root and owns containment and ripgrep execution.
@@ -67,40 +61,49 @@ const definition = Tool.make({
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
+    const tools = yield* Tools.Service
     const filesystem = yield* FileSystem.Service
     const search = yield* LocationSearch.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        execute: ({ parameters, assertPermission }) =>
-          Effect.gen(function* () {
-            const root = yield* filesystem.resolveRoot(parameters)
-            yield* assertPermission({
-              action: name,
-              resources: [parameters.pattern],
-              save: ["*"],
-              metadata: {
-                root: root.resource,
-                reference: parameters.reference,
-                path: parameters.path,
-                include: parameters.include,
-                limit: parameters.limit,
-              },
-            })
-            return yield* search.grep(parameters)
-          }).pipe(
-            Effect.catchCause((cause) => {
-              const error = Cause.squash(cause)
-              const message =
-                error instanceof Ripgrep.InvalidPatternError
-                  ? `Invalid grep pattern ${JSON.stringify(parameters.pattern)}: ${error.message}`
-                  : `Unable to grep for ${parameters.pattern}`
-              return Effect.fail(new ToolFailure({ message, error }))
-            }),
-          ),
-      }),
-    )
+    yield* tools
+      .register({
+        [name]: Tool.make({
+          description:
+            "Search file contents by regular expression within the active Location, a named project reference, or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
+          input: Parameters,
+          output: LocationSearch.GrepResult,
+          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const root = yield* filesystem.resolveRoot(input)
+              yield* permission.assert({
+                action: name,
+                resources: [input.pattern],
+                save: ["*"],
+                metadata: {
+                  root: root.resource,
+                  reference: input.reference,
+                  path: input.path,
+                  include: input.include,
+                  limit: input.limit,
+                },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+              })
+              return yield* search.grep(input)
+            }).pipe(
+              Effect.mapError((error) => {
+                const message =
+                  error instanceof Ripgrep.InvalidPatternError
+                    ? `Invalid grep pattern ${JSON.stringify(input.pattern)}: ${error.message}`
+                    : `Unable to grep for ${input.pattern}`
+                return new ToolFailure({ message })
+              }),
+            ),
+        }),
+      })
+      .pipe(Effect.orDie)
   }),
 )

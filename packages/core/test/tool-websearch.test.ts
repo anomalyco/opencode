@@ -7,6 +7,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebSearchTool } from "@opencode-ai/core/tool/websearch"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_websearch_test")
 const payload = (text: string) =>
@@ -147,10 +148,11 @@ describe("WebSearchTool contribution", () => {
       config = { provider: "exa", enableExa: false, enableParallel: false }
       const registry = yield* ToolRegistry.Service
 
-      expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["websearch"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["websearch"])
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: {
             type: "tool-call",
             id: "call-exa",
@@ -165,7 +167,7 @@ describe("WebSearchTool contribution", () => {
           },
         }),
       ).toEqual({ type: "text", value: "exa results" })
-      expect(assertions).toEqual([
+      expect(assertions).toMatchObject([
         {
           sessionID,
           action: "websearch",
@@ -213,8 +215,9 @@ describe("WebSearchTool contribution", () => {
       config = { provider: "parallel", enableExa: false, enableParallel: false, parallelApiKey: "parallel-secret" }
       const registry = yield* ToolRegistry.Service
 
-      const settled = yield* registry.settle({
+      const settled = yield* settleTool(registry, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-parallel", name: "websearch", input: { query: "effect layers" } },
       })
 
@@ -251,8 +254,9 @@ describe("WebSearchTool contribution", () => {
       config = { provider: "exa", enableExa: false, enableParallel: false, exaApiKey: "exa secret" }
       const registry = yield* ToolRegistry.Service
 
-      const settled = yield* registry.settle({
+      const settled = yield* settleTool(registry, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-exa-key", name: "websearch", input: { query: "effect schema" } },
       })
 
@@ -270,8 +274,9 @@ describe("WebSearchTool contribution", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-empty", name: "websearch", input: { query: "nothing" } },
         }),
       ).toEqual({ type: "text", value: WebSearchTool.NO_RESULTS })
@@ -285,7 +290,7 @@ describe("WebSearchTool contribution", () => {
       truncations.length = 0
       responseBody = payload("full search results")
       config = { provider: "exa", enableExa: false, enableParallel: false }
-      truncate = (input) =>
+      truncate = (_input) =>
         Effect.succeed({
           content: "HEAD\n\n... output truncated; full content saved to /tmp/tool-output/tool_opaque ...\n\nTAIL",
           truncated: true,
@@ -293,21 +298,19 @@ describe("WebSearchTool contribution", () => {
         })
       const registry = yield* ToolRegistry.Service
 
-      const settled = yield* registry.settle({
+      const settled = yield* settleTool(registry, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-overflow", name: "websearch", input: { query: "verbose" } },
       })
 
-      expect(settled.result).toMatchObject({
-        type: "text",
-        value: expect.stringContaining("/tmp/tool-output/tool_opaque"),
-      })
+      expect(settled.result).toEqual({ type: "text", value: "full search results" })
       expect(settled.output?.structured).toMatchObject({
         provider: "exa",
-        truncated: true,
-        outputPath: "/tmp/tool-output/tool_opaque",
+        text: "full search results",
+        truncated: false,
       })
-      expect(truncations).toEqual([{ sessionID, toolCallID: "call-overflow", content: "full search results" }])
+      expect(truncations).toEqual([])
     }),
   )
 
@@ -320,8 +323,9 @@ describe("WebSearchTool contribution", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-large-response", name: "websearch", input: { query: "too much" } },
         }),
       ).toEqual({ type: "error", value: "Unable to search the web for too much" })

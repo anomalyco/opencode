@@ -13,11 +13,10 @@ import { SessionProjector } from "../session/projector"
 import { SessionStore } from "../session/store"
 import { ApplicationTools } from "../tool/application-tools"
 import { Session } from "./session"
-import { Tool } from "./tool"
 
 export interface Interface {
   readonly sessions: Session.Interface
-  readonly tools: Tool.Service
+  readonly tools: import("./tool").Service
 }
 
 /** Intentional public native API for Effect applications embedding OpenCode. */
@@ -88,7 +87,7 @@ export const layer = Layer.effect(
     const tools = yield* ApplicationTools.Service
     const validation = yield* SessionModelValidation
     return Service.of({
-      tools: { attach: tools.attach },
+      tools: { register: tools.register },
       sessions: {
         create: (input) =>
           sessions.create({

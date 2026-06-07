@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@opencode-ai/core/config"
@@ -71,7 +71,7 @@ describe("ToolOutputStore", () => {
     ),
   )
 
-  it.live("bounds aggregate text blocks with one managed file", () =>
+  it.live("bounds aggregate text and structured output with one managed file", () =>
     withStore(({ store, fs }) =>
       Effect.gen(function* () {
         const first = "HEAD-" + "x".repeat(30_000)
@@ -87,9 +87,15 @@ describe("ToolOutputStore", () => {
             ],
           },
         })
-        expect(result.output.structured).toEqual({ kind: "report" })
+        expect(result.output.structured).toEqual({})
         expect(result.outputPaths).toHaveLength(1)
-        expect(yield* fs.readFileString(result.outputPaths[0]!)).toBe(`${first}\n\n${second}`)
+        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual({
+          structured: { kind: "report" },
+          content: [
+            { type: "text", text: first },
+            { type: "text", text: second },
+          ],
+        })
         if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
         expect(Buffer.byteLength(result.output.content[0].text)).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
       }),
@@ -101,27 +107,136 @@ describe("ToolOutputStore", () => {
       Effect.gen(function* () {
         const structured = { text: "x".repeat(ToolOutputStore.MAX_BYTES) }
         const result = yield* store.bound({ sessionID, toolCallID: "call-json", output: { structured, content: [] } })
-        expect(result.output.structured).toBe(structured)
+        expect(result.output.structured).toEqual({})
         expect(result.outputPaths).toHaveLength(1)
-        expect(yield* fs.readFileString(result.outputPaths[0]!)).toBe(JSON.stringify(structured))
+        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual({ structured, content: [] })
+        expect(result.output.content).toHaveLength(1)
       }),
     ),
   )
 
-  it.live("degrades to lossy bounded output when writing fails", () =>
+  it.live("preserves oversized inline media without duplicating its data", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const data = "a".repeat(ToolOutputStore.MAX_BYTES)
+        const result = yield* store.bound({
+          sessionID,
+          toolCallID: "call-file",
+          output: {
+            structured: { caption: "pixel" },
+            content: [{ type: "file", source: { type: "data", data }, mime: "image/png", name: "pixel.png" }],
+          },
+        })
+        expect(result.outputPaths).toEqual([])
+        expect(result.output.structured).toEqual({})
+        expect(result.output.content).toHaveLength(1)
+        expect(result.output.content[0]).toEqual({
+          type: "file",
+          source: { type: "data", data },
+          mime: "image/png",
+          name: "pixel.png",
+        })
+      }),
+    ),
+  )
+
+  it.live("rejects inline media beyond the settlement media limit", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const exit = yield* store
+          .bound({
+            sessionID,
+            toolCallID: "call-file-too-large",
+            output: {
+              structured: {},
+              content: [
+                {
+                  type: "file",
+                  source: { type: "data", data: "a".repeat(ToolOutputStore.MAX_INLINE_MEDIA_BYTES + 1) },
+                  mime: "image/png",
+                },
+              ],
+            },
+          })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit))
+          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.MediaLimitError")
+      }),
+    ),
+  )
+
+  it.live("fails oversized settlement when complete retention cannot be written", () =>
     withStore(({ root, store, fs }) =>
       Effect.gen(function* () {
         yield* fs.writeFileString(path.join(root, "tool-output"), "not a directory")
-        const result = yield* store.bound({
-          sessionID,
-          toolCallID: "call-lossy",
-          output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
-        })
-        expect(result.outputPaths).toEqual([])
-        if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
-        expect(result.output.content[0].text).toContain("could not be retained")
+        const exit = yield* store
+          .bound({
+            sessionID,
+            toolCallID: "call-lossy",
+            output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
+          })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit))
+          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.StorageError")
       }),
     ),
+  )
+
+  it.live("fails operationally when output cannot be encoded for bounding", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const exit = yield* store
+          .bound({
+            sessionID,
+            toolCallID: "call-unencodable",
+            output: {
+              structured: { value: 1n },
+              content: [{ type: "text", text: "readable text" }],
+            },
+          })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit))
+          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.StorageError")
+      }),
+    ),
+  )
+
+  it.live("preserves interruption while retaining complete output", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() => tmpdir())
+      const blockedFilesystem = Layer.effect(
+        FSUtil.Service,
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          return FSUtil.Service.of({
+            ...fs,
+            ensureDir: () => Effect.void,
+            writeFileString: () => Effect.never,
+          })
+        }),
+      ).pipe(Layer.provide(FSUtil.defaultLayer))
+      const store = ToolOutputStore.layer.pipe(
+        Layer.provide(blockedFilesystem),
+        Layer.provide(Global.layerWith({ data: root.path })),
+      )
+      const exit = yield* Effect.gen(function* () {
+        const service = yield* ToolOutputStore.Service
+        const fiber = yield* service
+          .bound({
+            sessionID,
+            toolCallID: "call-interrupted",
+            output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
+          })
+          .pipe(Effect.forkChild)
+        yield* Fiber.interrupt(fiber)
+        return yield* Fiber.await(fiber)
+      }).pipe(Effect.provide(store))
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true)
+      yield* Effect.promise(() => root[Symbol.asyncDispose]())
+    }),
   )
 
   it.live("honors configured limits", () =>

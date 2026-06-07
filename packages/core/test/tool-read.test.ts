@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -8,6 +8,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ReadTool } from "@opencode-ai/core/tool/read"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const assertions: PermissionV2.AssertInput[] = []
 const readCalls: {
@@ -100,11 +101,12 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.definitions()).toMatchObject([{ name: "read" }])
-      expect(yield* registry.definitions([{ action: "read", resource: "*", effect: "deny" }])).toEqual([])
+      expect(yield* toolDefinitions(registry)).toMatchObject([{ name: "read" }])
+      expect(yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).toEqual([])
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
       ).toEqual({ type: "json", value: { type: "text", content: "hello", mime: "text/plain" } })
@@ -125,8 +127,9 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-image", name: "read", input: { path: "pixel.png" } },
         }),
       ).toEqual({
@@ -138,16 +141,50 @@ describe("ReadTool", () => {
       })
       expect(readCalls).toEqual([{ input: { path: "pixel.png" }, page: {} }])
 
-      const settled = yield* registry.settle({
+      const settled = yield* settleTool(registry, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-image-settle", name: "read", input: { path: "pixel.png" } },
       })
-      expect(settled.output?.structured).toEqual({ type: "media", mime: "image/png" })
-      expect(JSON.stringify(settled.output?.structured)).not.toContain(png)
+      expect(settled.output?.structured).toEqual({})
       expect(settled.output?.content).toMatchObject([
         { type: "text", text: "Image read successfully" },
         { type: "file", mime: "image/png", source: { type: "data", data: png } },
       ])
+    }),
+  )
+
+  it.effect("preserves a PNG above the generic text limit as native media", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const pixels = Uint8Array.from({ length: 256 * 256 * 4 }, (_, index) => (index * 73 + (index >> 3)) % 256)
+      const source = new photon.PhotonImage(pixels, 256, 256)
+      const png = Buffer.from(source.get_bytes()).toString("base64")
+      source.free()
+      expect(Buffer.byteLength(png)).toBeGreaterThan(50 * 1024)
+      readResult = new FileSystem.BinaryContent({
+        type: "binary",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      })
+      const registry = yield* ToolRegistry.Service
+
+      const settled = yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-large-image", name: "read", input: { path: "large.png" } },
+      })
+
+      expect(settled.outputPaths).toBeUndefined()
+      expect(settled.output?.structured).toEqual({})
+      expect(settled.result).toEqual({
+        type: "content",
+        value: [
+          { type: "text", text: "Image read successfully" },
+          { type: "media", mediaType: "image/png", data: png, filename: "large.png" },
+        ],
+      })
     }),
   )
 
@@ -162,8 +199,9 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-truncated-image", name: "read", input: { path: "truncated.png" } },
         }),
       ).toEqual({ type: "error", value: "Image could not be decoded: truncated.png" })
@@ -193,8 +231,9 @@ describe("ReadTool", () => {
         }),
       ]
       const registry = yield* ToolRegistry.Service
-      const result = yield* registry.execute({
+      const result = yield* executeTool(registry, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-wide-image", name: "read", input: { path: "wide.png" } },
       })
 
@@ -224,8 +263,9 @@ describe("ReadTool", () => {
         }),
       ]
       const registry = yield* ToolRegistry.Service
-      const result = yield* registry.execute({
+      const result = yield* executeTool(registry, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-resize-image", name: "read", input: { path: "wide.png" } },
       })
 
@@ -261,8 +301,9 @@ describe("ReadTool", () => {
         }),
       ]
       const registry = yield* ToolRegistry.Service
-      const result = yield* registry.execute({
+      const result = yield* executeTool(registry, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-max-bytes", name: "read", input: { path: "pixel.png" } },
       })
 
@@ -283,8 +324,9 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-disguised-image", name: "read", input: { path: "pixel.bin" } },
         }),
       ).toMatchObject({
@@ -294,22 +336,25 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("preserves unsupported binary errors from the filesystem", () =>
+  it.effect("preserves unexpected filesystem defects", () =>
     Effect.gen(function* () {
       readFailure = new FileSystem.BinaryFileError("archive.dat")
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
-          sessionID,
-          call: {
-            type: "tool-call",
-            id: "call-binary",
-            name: "read",
-            input: { path: "archive.dat", offset: 2, limit: 1 },
-          },
-        }),
-      ).toEqual({ type: "error", value: "Cannot read binary file: archive.dat" })
+        Exit.isFailure(
+          yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-binary",
+              name: "read",
+              input: { path: "archive.dat", offset: 2, limit: 1 },
+            },
+          }).pipe(Effect.exit),
+        ),
+      ).toBe(true)
       expect(readCalls).toEqual([
         { input: { path: "archive.dat", offset: 2, limit: 1 }, page: { offset: 2, limit: 1 } },
       ])
@@ -322,8 +367,9 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
       ).toEqual({ type: "error", value: "Unable to read README.md" })
@@ -337,8 +383,9 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: {
             type: "tool-call",
             id: "call-read-directory",
@@ -359,8 +406,9 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
         }),
       ).toEqual({ type: "error", value: "Unable to read src" })
@@ -372,8 +420,9 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
 
-      yield* registry.execute({
+      yield* executeTool(registry, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md", reference: "docs" } },
       })
 
@@ -381,17 +430,20 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("settles missing files as typed tool errors", () =>
+  it.effect("preserves unexpected resolution defects", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
 
       resolveFailure = new Error("missing")
       expect(
-        yield* registry.execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-missing", name: "read", input: { path: "missing.txt" } },
-        }),
-      ).toEqual({ type: "error", value: "Unable to read missing.txt" })
+        Exit.isFailure(
+          yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: "call-missing", name: "read", input: { path: "missing.txt" } },
+          }).pipe(Effect.exit),
+        ),
+      ).toBe(true)
 
       expect(readCalls).toEqual([])
     }),
@@ -410,8 +462,9 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: {
             type: "tool-call",
             id: "call-large",
@@ -438,8 +491,9 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(
-        yield* registry.execute({
+        yield* executeTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-direct-binary", name: "read", input: { path: "late-binary" } },
         }),
       ).toEqual({ type: "error", value: "Cannot read binary file: late-binary" })
