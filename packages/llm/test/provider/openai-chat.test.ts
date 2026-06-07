@@ -5,6 +5,7 @@ import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
+import { ProviderShared } from "../../src/protocols/shared"
 import { Auth, LLMClient } from "../../src/route"
 import { it } from "../lib/effect"
 import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http"
@@ -223,17 +224,208 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("continues image tool results as vision input without base64 text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: { path: "pixel.png" } })]),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "pixel.png" },
+                ],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_image",
+              type: "function",
+              function: { name: "read", arguments: encodeJson({ path: "pixel.png" }) },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_image", content: "Image read successfully" },
+        {
+          role: "user",
+          content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } }],
+        },
+      ])
+      expect(JSON.stringify(prepared.body.messages)).not.toContain('"content":"AAECAw=="')
+    }),
+  )
+
+  it.effect("orders parallel tool responses before one aggregated vision message", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_1", name: "read", input: {} }),
+              ToolCallPart.make({ id: "call_2", name: "read", input: {} }),
+            ]),
+            Message.make({
+              role: "tool",
+              content: [
+                {
+                  type: "tool-result",
+                  id: "call_1",
+                  name: "read",
+                  result: { type: "content", value: [{ type: "media", mediaType: "image/png", data: "AAEC" }] },
+                },
+                {
+                  type: "tool-result",
+                  id: "call_2",
+                  name: "read",
+                  result: { type: "content", value: [{ type: "media", mediaType: "image/jpeg", data: "/9j/" }] },
+                },
+              ],
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages.slice(1)).toEqual([
+        { role: "tool", tool_call_id: "call_1", content: "" },
+        { role: "tool", tool_call_id: "call_2", content: "" },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAEC" } },
+            { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("aggregates consecutive tool images with a following system update", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              result: { type: "content", value: [{ type: "media", mediaType: "image/png", data: "AAEC" }] },
+            }),
+            Message.tool({
+              id: "call_2",
+              name: "read",
+              result: { type: "content", value: [{ type: "media", mediaType: "image/webp", data: "UklG" }] },
+            }),
+            Message.system("Inspect both images."),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        { role: "tool", tool_call_id: "call_1", content: "" },
+        { role: "tool", tool_call_id: "call_2", content: "" },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAEC" } },
+            { type: "image_url", image_url: { url: "data:image/webp;base64,UklG" } },
+            { type: "text", text: "<system-update>\nInspect both images.\n</system-update>" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("appends system updates without replacing multipart user content", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({ type: "media", mediaType: "image/png", data: "AAEC" }),
+            Message.system("Keep the image."),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAEC" } },
+            { type: "text", text: "<system-update>\nKeep the image.\n</system-update>" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  for (const [name, media] of [
+    ["mismatched data URL MIME", { mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" }],
+    ["malformed base64", { mediaType: "image/png", data: "not-base64" }],
+    ["unsupported SVG", { mediaType: "image/svg+xml", data: "PHN2Zz4=" }],
+  ] as const)
+    it.effect(`rejects ${name}`, () =>
+      Effect.gen(function* () {
+        const error = yield* LLMClient.prepare(
+          LLM.request({ model, messages: [Message.user({ type: "media", ...media })] }),
+        ).pipe(Effect.flip)
+        expect(error.message).toMatch(/does not support|does not match|valid base64/)
+      }),
+    )
+
+  it.effect("rejects oversized image input", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({
-          id: "req_media",
           model,
-          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [
+            Message.user({
+              type: "media",
+              mediaType: "image/png",
+              data: "A".repeat(ProviderShared.MAX_MEDIA_ENCODED_BYTES + 4),
+            }),
+          ],
         }),
       ).pipe(Effect.flip)
+      expect(error.message).toContain("encoded limit")
+    }),
+  )
 
-      expect(error.message).toContain("OpenAI Chat user messages only support text content for now")
+  it.effect("prepares raw and data URL image media as vision input", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          id: "req_media",
+          model,
+          messages: [
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              { type: "media", mediaType: "image/jpeg", data: "data:image/jpeg;base64,/9j/" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } },
+            { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/" } },
+          ],
+        },
+      ])
     }),
   )
 

@@ -19,10 +19,10 @@ export function makeStrategies(input: {
       yield* input.git.worktreeCreate({ repo: repo(options.sourceDirectory), directory: options.directory })
       return { directory: yield* input.canonical(options.directory) }
     }),
-    remove: Effect.fn("ProjectCopy.GitWorktree.remove")(function* (directory) {
-      const found = yield* input.git.find(directory)
-      if (!found) return yield* new DirectoryUnavailableError({ directory })
-      yield* input.git.worktreeRemove({ repo: found, directory })
+    remove: Effect.fn("ProjectCopy.GitWorktree.remove")(function* (options) {
+      const found = yield* input.git.find(options.directory)
+      if (!found) return yield* new DirectoryUnavailableError({ directory: options.directory })
+      yield* input.git.worktreeRemove({ repo: found, directory: options.directory, force: options.force })
     }),
     list: Effect.fn("ProjectCopy.GitWorktree.list")(function* (directory) {
       const found = yield* input.git.find(directory)

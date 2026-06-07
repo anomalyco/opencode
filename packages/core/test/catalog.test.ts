@@ -219,12 +219,16 @@ describe("CatalogV2", () => {
           model.request.headers.shared = "model"
           model.request.body.model = true
           model.request.body.request = true
+          const options = (model.request.options ??= {})
+          options.shared = "model"
+          options.model = true
         })
       })
 
       const model = yield* catalog.model.get(providerID, modelID)
       expect(model.request.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
       expect(model.request.body).toEqual({ provider: true, model: true, request: true })
+      expect(model.request.options).toEqual({ shared: "model", model: true })
     }),
   )
 
@@ -278,6 +282,34 @@ describe("CatalogV2", () => {
 
       yield* transform(models)
       expect(Option.getOrUndefined(yield* catalog.model.default())?.id).toBe(newest)
+    }),
+  )
+
+  it.effect("ignores a configured default on a disabled provider", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const disabledProvider = ProviderV2.ID.make("disabled")
+      const enabledProvider = ProviderV2.ID.make("enabled")
+      const disabledModel = ModelV2.ID.make("configured")
+      const fallbackModel = ModelV2.ID.make("fallback")
+      const transform = yield* catalog.transform()
+
+      yield* transform((catalog) => {
+        catalog.provider.update(disabledProvider, (provider) => {
+          provider.enabled = false
+        })
+        catalog.model.update(disabledProvider, disabledModel, () => {})
+        catalog.provider.update(enabledProvider, (provider) => {
+          provider.enabled = { via: "custom", data: {} }
+        })
+        catalog.model.update(enabledProvider, fallbackModel, () => {})
+        catalog.model.default.set(disabledProvider, disabledModel)
+      })
+
+      expect(Option.getOrUndefined(yield* catalog.model.default())).toMatchObject({
+        providerID: enabledProvider,
+        id: fallbackModel,
+      })
     }),
   )
 

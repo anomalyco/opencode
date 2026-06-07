@@ -1110,7 +1110,14 @@ export function options(input: {
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
-      result["reasoningSummary"] = "auto"
+      if (
+        input.model.api.npm === "@ai-sdk/openai" ||
+        input.model.api.npm === "@ai-sdk/azure" ||
+        input.model.api.npm === "@ai-sdk/github-copilot" ||
+        input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
+      ) {
+        result["reasoningSummary"] = "auto"
+      }
       if (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle") {
         result["include"] = INCLUDE_ENCRYPTED_REASONING
       }

@@ -18,6 +18,7 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { isContextOverflow } from "../provider-error"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
@@ -126,6 +127,7 @@ const OpenAIResponsesCoreFields = {
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
+  service_tier: Schema.optional(OpenAIOptions.OpenAIServiceTier),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(OpenAIOptions.OpenAIResponseIncludable),
   reasoning: Schema.optional(
@@ -302,10 +304,14 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
   part: LLMRequest["messages"][number]["content"][number],
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media" && part.mediaType.startsWith("image/")) {
-    return { type: "input_image" as const, image_url: ProviderShared.mediaDataUrl(part) }
+  if (part.type === "media") {
+    const media = yield* ProviderShared.validateMedia(
+      "OpenAI Responses",
+      part,
+      new Set<string>(ProviderShared.IMAGE_MIMES),
+    )
+    return { type: "input_image" as const, image_url: media.dataUrl }
   }
-  if (part.type === "media") return yield* invalid("OpenAI Responses user media content only supports images")
   return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
 })
 
@@ -315,12 +321,12 @@ const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultCon
   item: ToolResultContentPart,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  if (item.mediaType.startsWith("image/"))
-    return {
-      type: "input_image" as const,
-      image_url: ProviderShared.mediaDataUrl(item),
-    }
-  return yield* invalid(`OpenAI Responses tool-result media content only supports images, got ${item.mediaType}`)
+  const media = yield* ProviderShared.validateMedia(
+    "OpenAI Responses",
+    item,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
+  return { type: "input_image" as const, image_url: media.dataUrl }
 })
 
 const lowerToolResultOutput = Effect.fn("OpenAIResponses.lowerToolResultOutput")(function* (part: ToolResultPart) {
@@ -447,6 +453,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   const include = OpenAIOptions.include(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
   const instructions = OpenAIOptions.instructions(request)
+  const serviceTier = OpenAIOptions.serviceTier(request)
   return {
     ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
@@ -454,6 +461,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
     ...(include ? { include } : {}),
     ...(effort || summary ? { reasoning: { effort, summary } } : {}),
     ...(verbosity ? { text: { verbosity } } : {}),
+    ...(serviceTier ? { service_tier: serviceTier } : {}),
   }
 })
 
@@ -877,14 +885,23 @@ const providerErrorMessage = (event: OpenAIResponsesEvent, fallback: string): st
   return message || code || fallback
 }
 
+const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
+  const code = event.code || event.response?.error?.code || undefined
+  const message = providerErrorMessage(event, fallback)
+  return LLMEvent.providerError({
+    message,
+    classification: code === "context_length_exceeded" || isContextOverflow(message) ? "context-overflow" : undefined,
+  })
+}
+
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses response failed") })],
+  [providerError(event, "OpenAI Responses response failed")],
 ]
 
 const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses stream error") })],
+  [providerError(event, "OpenAI Responses stream error")],
 ]
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {

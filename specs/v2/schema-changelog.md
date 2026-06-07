@@ -1,5 +1,16 @@
 # V2 Schema Changelog
 
+## 2026-06-05: Execute Automatic Session Compaction
+
+- Trigger automatic compaction before provider turns using the complete estimated request and absolute model-aware headroom.
+- Preserve the existing structured summary contract and update prior summaries with newly compacted history.
+- Store token-bounded recent history as plain serialized text inside the checkpoint instead of replaying provider-native messages.
+- Keep compaction starts durable and progress deltas live-only; activate history cutover only from a durable completed summary.
+- Version the completed event as `session.next.compaction.ended.2` rather than changing the existing synchronized v1 payload in place.
+- Reload the replacement Context Epoch and continue the original pending turn after compaction.
+- Preserve full durable history; compaction changes only the active model representation.
+- Defer provider-overflow recovery, explicit manual compaction, and deterministic old tool-result pruning.
+
 Record V2 database, durable-event, projected-message, HTTP, and generated SDK schema changes here. Each entry states why the contract changed and whether consumers or stored data need compatibility handling. Commit messages for schema-affecting changes should include the same summary.
 
 This document covers meaningful contract changes introduced on the `feat/opencode-embedded-api` branch since its divergence from `origin/dev`. Mechanical file moves and internal refactors are omitted unless they changed stored data, replay behavior, public HTTP or SDK shapes, or model-facing tool contracts.
@@ -167,28 +178,26 @@ Compatibility:
 - Tool results are durably settled before provider continuation.
 - Legacy text, JSON, and inline-media results remain convertible; unresolved URL and file sources must be materialized or explicitly rejected before provider lowering.
 
-### Managed Tool-Output Resources
+### Managed Tool-Output Files
 
 Affected schema:
 
-- New `ToolOutputStore.Resource` and `ToolOutputStore.Page` schemas.
-- New `tool-output://<opaque-id>` URI contract.
-- `read` tool resource-page input.
+- New optional managed `outputPath` and `outputPaths` fields on tool results and completed Session tool state.
+- Absolute managed output paths accepted by ordinary `read` and `grep` inputs.
 
 Change:
 
-- Spill oversized model-facing tool text into Session-owned opaque managed resources.
-- Page stored UTF-8 content by byte offset with bounded reads and explicit `truncated` and `next` metadata.
+- Spill oversized model-facing tool text into globally unique files under OpenCode's shared tool-output directory.
+- Include the absolute file path in the bounded preview so ordinary `read`, `grep`, and `bash` operations can inspect it.
 
 Reason:
 
 - Tool results need bounded model context without discarding the full output.
-- Opaque Session ownership prevents one Session from reading another Session's managed output.
+- Filesystem resolution admits only direct generated `tool_*` files from the managed directory, while existing permissions whitelist that directory.
 
 Compatibility:
 
-- This is an additive internal and model-facing resource contract.
-- Managed output is retained for a bounded period and is not a public filesystem path.
+- Managed output is retained for a bounded period and exposed as a normal host filesystem path.
 
 ### Location-Scoped Filesystem Read And Search Contracts
 
@@ -768,3 +777,26 @@ Change:
 Compatibility:
 
 - Watcher-backed per-file `Refreshable` instruction observations, configured sources, nested discovery, and plugin-defined context remain follow-up slices.
+
+## 2026-06-05: Admit Selected-Agent Skill Guidance
+
+Affected schema:
+
+- Add `session_context_epoch.agent` so each durable baseline records its owning effective agent.
+- No synchronized event, public HTTP API, or generated SDK schema changes.
+
+Change:
+
+- Compose selected-agent, permission-filtered available-skill guidance with Location-wide System Context before Context Epoch admission.
+- Keep skill bodies behind the existing permission-checked `skill` tool and remove the unfiltered skill list from its Location-wide definition.
+- Stop missing-skill errors from enumerating the unfiltered Location-wide skill catalog.
+- Bind local tool authorization and pending permission requests to the provider turn's effective agent.
+- Keep absolute skill locations out of available-skill guidance; expose body and location only through the permission-checked `skill` tool.
+- Request Context Epoch replacement after an agent switch, dynamically re-observe the effective agent during retries, and fence first-epoch creation against the authoritative effective agent.
+- Fence existing-epoch replacement against the authoritative effective agent and block cross-agent provider turns while replacement context is unavailable.
+- Group the System Context algebra, registry, and built-ins under `system-context/`; keep source producers and Context Epoch persistence with their owning Skill, instruction, and Session modules; rename projected conversation selection to Session History.
+- Add the canonical V1-to-V2 runtime-context parity checklist to `specs/v2/session.md`.
+
+Compatibility:
+
+- Existing Context Epoch rows backfill the default `build` agent and reconcile to another selected agent at the next safe provider-turn boundary.
