@@ -7,11 +7,11 @@
     </picture>
   </a>
 </p>
-<p align="center">ایجنت کدنویسی هوش مصنوعی متن‌باز.</p>
+<p align="center">یک ایجنت کدنویسی متن‌باز مبتنی بر هوش مصنوعی.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="وضعیت بیلد" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -40,95 +40,91 @@
   <a href="README.fa.md">فارسی</a>
 </p>
 
-[![رابط کاربری ترمینال OpenCode](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
-
-<div dir="rtl">
 
 ### نصب
 
 ```bash
-# سریع و ساده
+# YOLO
 curl -fsSL https://opencode.ai/install | bash
 
-# پکیج منیجرها
+# مدیران پکیج
 npm i -g opencode-ai@latest        # یا bun/pnpm/yarn
-scoop install opencode             # ویندوز
-choco install opencode             # ویندوز
-brew install anomalyco/tap/opencode # macOS و لینوکس (پیشنهادی، همیشه به‌روز)
-brew install opencode              # macOS و لینوکس (فرمول رسمی brew، به‌روزرسانی کمتر)
-sudo pacman -S opencode            # Arch Linux (پایدار)
+scoop install opencode             # Windows
+choco install opencode             # Windows
+brew install anomalyco/tap/opencode # macOS و Linux (توصیه‌شده، همیشه به‌روز)
+brew install opencode              # macOS و Linux (فرمول رسمی brew، به‌روزرسانی کمتر)
+sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (آخرین نسخه از AUR)
-mise use -g opencode               # هر سیستم‌عاملی
-nix run nixpkgs#opencode           # یا github:anomalyco/opencode برای آخرین نسخه dev
+mise use -g opencode               # هر سیستمی
+nix run nixpkgs#opencode           # یا github:anomalyco/opencode برای آخرین شاخه dev
 ```
 
 > [!TIP]
 > قبل از نصب، نسخه‌های قدیمی‌تر از 0.1.x را حذف کنید.
 
-### اپلیکیشن دسکتاپ (بتا)
+### اپلیکیشن دسکتاپ (BETA)
 
-OpenCode به‌صورت اپلیکیشن دسکتاپ هم در دسترس است. می‌توانید آن را مستقیماً از [صفحه releases](https://github.com/anomalyco/opencode/releases) یا [opencode.ai/download](https://opencode.ai/download) دانلود کنید.
+OpenCode به صورت اپلیکیشن دسکتاپ نیز در دسترس است. مستقیماً از [صفحه Releases](https://github.com/anomalyco/opencode/releases) یا از [opencode.ai/download](https://opencode.ai/download) دانلود کنید.
 
 | پلتفرم                | دانلود                             |
 | --------------------- | ---------------------------------- |
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| ویندوز                | `opencode-desktop-windows-x64.exe` |
-| لینوکس                | `.deb` یا `.rpm` یا `.AppImage`    |
+| Windows               | `opencode-desktop-windows-x64.exe` |
+| Linux                 | `.deb` یا `.rpm` یا AppImage       |
 
 ```bash
 # macOS (Homebrew)
 brew install --cask opencode-desktop
-# ویندوز (Scoop)
+# Windows (Scoop)
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
 #### مسیر نصب
 
-اسکریپت نصب برای انتخاب مسیر نصب، ترتیب اولویت زیر را رعایت می‌کند:
+اسکریپت نصب ترتیب اولویت زیر را برای مسیر نصب رعایت می‌کند:
 
 1. `$OPENCODE_INSTALL_DIR` - مسیر نصب سفارشی
 2. `$XDG_BIN_DIR` - مسیر سازگار با مشخصات XDG Base Directory
-3. `$HOME/bin` - مسیر استاندارد باینری کاربر (اگر وجود داشته باشد یا قابل ساخت باشد)
-4. `$HOME/.opencode/bin` - مسیر پیش‌فرض
+3. `$HOME/bin` - پوشه باینری استاندارد کاربر (در صورت وجود یا امکان ساخت)
+4. `$HOME/.opencode/bin` - مسیر پیش‌فرض جایگزین
 
 ```bash
-# نمونه‌ها
+# مثال‌ها
 OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
-### ایجنت‌ها
+### Agents
 
-OpenCode دو ایجنت توکار دارد که می‌توانید با کلید `Tab` بین آن‌ها جابه‌جا شوید.
+OpenCode دارای دو ایجنت داخلی است که می‌توانید با دکمه `Tab` بین آن‌ها جابه‌جا شوید.
 
-- **build** - ایجنت پیش‌فرض با دسترسی کامل، مناسب برای توسعه
+- **build** - پیش‌فرض، ایجنت با دسترسی کامل برای کارهای توسعه
 - **plan** - ایجنت فقط‌خواندنی برای تحلیل و بررسی کد
-  - به‌صورت پیش‌فرض ویرایش فایل را رد می‌کند
-  - قبل از اجرای دستورات bash اجازه می‌گیرد
-  - ایده‌آل برای بررسی کدبیس‌های ناآشنا یا برنامه‌ریزی تغییرات
+  - به صورت پیش‌فرض از ویرایش فایل‌ها خودداری می‌کند
+  - قبل از اجرای دستورات bash اجازه می‌خواهد
+  - مناسب برای بررسی پایگاه‌های کد ناآشنا یا برنامه‌ریزی تغییرات
 
-همچنین یک ساب‌ایجنت **general** برای جست‌وجوهای پیچیده و وظایف چندمرحله‌ای وجود دارد.
-این ایجنت به‌صورت داخلی استفاده می‌شود و می‌توان با `@general` در پیام‌ها آن را فراخوانی کرد.
+علاوه بر این، یک ایجنت فرعی **general** برای جستجوهای پیچیده و وظایف چندمرحله‌ای وجود دارد.
+به صورت داخلی استفاده می‌شود و با نوشتن `@general` در پیام‌ها قابل فراخوانی است.
 
-برای اطلاعات بیشتر درباره [ایجنت‌ها](https://opencode.ai/docs/agents) مستندات را بخوانید.
+برای اطلاعات بیشتر، [agents](https://opencode.ai/docs/agents) را مطالعه کنید.
 
 ### مستندات
 
-برای آشنایی با نحوه پیکربندی OpenCode، [**به مستندات ما مراجعه کنید**](https://opencode.ai/docs).
+برای اطلاعات بیشتر درباره نحوه تنظیم OpenCode، [**به مستندات مراجعه کنید**](https://opencode.ai/docs).
 
-### مشارکت در توسعه
+### مشارکت
 
-اگر علاقه‌مند به مشارکت در OpenCode هستید، لطفاً قبل از ارسال pull request، [راهنمای مشارکت](./CONTRIBUTING.md) را بخوانید.
+اگر علاقه‌مند به مشارکت در OpenCode هستید، لطفاً قبل از ارسال pull request، [مستندات مشارکت](./CONTRIBUTING.md) را مطالعه کنید.
 
-### ساخت روی OpenCode
+### ساخت بر روی OpenCode
 
-اگر روی پروژه‌ای کار می‌کنید که با OpenCode مرتبط است و از کلمه «opencode» در نامش استفاده می‌کند — مثلاً «opencode-dashboard» یا «opencode-mobile» — لطفاً در README خود توضیح دهید که این پروژه توسط تیم OpenCode ساخته نشده و هیچ وابستگی‌ای به ما ندارد.
+اگر روی پروژه‌ای مرتبط با OpenCode کار می‌کنید که از "opencode" در نامش استفاده می‌کند (مانند "opencode-dashboard" یا "opencode-mobile")، لطفاً یک یادداشت در README اضافه کنید که توضیح دهد این پروژه توسط تیم OpenCode ساخته نشده و هیچ وابستگی‌ای به ما ندارد.
 
 ---
 
 **به جامعه ما بپیوندید** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
-
-</div>
