@@ -237,6 +237,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
     // and does not await the scan; the native background scan starts as soon as
     // the picker exists. The `wait` gate dedupes concurrent creation.
     const acquire = Effect.fn("Search.acquire")(function* (cwd: string) {
+      // The opencode test runtime owns an isolated XDG tree that Windows must
+      // remove before process exit, so use ripgrep instead of native FFF there.
+      if (process.env.OPENCODE_TEST_HOME) return undefined
+
       const available = yield* fffSync("check availability", () => Fff.available()).pipe(
         Effect.catch((error) => {
           log.warn("fff availability check failed", { error })
@@ -262,9 +266,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             basePath: dir,
             frecencyDbPath: path.join(root, `${id}.frecency.mdb`),
             historyDbPath: path.join(root, `${id}.history.mdb`),
-            // fff 0.9.3 keeps its process-global log file open until exit, so
-            // disable it in tests to let Windows remove the isolated XDG tree.
-            logFilePath: process.env.OPENCODE_TEST_HOME ? undefined : path.join(Global.Path.log, "fff.log"),
+            // fff uses a bit different log version, also with spans so keep
+            // them in the same folder for debuggability
+            logFilePath: path.join(Global.Path.log, "fff.log"),
             logLevel: Log.getLevel().toLowerCase() as Lowercase<Log.Level>,
             aiMode: true,
             // only the first toolcall picker can accumulate resources to index
