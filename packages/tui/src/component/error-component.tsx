@@ -42,10 +42,11 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
 
   issueURL.searchParams.set("opencode-version", InstallationVersion)
 
-  const copyIssueURL = () => {
-    void clipboard.write?.(issueURL.toString()).then(() => {
-      setCopied(true)
-    })
+  const copyIssueURL = async () => {
+    try {
+      const result = await clipboard.write!(issueURL.toString())
+      if (result.verified) setCopied(true)
+    } catch {}
   }
 
   return (

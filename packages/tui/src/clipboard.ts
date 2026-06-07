@@ -6,6 +6,26 @@ import { promisify } from "node:util"
 
 const exec = promisify(execFile)
 
+export type ClipboardWriteMethod = "osascript" | "wl-copy" | "xclip" | "xsel" | "powershell" | "clipboardy" | "osc52"
+export type ClipboardWriteResult = Readonly<{
+  method: ClipboardWriteMethod
+  verified: boolean
+}>
+export type ClipboardWriteAttempt = Readonly<{ method: ClipboardWriteMethod; error: string }>
+export class ClipboardWriteError extends Error {
+  constructor(readonly attempts: ClipboardWriteAttempt[]) {
+    super(`Clipboard write failed: ${attempts.map((attempt) => `${attempt.method}: ${attempt.error}`).join("; ")}`)
+    this.name = "ClipboardWriteError"
+  }
+}
+
+type ClipboardCommand = Readonly<{
+  method: Exclude<ClipboardWriteMethod, "clipboardy" | "osc52">
+  command: string
+  args: string[]
+}>
+export type ClipboardCandidate = ClipboardCommand | Readonly<{ method: "clipboardy" }> | Readonly<{ method: "osc52" }>
+
 function command(command: string, args: string[] = [], input?: string) {
   return new Promise<Buffer>((resolve, reject) => {
     const child = spawn(command, args, { stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"] })
@@ -20,10 +40,19 @@ function command(command: string, args: string[] = [], input?: string) {
   })
 }
 
-function writeOsc52(text: string) {
-  if (!process.stdout.isTTY) return
+function errorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err)
+}
+
+function debug(message: string) {
+  if (process.env.OPENCODE_CLIPBOARD_DEBUG !== "1") return
+  process.stderr.write(`[opencode clipboard] ${message}\n`)
+}
+
+function writeOsc52(text: string, stdout: Pick<NodeJS.WriteStream, "isTTY" | "write"> = process.stdout) {
+  if (!stdout.isTTY) throw new Error("stdout is not a TTY")
   const sequence = `\x1b]52;c;${Buffer.from(text).toString("base64")}\x07`
-  process.stdout.write(process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence)
+  stdout.write(process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence)
 }
 
 export async function read() {
@@ -93,32 +122,94 @@ export function copyCommand(
   }
 }
 
-let copyMethod: Promise<(text: string) => Promise<void>> | undefined
+export function clipboardCandidates(
+  os: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+  has: (name: string) => boolean,
+): ClipboardCandidate[] {
+  const result: ClipboardCandidate[] = []
 
-function getCopyMethod() {
-  return (copyMethod ??= (async () => {
-    const { which } = await import("@opencode-ai/core/util/which")
-    const native = copyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)))
-    if (native?.[0] === "osascript") {
-      return async (text: string) => {
-        const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
-      }
+  if (os === "darwin" && has("osascript")) {
+    result.push({ method: "osascript", command: "osascript", args: [] })
+  }
+
+  if (os === "linux") {
+    if (env.WAYLAND_DISPLAY && has("wl-copy")) result.push({ method: "wl-copy", command: "wl-copy", args: [] })
+    if (env.DISPLAY && has("xclip")) {
+      result.push({ method: "xclip", command: "xclip", args: ["-selection", "clipboard"] })
     }
-    if (native) {
-      return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
-      }
-    }
-    return async (text: string) => {
-      const { default: clipboardy } = await import("clipboardy")
-      await clipboardy.write(text).catch(() => undefined)
-    }
-  })())
+    if (env.DISPLAY && has("xsel")) result.push({ method: "xsel", command: "xsel", args: ["--clipboard", "--input"] })
+  }
+
+  if ((os === "win32" || release().includes("WSL")) && has("powershell.exe")) {
+    result.push({
+      method: "powershell",
+      command: "powershell.exe",
+      args: [
+        "-NonInteractive",
+        "-NoProfile",
+        "-Command",
+        "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+      ],
+    })
+  }
+
+  result.push({ method: "clipboardy" })
+  result.push({ method: "osc52" })
+  return result
 }
 
-export async function write(text: string) {
-  writeOsc52(text)
-  const method = await getCopyMethod()
-  await method(text)
+export async function writeWithCandidates(
+  text: string,
+  candidates: ClipboardCandidate[],
+  run: (candidate: ClipboardCandidate, text: string) => Promise<ClipboardWriteResult>,
+) {
+  const attempts: ClipboardWriteAttempt[] = []
+  for (const candidate of candidates) {
+    try {
+      const result = await run(candidate, text)
+      debug(`wrote using ${result.method}${result.verified ? "" : " (unverified)"}`)
+      return result
+    } catch (err) {
+      const error = errorMessage(err)
+      debug(`${candidate.method} failed: ${error}`)
+      attempts.push({ method: candidate.method, error })
+    }
+  }
+  throw new ClipboardWriteError(attempts)
+}
+
+async function runCandidate(candidate: ClipboardCandidate, text: string): Promise<ClipboardWriteResult> {
+  if (candidate.method === "clipboardy") {
+    const { default: clipboardy } = await import("clipboardy")
+    await clipboardy.write(text)
+    return { method: "clipboardy", verified: true }
+  }
+
+  if (candidate.method === "osc52") {
+    writeOsc52(text)
+    return { method: "osc52", verified: false }
+  }
+
+  if (candidate.method === "osascript") {
+    const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+    await command("osascript", ["-e", `set the clipboard to "${escaped}"`])
+    return { method: "osascript", verified: true }
+  }
+
+  await command(candidate.command, candidate.args, text)
+  return { method: candidate.method, verified: true }
+}
+
+export async function write(text: string): Promise<ClipboardWriteResult> {
+  const mode = process.env.OPENCODE_CLIPBOARD ?? "auto"
+  if (mode === "off") throw new ClipboardWriteError([{ method: "clipboardy", error: "clipboard disabled" }])
+
+  const { which } = await import("@opencode-ai/core/util/which")
+  const candidates = clipboardCandidates(platform(), process.env, (name) => Boolean(which(name))).filter((candidate) => {
+    if (mode === "native") return candidate.method !== "osc52"
+    if (mode === "osc52") return candidate.method === "osc52"
+    return true
+  })
+  return writeWithCandidates(text, candidates, runCandidate)
 }
