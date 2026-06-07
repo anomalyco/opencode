@@ -126,6 +126,15 @@ function isOutputSchemaValidationError(error: Error) {
   )
 }
 
+function isMethodNotFound(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error && error.code === -32601) return true
+  return error instanceof Error && /(?:-32601|method (?:not found|not available)|not supported)/i.test(error.message)
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 function listTools(key: string, client: MCPClient, timeout: number) {
   return Effect.tryPromise({
     try: () => client.listTools(undefined, { timeout }),
@@ -203,9 +212,11 @@ function fetchFromClient<T extends { name: string }>(
 ) {
   return Effect.tryPromise({
     try: () => listFn(client),
-    catch: (e: any) => {
-      log.error(`failed to get ${label}`, { clientName, error: e.message })
-      return e
+    catch: (error) => {
+      const message = errorMessage(error)
+      if (isMethodNotFound(error)) log.warn(`MCP server does not support ${label}`, { clientName, error: message })
+      else log.error(`failed to get ${label}`, { clientName, error: message })
+      return error
     },
   }).pipe(
     Effect.map((items) => {

@@ -1,7 +1,8 @@
-import { expect, mock, beforeEach } from "bun:test"
+import { expect, mock, beforeEach, spyOn } from "bun:test"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
+import { Log } from "@opencode-ai/core/util/log"
 
 // --- Mock infrastructure ---
 
@@ -13,7 +14,9 @@ interface MockClientState {
   listToolsShouldFail: boolean
   listToolsError: string
   listPromptsShouldFail: boolean
+  listPromptsError: Error
   listResourcesShouldFail: boolean
+  listResourcesError: Error
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
   closed: boolean
@@ -41,7 +44,9 @@ function getOrCreateClientState(name?: string): MockClientState {
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
       listPromptsShouldFail: false,
+      listPromptsError: new Error("listPrompts failed"),
       listResourcesShouldFail: false,
+      listResourcesError: new Error("listResources failed"),
       prompts: [],
       resources: [],
       closed: false,
@@ -149,14 +154,14 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
     async listPrompts() {
       if (this._state?.listPromptsShouldFail) {
-        throw new Error("listPrompts failed")
+        throw this._state.listPromptsError
       }
       return { prompts: this._state?.prompts ?? [] }
     }
 
     async listResources() {
       if (this._state?.listResourcesShouldFail) {
-        throw new Error("listResources failed")
+        throw this._state.listResourcesError
       }
       return { resources: this._state?.resources ?? [] }
     }
@@ -596,6 +601,64 @@ it.instance(
       },
     },
   },
+)
+
+it.instance(
+  "optional discovery logs unsupported methods as warnings",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "tools-only-server"
+        const serverState = getOrCreateClientState("tools-only-server")
+        serverState.listPromptsShouldFail = true
+        serverState.listPromptsError = Object.assign(new Error("MCP error -32601: Method not found"), { code: -32601 })
+        serverState.listResourcesShouldFail = true
+        serverState.listResourcesError = new Error("resources not supported")
+        const logger = Log.create({ service: "mcp" })
+        const warn = spyOn(logger, "warn").mockImplementation(() => {})
+        const error = spyOn(logger, "error").mockImplementation(() => {})
+
+        yield* mcp.add("tools-only-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(yield* mcp.prompts()).toEqual({})
+        expect(yield* mcp.resources()).toEqual({})
+        expect(warn).toHaveBeenCalledTimes(2)
+        expect(error).not.toHaveBeenCalled()
+        warn.mockRestore()
+        error.mockRestore()
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "optional discovery keeps unexpected failures at error level",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "broken-prompt-server"
+        const serverState = getOrCreateClientState("broken-prompt-server")
+        serverState.listPromptsShouldFail = true
+        const logger = Log.create({ service: "mcp" })
+        const warn = spyOn(logger, "warn").mockImplementation(() => {})
+        const error = spyOn(logger, "error").mockImplementation(() => {})
+
+        yield* mcp.add("broken-prompt-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(yield* mcp.prompts()).toEqual({})
+        expect(warn).not.toHaveBeenCalled()
+        expect(error).toHaveBeenCalledTimes(1)
+        warn.mockRestore()
+        error.mockRestore()
+      }),
+    ),
+  { config: { mcp: {} } },
 )
 
 it.instance(
