@@ -17,7 +17,6 @@ import {
   batch,
   Show,
   on,
-  untrack,
 } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -1005,19 +1004,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     bindings: customSlashBindings(),
   }))
 
-  createEffect(() => {
-    const currentModel = local.model.current()
-    if (!currentModel) return
-    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
-      untrack(() => {
-        DialogAlert.show(
-          dialog,
-          "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
-        ).then(() => kv.set("openrouter_warning", true))
-      })
-    }
-  })
   event.on(TuiEvent.CommandExecute.type, (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     keymap.dispatchCommand(evt.properties.command)
