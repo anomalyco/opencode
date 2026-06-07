@@ -11,9 +11,9 @@ import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
-import { headerRow, modelRow, type FormState } from "./dialog-custom-provider-form"
+import { customProviderFormState } from "./dialog-custom-provider-form"
 import { SettingsList } from "./settings-list"
-import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
+import { SettingsServerPicker } from "./settings-server-picker"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
@@ -30,14 +30,6 @@ const PROVIDER_NOTES = [
 ] as const
 
 export const SettingsProviders: Component = () => {
-  return (
-    <SettingsServerScope>
-      <SettingsProvidersContent />
-    </SettingsServerScope>
-  )
-}
-
-const SettingsProvidersContent: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
@@ -89,28 +81,6 @@ const SettingsProvidersContent: Component = () => {
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
     return true
-  }
-
-  const customProviderFormState = (providerID: string): Partial<FormState> => {
-    const config = serverSync.data.config.provider?.[providerID]
-    if (!config) return { providerID }
-    const rawHeaders = config.options?.headers as Record<string, string> | undefined
-    return {
-      providerID,
-      name: config.name ?? "",
-      baseURL: config.options?.baseURL ?? "",
-      apiKey: config.env?.[0] ? `{env:${config.env[0]}}` : "",
-      models: Object.entries(config.models ?? {}).map(([id, m]) => ({
-        ...modelRow(),
-        id,
-        name: (m as { name?: string }).name ?? "",
-      })),
-      headers: Object.entries(rawHeaders ?? {}).map(([key, value]) => ({
-        ...headerRow(),
-        key,
-        value,
-      })),
-    }
   }
 
   const disableProvider = async (providerID: string, name: string) => {
@@ -202,13 +172,13 @@ const SettingsProvidersContent: Component = () => {
                         <Button
                           size="large"
                           variant="secondary"
-                          icon="edit"
+                          icon="pencil-line"
                           onClick={() => {
                             if (isConfigCustom(item.id)) {
                               dialog.show(() => (
                                 <DialogCustomProvider
                                   back="close"
-                                  initialConfig={customProviderFormState(item.id)}
+                                  initialConfig={customProviderFormState(item.id, serverSync.data.config.provider?.[item.id])}
                                   originalProviderID={item.id}
                                 />
                               ))

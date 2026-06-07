@@ -11,6 +11,7 @@ import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider } from "../dialog-connect-provider"
 import { DialogSelectProvider } from "../dialog-select-provider"
 import { DialogCustomProvider } from "../dialog-custom-provider"
+import { customProviderFormState } from "../dialog-custom-provider-form"
 import { SettingsListV2 } from "./parts/list"
 import "./settings-v2.css"
 
@@ -168,9 +169,31 @@ export const SettingsProvidersV2: Component = () => {
                         </span>
                       }
                     >
-                      <ButtonV2 size="normal" variant="ghost-muted" onClick={() => void disconnect(item.id, item.name)}>
-                        {language.t("common.disconnect")}
-                      </ButtonV2>
+                      <div class="flex items-center gap-2">
+                        <ButtonV2 size="normal" variant="neutral" icon="xmark-small" onClick={() => void disconnect(item.id, item.name)}>
+                          {language.t("common.disconnect")}
+                        </ButtonV2>
+                        <ButtonV2
+                          size="normal"
+                          variant="neutral"
+                          icon="edit"
+                          onClick={() => {
+                            if (isConfigCustom(item.id)) {
+                              dialog.show(() => (
+                                <DialogCustomProvider
+                                  back="close"
+                                  initialConfig={customProviderFormState(item.id, serverSync.data.config.provider?.[item.id])}
+                                  originalProviderID={item.id}
+                                />
+                              ))
+                            } else {
+                              dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                            }
+                          }}
+                        >
+                          {language.t("common.edit")}
+                        </ButtonV2>
+                      </div>
                     </Show>
                   </div>
                 )}

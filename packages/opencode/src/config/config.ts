@@ -161,6 +161,14 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
   return Object.entries(patch).reduce((result, [key, value]) => patchJsonc(result, value, [...path, key]), input)
 }
 
+const JSONC_FORMAT = { formattingOptions: { insertSpaces: true, tabSize: 2 } }
+
+// Replace a value at path entirely (no recursive merge), used for fields where
+// the patch value is authoritative rather than additive.
+function replaceJsonc(input: string, path: string[], value: unknown): string {
+  return applyEdits(input, modify(input, path, value, JSONC_FORMAT))
+}
+
 function writable(info: Info) {
   const { plugin_origins: _plugin_origins, ...next } = info
   return next
@@ -637,13 +645,27 @@ export const layer = Layer.effect(
       let changed: boolean
       if (!file.endsWith(".jsonc")) {
         const existing = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(before, file), file)
-        const merged = mergeDeep(writable(existing), patch)
+        const merged = mergeDeep(writable(existing), patch) as Info
+        // Provider models and headers are authoritative when explicitly set — replace, not merge.
+        for (const [id, patchProvider] of Object.entries(patch.provider ?? {})) {
+          if (!patchProvider || !merged.provider?.[id]) continue
+          if ("models" in patchProvider) merged.provider[id].models = patchProvider.models
+          if (patchProvider.options && "headers" in patchProvider.options)
+            merged.provider[id].options = { ...merged.provider[id].options, headers: patchProvider.options.headers }
+        }
         const serialized = JSON.stringify(merged, null, 2)
         changed = serialized !== before
         if (changed) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
         next = merged
       } else {
-        const updated = patchJsonc(before, patch)
+        let updated = patchJsonc(before, patch)
+        // Provider models and headers are authoritative when explicitly set — replace, not merge.
+        for (const [id, patchProvider] of Object.entries(patch.provider ?? {})) {
+          if (!patchProvider) continue
+          if ("models" in patchProvider) updated = replaceJsonc(updated, ["provider", id, "models"], patchProvider.models)
+          if (patchProvider.options && "headers" in patchProvider.options)
+            updated = replaceJsonc(updated, ["provider", id, "options", "headers"], patchProvider.options.headers)
+        }
         next = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(updated, file), file)
         changed = updated !== before
         if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)

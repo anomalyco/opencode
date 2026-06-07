@@ -143,7 +143,7 @@ export function validateCustomProvider(input: ValidateArgs) {
         ...(env ? { env: [env] } : {}),
         options: {
           baseURL,
-          ...(Object.keys(headerConfig).length ? { headers: headerConfig } : {}),
+          headers: headerConfig,
         },
         models: modelConfig,
       },
@@ -157,3 +157,25 @@ const nextRow = () => `row-${row++}`
 
 export const modelRow = (): ModelRow => ({ row: nextRow(), id: "", name: "", err: {} })
 export const headerRow = (): HeaderRow => ({ row: nextRow(), key: "", value: "", err: {} })
+
+type ProviderConfigEntry = {
+  name?: string
+  env?: string[]
+  options?: { baseURL?: string; headers?: Record<string, string>; [key: string]: unknown }
+  models?: Record<string, { name?: string; [key: string]: unknown } | null>
+}
+
+export function customProviderFormState(providerID: string, config: ProviderConfigEntry | undefined): Partial<FormState> {
+  if (!config) return { providerID }
+  const rawHeaders = config.options?.headers
+  return {
+    providerID,
+    name: config.name ?? "",
+    baseURL: config.options?.baseURL ?? "",
+    apiKey: config.env?.[0] ? `{env:${config.env[0]}}` : "",
+    models: Object.entries(config.models ?? {})
+      .filter(([, m]) => m !== null)
+      .map(([id, m]) => ({ ...modelRow(), id, name: m?.name ?? "" })),
+    headers: Object.entries(rawHeaders ?? {}).map(([key, value]) => ({ ...headerRow(), key, value })),
+  }
+}
