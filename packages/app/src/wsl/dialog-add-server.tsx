@@ -409,38 +409,46 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                   </div>
                 }
               >
-                <div class="rounded-md border border-border-weak-base overflow-hidden">
+                <div class="max-h-44 overflow-y-auto rounded-md border border-border-weak-base">
                   <For each={visibleInstalledDistros()}>
                     {(item) => {
                       const alreadyAdded = () => existingServerDistros().has(item.name)
                       const selected = () => selectedDistro() === item.name
                       return (
-                        <button
-                          type="button"
-                          class="w-full min-w-0 px-3 py-2.5 flex items-center justify-between gap-3 text-left border-b border-l-2 border-l-transparent border-border-weak-base last:border-b-0 transition-colors"
+                        <div
+                          class="min-w-0 px-3 py-2.5 flex items-center justify-between gap-3 border-b border-l-2 border-l-transparent border-border-weak-base last:border-b-0"
                           classList={{
                             "border-l-border-strong-base": selected(),
-                            "hover:border-l-border-strong-base": !alreadyAdded(),
                             "opacity-60": alreadyAdded(),
                           }}
-                          disabled={busy() || alreadyAdded()}
-                          onClick={() => selectDistro(item.name)}
                         >
                           <div class="min-w-0 flex flex-col gap-0.5">
                             <div class="text-13-medium text-text-strong truncate">{item.name}</div>
-                            <Show when={selected() && !alreadyAdded()}>
-                              <div class="text-12-regular text-text-weak">{distroMessage()}</div>
-                            </Show>
+                            <div class="text-12-regular text-text-weak truncate">
+                              <Show
+                                when={selected() && !alreadyAdded()}
+                                fallback={item.isDefault ? language.t("common.default") : language.t("wsl.onboarding.installed")}
+                              >
+                                {distroMessage()}
+                              </Show>
+                            </div>
                           </div>
                           <div class="shrink-0 flex items-center gap-2">
-                            <Show when={item.isDefault}>
-                              <span class="text-12-regular text-text-weak">{language.t("common.default")}</span>
-                            </Show>
                             <Show when={alreadyAdded()}>
                               <span class="text-12-regular text-text-weak">{language.t("wsl.onboarding.alreadyAdded")}</span>
                             </Show>
+                            <Show when={!alreadyAdded()}>
+                              <Button
+                                variant={selected() ? "secondary" : "ghost"}
+                                size="small"
+                                disabled={busy() || selected()}
+                                onClick={() => selectDistro(item.name)}
+                              >
+                                {selected() ? language.t("wsl.onboarding.selected") : language.t("wsl.onboarding.select")}
+                              </Button>
+                            </Show>
                           </div>
-                        </button>
+                        </div>
                       )
                     }}
                   </For>
@@ -484,14 +492,31 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
               </Show>
             </section>
 
+            <div class="flex items-center justify-end gap-2">
+              <Button variant="ghost" size="large" disabled={store.adding} onClick={cancel}>
+                {language.t("common.cancel")}
+              </Button>
+              <Button
+                variant="secondary"
+                size="large"
+                disabled={busy() || !selectedDistro() || !distroReady()}
+                onClick={openOpencodeStep}
+              >
+                {language.t("wsl.onboarding.next")}
+              </Button>
+            </div>
+
             <Show when={installableDistros().length > 0}>
               <section class="flex flex-col gap-2">
                 <div class="text-12-medium text-text-weak">{language.t("wsl.onboarding.availableDistros")}</div>
-                <div class="rounded-md border border-border-weak-base overflow-hidden">
+                <div class="max-h-36 overflow-y-auto rounded-md border border-border-weak-base">
                   <For each={installableDistros()}>
                     {(item) => (
                       <div class="px-3 py-2.5 flex items-center justify-between gap-3 border-b border-border-weak-base last:border-b-0">
-                        <div class="min-w-0 text-13-medium text-text-strong truncate">{item.label}</div>
+                        <div class="min-w-0 flex flex-col gap-0.5">
+                          <div class="text-13-medium text-text-strong truncate">{item.label}</div>
+                          <div class="text-12-regular text-text-weak truncate">{item.name}</div>
+                        </div>
                         <Button
                           variant="secondary"
                           size="small"
@@ -511,20 +536,6 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                 </div>
               </section>
             </Show>
-
-            <div class="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="large" disabled={store.adding} onClick={cancel}>
-                {language.t("common.cancel")}
-              </Button>
-              <Button
-                variant="secondary"
-                size="large"
-                disabled={busy() || !selectedDistro() || !distroReady()}
-                onClick={openOpencodeStep}
-              >
-                {language.t("wsl.onboarding.next")}
-              </Button>
-            </div>
           </Show>
 
           <Show when={activeStep() === "opencode"}>
