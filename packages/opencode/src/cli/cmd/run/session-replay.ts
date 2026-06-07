@@ -217,7 +217,9 @@ function replayMessage(
     commits.push(...next.commits)
   }
 
-  const summary = config.summaries.has(message.info.id) ? messageTurnSummaryCommit(message, config.providers) : undefined
+  const summary = config.summaries.has(message.info.id)
+    ? messageTurnSummaryCommit(message, config.providers)
+    : undefined
   if (summary) {
     commits.push(summary)
   }

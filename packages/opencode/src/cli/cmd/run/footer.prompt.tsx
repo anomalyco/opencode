@@ -234,7 +234,7 @@ export function RunPromptBody(props: {
 
           props.onContentChange()
         })
-        .catch(() => { })
+        .catch(() => {})
     }, 0)
   }
 
@@ -1200,7 +1200,11 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const submit = command ? { ...next, command } : parsed?.type === "command" ? { ...next, command: parsed.command } : next
+    const submit = command
+      ? { ...next, command }
+      : parsed?.type === "command"
+        ? { ...next, command: parsed.command }
+        : next
     const shellMode = next.mode === "shell"
 
     resetDraft()

@@ -166,7 +166,9 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
-  const foregroundSubagents = createMemo(() => props.backgroundSubagents && activeTabs().some((item) => !item.background))
+  const foregroundSubagents = createMemo(
+    () => props.backgroundSubagents && activeTabs().some((item) => !item.background),
+  )
   const model = createMemo(() => {
     const current = props.currentModel()
     return current ? modelInfo(props.providers(), current) : { model: props.state().model, provider: undefined }
@@ -648,9 +650,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                     panel() || prompt()
                       ? undefined
                       : {
-                        ...EMPTY_BORDER,
-                        vertical: "█",
-                      }
+                          ...EMPTY_BORDER,
+                          vertical: "█",
+                        }
                   }
                 >
                   <box
@@ -938,7 +940,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                       maxWidth={18}
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>{sectionSeparator()}</Show>
+                        <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>
+                          {sectionSeparator()}
+                        </Show>
                         <span style={{ fg: theme().text }}>{hint().key}</span>{" "}
                         <span style={{ fg: theme().muted }}>{hint().label}</span>
                       </text>

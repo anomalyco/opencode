@@ -96,12 +96,7 @@ function promptPartStart(part: Mention) {
   return part.source?.text.start ?? Number.POSITIVE_INFINITY
 }
 
-function findPromptPartIndex(
-  content: string,
-  text: string,
-  used: Array<{ start: number; end: number }>,
-  hint: number,
-) {
+function findPromptPartIndex(content: string, text: string, used: Array<{ start: number; end: number }>, hint: number) {
   let searchFrom = 0
   let best = -1
   let distance = Number.POSITIVE_INFINITY

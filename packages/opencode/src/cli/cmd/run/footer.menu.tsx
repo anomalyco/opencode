@@ -264,7 +264,12 @@ export function RunFooterMenu(props: {
           if (row.type === "header") {
             return (
               <box paddingLeft={props.paddingLeft ?? 1} paddingRight={props.paddingRight ?? 1}>
-                <text fg={props.headerColor ?? props.theme().highlight} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                <text
+                  fg={props.headerColor ?? props.theme().highlight}
+                  attributes={TextAttributes.BOLD}
+                  wrapMode="none"
+                  truncate
+                >
                   {row.label}
                 </text>
               </box>
@@ -281,11 +286,7 @@ export function RunFooterMenu(props: {
                 ? props.theme().shade
                 : transparent
           return (
-            <box
-              paddingRight={0}
-              flexDirection="row"
-              backgroundColor={background()}
-            >
+            <box paddingRight={0} flexDirection="row" backgroundColor={background()}>
               {border() ? (
                 <text fg={props.theme().highlight} bg={background()} wrapMode="none">
                   {active() ? "▌" : " "}

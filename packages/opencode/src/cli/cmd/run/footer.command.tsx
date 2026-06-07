@@ -298,7 +298,14 @@ function PanelShell(props: {
         </box>
       )}
       {minimal() ? (
-        <box id={`${props.id}-bottom`} width="100%" height={1} border={false} backgroundColor="transparent" flexShrink={0}>
+        <box
+          id={`${props.id}-bottom`}
+          width="100%"
+          height={1}
+          border={false}
+          backgroundColor="transparent"
+          flexShrink={0}
+        >
           <box
             width="100%"
             height={1}
@@ -368,17 +375,18 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.subagents().length > 0
         ? [
-          {
-            action: "subagent" as const,
-            category: "Session",
-            display: "View subagents",
-            footer: activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
-            keywords: props
-              .subagents()
-              .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
-              .join(" "),
-          },
-        ]
+            {
+              action: "subagent" as const,
+              category: "Session",
+              display: "View subagents",
+              footer:
+                activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
+              keywords: props
+                .subagents()
+                .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
+                .join(" "),
+            },
+          ]
         : []),
       {
         action: "slash",
@@ -392,16 +400,16 @@ export function RunCommandMenuBody(props: {
     const prompt: CommandEntry[] =
       props.commands() === undefined || skills().length > 0
         ? [
-          {
-            action: "skill" as const,
-            category: "Prompt",
-            display: "Skills",
-            footer: "/skills",
-            keywords: `skill skills ${skills()
-              .map((item) => `${item.name} ${item.description ?? ""}`)
-              .join(" ")}`.trim(),
-          },
-        ]
+            {
+              action: "skill" as const,
+              category: "Prompt",
+              display: "Skills",
+              footer: "/skills",
+              keywords: `skill skills ${skills()
+                .map((item) => `${item.name} ${item.description ?? ""}`)
+                .join(" ")}`.trim(),
+            },
+          ]
         : []
     const agent: CommandEntry[] = [
       {
@@ -411,17 +419,17 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.queued().length > 0
         ? [
-          {
-            action: "queued" as const,
-            category: "Agent",
-            display: "Manage queued prompts",
-            footer: `${props.queued().length} queued`,
-            keywords: props
-              .queued()
-              .map((item) => item.prompt.text)
-              .join(" "),
-          },
-        ]
+            {
+              action: "queued" as const,
+              category: "Agent",
+              display: "Manage queued prompts",
+              footer: `${props.queued().length} queued`,
+              keywords: props
+                .queued()
+                .map((item) => item.prompt.text)
+                .join(" "),
+            },
+          ]
         : []),
       {
         action: "variant.cycle",
@@ -432,13 +440,13 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.variants().length > 0
         ? [
-          {
-            action: "variant.list" as const,
-            category: "Agent",
-            display: "Switch model variant",
-            keywords: `variant variants ${props.variants().join(" ")}`,
-          },
-        ]
+            {
+              action: "variant.list" as const,
+              category: "Agent",
+              display: "Switch model variant",
+              keywords: `variant variants ${props.variants().join(" ")}`,
+            },
+          ]
         : []),
     ]
     const commands = (props.commands() ?? [])

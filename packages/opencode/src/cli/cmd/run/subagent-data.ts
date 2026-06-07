@@ -829,9 +829,10 @@ export function reduceSubagentData(input: {
   }
 
   const detail = ensureDetail(input.data, sessionID)
-  const cancelled = event.type === "message.updated" && isAbortedAssistantMessage(event.properties.info)
-    ? cancelSubagentTab(input.data, sessionID)
-    : false
+  const cancelled =
+    event.type === "message.updated" && isAbortedAssistantMessage(event.properties.info)
+      ? cancelSubagentTab(input.data, sessionID)
+      : false
   if (event.type === "session.status") {
     if (event.properties.status.type !== "retry") {
       return cancelled
@@ -839,13 +840,13 @@ export function reduceSubagentData(input: {
 
     return (
       appendCommits(detail, [
-      {
-        kind: "error",
-        text: event.properties.status.message,
-        phase: "start",
-        source: "system",
-        messageID: `retry:${event.properties.status.attempt}`,
-      },
+        {
+          kind: "error",
+          text: event.properties.status.message,
+          phase: "start",
+          source: "system",
+          messageID: `retry:${event.properties.status.attempt}`,
+        },
       ]) || cancelled
     )
   }
@@ -853,13 +854,13 @@ export function reduceSubagentData(input: {
   if (event.type === "session.error" && event.properties.error) {
     return (
       appendCommits(detail, [
-      {
-        kind: "error",
-        text: formatError(event.properties.error),
-        phase: "start",
-        source: "system",
-        messageID: `session.error:${event.properties.sessionID}:${formatError(event.properties.error)}`,
-      },
+        {
+          kind: "error",
+          text: formatError(event.properties.error),
+          phase: "start",
+          source: "system",
+          messageID: `session.error:${event.properties.sessionID}:${formatError(event.properties.error)}`,
+        },
       ]) || cancelled
     )
   }

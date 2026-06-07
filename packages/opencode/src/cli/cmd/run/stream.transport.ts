@@ -713,10 +713,10 @@ function createLayer(input: StreamInput) {
                 messages: messagesList,
                 permissions: sessionPermissions,
                 questions: sessionQuestions,
-              thinking: input.thinking,
-              limits: input.limits(),
-              providers: input.providers?.(),
-            })
+                thinking: input.thinking,
+                limits: input.limits(),
+                providers: input.providers?.(),
+              })
             : undefined
           const replay =
             history && input.replayLimit !== undefined && messagesList.length > input.replayLimit

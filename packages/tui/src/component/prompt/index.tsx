@@ -461,7 +461,7 @@ export function Prompt(props: PromptProps) {
 
               if (!virtualText) return part
 
-               const newStart = normalized.indexOf(virtualText)
+              const newStart = normalized.indexOf(virtualText)
               // if the virtual text is deleted, remove the part
               if (newStart === -1) return null
 
@@ -496,14 +496,14 @@ export function Prompt(props: PromptProps) {
             })
             .filter((part) => part !== null)
 
-           setStore("prompt", {
-             input: normalized,
-             // keep only the non-text parts because the text parts were
-             // already expanded inline
-             parts: updatedNonTextParts,
-           })
-           restoreExtmarksFromParts(updatedNonTextParts)
-           input.cursorOffset = Bun.stringWidth(normalized)
+          setStore("prompt", {
+            input: normalized,
+            // keep only the non-text parts because the text parts were
+            // already expanded inline
+            parts: updatedNonTextParts,
+          })
+          restoreExtmarksFromParts(updatedNonTextParts)
+          input.cursorOffset = Bun.stringWidth(normalized)
         },
       },
       {

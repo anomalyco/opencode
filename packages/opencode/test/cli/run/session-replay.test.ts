@@ -102,63 +102,62 @@ function assistantMessage(
   }
 }
 
-const provider = (name: string): RunProvider =>
-  ({
-    id: "openai",
-    name: "OpenAI",
-    source: "api",
-    env: [],
-    options: {},
-    models: {
-      "gpt-5": {
-        id: "gpt-5",
-        providerID: "openai",
-        api: {
-          id: "openai",
-          url: "https://openai.test",
-          npm: "@ai-sdk/openai",
-        },
-        name,
-        capabilities: {
-          temperature: true,
-          reasoning: true,
-          attachment: true,
-          toolcall: true,
-          input: {
-            text: true,
-            audio: false,
-            image: false,
-            video: false,
-            pdf: false,
-          },
-          output: {
-            text: true,
-            audio: false,
-            image: false,
-            video: false,
-            pdf: false,
-          },
-          interleaved: false,
-        },
-        cost: {
-          input: 0,
-          output: 0,
-          cache: {
-            read: 0,
-            write: 0,
-          },
-        },
-        limit: {
-          context: 128000,
-          output: 8192,
-        },
-        status: "active",
-        options: {},
-        headers: {},
-        release_date: "2026-01-01",
+const provider = (name: string): RunProvider => ({
+  id: "openai",
+  name: "OpenAI",
+  source: "api",
+  env: [],
+  options: {},
+  models: {
+    "gpt-5": {
+      id: "gpt-5",
+      providerID: "openai",
+      api: {
+        id: "openai",
+        url: "https://openai.test",
+        npm: "@ai-sdk/openai",
       },
+      name,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        output: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-01-01",
     },
-  })
+  },
+})
 
 function runningToolMessage(id: string): SessionMessages[number] {
   return {
