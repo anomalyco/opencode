@@ -28,6 +28,7 @@ import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
 import { SkillGuidance } from "./skill/guidance"
 import { BuiltInTools } from "./tool/builtins"
+import { Image } from "./image"
 import { ToolRegistry } from "./tool/registry"
 import { ApplicationTools } from "./tool/application-tools"
 import { ToolOutputStore } from "./tool-output-store"
@@ -71,6 +72,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(base),
     )
     const services = Layer.mergeAll(base, resources, permissionsAndTools)
+    const image = Image.layer.pipe(Layer.provide(services))
     const mutation = FileMutation.locationLayer.pipe(Layer.provide(services))
     const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
@@ -83,6 +85,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(resources),
       Layer.provide(todos),
       Layer.provide(questions),
+      Layer.provide(image),
     )
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.defaultLayer.pipe(
@@ -90,9 +93,18 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(model),
       Layer.provide(skillGuidance),
     )
-    return Layer.mergeAll(services, mutation, searches, resources, todos, questions, model, runner, builtInTools).pipe(
-      Layer.fresh,
-    )
+    return Layer.mergeAll(
+      services,
+      image,
+      mutation,
+      searches,
+      resources,
+      todos,
+      questions,
+      model,
+      runner,
+      builtInTools,
+    ).pipe(Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
   dependencies: [

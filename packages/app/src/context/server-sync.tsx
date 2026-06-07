@@ -36,6 +36,7 @@ import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
 import type { ServerScope } from "@/utils/server-scope"
 import { persisted } from "@/utils/persist"
+import { toggleMcp } from "./global-sync/mcp"
 
 type GlobalStore = {
   ready: boolean
@@ -480,6 +481,28 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
     project: projectApi,
     todo: {
       set: setSessionTodo,
+    },
+    mcp: {
+      toggle: async (directory: string, name: string) => {
+        const key = directoryKey(directory)
+        const sdk = sdkFor(key)
+        const status = children.child(key, { bootstrap: false })[0].mcp[name].status
+        await toggleMcp({
+          status,
+          connect: async () => {
+            await sdk.mcp.connect({ name })
+          },
+          disconnect: async () => {
+            await sdk.mcp.disconnect({ name })
+          },
+          authenticate: async () => {
+            await sdk.mcp.auth.authenticate({ name })
+          },
+          refresh: async () => {
+            await queryClient.refetchQueries(queryOptionsApi.mcp(key))
+          },
+        })
+      },
     },
   }
 }

@@ -4,7 +4,7 @@ import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { testEffect } from "../lib/effect"
 
-const contribution = (key: string, text: string, sourceKey = key) => ({
+const entry = (key: string, text: string, sourceKey = key) => ({
   key: SystemContext.Key.make(key),
   load: Effect.succeed(
     SystemContext.make({
@@ -20,7 +20,7 @@ const contribution = (key: string, text: string, sourceKey = key) => ({
 const it = testEffect(SystemContextRegistry.layer)
 
 describe("SystemContextRegistry", () => {
-  it.effect("loads empty system context when there are no contributions", () =>
+  it.effect("loads empty system context when there are no entries", () =>
     Effect.gen(function* () {
       const registry = yield* SystemContextRegistry.Service
 
@@ -28,21 +28,21 @@ describe("SystemContextRegistry", () => {
     }),
   )
 
-  it.effect("loads scoped contributions in stable key order", () =>
+  it.effect("loads scoped entries in stable key order", () =>
     Effect.gen(function* () {
       const registry = yield* SystemContextRegistry.Service
-      yield* registry.contribute(contribution("test/second", "second"))
-      yield* registry.contribute(contribution("test/first", "first"))
+      yield* registry.register(entry("test/second", "second"))
+      yield* registry.register(entry("test/first", "first"))
 
       expect((yield* SystemContext.initialize(yield* registry.load())).baseline).toBe("first\n\nsecond")
     }),
   )
 
-  it.effect("re-evaluates contribution producers on each load", () =>
+  it.effect("re-evaluates entry producers on each load", () =>
     Effect.gen(function* () {
       const registry = yield* SystemContextRegistry.Service
       let loads = 0
-      yield* registry.contribute({
+      yield* registry.register({
         key: SystemContext.Key.make("test/dynamic"),
         load: Effect.sync(() => {
           loads++
@@ -57,11 +57,11 @@ describe("SystemContextRegistry", () => {
     }),
   )
 
-  it.effect("propagates contribution producer failures", () =>
+  it.effect("propagates entry producer failures", () =>
     Effect.gen(function* () {
       const registry = yield* SystemContextRegistry.Service
-      const failure = new Error("contribution failed")
-      yield* registry.contribute({ key: SystemContext.Key.make("test/failure"), load: Effect.die(failure) })
+      const failure = new Error("entry failed")
+      yield* registry.register({ key: SystemContext.Key.make("test/failure"), load: Effect.die(failure) })
 
       const exit = yield* registry.load().pipe(Effect.exit)
 
@@ -70,11 +70,11 @@ describe("SystemContextRegistry", () => {
     }),
   )
 
-  it.effect("rejects duplicate source keys from separate contributions", () =>
+  it.effect("rejects duplicate source keys from separate entries", () =>
     Effect.gen(function* () {
       const registry = yield* SystemContextRegistry.Service
-      yield* registry.contribute(contribution("test/first", "first", "test/duplicate"))
-      yield* registry.contribute(contribution("test/second", "second", "test/duplicate"))
+      yield* registry.register(entry("test/first", "first", "test/duplicate"))
+      yield* registry.register(entry("test/second", "second", "test/duplicate"))
 
       const exit = yield* registry.load().pipe(Effect.exit)
 
@@ -86,23 +86,23 @@ describe("SystemContextRegistry", () => {
     }),
   )
 
-  it.effect("rejects duplicate contribution keys", () =>
+  it.effect("rejects duplicate entry keys", () =>
     Effect.gen(function* () {
       const registry = yield* SystemContextRegistry.Service
-      yield* registry.contribute(contribution("test/duplicate", "first"))
+      yield* registry.register(entry("test/duplicate", "first"))
 
-      const exit = yield* registry.contribute(contribution("test/duplicate", "second", "test/other")).pipe(Effect.exit)
+      const exit = yield* registry.register(entry("test/duplicate", "second", "test/other")).pipe(Effect.exit)
 
       expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("Duplicate system context contribution key")
+      if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("Duplicate system context entry key")
     }),
   )
 
-  it.effect("removes a contribution when its owning scope closes", () =>
+  it.effect("removes an entry when its owning scope closes", () =>
     Effect.gen(function* () {
       const registry = yield* SystemContextRegistry.Service
       const scope = yield* Scope.make()
-      yield* registry.contribute(contribution("test/scoped", "scoped")).pipe(Scope.provide(scope))
+      yield* registry.register(entry("test/scoped", "scoped")).pipe(Scope.provide(scope))
 
       expect((yield* SystemContext.initialize(yield* registry.load())).baseline).toBe("scoped")
 

@@ -15,6 +15,7 @@ import { EditTool } from "@opencode-ai/core/tool/edit"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_edit_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -82,6 +83,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const edit = EditTool.layer.pipe(
     Layer.provide(registry),
+    Layer.provide(permission),
     Layer.provide(resolution),
     Layer.provide(mutation),
     Layer.provide(filesystem),
@@ -91,8 +93,9 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   }).pipe(Effect.provide(Layer.mergeAll(registry, resolution, mutation, edit)))
 }
 
-const call = (input: typeof EditTool.Parameters.Type, id = "call-edit") => ({
+const call = (input: typeof EditTool.Input.Type, id = "call-edit") => ({
   sessionID,
+  ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "edit", input },
 })
 
@@ -109,8 +112,12 @@ describe("EditTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["edit"])
-                const settled = yield* registry.settle(
+                expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["edit"])
+                expect(yield* toolDefinitions(registry, [{ action: "edit", resource: "*", effect: "deny" }])).toEqual(
+                  [],
+                )
+                const settled = yield* settleTool(
+                  registry,
                   call({ path: "hello.txt", oldString: "before", newString: "after" }),
                 )
                 expect(settled.result).toEqual({
@@ -125,7 +132,7 @@ describe("EditTool", () => {
                   replacements: 1,
                 })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nrest\n")
-                expect(assertions).toEqual([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
+                expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
                 expect(writes).toEqual([yield* Effect.promise(() => fs.realpath(target))])
               }),
             ),
@@ -145,7 +152,7 @@ describe("EditTool", () => {
         return Effect.promise(() => fs.writeFile(target, "before")).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>
-              registry.execute(call({ path: target, oldString: "before", newString: "after" })),
+              executeTool(registry, call({ path: target, oldString: "before", newString: "after" })),
             ),
           ),
           Effect.andThen((result) =>
@@ -170,7 +177,7 @@ describe("EditTool", () => {
         return Effect.promise(() => fs.writeFile(target, "before")).pipe(
           Effect.andThen(
             withTool(active.path, (registry) =>
-              registry.execute(call({ path: target, oldString: "before", newString: "after" })),
+              executeTool(registry, call({ path: target, oldString: "before", newString: "after" })),
             ),
           ),
           Effect.andThen((result) =>
@@ -201,7 +208,7 @@ describe("EditTool", () => {
           denyAction = "external_directory"
           expect(
             yield* withTool(active.path, (registry) =>
-              registry.execute(call({ path: external, oldString: "before", newString: "after" })),
+              executeTool(registry, call({ path: external, oldString: "before", newString: "after" })),
             ),
           ).toEqual({
             type: "error",
@@ -215,7 +222,7 @@ describe("EditTool", () => {
           denyAction = "edit"
           expect(
             yield* withTool(active.path, (registry) =>
-              registry.execute(call({ path: external, oldString: "before", newString: "after" })),
+              executeTool(registry, call({ path: external, oldString: "before", newString: "after" })),
             ),
           ).toEqual({
             type: "error",
@@ -244,10 +251,12 @@ describe("EditTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                const matching = yield* registry.execute(
+                const matching = yield* executeTool(
+                  registry,
                   call({ path: "secret.txt", oldString: "secret content", newString: "replacement" }),
                 )
-                const missing = yield* registry.execute(
+                const missing = yield* executeTool(
+                  registry,
                   call({ path: "secret.txt", oldString: "not present", newString: "replacement" }),
                 )
 
@@ -276,26 +285,26 @@ describe("EditTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(call({ path: "matches.txt", oldString: "same", newString: "same" })),
+                  yield* executeTool(registry, call({ path: "matches.txt", oldString: "same", newString: "same" })),
                 ).toEqual({
                   type: "error",
                   value: "No changes to apply: oldString and newString are identical.",
                 })
                 expect(
-                  yield* registry.execute(call({ path: "matches.txt", oldString: "", newString: "after" })),
+                  yield* executeTool(registry, call({ path: "matches.txt", oldString: "", newString: "after" })),
                 ).toEqual({
                   type: "error",
                   value: "oldString must not be empty. Use write to create or overwrite a file.",
                 })
                 expect(
-                  yield* registry.execute(call({ path: "matches.txt", oldString: "missing", newString: "after" })),
+                  yield* executeTool(registry, call({ path: "matches.txt", oldString: "missing", newString: "after" })),
                 ).toEqual({
                   type: "error",
                   value:
                     "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
                 })
                 expect(
-                  yield* registry.execute(call({ path: "matches.txt", oldString: "same", newString: "after" })),
+                  yield* executeTool(registry, call({ path: "matches.txt", oldString: "same", newString: "after" })),
                 ).toEqual({
                   type: "error",
                   value:
@@ -320,7 +329,7 @@ describe("EditTool", () => {
         return Effect.promise(() => fs.writeFile(target, "same same same")).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>
-              registry.settle(call({ path: "all.txt", oldString: "same", newString: "after", replaceAll: true })),
+              settleTool(registry, call({ path: "all.txt", oldString: "same", newString: "after", replaceAll: true })),
             ),
           ),
           Effect.andThen((settled) =>
@@ -345,7 +354,7 @@ describe("EditTool", () => {
         return Effect.promise(() => fs.writeFile(target, "\uFEFFbefore\r\nrest\r\n")).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>
-              registry.execute(call({ path: "windows.txt", oldString: "before\nrest", newString: "after\nrest" })),
+              executeTool(registry, call({ path: "windows.txt", oldString: "before\nrest", newString: "after\nrest" })),
             ),
           ),
           Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
@@ -366,7 +375,7 @@ describe("EditTool", () => {
         return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>
-              registry.execute(call({ path: "concurrent.txt", oldString: "before", newString: "after" })),
+              executeTool(registry, call({ path: "concurrent.txt", oldString: "before", newString: "after" })),
             ),
           ),
           Effect.andThen((result) =>
@@ -389,7 +398,7 @@ describe("EditTool", () => {
 test("keeps the locked edit schema, semantics docstring, and deferred TODOs visible", async () => {
   const source = (await fs.readFile(new URL("../src/tool/edit.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
   const definition = await Effect.runPromise(
-    withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => registry.definitions()),
+    withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => toolDefinitions(registry)),
   )
   const schema = definition[0]?.inputSchema as { readonly properties?: Record<string, unknown> }
 
