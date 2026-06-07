@@ -1,4 +1,3 @@
-import { Redactor } from "@opencode-ai/http-recorder"
 import * as Anthropic from "../../src/providers/anthropic"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
 import * as Google from "../../src/providers/google"
@@ -64,7 +63,7 @@ const redactCloudflareURL = (url: string) =>
     .replace(/\/v1\/[^/]+\/[^/]+\/compat\//, "/v1/{account}/{gateway}/compat/")
 
 const cloudflareOptions = {
-  redactor: Redactor.defaults({ url: { transform: redactCloudflareURL } }),
+  redact: { url: redactCloudflareURL },
 }
 
 describeRecordedGoldenScenarios([
@@ -103,7 +102,7 @@ describeRecordedGoldenScenarios([
     prefix: "anthropic-messages",
     model: anthropicHaiku,
     requires: ["ANTHROPIC_API_KEY"],
-    options: { redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }) },
+    options: { redact: { allowRequestHeaders: ["anthropic-version"] } },
     scenarios: ["text", "tool-call"],
   },
   {
@@ -112,7 +111,7 @@ describeRecordedGoldenScenarios([
     model: anthropicOpus,
     requires: ["ANTHROPIC_API_KEY"],
     tags: ["flagship"],
-    options: { redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }) },
+    options: { redact: { allowRequestHeaders: ["anthropic-version"] } },
     scenarios: [
       { id: "tool-loop", temperature: false },
       { id: "image-tool-result", temperature: false, maxTokens: 40 },

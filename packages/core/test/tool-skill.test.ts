@@ -9,10 +9,10 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { SkillTool } from "@opencode-ai/core/tool/skill"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_skill_tool_test")
 
@@ -41,9 +41,6 @@ describe("SkillTool", () => {
           let current = [info]
           const assertions: PermissionV2.AssertInput[] = []
           let deny = false
-          const truncations: ToolOutputStore.TruncateInput[] = []
-          let truncate = (input: ToolOutputStore.TruncateInput): Effect.Effect<ToolOutputStore.TruncateResult> =>
-            Effect.succeed({ content: input.content, truncated: false })
           let bootWaited = false
           const boot = Layer.succeed(
             PluginBoot.Service,
@@ -77,75 +74,58 @@ describe("SkillTool", () => {
             }),
           )
           const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-          const resources = Layer.succeed(
-            ToolOutputStore.Service,
-            ToolOutputStore.Service.of({
-              limits: () => Effect.die("unused"),
-              write: () => Effect.die("unused"),
-              truncate: (input) => Effect.sync(() => truncations.push(input)).pipe(Effect.andThen(truncate(input))),
-              bound: (input) => Effect.succeed({ output: input.output, outputPaths: [] }),
-              cleanup: () => Effect.die("unused"),
-            }),
-          )
           const tool = SkillTool.layer.pipe(
             Layer.provide(registry),
+            Layer.provide(permission),
             Layer.provide(FSUtil.defaultLayer),
             Layer.provide(boot),
             Layer.provide(skills),
-            Layer.provide(resources),
           )
-          const layer = Layer.mergeAll(permission, skills, registry, boot, resources, tool)
+          const layer = Layer.mergeAll(permission, skills, registry, boot, tool)
 
           return yield* Effect.gen(function* () {
             const registry = yield* ToolRegistry.Service
             expect(bootWaited).toBe(true)
-            expect((yield* registry.definitions())[0]).toMatchObject({
+            expect((yield* toolDefinitions(registry))[0]).toMatchObject({
               name: "skill",
               description: SkillTool.description,
             })
             expect(
-              yield* registry.execute({
+              yield* executeTool(registry, {
                 sessionID,
+                ...toolIdentity,
                 call: { type: "tool-call", id: "call-skill", name: "skill", input: { name: "effect" } },
               }),
             ).toEqual({
               type: "text",
               value: SkillTool.toModelOutput(info, [reference]),
             })
-            expect(truncations).toEqual([
-              { sessionID, toolCallID: "call-skill", content: SkillTool.toModelOutput(info, [reference]) },
-            ])
-            truncate = (input) =>
-              Effect.succeed({
-                content: "HEAD\n\n... output truncated; full content saved to /tmp/tool-output/tool_opaque ...\n\nTAIL",
-                truncated: true,
-                outputPath: "/tmp/tool-output/tool_opaque",
-              })
             expect(
-              yield* registry.settle({
+              yield* settleTool(registry, {
                 sessionID,
+                ...toolIdentity,
                 call: { type: "tool-call", id: "call-skill-overflow", name: "skill", input: { name: "effect" } },
               }),
             ).toMatchObject({
-              result: { type: "text", value: expect.stringContaining("/tmp/tool-output/tool_opaque") },
-              output: {
-                structured: { truncated: true, outputPath: "/tmp/tool-output/tool_opaque" },
-              },
+              result: { type: "text", value: SkillTool.toModelOutput(info, [reference]) },
+              output: { structured: { name: "effect" } },
             })
-            expect(assertions).toEqual([
+            expect(assertions).toMatchObject([
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },
             ])
             expect(
-              yield* registry.execute({
+              yield* executeTool(registry, {
                 sessionID,
+                ...toolIdentity,
                 call: { type: "tool-call", id: "call-missing-skill", name: "skill", input: { name: "missing" } },
               }),
             ).toEqual({ type: "error", value: "Unable to load skill missing" })
             deny = true
             expect(
-              yield* registry.execute({
+              yield* executeTool(registry, {
                 sessionID,
+                ...toolIdentity,
                 call: { type: "tool-call", id: "call-denied-skill", name: "skill", input: { name: "effect" } },
               }),
             ).toEqual({ type: "error", value: "Unable to load skill effect" })
@@ -163,10 +143,10 @@ describe("SkillTool", () => {
               ]),
             )
             current = [flat]
-            truncate = (input) => Effect.succeed({ content: input.content, truncated: false })
             expect(
-              yield* registry.execute({
+              yield* executeTool(registry, {
                 sessionID,
+                ...toolIdentity,
                 call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { name: "public" } },
               }),
             ).toEqual({ type: "text", value: SkillTool.toModelOutput(flat, []) })

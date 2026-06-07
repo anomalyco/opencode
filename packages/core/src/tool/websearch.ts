@@ -1,13 +1,14 @@
 export * as WebSearchTool from "./websearch"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
-import { Cause, Context, Duration, Effect, Layer, Schema } from "effect"
+import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { Context, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { truthy } from "../flag/flag"
 import { InstallationVersion } from "../installation/version"
 import { PositiveInt } from "../schema"
-import { ToolOutputStore } from "../tool-output-store"
-import { ToolRegistry } from "./registry"
+import { PermissionV2 } from "../permission"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 import { checksum } from "../util/encode"
 
 export const name = "websearch"
@@ -165,12 +166,12 @@ const callMcp = <F extends Schema.Struct.Fields>(
       const response = yield* HttpClient.filterStatusOk(http).execute(request)
       const body = yield* response.text
       if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES)
-        return yield* Effect.die(new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`))
+        return yield* Effect.fail(new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`))
       return yield* parseResponse(body)
     }).pipe(
       Effect.timeoutOrElse({
         duration: Duration.seconds(25),
-        orElse: () => Effect.die(new Error(`${tool} request timed out`)),
+        orElse: () => Effect.fail(new Error(`${tool} request timed out`)),
       }),
     )
   })
@@ -178,82 +179,68 @@ const callMcp = <F extends Schema.Struct.Fields>(
 const Success = Schema.Struct({
   provider: Provider,
   text: Schema.String,
-  truncated: Schema.Boolean,
-  outputPath: Schema.String.pipe(Schema.optional),
-})
-
-const definition = Tool.make({
-  description,
-  parameters: Parameters,
-  success: Success,
-  toModelOutput: ({ output }) => [toolText({ type: "text", text: output.text })],
 })
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
+    const tools = yield* Tools.Service
     const http = yield* HttpClient.HttpClient
     const config = yield* ConfigService
-    const resources = yield* ToolOutputStore.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        outputPaths: (output) => (output.outputPath ? [output.outputPath] : []),
-        execute: ({ parameters, sessionID, call, assertPermission }) => {
-          const provider = selectProvider(sessionID, config, config.provider)
-          return Effect.gen(function* () {
-            yield* assertPermission({
-              action: name,
-              resources: [parameters.query],
-              save: ["*"],
-              metadata: { ...parameters, provider },
-            })
+    yield* tools
+      .register({
+        [name]: Tool.make({
+          description,
+          input: Parameters,
+          output: Success,
+          toModelOutput: ({ output }) => [toolText({ type: "text", text: output.text })],
+          execute: (input, context) => {
+            const provider = selectProvider(context.sessionID, config, config.provider)
+            return Effect.gen(function* () {
+              yield* permission.assert({
+                action: name,
+                resources: [input.query],
+                save: ["*"],
+                metadata: { ...input, provider },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+              })
 
-            const text =
-              provider === "exa"
-                ? yield* callMcp(http, exaUrl(config.exaApiKey), "web_search_exa", ExaArgs, {
-                    query: parameters.query,
-                    type: parameters.type || "auto",
-                    numResults: parameters.numResults || 8,
-                    livecrawl: parameters.livecrawl || "fallback",
-                    contextMaxCharacters: parameters.contextMaxCharacters,
-                  })
-                : yield* callMcp(
-                    http,
-                    PARALLEL_URL,
-                    "web_search",
-                    ParallelArgs,
-                    {
-                      objective: parameters.query,
-                      search_queries: [parameters.query],
-                      session_id: sessionID,
-                      // V2 invocation context does not safely expose the model yet.
-                    },
-                    {
-                      "User-Agent": `opencode/${InstallationVersion}`,
-                      ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
-                    },
-                  )
-            const truncated = yield* resources.truncate({ sessionID, toolCallID: call.id, content: text ?? NO_RESULTS })
-            return {
-              provider,
-              text: truncated.content,
-              truncated: truncated.truncated,
-              ...(truncated.truncated ? { outputPath: truncated.outputPath } : {}),
-            }
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.fail(
-                new ToolFailure({
-                  message: `Unable to search the web for ${parameters.query}`,
-                  error: Cause.squash(cause),
-                }),
-              ),
-            ),
-          )
-        },
-      }),
-    )
+              const text =
+                provider === "exa"
+                  ? yield* callMcp(http, exaUrl(config.exaApiKey), "web_search_exa", ExaArgs, {
+                      query: input.query,
+                      type: input.type || "auto",
+                      numResults: input.numResults || 8,
+                      livecrawl: input.livecrawl || "fallback",
+                      contextMaxCharacters: input.contextMaxCharacters,
+                    })
+                  : yield* callMcp(
+                      http,
+                      PARALLEL_URL,
+                      "web_search",
+                      ParallelArgs,
+                      {
+                        objective: input.query,
+                        search_queries: [input.query],
+                        session_id: context.sessionID,
+                        // V2 invocation context does not safely expose the model yet.
+                      },
+                      {
+                        "User-Agent": `opencode/${InstallationVersion}`,
+                        ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
+                      },
+                    )
+              return {
+                provider,
+                text: text ?? NO_RESULTS,
+              }
+            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to search the web for ${input.query}` })))
+          },
+        }),
+      })
+      .pipe(Effect.orDie)
   }),
 )
