@@ -50,12 +50,12 @@
 # سریع و ساده
 curl -fsSL https://opencode.ai/install | bash
 
-# پکیج منیجرها
+# پکیج منیجر ها
 npm i -g opencode-ai@latest        # یا bun/pnpm/yarn
-scoop install opencode             # ویندوز
-choco install opencode             # ویندوز
+scoop install opencode             # Windows
+choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS و لینوکس (پیشنهادی، همیشه به‌روز)
-brew install opencode              # macOS و لینوکس (فرمول رسمی brew، به‌روزرسانی کمتر)
+brew install opencode              # macOS and Linux (official brew formula, updated less)
 sudo pacman -S opencode            # Arch Linux (نسخه پایدار)
 paru -S opencode-bin               # Arch Linux (آخرین نسخه از AUR)
 mise use -g opencode               # هر سیستم‌عاملی
