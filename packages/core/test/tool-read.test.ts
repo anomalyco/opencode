@@ -3,6 +3,7 @@ import { Effect, Exit, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Image } from "@opencode-ai/core/image"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
@@ -75,13 +76,29 @@ const permission = Layer.succeed(
 )
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
+const image = Image.layer.pipe(Layer.provide(config))
+const unavailableImage = Layer.succeed(
+  Image.Service,
+  Image.Service.of({ normalize: () => Effect.fail(new Image.ResizerUnavailableError()) }),
+)
 const read = ReadTool.layer.pipe(
   Layer.provide(registry),
   Layer.provide(filesystem),
   Layer.provide(permission),
   Layer.provide(config),
+  Layer.provide(image),
 )
-const it = testEffect(Layer.mergeAll(registry, filesystem, permission, config, read))
+const it = testEffect(Layer.mergeAll(registry, filesystem, permission, config, image, read))
+const unavailableRead = ReadTool.layer.pipe(
+  Layer.provide(registry),
+  Layer.provide(filesystem),
+  Layer.provide(permission),
+  Layer.provide(config),
+  Layer.provide(unavailableImage),
+)
+const itWithoutResizer = testEffect(
+  Layer.mergeAll(registry, filesystem, permission, config, unavailableImage, unavailableRead),
+)
 const sessionID = SessionV2.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
@@ -184,6 +201,30 @@ describe("ReadTool", () => {
           { type: "text", text: "Image read successfully" },
           { type: "media", mediaType: "image/png", data: png, filename: "large.png" },
         ],
+      })
+    }),
+  )
+
+  itWithoutResizer.effect("returns the original image when the resizer is unavailable", () =>
+    Effect.gen(function* () {
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      readResult = new FileSystem.BinaryContent({
+        type: "binary",
+        content: png,
+        encoding: "base64",
+        mime: "image/png",
+      })
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-image-fallback", name: "read", input: { path: "pixel.png" } },
+        }),
+      ).toMatchObject({
+        type: "content",
+        value: [{ type: "text" }, { type: "media", mediaType: "image/png", data: png }],
       })
     }),
   )
