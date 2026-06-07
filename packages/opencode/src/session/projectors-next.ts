@@ -26,7 +26,23 @@ function encodeMessageData(value: unknown): SessionMessageData {
   return encodeDateTimes(value) as SessionMessageData
 }
 
-function sqlite(db: Database.TxOrDb, sessionID: SessionID, seq: number): SessionMessageUpdater.Adapter<void> {
+function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdater.Adapter<void> {
+  let nextSeq: number | undefined
+  const appendSeq = () => {
+    if (nextSeq === undefined) {
+      const row = db
+        .select({ seq: SessionMessageTable.seq })
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .orderBy(desc(SessionMessageTable.seq))
+        .get()
+      nextSeq = (row?.seq ?? -1) + 1
+    }
+    const result = nextSeq
+    nextSeq += 1
+    return result
+  }
+
   return {
     getCurrentAssistant() {
       const row = db
@@ -107,7 +123,7 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID, seq: number): Session
             id,
             session_id: sessionID,
             type,
-            seq,
+            seq: appendSeq(),
             time_created: DateTime.toEpochMillis(message.time.created),
             data: encodeMessageData(data),
           },
@@ -118,8 +134,8 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID, seq: number): Session
   }
 }
 
-function update(db: Database.TxOrDb, event: SessionEvent.Event, seq: number) {
-  SessionMessageUpdater.update(sqlite(db, event.data.sessionID, seq), event)
+function update(db: Database.TxOrDb, event: SessionEvent.Event) {
+  SessionMessageUpdater.update(sqlite(db, event.data.sessionID), event)
 }
 
 export default [
@@ -131,7 +147,7 @@ export default [
       })
       .where(eq(SessionTable.id, data.sessionID))
       .run()
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.agent.switched", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.agent.switched", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.ModelSwitched), (db, data, event) => {
     db.update(SessionTable)
@@ -141,67 +157,67 @@ export default [
       })
       .where(eq(SessionTable.id, data.sessionID))
       .run()
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.model.switched", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.model.switched", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Prompted), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.prompted", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.prompted", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Synthetic), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.synthetic", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.synthetic", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Shell.Started), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.shell.started", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.shell.started", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Shell.Ended), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.shell.ended", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.shell.ended", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Step.Started), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.started", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.started", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Step.Ended), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.ended", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.ended", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Step.Failed), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.failed", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.failed", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Text.Started), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.text.started", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.text.started", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Text.Delta), () => {}),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Text.Ended), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.text.ended", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.text.ended", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Tool.Input.Started), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.input.started", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.input.started", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Tool.Input.Delta), () => {}),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Tool.Input.Ended), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.input.ended", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.input.ended", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Tool.Called), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.called", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.called", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Tool.Success), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.success", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.success", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Tool.Failed), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.failed", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.failed", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Reasoning.Started), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.reasoning.started", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.reasoning.started", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Reasoning.Delta), () => {}),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Reasoning.Ended), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.reasoning.ended", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.reasoning.ended", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Retried), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.retried", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.retried", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Compaction.Started), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.started", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.started", data })
   }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Compaction.Delta), () => {}),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Compaction.Ended), (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.ended", data }, event.seq)
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.ended", data })
   }),
 ]

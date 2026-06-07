@@ -33,6 +33,7 @@ Write Operation -> Database Write -> Event Emission -> UI Update
 
 - [ ] Modified database write logic
 - [ ] Modified event emission logic
+- [ ] Modified event projector or read-model ordering logic
 - [ ] Changed timestamp handling functions
 - [ ] Introduced new ORM type conversions
 
@@ -206,6 +207,7 @@ When writing code that involves multi-table writes or events:
 - [ ] **Timestamp variable naming** - is format clear? (`timestampMs` vs `timestampISO`)
 - [ ] **ORM behavior** - any known bugs? Need workarounds?
 - [ ] **JSON.stringify** - will it change data types?
+- [ ] **Projection ordering** - if a projection table has a local `seq`, does the projector assign it from the projection table rather than copying event `seq`?
 
 ---
 

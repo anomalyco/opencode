@@ -523,6 +523,43 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+noLLMServer.instance(
+  "prompt assigns unique v2 message seq values when model switch and user prompt are projected together",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "hello with model switch" }],
+      })
+
+      const rows = Database.use((db) =>
+        db
+          .select({
+            type: SessionMessageTable.type,
+            seq: SessionMessageTable.seq,
+          })
+          .from(SessionMessageTable)
+          .where(Database.eq(SessionMessageTable.session_id, chat.id))
+          .orderBy(Database.asc(SessionMessageTable.seq))
+          .all(),
+      )
+
+      expect(rows).toEqual([
+        { type: "agent-switched", seq: 0 },
+        { type: "model-switched", seq: 1 },
+        { type: "user", seq: 2 },
+      ])
+    }),
+  { config: cfg },
+)
+
 it.instance("static loop returns assistant text through local provider", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
