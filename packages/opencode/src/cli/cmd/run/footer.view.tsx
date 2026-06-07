@@ -469,7 +469,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     const limit = responsive().statusline.contextHintLimit
     return limit === undefined ? items : items.slice(0, limit)
   })
-  const hasSingleContextHint = createMemo(() => contextHints().length === 1)
   const hasContextHints = createMemo(() => contextHints().length > 0)
   const commandHint = createMemo(() => {
     if (!prompt() || !responsive().statusline.showCommandHint) {
@@ -922,7 +921,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                         <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
                           {sectionSeparator()}
                         </Show>
-                        <span style={{ fg: theme().highlight }}>{hint.key}</span>{" "}
+                        <span style={{ fg: theme().text }}>{hint.key}</span>{" "}
                         <span style={{ fg: theme().muted }}>{hint.label}</span>
                       </text>
                     </box>
@@ -940,7 +939,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
                         <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>{sectionSeparator()}</Show>
-                        <span style={{ fg: theme().highlight }}>{hint().key}</span>{" "}
+                        <span style={{ fg: theme().text }}>{hint().key}</span>{" "}
                         <span style={{ fg: theme().muted }}>{hint().label}</span>
                       </text>
                     </box>
