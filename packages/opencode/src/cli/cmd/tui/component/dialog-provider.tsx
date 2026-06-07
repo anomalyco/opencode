@@ -16,6 +16,15 @@ import { isConsoleManagedProvider } from "@tui/util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
 
+const PROVIDER_PRIORITY: Record<string, number> = {
+  opencode: 0,
+  "opencode-go": 1,
+  openai: 2,
+  "github-copilot": 3,
+  anthropic: 4,
+  google: 5,
+}
+
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
 const CUSTOM_PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 
@@ -35,40 +44,28 @@ type ProviderOption =
       type: "custom"
     })
 
-const popularProviders = ["opencode", "opencode-go", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
-const popularProviderSet = new Set(popularProviders)
-
 export function providerOptions(list: { id: string; name: string }[]): ProviderOption[] {
-  const popular = list.filter((x) => popularProviderSet.has(x.id))
-  const rest = list.filter((x) => !popularProviderSet.has(x.id))
-
-  const toOption = (provider: { id: string; name: string }, category: string) => ({
-    type: "provider" as const,
-    title: provider.name,
-    value: provider.id,
-    providerID: provider.id,
-    description: {
-      opencode: "(Recommended)",
-      anthropic: "(API key)",
-      openai: "(ChatGPT Plus/Pro or API key)",
-      "opencode-go": "Low cost subscription for everyone",
-    }[provider.id],
-    category,
-  })
-
   return [
     ...pipe(
-      popular,
-      sortBy((x) => popularProviders.indexOf(x.id)),
-      map((provider) => toOption(provider, "Popular")),
-    ),
-    ...pipe(
-      rest,
+      list,
       sortBy(
+        (x) => PROVIDER_PRIORITY[x.id] ?? 99,
         (x) => x.name.toLowerCase(),
         (x) => x.id,
       ),
-      map((provider) => toOption(provider, "Providers")),
+      map((provider) => ({
+        type: "provider" as const,
+        title: provider.name,
+        value: provider.id,
+        providerID: provider.id,
+        description: {
+          opencode: "(Recommended)",
+          anthropic: "(API key)",
+          openai: "(ChatGPT Plus/Pro or API key)",
+          "opencode-go": "Low cost subscription for everyone",
+        }[provider.id],
+        category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
+      })),
     ),
     {
       type: "custom",
