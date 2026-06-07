@@ -191,7 +191,7 @@ export type FooterSubagentTab = {
   callID: string
   label: string
   description: string
-  status: "running" | "completed" | "error"
+  status: "running" | "completed" | "cancelled" | "error"
   background?: boolean
   title?: string
   toolCalls?: number

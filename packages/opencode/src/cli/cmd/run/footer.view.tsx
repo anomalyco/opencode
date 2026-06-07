@@ -919,7 +919,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                       maxWidth={24}
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={hasSingleContextHint() && (hasActivityMeta() || hasModelStatus())}>
+                        <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
                           {sectionSeparator()}
                         </Show>
                         <span style={{ fg: theme().highlight }}>{hint.key}</span>{" "}

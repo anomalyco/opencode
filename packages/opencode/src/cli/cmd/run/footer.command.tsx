@@ -113,6 +113,10 @@ function subagentStatusLabel(status: FooterSubagentTab["status"]) {
     return "done"
   }
 
+  if (status === "cancelled") {
+    return "cancelled"
+  }
+
   if (status === "error") {
     return "error"
   }
