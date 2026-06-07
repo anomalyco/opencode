@@ -264,7 +264,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             historyDbPath: path.join(root, `${id}.history.mdb`),
             // fff 0.9.3 keeps its process-global log file open until exit, so
             // disable it in tests to let Windows remove the isolated XDG tree.
-            logFilePath: process.env.NODE_ENV === "test" ? undefined : path.join(Global.Path.log, "fff.log"),
+            logFilePath: process.env.OPENCODE_TEST_HOME ? undefined : path.join(Global.Path.log, "fff.log"),
             logLevel: Log.getLevel().toLowerCase() as Lowercase<Log.Level>,
             aiMode: true,
             // only the first toolcall picker can accumulate resources to index
