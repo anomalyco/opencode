@@ -35,6 +35,7 @@ export interface BasicToolProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
+  hideArrow?: boolean
   defer?: boolean
   mountDetails?: "open" | "always"
   locked?: boolean
@@ -212,7 +213,7 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={hasDetails() && !props.locked}>
+          <Show when={hasDetails() && !props.locked && !props.hideArrow}>
             <Collapsible.Arrow />
           </Show>
         </div>

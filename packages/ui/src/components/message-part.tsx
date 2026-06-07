@@ -2278,19 +2278,20 @@ ToolRegistry.register({
         if (stats.tools > 0) return "using tools"
         return "running"
       }
-      if (stats.outputs > 0) return "output received"
+      if (stats.outputs > 0) return "complete"
       if (stats.tools > 0) return "tools complete"
       if (stats.messages > 0) return "started"
       return "created"
     })
     const statItems = createMemo(() => {
       const stats = childStats()
-      const items: string[] = [statusLabel()]
-      if (stats.messages > 0) items.push(`${stats.messages} msg`)
-      if (stats.tools > 0) items.push(`${stats.tools} tool`)
-      if (stats.runningTools > 0) items.push(`${stats.runningTools} running`)
-      if (stats.outputs > 0) items.push("output")
-      return items
+      return [
+        statusLabel(),
+        `${stats.errorTools} error`,
+        `${stats.messages} msg`,
+        `${stats.tools} tool`,
+        ...(stats.runningTools > 0 ? [`${stats.runningTools} running`] : []),
+      ]
     })
     const missingSessionDetail = createMemo(() => {
       if (childSessionId()) return undefined
@@ -2346,16 +2347,11 @@ ToolRegistry.register({
             )}
           </For>
         </div>
-        <Show when={!pending() && href()}>
-          <div data-component="tool-action">
-            <Icon name="align-right" size="small" />
-          </div>
-        </Show>
       </div>
     )
 
     return (
-      <BasicTool {...props} hideDetails={!hasOutput()} icon="task" trigger={trigger()}>
+      <BasicTool {...props} hideArrow hideDetails={!hasOutput()} icon="task" trigger={trigger()}>
         <Show when={hasOutput()}>
           <div data-component="tool-output" data-kind="subagent-task" data-scrollable>
             <Show when={missingSessionDetail()}>
