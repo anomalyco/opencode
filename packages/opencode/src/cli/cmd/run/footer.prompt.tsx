@@ -34,13 +34,6 @@ export const TEXTAREA_MIN_ROWS = 1
 export const TEXTAREA_MAX_ROWS = 6
 export const PROMPT_MAX_ROWS = TEXTAREA_MAX_ROWS + AUTOCOMPLETE_ROWS - 1 + AUTOCOMPLETE_BOTTOM_ROWS
 
-export const HINT_BREAKPOINTS = {
-  send: 50,
-  newline: 66,
-  history: 80,
-  command: 95,
-}
-
 type Mention = Extract<RunPromptPart, { type: "file" | "agent" }>
 
 type Auto = RunFooterMenuItem & {
@@ -180,15 +173,6 @@ function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
   }
 
   return { type: "command" as const, command: { name: head.name, arguments: head.arguments } }
-}
-
-export function hintFlags(width: number) {
-  return {
-    send: width >= HINT_BREAKPOINTS.send,
-    newline: width >= HINT_BREAKPOINTS.newline,
-    history: width >= HINT_BREAKPOINTS.history,
-    command: width >= HINT_BREAKPOINTS.command,
-  }
 }
 
 export function RunPromptBody(props: {

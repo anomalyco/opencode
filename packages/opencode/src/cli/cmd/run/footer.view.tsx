@@ -22,9 +22,10 @@ import {
 } from "./footer.command"
 import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody } from "./footer.subagent"
-import { RunPromptBody, createPromptState, hintFlags } from "./footer.prompt"
+import { RunPromptBody, createPromptState } from "./footer.prompt"
 import { RunPermissionBody } from "./footer.permission"
 import { RunQuestionBody } from "./footer.question"
+import { footerWidthPolicy } from "./footer.width"
 import {
   OPENCODE_BASE_MODE,
   formatKeyBindings,
@@ -112,6 +113,8 @@ export { TEXTAREA_MIN_ROWS, TEXTAREA_MAX_ROWS } from "./footer.prompt"
 
 export function RunFooterView(props: RunFooterViewProps) {
   const term = useTerminalDimensions()
+  const width = createMemo(() => term().width)
+  const responsive = createMemo(() => footerWidthPolicy(width()))
   const active = createMemo<FooterView>(() => props.view?.() ?? { type: "prompt" })
   const subagent = createMemo<FooterSubagentState>(() => {
     return (
@@ -219,7 +222,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         props.tuiConfig,
       ) ?? "",
   )
-  const hints = createMemo(() => hintFlags(term().width))
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
@@ -333,7 +335,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     state: props.state,
     view: promptView,
     prompt,
-    width: () => term().width,
+    width,
     theme,
     history: props.history,
     onSubmit: props.onSubmit,
@@ -382,13 +384,11 @@ export function RunFooterView(props: RunFooterViewProps) {
     return shell() ? "Shell mode" : "Ready"
   })
   const activityMeta = createMemo(() => {
-    const items: string[] = []
-
-    if (term().width >= 80 && usage().length > 0) {
-      items.push(usage())
+    if (!responsive().statusline.showActivityMeta || usage().length === 0) {
+      return ""
     }
 
-    return items.join(" · ")
+    return usage()
   })
   const modelStatus = createMemo(() => {
     const current = props.currentModel()
@@ -400,8 +400,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       model: model().model,
       variant: props.currentVariant(),
       provider: undefined,
-      // Prefer without provider, but if we show it, only show on wide terminals
-      // provider: term().width >= 150 ? model().provider : undefined,
+      // Prefer without provider, but keep it on the shared width policy if we add it back.
     }
   })
   const statusColor = createMemo(() => {
@@ -421,7 +420,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const statuslineBackground = createMemo(() => theme().status)
   const contextHints = createMemo(() => {
-    if (!prompt() || shell() || term().width < 80) {
+    if (!prompt() || shell() || !responsive().statusline.showContextHints) {
       return []
     }
 
@@ -436,11 +435,11 @@ export function RunFooterView(props: RunFooterViewProps) {
       items.push({ kind: "subagents", key: subagentShortcut(), label: "subagents" })
     }
 
-    const limit = term().width >= 150 ? items.length : term().width >= 120 ? 2 : 1
-    return items.slice(0, limit)
+    const limit = responsive().statusline.contextHintLimit
+    return limit === undefined ? items : items.slice(0, limit)
   })
   const commandHint = createMemo(() => {
-    if (!prompt() || term().width < 95) {
+    if (!prompt() || !responsive().statusline.showCommandHint) {
       return
     }
 
@@ -812,7 +811,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </text>
                 </box>
 
-                <Show when={hints().history && activityMeta().length > 0}>
+                <Show when={activityMeta().length > 0}>
                   <box
                     id="run-direct-footer-statusline-meta"
                     paddingLeft={1}
@@ -827,7 +826,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </box>
                 </Show>
 
-                <Show when={term().width >= 120 && modelStatus()}>
+                <Show when={responsive().statusline.showModel && modelStatus()}>
                   {(info) => (
                     <box
                       id="run-direct-footer-statusline-model"
@@ -835,7 +834,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                       paddingRight={1}
                       backgroundColor={statuslineBackground()}
                       flexShrink={1}
-                      maxWidth={term().width >= 150 ? 40 : 24}
+                      maxWidth={responsive().statusline.modelMaxWidth}
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
                         {info().model}
@@ -906,17 +905,17 @@ export function RunFooterView(props: RunFooterViewProps) {
             vertical: "┃",
           }}
         >
-          <RunFooterSubagentBody
-            active={inspecting}
-            theme={runTheme}
-            tab={selectedTab}
-            index={selectedIndex}
-            total={() => tabs().length}
-            detail={detail}
-            width={() => term().width}
-            diffStyle={props.diffStyle}
-            onCycle={cycleTab}
-            onClose={closeTab}
+            <RunFooterSubagentBody
+              active={inspecting}
+              theme={runTheme}
+              tab={selectedTab}
+              index={selectedIndex}
+              total={() => tabs().length}
+              detail={detail}
+              width={width}
+              diffStyle={props.diffStyle}
+              onCycle={cycleTab}
+              onClose={closeTab}
           />
         </box>
       </Show>
