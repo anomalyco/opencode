@@ -621,7 +621,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       gap={0}
       padding={0}
     >
-      <Show when={panel()}>
+      <Show when={panel() || inspecting()}>
         <box id="run-direct-footer-panel-spacer" width="100%" height={1} flexShrink={0} backgroundColor="transparent" />
       </Show>
 
