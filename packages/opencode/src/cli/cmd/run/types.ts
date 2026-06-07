@@ -97,6 +97,12 @@ export type FooterPatch = Partial<FooterState>
 
 export type RunDiffStyle = "auto" | "stacked"
 
+export type TurnSummary = {
+  agent: string
+  model: string
+  duration: string
+}
+
 export type ScrollbackOptions = {
   diffStyle?: RunDiffStyle
   suppressBackgrounds?: boolean
@@ -298,6 +304,7 @@ export type StreamCommit = {
   text: string
   phase: StreamPhase
   source: StreamSource
+  summary?: TurnSummary
   messageID?: string
   partID?: string
   tool?: string

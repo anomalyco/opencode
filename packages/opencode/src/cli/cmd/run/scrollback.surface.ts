@@ -16,6 +16,7 @@ import {
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
 import { withRunSpan } from "./otel"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
+import { turnSummaryCommit } from "./turn-summary"
 import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
 import type { RunDiffStyle, RunEntryBody, StreamCommit } from "./types"
@@ -357,6 +358,14 @@ export class RunScrollbackStream {
       this.markRendered(await this.finishActive(false))
     }
 
+    if (commit.summary) {
+      this.writeSpacer(1)
+      this.renderer.writeToScrollback(turnSummaryWriter({ ...commit.summary, theme: this.theme }))
+      this.markRendered(commit)
+      this.tail = commit
+      return
+    }
+
     const body = entryBody(commit)
     if (body.type === "none") {
       if (entryDone(commit)) {
@@ -429,9 +438,7 @@ export class RunScrollbackStream {
   }
 
   public async writeTurnSummary(input: { agent: string; model: string; duration: string }): Promise<void> {
-    await this.complete(false)
-    this.writeSpacer(1)
-    this.renderer.writeToScrollback(turnSummaryWriter({ ...input, theme: this.theme }))
+    await this.append(turnSummaryCommit(input))
   }
 
   public destroy(): void {

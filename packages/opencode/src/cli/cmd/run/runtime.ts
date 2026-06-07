@@ -506,6 +506,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
             replay: input.replay,
             replayLimit: input.replayLimit,
             limits: () => state.limits,
+            providers: () => state.providers,
             footer,
             trace: log,
           })
@@ -746,6 +747,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
       try {
         const eager = eagerStream(input, ctx)
         if (eager) {
+          if (input.replay && state.shown) {
+            // Replay commits immutable scrollback rows, so wait for provider names
+            // before bootstrapping existing session history.
+            await modelTask
+          }
+
           await ensureStream()
         }
 

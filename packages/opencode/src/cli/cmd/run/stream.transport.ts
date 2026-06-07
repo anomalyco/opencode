@@ -57,6 +57,7 @@ import type {
   RunInput,
   RunPrompt,
   RunPromptPart,
+  RunProvider,
   StreamCommit,
 } from "./types"
 
@@ -74,6 +75,7 @@ type StreamInput = {
   replay?: boolean
   replayLimit?: number
   limits: () => Record<string, number>
+  providers?: () => RunProvider[]
   footer: FooterApi
   trace?: Trace
   signal?: AbortSignal
@@ -712,9 +714,10 @@ function createLayer(input: StreamInput) {
                 messages: messagesList,
                 permissions: sessionPermissions,
                 questions: sessionQuestions,
-                thinking: input.thinking,
-                limits: input.limits(),
-              })
+              thinking: input.thinking,
+              limits: input.limits(),
+              providers: input.providers?.(),
+            })
             : undefined
           const replay =
             history && input.replayLimit !== undefined && messagesList.length > input.replayLimit
@@ -724,6 +727,7 @@ function createLayer(input: StreamInput) {
                   questions: sessionQuestions,
                   thinking: input.thinking,
                   limits: input.limits(),
+                  providers: input.providers?.(),
                 })
               : history
 
@@ -1026,6 +1030,7 @@ function createLayer(input: StreamInput) {
                 questions: sessionQuestions,
                 thinking: input.thinking,
                 limits: input.limits(),
+                providers: input.providers?.(),
               })
               const activeCommits = replayActiveText(history.data, state.data)
               return {
@@ -1043,6 +1048,7 @@ function createLayer(input: StreamInput) {
                         questions: sessionQuestions,
                         thinking: input.thinking,
                         limits: input.limits(),
+                        providers: input.providers?.(),
                       })
                     : history,
               }

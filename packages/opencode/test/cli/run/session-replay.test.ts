@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { replayLocalRows, replaySession } from "@/cli/cmd/run/session-replay"
 import type { SessionMessages } from "@/cli/cmd/run/session.shared"
+import type { RunProvider } from "@/cli/cmd/run/types"
 
 function userMessage(id: string, text: string): SessionMessages[number] {
   return {
@@ -29,17 +30,23 @@ function userMessage(id: string, text: string): SessionMessages[number] {
   }
 }
 
-function assistantInfo(id: string) {
+function assistantInfo(
+  id: string,
+  input: {
+    parentID?: string
+    modelID?: string
+    providerID?: string
+    time?: { created: number; completed?: number }
+  } = {},
+) {
   return {
     id,
     sessionID: "session-1",
     role: "assistant" as const,
-    time: {
-      created: 2,
-    },
-    parentID: "msg-user-1",
-    modelID: "gpt-5",
-    providerID: "openai",
+    time: input.time ?? { created: 2 },
+    parentID: input.parentID ?? "msg-user-1",
+    modelID: input.modelID ?? "gpt-5",
+    providerID: input.providerID ?? "openai",
     mode: "chat",
     agent: "build",
     path: {
@@ -59,9 +66,26 @@ function assistantInfo(id: string) {
   }
 }
 
-function assistantMessage(id: string, text: string): SessionMessages[number] {
+function assistantMessage(
+  id: string,
+  text: string,
+  input: {
+    parentID?: string
+    modelID?: string
+    providerID?: string
+    time?: { created: number; completed?: number }
+  } = {},
+): SessionMessages[number] {
+  const time = input.time ?? {
+    created: 200,
+    completed: 3000,
+  }
+
   return {
-    info: assistantInfo(id),
+    info: assistantInfo(id, {
+      ...input,
+      time,
+    }),
     parts: [
       {
         id: `${id}-text`,
@@ -70,13 +94,71 @@ function assistantMessage(id: string, text: string): SessionMessages[number] {
         type: "text",
         text,
         time: {
-          start: 2,
-          end: 3,
+          start: time.created,
+          end: time.completed,
         },
       },
     ],
   }
 }
+
+const provider = (name: string): RunProvider =>
+  ({
+    id: "openai",
+    name: "OpenAI",
+    source: "api",
+    env: [],
+    options: {},
+    models: {
+      "gpt-5": {
+        id: "gpt-5",
+        providerID: "openai",
+        api: {
+          id: "openai",
+          url: "https://openai.test",
+          npm: "@ai-sdk/openai",
+        },
+        name,
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          output: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          interleaved: false,
+        },
+        cost: {
+          input: 0,
+          output: 0,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+        limit: {
+          context: 128000,
+          output: 8192,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-01-01",
+      },
+    },
+  })
 
 function runningToolMessage(id: string): SessionMessages[number] {
   return {
@@ -104,7 +186,7 @@ function runningToolMessage(id: string): SessionMessages[number] {
 }
 
 describe("run session replay", () => {
-  test("replays persisted user and assistant history into scrollback commits", () => {
+  test("replays persisted user, assistant, and turn summary history into scrollback commits", () => {
     const out = replaySession({
       messages: [
         userMessage("msg-user-1", "Hello, whats the weather today?"),
@@ -131,6 +213,18 @@ describe("run session replay", () => {
         source: "assistant",
         messageID: "msg-1",
       }),
+      expect.objectContaining({
+        kind: "system",
+        text: "▣ Build · gpt-5 · 2.8s",
+        phase: "final",
+        source: "system",
+        messageID: "msg-1",
+        summary: {
+          agent: "Build",
+          model: "gpt-5",
+          duration: "2.8s",
+        },
+      }),
     ])
     expect(out.patch).toEqual(
       expect.objectContaining({
@@ -138,6 +232,60 @@ describe("run session replay", () => {
         status: "",
       }),
     )
+  })
+
+  test("uses provider model names for replayed turn summaries when available", () => {
+    const out = replaySession({
+      messages: [
+        userMessage("msg-user-1", "Hello, whats the weather today?"),
+        assistantMessage("msg-1", "What city or ZIP code should I check?"),
+      ],
+      permissions: [],
+      questions: [],
+      thinking: true,
+      limits: {},
+      providers: [provider("Little Frank")],
+    })
+
+    expect(out.commits.at(-1)).toEqual(
+      expect.objectContaining({
+        kind: "system",
+        text: "▣ Build · Little Frank · 2.8s",
+        summary: {
+          agent: "Build",
+          model: "Little Frank",
+          duration: "2.8s",
+        },
+      }),
+    )
+  })
+
+  test("replays one turn summary for the final assistant in a multi-step turn", () => {
+    const out = replaySession({
+      messages: [
+        userMessage("msg-user-1", "Plan and then answer"),
+        assistantMessage("msg-step-1", "Working", {
+          parentID: "msg-user-1",
+          time: { created: 200, completed: 900 },
+        }),
+        assistantMessage("msg-step-2", "Done", {
+          parentID: "msg-user-1",
+          time: { created: 1000, completed: 3000 },
+        }),
+      ],
+      permissions: [],
+      questions: [],
+      thinking: true,
+      limits: {},
+    })
+
+    expect(out.commits.filter((commit) => commit.summary)).toEqual([
+      expect.objectContaining({
+        kind: "system",
+        text: "▣ Build · gpt-5 · 2.0s",
+        messageID: "msg-step-2",
+      }),
+    ])
   })
 
   test("keeps the footer in a running state for resumed active tools", () => {
