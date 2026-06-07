@@ -1,3 +1,4 @@
+/// <reference path="./audio.d.ts" />
 import type {
   TuiAttention,
   TuiAttentionNotifyInput,
@@ -9,7 +10,7 @@ import type {
   TuiAttentionSoundPack,
   TuiAttentionSoundPackInfo,
 } from "@opencode-ai/plugin/tui"
-import { AttentionSoundName, type TuiConfig } from "@opencode-ai/tui/config"
+import { AttentionSoundName, type TuiConfig } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
 import * as TuiAudio from "./audio"
@@ -19,7 +20,6 @@ import permissionSoundPath from "@opencode-ai/ui/audio/staplebops-06.mp3" with {
 import errorSoundPath from "@opencode-ai/ui/audio/nope-03.mp3" with { type: "file" }
 import doneSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
 import subagentDoneSoundPath from "@opencode-ai/ui/audio/yup-01.mp3" with { type: "file" }
-import * as Log from "@opencode-ai/core/util/log"
 
 type FocusState = "unknown" | "focused" | "blurred"
 
@@ -37,8 +37,6 @@ type RegisteredSoundPack = TuiAttentionSoundPack & {
 type TuiAttentionHost = TuiAttention & {
   dispose(): void
 }
-
-const log = Log.create({ service: "tui.attention" })
 
 const DEFAULT_TITLE = "opencode"
 const DEFAULT_PACK_ID = "opencode.default"
@@ -154,7 +152,7 @@ export function createTuiAttention(input: {
     try {
       for (const file of soundCandidates(name)) {
         const current = await audio.loadSoundFile(file).catch((error) => {
-          log.debug("failed to load attention sound", { file, error })
+          console.debug("failed to load attention sound", { file, error })
           return null
         })
         if (disposed) return false
@@ -163,7 +161,7 @@ export function createTuiAttention(input: {
       }
       return false
     } catch (error) {
-      log.debug("failed to play attention sound", { error })
+      console.debug("failed to play attention sound", { error })
       return false
     }
   }
@@ -189,7 +187,7 @@ export function createTuiAttention(input: {
                   normalizeText(request.title, DEFAULT_TITLE, TITLE_LIMIT),
                 )
               } catch (error) {
-                log.debug("failed to trigger attention notification", { error })
+                console.debug("failed to trigger attention notification", { error })
                 return false
               }
             })()
@@ -198,13 +196,7 @@ export function createTuiAttention(input: {
         const requestedSound = typeof request.sound === "object" ? request.sound : undefined
         const soundSkip = volume === undefined ? undefined : focusSkip(requestedSound?.when ?? "always", focus)
         const soundName =
-<<<<<<< HEAD
           requestedSound?.name && Schema.is(AttentionSoundName)(requestedSound.name) ? requestedSound.name : "default"
-=======
-          requestedSound?.name && Schema.is(AttentionSoundName)(requestedSound.name)
-            ? requestedSound.name
-            : "default"
->>>>>>> e5ff6e467 (refactor(tui): organize config modules)
         const sound = volume === undefined || soundSkip ? false : await playSound(soundName, volume)
 
         if (!notification && !sound) {
@@ -218,7 +210,7 @@ export function createTuiAttention(input: {
           sound,
         }
       } catch (error) {
-        log.debug("failed to handle attention notification", { error })
+        console.debug("failed to handle attention notification", { error })
         return {
           ok: false,
           notification: false,

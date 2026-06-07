@@ -3,7 +3,7 @@ import { useSync } from "../../context/sync"
 import { DialogSelect } from "../../ui/dialog-select"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
-import { useTuiPlatform } from "../../platform"
+import { useClipboard } from "../../context/clipboard"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs as strip } from "../../prompt/part"
 
@@ -16,7 +16,7 @@ export function DialogMessage(props: {
   const sdk = useSDK()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
-  const platform = useTuiPlatform()
+  const clipboard = useClipboard()
 
   return (
     <DialogSelect
@@ -69,7 +69,7 @@ export function DialogMessage(props: {
               return agg
             }, "")
 
-            await platform.clipboard?.write?.(text)
+            await clipboard.write?.(text)
             dialog.clear()
           },
         },

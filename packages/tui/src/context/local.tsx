@@ -4,11 +4,14 @@ import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "./sync"
 import { useEvent } from "./event"
 import path from "path"
-import { useTuiEnvironment } from "../runtime"
+import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
+import { useTheme } from "./theme"
+import { useToast } from "../ui/toast"
+import { useRoute } from "./route"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -18,17 +21,6 @@ export type LocalTheme = {
   primary: RGBA
   error: RGBA
   info: RGBA
-}
-
-export type LocalDependencies = {
-  theme: LocalTheme
-  toast: {
-    show(options: { variant: "info" | "warning" | "error"; message: string; duration?: number }): void
-  }
-  route: {
-    readonly data: { type: string; sessionID?: string }
-    navigate(route: { type: "session"; sessionID: string }): void
-  }
 }
 
 export function parseModel(model: string) {
@@ -57,11 +49,13 @@ export function recentModels(
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
-  init: (props: LocalDependencies) => {
+  init: () => {
     const sync = useSync()
     const sdk = useSDK()
-    const toast = props.toast
-    const environment = useTuiEnvironment()
+    const toast = useToast()
+    const theme = useTheme().theme
+    const route = useRoute()
+    const paths = useTuiPaths()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
@@ -82,7 +76,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
       })
-      const theme = props.theme
       const colors = createMemo(() => [
         theme.secondary,
         theme.accent,
@@ -164,7 +157,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {},
       })
 
-      const filePath = path.join(environment.paths.state, "model.json")
+      const filePath = path.join(paths.state, "model.json")
       const state = {
         pending: false,
       }
@@ -421,7 +414,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         pinned: [],
       })
 
-      const filePath = path.join(environment.paths.state, "session.json")
+      const filePath = path.join(paths.state, "session.json")
       const state = {
         pending: false,
       }
@@ -453,7 +446,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (state.pending) save()
         })
 
-      const route = props.route
       const event = useEvent()
 
       const slots = createMemo(() => {

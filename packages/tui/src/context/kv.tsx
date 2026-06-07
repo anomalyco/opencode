@@ -1,18 +1,25 @@
 import { createSignal, type Setter } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { useOptionalTuiPlatform } from "../platform"
+import { Flock } from "@opencode-ai/core/util/flock"
+import { Global } from "@opencode-ai/core/global"
+import { readJson, writeJsonAtomic } from "../util/persistence"
+import { useTuiPaths } from "./runtime"
+import path from "path"
 
 export const { use: useKV, provider: KVProvider } = createSimpleContext({
   name: "KV",
   init: () => {
-    const platform = useOptionalTuiPlatform()
+    const paths = useTuiPaths()
+    void Global.Path.state
+    const file = path.join(paths.state, "kv.json")
+    const lock = `tui-kv:${file}`
     const [ready, setReady] = createSignal(false)
     const [store, setStore] = createStore<Record<string, any>>()
     // Queue same-process writes so rapid updates persist in order.
     let write = Promise.resolve()
 
-    ;(platform?.state?.read() ?? Promise.resolve({}))
+    ;Flock.withLock(lock, () => readJson<Record<string, unknown>>(file))
       .then((x) => {
         setStore(x)
       })
@@ -48,7 +55,9 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
         setStore(key, value)
         const snapshot = structuredClone(unwrap(store))
         write = write
-          .then(() => platform?.state?.write(snapshot))
+          .then(() =>
+            Flock.withLock(lock, () => writeJsonAtomic(file, snapshot)),
+          )
           .catch((error) => {
             console.error("Failed to write KV state", { error })
           })

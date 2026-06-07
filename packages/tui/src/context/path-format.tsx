@@ -1,6 +1,7 @@
 import path from "path"
 import { createContext, useContext, type ParentProps } from "solid-js"
-import { abbreviateHome, useTuiEnvironment } from "../runtime"
+import { abbreviateHome } from "../runtime"
+import { useTuiPaths } from "./runtime"
 
 const context = createContext<{
   path: () => string
@@ -8,12 +9,12 @@ const context = createContext<{
 }>()
 
 export function PathFormatterProvider(props: ParentProps<{ path: string | undefined }>) {
-  const environment = useTuiEnvironment()
+  const paths = useTuiPaths()
   return (
     <context.Provider
       value={{
-        path: () => props.path || environment.cwd,
-        format: (input) => formatPath(input, props.path || environment.cwd, environment.paths.home),
+        path: () => props.path || paths.cwd,
+        format: (input) => formatPath(input, props.path || paths.cwd, paths.home),
       }}
     >
       {props.children}

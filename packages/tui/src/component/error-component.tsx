@@ -1,22 +1,23 @@
 import { TextAttributes } from "@opentui/core"
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { getScrollAcceleration } from "../util/scroll"
-import { useTuiPlatform } from "../platform"
+import { useClipboard } from "../context/clipboard"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { destroyRenderer } from "../util/renderer"
 
 export function ErrorComponent(props: {
   error: Error
   reset: () => void
-  exit: () => Promise<void>
-  version: string
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
-  const platform = useTuiPlatform()
+  const renderer = useRenderer()
+  const clipboard = useClipboard()
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      void props.exit()
+      destroyRenderer(renderer)
     }
   })
   const [copied, setCopied] = createSignal(false)
@@ -43,10 +44,10 @@ export function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("opencode-version", props.version)
+  issueURL.searchParams.set("opencode-version", InstallationVersion)
 
   const copyIssueURL = () => {
-    void platform.clipboard?.write?.(issueURL.toString()).then(() => {
+    void clipboard.write?.(issueURL.toString()).then(() => {
       setCopied(true)
     })
   }
@@ -69,7 +70,7 @@ export function ErrorComponent(props: {
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={() => void props.exit()} backgroundColor={colors.primary} padding={1}>
+        <box onMouseUp={() => destroyRenderer(renderer)} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>

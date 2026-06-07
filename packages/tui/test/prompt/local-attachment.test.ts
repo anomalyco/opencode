@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { readLocalAttachment } from "../../src/component/prompt/local-attachment"
-import type { PlatformFiles } from "../../src/platform"
+import { readLocalAttachmentWith } from "../../src/component/prompt/local-attachment"
+import type { LocalFiles } from "../../src/component/prompt/local-attachment"
 
-function files(input: { mime: string; text?: string; bytes?: Uint8Array }): PlatformFiles {
+function files(input: { mime: string; text?: string; bytes?: Uint8Array }): LocalFiles {
   return {
     mime: async () => input.mime,
     readText: async () => input.text ?? "",
@@ -12,7 +12,7 @@ function files(input: { mime: string; text?: string; bytes?: Uint8Array }): Plat
 
 describe("prompt local attachments", () => {
   test("reads SVG attachments as text", async () => {
-    expect(await readLocalAttachment(files({ mime: "image/svg+xml", text: "<svg />" }), "/tmp/image.svg")).toEqual({
+    expect(await readLocalAttachmentWith(files({ mime: "image/svg+xml", text: "<svg />" }), "/tmp/image.svg")).toEqual({
       type: "text",
       mime: "image/svg+xml",
       content: "<svg />",
@@ -21,7 +21,7 @@ describe("prompt local attachments", () => {
 
   test("reads image and PDF attachments as bytes", async () => {
     const content = new Uint8Array([1, 2, 3])
-    expect(await readLocalAttachment(files({ mime: "application/pdf", bytes: content }), "/tmp/file.pdf")).toEqual({
+    expect(await readLocalAttachmentWith(files({ mime: "application/pdf", bytes: content }), "/tmp/file.pdf")).toEqual({
       type: "binary",
       mime: "application/pdf",
       content,
@@ -29,9 +29,9 @@ describe("prompt local attachments", () => {
   })
 
   test("ignores unsupported and unreadable local files", async () => {
-    expect(await readLocalAttachment(files({ mime: "text/plain" }), "/tmp/file.txt")).toBeUndefined()
+    expect(await readLocalAttachmentWith(files({ mime: "text/plain" }), "/tmp/file.txt")).toBeUndefined()
     expect(
-      await readLocalAttachment(
+      await readLocalAttachmentWith(
         {
           ...files({ mime: "image/png" }),
           readBytes: async () => Promise.reject(new Error("missing")),

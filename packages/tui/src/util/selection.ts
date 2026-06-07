@@ -1,4 +1,4 @@
-import type { TuiPlatform } from "../platform"
+import type { ClipboardService } from "../context/clipboard"
 
 type Toast = {
   show: (input: { message: string; variant: "info" | "success" | "warning" | "error" }) => void
@@ -23,7 +23,7 @@ type SelectionKeyEvent = {
   stopPropagation: () => void
 }
 
-export function copy(renderer: Renderer, toast: Toast, clipboard: TuiPlatform["clipboard"]): boolean {
+export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
 
@@ -47,7 +47,7 @@ export function handleSelectionKey(
   renderer: Renderer,
   toast: Toast,
   event: SelectionKeyEvent,
-  clipboard: TuiPlatform["clipboard"],
+  clipboard: ClipboardService,
 ) {
   const selection = renderer.getSelection()
   if (!selection) return

@@ -1,42 +1,32 @@
 /** @jsxImportSource @opentui/solid */
-import { createTuiEnvironment, TuiEnvironmentProvider, type TuiEnvironment } from "@opencode-ai/tui/runtime"
+import {
+  TuiPathsProvider,
+  TuiStartupProvider,
+  TuiTerminalEnvironmentProvider,
+  type TuiPaths,
+} from "@opencode-ai/tui/context/runtime"
 import type { ParentProps } from "solid-js"
 
-export function TestTuiEnvironmentProvider(
+export function TestTuiContexts(
   props: ParentProps<{
     cwd?: string
     directory?: string
-    paths?: Partial<TuiEnvironment["paths"]>
-    capabilities?: Partial<TuiEnvironment["capabilities"]>
-    editor?: Partial<TuiEnvironment["editor"]>
+    paths?: Partial<TuiPaths>
   }>,
 ) {
   return (
-    <TuiEnvironmentProvider
-      value={createTuiEnvironment({
+    <TuiPathsProvider
+      value={{
         cwd: props.cwd ?? props.directory ?? "/tmp/opencode/packages/opencode",
-        platform: "linux",
-        paths: {
-          home: "/tmp/opencode/home",
-          state: "/tmp/opencode/state",
-          worktree: "/tmp/opencode",
-          ...props.paths,
-        },
-        capabilities: {
-          mouse: true,
-          copyOnSelect: true,
-          terminalTitle: false,
-          terminalSuspend: false,
-          workspaces: false,
-          showTimeToFirstDraw: false,
-          ...props.capabilities,
-        },
-        terminal: {},
-        editor: { zedTerminal: false, ...props.editor },
-        skipInitialLoading: false,
-      })}
+        home: "/tmp/opencode/home",
+        state: "/tmp/opencode/state",
+        worktree: "/tmp/opencode",
+        ...props.paths,
+      }}
     >
-      {props.children}
-    </TuiEnvironmentProvider>
+      <TuiTerminalEnvironmentProvider value={{ platform: "linux" }}>
+        <TuiStartupProvider value={{ skipInitialLoading: false }}>{props.children}</TuiStartupProvider>
+      </TuiTerminalEnvironmentProvider>
+    </TuiPathsProvider>
   )
 }

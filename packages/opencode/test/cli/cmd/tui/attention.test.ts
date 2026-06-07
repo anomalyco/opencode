@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AudioPlayOptions, AudioSound } from "@opentui/core"
-import { createTuiAttention } from "@/cli/tui/attention"
+import { createTuiAttention } from "@opencode-ai/tui/attention"
 import type { TuiConfig } from "@opencode-ai/tui/config"
 
 type FocusEvent = "focus" | "blur"

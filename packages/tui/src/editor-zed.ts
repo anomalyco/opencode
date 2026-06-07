@@ -1,9 +1,10 @@
 import { Database } from "bun:sqlite"
 import { statSync } from "node:fs"
+import { readFile as readFileAsync } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { Option, Schema } from "effect"
-import type { EditorSelection } from "@opencode-ai/tui/context/editor"
+import type { EditorSelection } from "./context/editor"
 
 const ZedEditorRowSchema = Schema.Struct({
   item_kind: Schema.String,
@@ -63,9 +64,7 @@ export async function resolveZedSelection(dbPath: string, cwd = process.cwd()): 
   const text =
     contents.type === "contents" && contents.contents != null
       ? contents.contents
-      : await Bun.file(row.buffer_path)
-          .text()
-          .catch(() => undefined)
+      : await readFileAsync(row.buffer_path, "utf8").catch(() => undefined)
   if (text == null) return { type: "unavailable" }
 
   const ranges = byteRanges.map((range) => {

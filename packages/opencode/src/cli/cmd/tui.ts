@@ -11,7 +11,6 @@ import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network
 import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "@opencode-ai/tui/context/sdk"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "../tui/win32"
 import { writeHeapSnapshot } from "v8"
 import {
   OPENCODE_PROCESS_ROLE,
@@ -20,7 +19,6 @@ import {
   sanitizedProcessEnv,
 } from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "../tui/validate-session"
-import { resolveTuiRuntime } from "../tui/runtime"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -114,137 +112,125 @@ export const TuiThreadCommand = cmd({
       }),
   handler: async (args) => {
     const { TuiConfig } = await import("@/config/tui")
-    // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
-    // (Important when running under `bun run` wrappers on Windows.)
-    const unguard = win32InstallCtrlCGuard()
+    if (args.fork && !args.continue && !args.session) {
+      UI.error("--fork requires --continue or --session")
+      process.exitCode = 1
+      return
+    }
+
+    // Resolve relative --project paths from PWD, then use the real cwd after
+    // chdir so the thread and worker share the same directory key.
+    const next = resolveThreadDirectory(args.project)
+    const file = await target()
     try {
-      // Must be the very first thing — disables CTRL_C_EVENT before any Worker
-      // spawn or async work so the OS cannot kill the process group.
-      win32DisableProcessedInput()
+      process.chdir(next)
+    } catch {
+      UI.error("Failed to change directory to " + next)
+      return
+    }
+    const cwd = Filesystem.resolve(process.cwd())
+    const env = sanitizedProcessEnv({
+      [OPENCODE_PROCESS_ROLE]: "worker",
+      [OPENCODE_RUN_ID]: ensureRunID(),
+    })
 
-      if (args.fork && !args.continue && !args.session) {
-        UI.error("--fork requires --continue or --session")
-        process.exitCode = 1
-        return
-      }
-
-      // Resolve relative --project paths from PWD, then use the real cwd after
-      // chdir so the thread and worker share the same directory key.
-      const next = resolveThreadDirectory(args.project)
-      const file = await target()
-      try {
-        process.chdir(next)
-      } catch {
-        UI.error("Failed to change directory to " + next)
-        return
-      }
-      const cwd = Filesystem.resolve(process.cwd())
-      const env = sanitizedProcessEnv({
-        [OPENCODE_PROCESS_ROLE]: "worker",
-        [OPENCODE_RUN_ID]: ensureRunID(),
+    const worker = new Worker(file, {
+      env,
+    })
+    worker.onerror = (e) => {
+      Log.Default.error("thread error", {
+        message: e.message,
+        filename: e.filename,
+        lineno: e.lineno,
+        colno: e.colno,
+        error: e.error,
       })
+    }
 
-      const worker = new Worker(file, {
-        env,
+    const client = Rpc.client<typeof rpc>(worker)
+    const error = (e: unknown) => {
+      Log.Default.error("process error", { error: errorMessage(e) })
+    }
+    const reload = () => {
+      client.call("reload", undefined).catch((err) => {
+        Log.Default.warn("worker reload failed", {
+          error: errorMessage(err),
+        })
       })
-      worker.onerror = (e) => {
-        Log.Default.error("thread error", {
-          message: e.message,
-          filename: e.filename,
-          lineno: e.lineno,
-          colno: e.colno,
-          error: e.error,
+    }
+    process.on("uncaughtException", error)
+    process.on("unhandledRejection", error)
+    process.on("SIGUSR2", reload)
+
+    let stopped = false
+    const stop = async () => {
+      if (stopped) return
+      stopped = true
+      process.off("uncaughtException", error)
+      process.off("unhandledRejection", error)
+      process.off("SIGUSR2", reload)
+      await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
+        Log.Default.warn("worker shutdown failed", {
+          error: errorMessage(error),
         })
-      }
+      })
+      worker.terminate()
+    }
 
-      const client = Rpc.client<typeof rpc>(worker)
-      const error = (e: unknown) => {
-        Log.Default.error("process error", { error: errorMessage(e) })
-      }
-      const reload = () => {
-        client.call("reload", undefined).catch((err) => {
-          Log.Default.warn("worker reload failed", {
-            error: errorMessage(err),
-          })
-        })
-      }
-      process.on("uncaughtException", error)
-      process.on("unhandledRejection", error)
-      process.on("SIGUSR2", reload)
+    const prompt = await input(args.prompt)
+    const config = await TuiConfig.get()
 
-      let stopped = false
-      const stop = async () => {
-        if (stopped) return
-        stopped = true
-        process.off("uncaughtException", error)
-        process.off("unhandledRejection", error)
-        process.off("SIGUSR2", reload)
-        await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
-          Log.Default.warn("worker shutdown failed", {
-            error: errorMessage(error),
-          })
-        })
-        worker.terminate()
-      }
+    const network = resolveNetworkOptionsNoConfig(args)
+    const external =
+      process.argv.includes("--port") ||
+      process.argv.includes("--hostname") ||
+      process.argv.includes("--mdns") ||
+      network.mdns ||
+      network.port !== 0 ||
+      network.hostname !== "127.0.0.1"
 
-      const prompt = await input(args.prompt)
-      const config = await TuiConfig.get()
-      const runtime = resolveTuiRuntime(config)
+    const transport = external
+      ? {
+          url: (await client.call("server", network)).url,
+          fetch: undefined,
+          events: undefined,
+        }
+      : {
+          url: "http://opencode.internal",
+          fetch: createWorkerFetch(client),
+          events: createEventSource(client),
+        }
 
-      const network = resolveNetworkOptionsNoConfig(args)
-      const external =
-        process.argv.includes("--port") ||
-        process.argv.includes("--hostname") ||
-        process.argv.includes("--mdns") ||
-        network.mdns ||
-        network.port !== 0 ||
-        network.hostname !== "127.0.0.1"
+    try {
+      await validateSession({
+        url: transport.url,
+        sessionID: args.session,
+        directory: cwd,
+        fetch: transport.fetch,
+      })
+    } catch (error) {
+      UI.error(errorMessage(error))
+      process.exitCode = 1
+      return
+    }
 
-      const transport = external
-        ? {
-            url: (await client.call("server", network)).url,
-            fetch: undefined,
-            events: undefined,
-          }
-        : {
-            url: "http://opencode.internal",
-            fetch: createWorkerFetch(client),
-            events: createEventSource(client),
-          }
+    setTimeout(() => {
+      client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+    }, 1000).unref?.()
 
-      try {
-        await validateSession({
+    try {
+      const { Effect } = await import("effect")
+      const { run } = await import("../tui/layer")
+      const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
+      await Effect.runPromise(
+        run({
           url: transport.url,
-          sessionID: args.session,
-          directory: cwd,
-          fetch: transport.fetch,
-        })
-      } catch (error) {
-        UI.error(errorMessage(error))
-        process.exitCode = 1
-        return
-      }
-
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
-
-      try {
-        const { createTuiRenderer, tui } = await import("@opencode-ai/tui")
-        const { createLegacyTuiHost } = await import("../tui/host")
-        const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
-        const renderer = await createTuiRenderer(config, runtime)
-        const handle = tui({
-          ...runtime,
-          url: transport.url,
-          renderer,
           async onSnapshot() {
             const tui = writeHeapSnapshot("tui.heapsnapshot")
             const server = await client.call("snapshot", undefined)
             return [tui, server]
           },
           config,
-          host: createLegacyTuiHost(renderer),
           pluginHost: createLegacyTuiPluginHost(),
           directory: cwd,
           fetch: transport.fetch,
@@ -257,13 +243,10 @@ export const TuiThreadCommand = cmd({
             prompt,
             fork: args.fork,
           },
-        })
-        await handle.done
-      } finally {
-        await stop()
-      }
+        }),
+      )
     } finally {
-      unguard?.()
+      await stop()
     }
     process.exit(0)
   },

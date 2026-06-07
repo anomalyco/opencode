@@ -7,7 +7,7 @@ import { ProjectProvider } from "../../../src/context/project"
 import { SDKProvider } from "../../../src/context/sdk"
 import { SyncProviderV2, useSyncV2 } from "../../../src/context/sync-v2"
 import { createEventSource, createFetch, directory, json } from "../../fixture/tui-sdk"
-import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
+import { TestTuiContexts } from "../../fixture/tui-environment"
 
 async function wait(fn: () => boolean, timeout = 2000) {
   const start = Date.now()
@@ -43,7 +43,7 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
   }
 
   const app = await testRender(() => (
-    <TestTuiEnvironmentProvider>
+    <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
           <SyncProviderV2>
@@ -51,7 +51,7 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
           </SyncProviderV2>
         </ProjectProvider>
       </SDKProvider>
-    </TestTuiEnvironmentProvider>
+    </TestTuiContexts>
   ))
 
   try {
@@ -172,7 +172,7 @@ test("sync v2 renders admitted prompts only after promotion", async () => {
   }
 
   const app = await testRender(() => (
-    <TestTuiEnvironmentProvider>
+    <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
           <SyncProviderV2>
@@ -180,7 +180,7 @@ test("sync v2 renders admitted prompts only after promotion", async () => {
           </SyncProviderV2>
         </ProjectProvider>
       </SDKProvider>
-    </TestTuiEnvironmentProvider>
+    </TestTuiContexts>
   ))
 
   try {
@@ -236,7 +236,7 @@ test("sync v2 renders a promoted prompt when admission was missed", async () => 
   }
 
   const app = await testRender(() => (
-    <TestTuiEnvironmentProvider>
+    <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
           <SyncProviderV2>
@@ -244,7 +244,7 @@ test("sync v2 renders a promoted prompt when admission was missed", async () => 
           </SyncProviderV2>
         </ProjectProvider>
       </SDKProvider>
-    </TestTuiEnvironmentProvider>
+    </TestTuiContexts>
   ))
 
   try {
@@ -284,7 +284,7 @@ test("sync v2 projects live context updates with their message ID", async () => 
   }
 
   const app = await testRender(() => (
-    <TestTuiEnvironmentProvider>
+    <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
           <SyncProviderV2>
@@ -292,7 +292,7 @@ test("sync v2 projects live context updates with their message ID", async () => 
           </SyncProviderV2>
         </ProjectProvider>
       </SDKProvider>
-    </TestTuiEnvironmentProvider>
+    </TestTuiContexts>
   ))
 
   try {
@@ -339,7 +339,7 @@ test("sync v2 preserves live events while snapshot hydration is in flight", asyn
   }
 
   const app = await testRender(() => (
-    <TestTuiEnvironmentProvider>
+    <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
           <SyncProviderV2>
@@ -347,7 +347,7 @@ test("sync v2 preserves live events while snapshot hydration is in flight", asyn
           </SyncProviderV2>
         </ProjectProvider>
       </SDKProvider>
-    </TestTuiEnvironmentProvider>
+    </TestTuiContexts>
   ))
 
   try {
@@ -389,7 +389,7 @@ test("sync v2 replaces stale cached rows while preserving in-flight live rows", 
   }
 
   const app = await testRender(() => (
-    <TestTuiEnvironmentProvider>
+    <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
           <SyncProviderV2>
@@ -397,7 +397,7 @@ test("sync v2 replaces stale cached rows while preserving in-flight live rows", 
           </SyncProviderV2>
         </ProjectProvider>
       </SDKProvider>
-    </TestTuiEnvironmentProvider>
+    </TestTuiContexts>
   ))
 
   try {
@@ -458,7 +458,7 @@ test("sync v2 preserves snapshot order and metadata for in-flight updates", asyn
   }
 
   const app = await testRender(() => (
-    <TestTuiEnvironmentProvider>
+    <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
           <SyncProviderV2>
@@ -466,7 +466,7 @@ test("sync v2 preserves snapshot order and metadata for in-flight updates", asyn
           </SyncProviderV2>
         </ProjectProvider>
       </SDKProvider>
-    </TestTuiEnvironmentProvider>
+    </TestTuiContexts>
   ))
 
   try {

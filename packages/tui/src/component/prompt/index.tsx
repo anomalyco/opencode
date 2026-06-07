@@ -14,10 +14,11 @@ import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { tint, useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
-import { useTuiEnvironment } from "../../runtime"
-import { useTuiPlatform } from "../../platform"
+import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
+import { useClipboard } from "../../context/clipboard"
 import { Spinner } from "../spinner"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
@@ -25,6 +26,8 @@ import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
+import { openEditor } from "../../editor"
+import { destroyRenderer } from "../../util/renderer"
 import { promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
@@ -34,7 +37,6 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { useExit } from "../../context/exit"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
@@ -143,8 +145,9 @@ export function Prompt(props: PromptProps) {
   const leader = useLeaderActive()
   const local = useLocal()
   const args = useArgs()
-  const environment = useTuiEnvironment()
-  const platform = useTuiPlatform()
+  const paths = useTuiPaths()
+  const terminalEnvironment = useTuiTerminalEnvironment()
+  const clipboard = useClipboard()
   const sdk = useSDK()
   const editor = useEditorContext()
   const route = useRoute()
@@ -366,7 +369,7 @@ export function Prompt(props: PromptProps) {
         run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
           ctx.event.preventDefault()
           ctx.event.stopPropagation()
-          const content = await platform.clipboard?.read?.()
+          const content = await clipboard.read?.()
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({
               filename: "clipboard",
@@ -430,12 +433,13 @@ export function Prompt(props: PromptProps) {
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
           const value = text
-          const content = await platform.editor?.open({
+          const content = await openEditor({
+            renderer,
             value,
             cwd:
               (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
               project.instance.directory() ||
-              environment.cwd,
+              paths.cwd,
           })
           if (!content) return
 
@@ -526,7 +530,7 @@ export function Prompt(props: PromptProps) {
         desc: "Change the workspace for the session",
         name: "workspace.set",
         category: "Session",
-        enabled: environment.capabilities.workspaces,
+        enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
         slashName: "warp",
         run: () => {
           workspace.open()
@@ -950,7 +954,7 @@ export function Prompt(props: PromptProps) {
     if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
-      void exit()
+      destroyRenderer(renderer)
       return true
     }
     const selectedModel = local.model.current()
@@ -1124,7 +1128,6 @@ export function Prompt(props: PromptProps) {
     if (finishMoveProgress) move.finishSubmit()
     return true
   }
-  const exit = useExit()
 
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.cursorOffset
@@ -1163,10 +1166,10 @@ export function Prompt(props: PromptProps) {
   async function pasteInputText(text: string) {
     const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     const pastedContent = normalizedText.trim()
-    const filepath = pastedFilepath(pastedContent, environment.platform)
+    const filepath = pastedFilepath(pastedContent, terminalEnvironment.platform)
     const isUrl = /^(https?):\/\//.test(filepath)
     if (!isUrl) {
-      const attachment = await readLocalAttachment(platform.files, filepath)
+      const attachment = await readLocalAttachment(filepath)
       const filename = path.basename(filepath)
       if (attachment?.type === "text") {
         pasteText(attachment.content, `[SVG: ${filename ?? "image"}]`)
