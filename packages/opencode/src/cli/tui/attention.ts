@@ -198,7 +198,13 @@ export function createTuiAttention(input: {
         const requestedSound = typeof request.sound === "object" ? request.sound : undefined
         const soundSkip = volume === undefined ? undefined : focusSkip(requestedSound?.when ?? "always", focus)
         const soundName =
+<<<<<<< HEAD
           requestedSound?.name && Schema.is(AttentionSoundName)(requestedSound.name) ? requestedSound.name : "default"
+=======
+          requestedSound?.name && Schema.is(AttentionSoundName)(requestedSound.name)
+            ? requestedSound.name
+            : "default"
+>>>>>>> e5ff6e467 (refactor(tui): organize config modules)
         const sound = volume === undefined || soundSkip ? false : await playSound(soundName, volume)
 
         if (!notification && !sound) {
