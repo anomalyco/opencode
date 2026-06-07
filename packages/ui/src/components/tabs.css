@@ -144,8 +144,8 @@
       height: var(--tabs-bar-height);
       padding-left: 12px;
       padding-right: 0;
-      --tabs-review-gap: 16px;
-      --tabs-review-fade: 16px;
+      --tabs-review-gap: 0px;
+      --tabs-review-fade: 0px;
       gap: var(--tabs-review-gap);
       background-color: var(--background-stronger);
       border-bottom: 1px solid var(--border-weaker-base);
@@ -211,6 +211,15 @@
       [data-slot="tabs-trigger"] {
         height: 100%;
         padding: 0 !important;
+      }
+
+      &.session-file-tab-trigger {
+        height: 100%;
+        border-radius: 0;
+
+        &::after {
+          bottom: 0;
+        }
       }
 
       &:has([data-slot="tabs-trigger-close-button"]) {

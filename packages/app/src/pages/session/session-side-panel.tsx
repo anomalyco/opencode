@@ -238,16 +238,6 @@ export function SessionSidePanel(props: {
                         onCleanup(stop)
                       }}
                     >
-                      <Show when={reviewTab() && props.canReview()}>
-                        <Tabs.Trigger value="review">
-                          <div class="flex items-center gap-1.5">
-                            <div>{language.t("session.tab.review")}</div>
-                            <Show when={props.hasReview()}>
-                              <div>{props.reviewCount()}</div>
-                            </Show>
-                          </div>
-                        </Tabs.Trigger>
-                      </Show>
                       <Show when={contextOpen()}>
                         <Tabs.Trigger
                           value="context"
@@ -279,7 +269,7 @@ export function SessionSidePanel(props: {
                       <SortableProvider ids={openedTabs()}>
                         <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                       </SortableProvider>
-                      <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
+                      <div class="h-full shrink-0 flex items-center justify-center px-3">
                         <TooltipKeybind
                           title={language.t("command.file.open")}
                           keybind={command.keybind("file.open")}
@@ -296,6 +286,19 @@ export function SessionSidePanel(props: {
                             aria-label={language.t("command.file.open")}
                           />
                         </TooltipKeybind>
+                      </div>
+                      <div class="min-w-0 flex-1" />
+                      <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
+                        <Show when={reviewTab() && props.canReview()}>
+                          <Tabs.Trigger value="review">
+                            <div class="flex items-center gap-1.5">
+                              <div>{language.t("session.tab.review")}</div>
+                              <Show when={props.hasReview()}>
+                                <div>{props.reviewCount()}</div>
+                              </Show>
+                            </div>
+                          </Tabs.Trigger>
+                        </Show>
                       </div>
                     </Tabs.List>
                   </div>

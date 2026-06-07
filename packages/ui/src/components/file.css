@@ -1,4 +1,24 @@
 [data-component="file"] {
+  [data-slot="file-markdown-actions"] {
+    position: sticky;
+    top: 12px;
+    z-index: 20;
+    height: 0;
+    margin-right: 12px;
+    margin-left: auto;
+    pointer-events: none;
+    transform: translateY(12px);
+    width: max-content;
+
+    [data-slot="file-markdown-actions-inner"] {
+      pointer-events: auto;
+      border: 1px solid var(--border-weak-base);
+      border-radius: 8px;
+      background-color: color-mix(in srgb, var(--background-base) 86%, transparent);
+      box-shadow: var(--shadow-xs);
+      backdrop-filter: blur(12px);
+    }
+  }
 }
 
 [data-component="file"][data-mode="text"] {
@@ -24,6 +44,8 @@
 
   [data-slot="file-markdown-preview"] {
     min-height: 0;
+    padding-top: 0;
+    padding-right: 144px;
   }
 }
 

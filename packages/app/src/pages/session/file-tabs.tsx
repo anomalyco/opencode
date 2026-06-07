@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
+import { showToast } from "@opencode-ai/ui/toast"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -13,6 +14,8 @@ import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
+import { usePlatform } from "@/context/platform"
+import { useSDK } from "@/context/sdk"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -55,6 +58,8 @@ export function FileTabContent(props: { tab: string }) {
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
+  const platform = usePlatform()
+  const sdk = useSDK()
   const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
@@ -85,6 +90,39 @@ export function FileTabContent(props: { tab: string }) {
   const md = createMemo(() => /\.(md|markdown|mdx)$/i.test(path() ?? ""))
   const pdf = createMemo(() => /\.pdf$/i.test(path() ?? ""))
   const contents = createMemo(() => state()?.content?.content ?? "")
+  const fullPath = createMemo(() => {
+    const p = path()
+    if (!p) return
+    return `${sdk.directory.replace(/[\\/]+$/, "")}/${p}`
+  })
+  const copyPath = () => {
+    const target = fullPath()
+    if (!target) return
+
+    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+    if (!clipboard?.writeText) {
+      showToast({ variant: "error", title: language.t("common.requestFailed") })
+      return
+    }
+
+    void clipboard.writeText(target).then(
+      () => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("session.share.copy.copied"),
+          description: target,
+        })
+      },
+      (err: unknown) => {
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      },
+    )
+  }
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -423,12 +461,21 @@ export function FileTabContent(props: { tab: string }) {
           current: state()?.content,
           onLoad: queueRestore,
         }}
+        copyPath={copyPath}
+        openFolder={
+          platform.openInFinder
+            ? () => {
+                const target = fullPath()
+                if (target) void platform.openInFinder?.(target)
+              }
+            : undefined
+        }
       />
     </div>
   )
 
   return (
-    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+    <Tabs.Content value={props.tab} class="relative h-full">
       <Show
         when={pdf() && state()?.loaded}
         fallback={

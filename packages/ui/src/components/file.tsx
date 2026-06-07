@@ -56,8 +56,10 @@ import { getWorkerPool } from "../pierre/worker"
 import { Button } from "./button"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
+import { IconButton } from "./icon-button"
 import { Markdown } from "./markdown"
 import { RadioGroup } from "./radio-group"
+import { Tooltip } from "./tooltip"
 
 const VIRTUALIZE_BYTES = 500_000
 const MARKDOWN_VIRTUALIZE_BYTES = 180_000
@@ -83,6 +85,8 @@ type SharedProps<T> = {
   classList?: ComponentProps<"div">["classList"]
   media?: FileMediaOptions
   search?: FileSearchControl
+  openFolder?: () => void
+  copyPath?: () => void
 }
 
 export type FileSearchHandle = {
@@ -121,6 +125,8 @@ const sharedKeys = [
   "selectedLines",
   "commentedLines",
   "search",
+  "openFolder",
+  "copyPath",
   "onLineSelected",
   "onLineSelectionEnd",
   "onLineNumberSelectionEnd",
@@ -720,6 +726,7 @@ function ViewerShell(props: {
   return (
     <FileRoot mode={props.mode} class={props.class} classList={props.classList}>
       <div
+        data-slot="file-viewer-shell"
         class="relative outline-none"
         ref={(el) => (props.viewer.wrapper = el)}
         tabIndex={0}
@@ -979,18 +986,46 @@ function TextViewer<T>(props: TextFileProps<T>) {
   const bar = (
     <div
       data-slot="file-markdown-actions"
-      class="flex items-center justify-end border-b border-border-weak-base bg-background-base px-3 py-2"
+      class="flex items-center justify-end gap-2"
       data-prevent-autofocus=""
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <RadioGroup
-        options={["preview", "source"] as const}
-        current={mode()}
-        size="small"
-        value={(value) => value}
-        label={(value) => i18n.t(value === "preview" ? "ui.file.preview" : "ui.file.source")}
-        onSelect={(value) => value && setMode(value)}
-      />
+      <div data-slot="file-markdown-actions-inner" class="flex items-center gap-2">
+        <Show when={props.copyPath}>
+          {(copyPath) => (
+            <Tooltip value={i18n.t("ui.file.copyPath")} placement="bottom">
+              <IconButton
+                icon="copy"
+                variant="ghost"
+                class="h-8 w-8 rounded-md"
+                onClick={copyPath()}
+                aria-label={i18n.t("ui.file.copyPath")}
+              />
+            </Tooltip>
+          )}
+        </Show>
+        <Show when={props.openFolder}>
+          {(openFolder) => (
+            <Tooltip value={i18n.t("ui.file.openFolder")} placement="bottom">
+              <IconButton
+                icon="folder"
+                variant="ghost"
+                class="h-8 w-8 rounded-md"
+                onClick={openFolder()}
+                aria-label={i18n.t("ui.file.openFolder")}
+              />
+            </Tooltip>
+          )}
+        </Show>
+        <RadioGroup
+          options={["preview", "source"] as const}
+          current={mode()}
+          size="small"
+          value={(value) => value}
+          label={(value) => i18n.t(value === "preview" ? "ui.file.preview" : "ui.file.source")}
+          onSelect={(value) => value && setMode(value)}
+        />
+      </div>
     </div>
   )
 
@@ -1033,7 +1068,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
       when={mode() === "source"}
       fallback={
         <FileRoot mode="markdown" class={props.class} classList={props.classList}>
-          <div class="flex min-h-0 flex-col overflow-hidden">
+          <div class="relative flex min-h-0 flex-col overflow-hidden">
             {bar}
             <div data-slot="file-markdown-preview" class="overflow-auto px-4 py-4">
               <Show
