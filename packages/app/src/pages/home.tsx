@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
@@ -384,7 +385,7 @@ function HomeDesign() {
             onClose={closeSearch}
             onSelect={selectSearchSession}
           />
-          <div class="mt-3 min-h-0 flex-1 overflow-y-auto">
+          <ScrollView class="mt-3 min-h-0 flex-1">
             <div class="pt-3 flex flex-col gap-6">
               <Show
                 when={!sessionLoad.isLoading}
@@ -426,7 +427,7 @@ function HomeDesign() {
                 </Show>
               </Show>
             </div>
-          </div>
+          </ScrollView>
         </section>
       </div>
     </div>
