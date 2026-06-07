@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { describe, expect, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { RGBA, type BoxRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -239,10 +239,6 @@ function expectPaletteList(list: BoxRenderable, selectedIndex: number) {
   )
 }
 
-// OpenTUI currently corrupts renderer state across these tests and segfaults Bun
-// after enough cases run in one process. Individual cases pass in isolation.
-// Re-enable after the upstream renderer teardown fix lands.
-describe.skip("direct footer renderer", () => {
 test("direct footer composer area does not adopt footer surface", async () => {
   const surface = RGBA.fromHex("#123456")
   const [theme, setTheme] = createSignal(RUN_THEME_FALLBACK)
@@ -740,7 +736,9 @@ test("direct footer slash autocomplete keeps a real skills command", async () =>
   }
 })
 
-test("direct footer skill picker inserts an editable bound skill command", async () => {
+// OpenTUI currently segfaults Bun while tearing down this composer-to-skill-panel transition.
+// Re-enable after the upstream renderer teardown fix lands.
+test.skip("direct footer skill picker inserts an editable bound skill command", async () => {
   const submits: RunPrompt[] = []
   const app = await renderFooter({
     commands: [command({ name: "new", description: "Skill named new", source: "skill" })],
@@ -776,7 +774,9 @@ test("direct footer skill picker inserts an editable bound skill command", async
   }
 })
 
-test("direct footer clears the synthetic skills draft when the panel closes", async () => {
+// OpenTUI currently segfaults Bun while tearing down this skill-panel close transition.
+// Re-enable after the upstream renderer teardown fix lands.
+test.skip("direct footer clears the synthetic skills draft when the panel closes", async () => {
   const submits: RunPrompt[] = []
   const app = await renderFooter({
     commands: [command({ name: "formatter", description: "Apply formatter fixes", source: "skill" })],
@@ -1184,5 +1184,4 @@ test("direct variant panel renders current variant selector", async () => {
   } finally {
     app.renderer.destroy()
   }
-})
 })
