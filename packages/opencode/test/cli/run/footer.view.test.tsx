@@ -955,11 +955,12 @@ test("direct footer shows editable prompts and additional queued work while runn
     const statusline = app.renderer.root.findDescendantById("run-direct-footer-statusline") as BoxRenderable
     const mode = app.renderer.root.findDescendantById("run-direct-footer-statusline-mode") as BoxRenderable
     const main = app.renderer.root.findDescendantById("run-direct-footer-statusline-main") as BoxRenderable
+    const spinner = app.renderer.root.findDescendantById("run-direct-footer-status-spinner")
     const model = app.renderer.root.findDescendantById("run-direct-footer-statusline-model") as BoxRenderable
     const queued = app.renderer.root.findDescendantById("run-direct-footer-statusline-queued") as BoxRenderable
     const hint = app.renderer.root.findDescendantById("run-direct-footer-statusline-hint") as BoxRenderable
 
-    expect(frame).toContain("esc interrupt")
+    expect(spinner).toBeDefined()
     expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
     expect(frame).toContain("3 queued")
     expect(frame).toContain("ctrl+b background")
