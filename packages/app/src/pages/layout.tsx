@@ -14,7 +14,6 @@ import {
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { useQuery } from "@tanstack/solid-query"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useServerSync } from "@/context/server-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -90,7 +89,6 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-import { runUpdateAndRestart } from "./layout/update"
 
 export default function Layout(props: ParentProps) {
   const serverSDK = useServerSDK()
@@ -168,28 +166,15 @@ export default function Layout(props: ParentProps) {
     peeked: false,
   })
 
-  const [update, setUpdate] = createStore({
-    installing: false,
-  })
-  const updateQuery = useQuery(() => ({
-    queryKey: ["desktop", "update"] as const,
-    enabled: () =>
-      !!platform.checkUpdate && !!platform.updateAndRestart && settings.ready() && settings.updates.startup(),
-    queryFn: () => platform.checkUpdate?.() ?? Promise.resolve({ updateAvailable: false, version: undefined }),
-    refetchInterval: (query) => (query.state.data?.updateAvailable ? false : 10 * 60 * 1000),
-  }))
   const updateVersion = () => {
-    if (!settings.ready()) return
-    if (!settings.updates.startup()) return
-    if (!updateQuery.data?.updateAvailable) return
-    return updateQuery.data.version ?? ""
+    const state = platform.updater?.state()
+    if (state?.status !== "ready") return
+    return state.version
   }
-  const installUpdate = () => {
-    runUpdateAndRestart(platform.updateAndRestart, (installing) => setUpdate("installing", installing))
-  }
+  const installUpdate = () => void platform.updater?.install()
   const titlebarUpdate: TitlebarUpdate = {
     version: updateVersion,
-    installing: () => update.installing,
+    installing: () => platform.updater?.state().status === "installing",
     install: installUpdate,
   }
 

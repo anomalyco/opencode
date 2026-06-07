@@ -4,12 +4,12 @@ import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
+import type { UpdaterPlatform } from "../updater"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
 type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
-type UpdateInfo = { updateAvailable: boolean; version?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
@@ -61,11 +61,8 @@ export type Platform = {
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
-  /** Check for a downloadable desktop update */
-  checkUpdate?(): Promise<UpdateInfo>
-
-  /** Install the downloaded update using the platform restart flow */
-  updateAndRestart?(): Promise<void>
+  /** Application-global desktop updater */
+  updater?: UpdaterPlatform
 
   /** Fetch override */
   fetch?: typeof fetch

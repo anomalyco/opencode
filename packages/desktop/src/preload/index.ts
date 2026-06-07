@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron"
 import type { ElectronAPI, WslServersEvent } from "./types"
+import type { UpdaterState } from "@opencode-ai/app/updater"
+
+const updaterCallbacks = new Set<(state: UpdaterState) => void>()
+let updaterState: UpdaterState | undefined
+let updaterSubscription: Promise<void> | undefined
+const updaterHandler = (_: unknown, state: UpdaterState) => {
+  updaterState = state
+  updaterCallbacks.forEach((callback) => callback(state))
+}
 
 const api: ElectronAPI = {
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
@@ -28,7 +37,26 @@ const api: ElectronAPI = {
     removeServer: (id) => ipcRenderer.invoke("wsl-servers-remove", id),
     startServer: (id) => ipcRenderer.invoke("wsl-servers-start", id),
   },
-  getWindowConfig: () => ipcRenderer.invoke("get-window-config"),
+  updater: {
+    subscribe: async (cb) => {
+      updaterCallbacks.add(cb)
+      if (updaterState) cb(updaterState)
+      if (!updaterSubscription) {
+        ipcRenderer.on("updater-state", updaterHandler)
+        updaterSubscription = ipcRenderer.invoke("updater-subscribe")
+      }
+      await updaterSubscription
+      return () => {
+        updaterCallbacks.delete(cb)
+        if (updaterCallbacks.size > 0) return
+        ipcRenderer.removeListener("updater-state", updaterHandler)
+        updaterSubscription = undefined
+        void ipcRenderer.invoke("updater-unsubscribe")
+      }
+    },
+    check: () => ipcRenderer.invoke("updater-check"),
+    install: () => ipcRenderer.invoke("updater-install"),
+  },
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),
   setDefaultServerUrl: (url) => ipcRenderer.invoke("set-default-server-url", url),
@@ -83,9 +111,6 @@ const api: ElectronAPI = {
   },
   setTitlebar: (theme) => ipcRenderer.invoke("set-titlebar", theme),
   runDesktopMenuAction: (action) => ipcRenderer.invoke("run-desktop-menu-action", action),
-  runUpdater: (alertOnFail) => ipcRenderer.invoke("run-updater", alertOnFail),
-  checkUpdate: () => ipcRenderer.invoke("check-update"),
-  installUpdate: () => ipcRenderer.invoke("install-update"),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
