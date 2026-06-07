@@ -8,6 +8,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { GlobTool } from "@opencode-ai/core/tool/glob"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_glob_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -90,8 +91,9 @@ const reset = () => {
   result = new LocationSearch.FilesResult({ items: [], truncated: false, partial: false })
 }
 
-const call = (input: typeof GlobTool.Parameters.Type, id = "call-glob") => ({
+const call = (input: typeof GlobTool.Input.Type, id = "call-glob") => ({
   sessionID,
+  ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "glob", input },
 })
 
@@ -99,7 +101,7 @@ describe("GlobTool", () => {
   it.effect("registers the glob definition", () =>
     Effect.gen(function* () {
       reset()
-      expect((yield* (yield* ToolRegistry.Service).definitions()).map((tool) => tool.name)).toEqual(["glob"])
+      expect((yield* toolDefinitions(yield* ToolRegistry.Service)).map((tool) => tool.name)).toEqual(["glob"])
     }),
   )
 
@@ -108,11 +110,13 @@ describe("GlobTool", () => {
       reset()
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.execute(call({ pattern: "**/*.ts", path: RelativePath.make("src"), limit: 12 }))).toEqual({
+      expect(
+        yield* executeTool(registry, call({ pattern: "**/*.ts", path: RelativePath.make("src"), limit: 12 })),
+      ).toEqual({
         type: "text",
         value: "No files found",
       })
-      expect(assertions).toEqual([
+      expect(assertions).toMatchObject([
         {
           sessionID,
           action: "glob",
@@ -131,7 +135,7 @@ describe("GlobTool", () => {
       reset()
       allow = false
 
-      expect(yield* (yield* ToolRegistry.Service).execute(call({ pattern: "*.secret" }))).toEqual({
+      expect(yield* executeTool(yield* ToolRegistry.Service, call({ pattern: "*.secret" }))).toEqual({
         type: "error",
         value: "Unable to find files matching *.secret",
       })
@@ -155,7 +159,7 @@ describe("GlobTool", () => {
         partial: false,
       })
 
-      expect(yield* (yield* ToolRegistry.Service).settle(call({ pattern: "*.ts" }))).toEqual({
+      expect(yield* settleTool(yield* ToolRegistry.Service, call({ pattern: "*.ts" }))).toEqual({
         result: { type: "text", value: "src/index.ts" },
         output: {
           structured: result,
@@ -181,11 +185,11 @@ describe("GlobTool", () => {
         partial: false,
       })
 
-      expect(yield* (yield* ToolRegistry.Service).execute(call({ pattern: "*.md", reference: "docs" }))).toEqual({
+      expect(yield* executeTool(yield* ToolRegistry.Service, call({ pattern: "*.md", reference: "docs" }))).toEqual({
         type: "text",
         value: "docs:guide.md",
       })
-      expect(assertions).toEqual([
+      expect(assertions).toMatchObject([
         {
           sessionID,
           action: "glob",

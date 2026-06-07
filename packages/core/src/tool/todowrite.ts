@@ -1,50 +1,54 @@
 export * as TodoWriteTool from "./todowrite"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
-import { Cause, Effect, Layer, Schema } from "effect"
+import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { Effect, Layer, Schema } from "effect"
+import { PermissionV2 } from "../permission"
 import { SessionTodo } from "../session/todo"
-import { ToolRegistry } from "./registry"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const name = "todowrite"
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   todos: Schema.Array(SessionTodo.Info).annotate({ description: "The updated todo list" }),
 })
 
-export const Success = Schema.Struct({
+export const Output = Schema.Struct({
   todos: Schema.Array(SessionTodo.Info),
 })
-export type Success = typeof Success.Type
+export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Success) => JSON.stringify(output.todos, null, 2)
-
-const definition = Tool.make({
-  description:
-    "Create and maintain a structured task list for the current coding session. Use it to track progress during multi-step work and keep todo statuses current.",
-  parameters: Parameters,
-  success: Success,
-  toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
-})
+export const toModelOutput = (output: Output) => JSON.stringify(output.todos, null, 2)
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
+    const tools = yield* Tools.Service
     const todos = yield* SessionTodo.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        execute: ({ parameters, sessionID, assertPermission }) =>
-          Effect.gen(function* () {
-            yield* assertPermission({ action: name, resources: ["*"], save: ["*"] })
-            yield* todos.update({ sessionID, todos: parameters.todos })
-            return { todos: parameters.todos }
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.fail(new ToolFailure({ message: "Unable to update todos", error: Cause.squash(cause) })),
-            ),
-          ),
-      }),
-    )
+    yield* tools
+      .register({
+        [name]: Tool.make({
+          description:
+            "Create and maintain a structured task list for the current coding session. Use it to track progress during multi-step work and keep todo statuses current.",
+          input: Input,
+          output: Output,
+          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              yield* permission.assert({
+                action: name,
+                resources: ["*"],
+                save: ["*"],
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+              })
+              yield* todos.update({ sessionID: context.sessionID, todos: input.todos })
+              return { todos: input.todos }
+            }).pipe(Effect.mapError(() => new ToolFailure({ message: "Unable to update todos" }))),
+        }),
+      })
+      .pipe(Effect.orDie)
   }),
 )

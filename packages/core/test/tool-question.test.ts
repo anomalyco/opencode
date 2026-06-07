@@ -6,6 +6,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_question_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -40,7 +41,7 @@ const question = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const tool = QuestionTool.layer.pipe(Layer.provide(registry), Layer.provide(question))
+const tool = QuestionTool.layer.pipe(Layer.provide(registry), Layer.provide(permission), Layer.provide(question))
 const it = testEffect(Layer.mergeAll(permission, registry, question, tool))
 
 describe("QuestionTool", () => {
@@ -50,10 +51,11 @@ describe("QuestionTool", () => {
       deny = true
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.definitions([{ action: "question", resource: "*", effect: "deny" }])).toEqual([])
+      expect(yield* toolDefinitions(registry, [{ action: "question", resource: "*", effect: "deny" }])).toEqual([])
       expect(
-        yield* registry.settle({
+        yield* settleTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-question-denied", name: "question", input: { questions: [] } },
         }),
       ).toEqual({ result: { type: "error", value: "Permission denied: question" } })
@@ -82,10 +84,11 @@ describe("QuestionTool", () => {
         },
       ]
 
-      expect((yield* registry.definitions()).map((definition) => definition.name)).toEqual(["question"])
+      expect((yield* toolDefinitions(registry)).map((definition) => definition.name)).toEqual(["question"])
       expect(
-        yield* registry.settle({
+        yield* settleTool(registry, {
           sessionID,
+          ...toolIdentity,
           call: { type: "tool-call", id: "call-question", name: "question", input: { questions } },
         }),
       ).toEqual({
@@ -104,8 +107,12 @@ describe("QuestionTool", () => {
           ],
         },
       })
-      expect(assertions).toEqual([{ sessionID, action: "question", resources: ["*"] }])
-      expect(capturedInput()).toEqual({ sessionID, questions, tool: undefined })
+      expect(assertions).toMatchObject([{ sessionID, action: "question", resources: ["*"] }])
+      expect(capturedInput()).toEqual({
+        sessionID,
+        questions,
+        tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" },
+      })
     }),
   )
 
@@ -116,11 +123,16 @@ describe("QuestionTool", () => {
       deny = false
       const registryService = yield* ToolRegistry.Service
 
-      yield* registryService.execute({
+      yield* executeTool(registryService, {
         sessionID,
+        ...toolIdentity,
         call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [] } },
       })
-      expect(capturedInput()).toEqual({ sessionID, questions: [], tool: undefined })
+      expect(capturedInput()).toEqual({
+        sessionID,
+        questions: [],
+        tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" },
+      })
     }),
   )
 
@@ -130,12 +142,11 @@ describe("QuestionTool", () => {
       reject = true
       deny = false
       const registryService = yield* ToolRegistry.Service
-      const fiber = yield* registryService
-        .execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [] } },
-        })
-        .pipe(Effect.forkScoped)
+      const fiber = yield* executeTool(registryService, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [] } },
+      }).pipe(Effect.forkScoped)
 
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)

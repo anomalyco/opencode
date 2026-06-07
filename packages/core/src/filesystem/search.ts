@@ -237,6 +237,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
     // and does not await the scan; the native background scan starts as soon as
     // the picker exists. The `wait` gate dedupes concurrent creation.
     const acquire = Effect.fn("Search.acquire")(function* (cwd: string) {
+      // The opencode test runtime owns an isolated XDG tree that Windows must
+      // remove before process exit, so use ripgrep instead of native FFF there.
+      if (process.env.OPENCODE_TEST_HOME) return undefined
+
       const available = yield* fffSync("check availability", () => Fff.available()).pipe(
         Effect.catch((error) => {
           log.warn("fff availability check failed", { error })

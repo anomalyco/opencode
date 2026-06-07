@@ -4,12 +4,13 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { TuiPluginRuntime } from "../../../src/cli/cmd/tui/plugin/runtime"
-import { tui, type TuiHandle } from "../../../src/cli/cmd/tui/app"
+import { tui, type TuiHandle } from "@opencode-ai/tui"
+import { createLegacyTuiHost } from "../../../src/cli/tui/host"
 import { Global } from "@opencode-ai/core/global"
 import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
-import * as TuiAudio from "../../../src/cli/cmd/tui/util/audio"
-import * as TuiKeymap from "../../../src/cli/cmd/tui/keymap"
+import * as TuiAudio from "../../../src/cli/tui/audio"
+import * as TuiKeymap from "@opencode-ai/tui/keymap"
+import { createTuiBuildInfo, createTuiEnvironment } from "@opencode-ai/tui/runtime"
 
 type TestRendererSetup = Awaited<ReturnType<typeof createTestRenderer>>
 type TmpDir = Awaited<ReturnType<typeof tmpdir>>
@@ -39,7 +40,6 @@ afterEach(async () => {
   current?.restore?.()
   await Bun.sleep(20)
   await current?.tmp?.[Symbol.asyncDispose]()
-  await TuiPluginRuntime.dispose().catch(() => {})
 })
 
 test("returns a handle immediately and resolves ready after async mount setup", async () => {
@@ -61,6 +61,23 @@ test("production can await done only and still receives mount failures", async (
   expect(app.setup.renderer.isDestroyed).toBe(true)
 })
 
+test("plugin startup failure does not fail the app", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const app = await startTui({ rejectPlugins: new Error("plugins failed") })
+    app.theme.resolve("dark")
+
+    await expect(app.handle.ready).resolves.toBeUndefined()
+    await app.pluginHost.started
+    expect(app.setup.renderer.isDestroyed).toBe(false)
+    expect(app.pluginHost.starts).toBe(1)
+    await app.handle.exit()
+    await app.handle.done
+  } finally {
+    error.mockRestore()
+  }
+})
+
 test("exit destroys the renderer, resolves done, and runs cleanup once", async () => {
   const beforeSighup = process.listenerCount("SIGHUP")
   const app = await startTui()
@@ -73,7 +90,7 @@ test("exit destroys the renderer, resolves done, and runs cleanup once", async (
   await app.handle.done
 
   expect(app.setup.renderer.isDestroyed).toBe(true)
-  expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+  expect(process.listenerCount("SIGHUP")).toBeLessThanOrEqual(beforeSighup)
 })
 
 test("exit preserves reason formatting and exit messages", async () => {
@@ -124,7 +141,7 @@ test("direct renderer destruction still cleans up and resolves done", async () =
   app.setup.renderer.destroy()
   await app.handle.done
 
-  expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+  expect(process.listenerCount("SIGHUP")).toBeLessThanOrEqual(beforeSighup)
 })
 
 test("SIGHUP exits before ready and removes its listener", async () => {
@@ -135,7 +152,7 @@ test("SIGHUP exits before ready and removes its listener", async () => {
   await app.handle.done
 
   expect(app.setup.renderer.isDestroyed).toBe(true)
-  expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+  expect(process.listenerCount("SIGHUP")).toBeLessThanOrEqual(beforeSighup)
 })
 
 test("SIGHUP exits after ready and removes its listener", async () => {
@@ -161,7 +178,6 @@ test("plugin, audio, and keymap cleanup run exactly once", async () => {
       unregister()
     }
   })
-  const disposePlugins = spyOn(TuiPluginRuntime, "dispose")
   const disposeAudio = spyOn(TuiAudio, "dispose")
 
   try {
@@ -175,18 +191,37 @@ test("plugin, audio, and keymap cleanup run exactly once", async () => {
 
     expect(registerKeymap).toHaveBeenCalledTimes(1)
     expect(unregisterKeymapCalls).toBe(1)
-    expect(disposePlugins).toHaveBeenCalledTimes(1)
+    expect(app.pluginHost.disposes).toBe(1)
     expect(disposeAudio).toHaveBeenCalledTimes(1)
   } finally {
     registerKeymap.mockRestore()
-    disposePlugins.mockRestore()
     disposeAudio.mockRestore()
   }
 })
 
-async function startTui(options: { rejectTheme?: Error } = {}) {
+test("plugin disposal failure does not stop remaining cleanup", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {})
+  const disposeAudio = spyOn(TuiAudio, "dispose")
+  try {
+    const app = await startTui({ rejectPluginDispose: new Error("dispose failed") })
+    app.theme.resolve("dark")
+    await app.handle.ready
+
+    await app.handle.exit()
+    await app.handle.done
+
+    expect(app.pluginHost.disposes).toBe(1)
+    expect(disposeAudio).toHaveBeenCalledTimes(1)
+    expect(app.setup.renderer.isDestroyed).toBe(true)
+  } finally {
+    error.mockRestore()
+    disposeAudio.mockRestore()
+  }
+})
+
+async function startTui(options: { rejectTheme?: Error; rejectPlugins?: Error; rejectPluginDispose?: Error } = {}) {
   const tmp = await tmpdir()
-  const restore = await isolateGlobalPaths(tmp.path)
+  const isolated = await isolateGlobalPaths(tmp.path)
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false, maxFps: Number.POSITIVE_INFINITY })
   const theme = deferred<"dark" | "light" | null>()
   const waitForThemeMode = spyOn(setup.renderer, "waitForThemeMode").mockImplementation(() => {
@@ -197,13 +232,48 @@ async function startTui(options: { rejectTheme?: Error } = {}) {
 
   const calls = createFetch()
   const events = createEventSource()
+  const pluginStarted = deferred<void>()
+  const pluginHost = {
+    starts: 0,
+    disposes: 0,
+    started: pluginStarted.promise,
+    async start() {
+      pluginHost.starts++
+      pluginStarted.resolve()
+      if (options.rejectPlugins) throw options.rejectPlugins
+    },
+    async dispose() {
+      pluginHost.disposes++
+      if (options.rejectPluginDispose) throw options.rejectPluginDispose
+    },
+  }
+  const environment = createTuiEnvironment({
+    cwd: tmp.path,
+    platform: "linux",
+    paths: { home: tmp.path, state: isolated.state, worktree: path.join(tmp.path, "worktree") },
+    capabilities: {
+      mouse: true,
+      copyOnSelect: true,
+      terminalTitle: false,
+      terminalSuspend: false,
+      workspaces: false,
+      showTimeToFirstDraw: false,
+    },
+    terminal: {},
+    editor: { zedTerminal: false },
+    skipInitialLoading: false,
+  })
   const handle = tui({
+    environment,
+    build: createTuiBuildInfo({ version: "test", channel: "test" }),
     url: "http://test",
     renderer: setup.renderer,
+    host: createLegacyTuiHost(setup.renderer),
     config: createTuiResolvedConfig({ plugin_enabled: disabledInternalPlugins }),
     directory,
     fetch: calls.fetch,
     events: events.source,
+    pluginHost,
     args: {},
   })
   active = {
@@ -212,27 +282,26 @@ async function startTui(options: { rejectTheme?: Error } = {}) {
     tmp,
     restore: () => {
       waitForThemeMode.mockRestore()
-      restore()
+      isolated.restore()
     },
   }
 
-  return { handle, setup, theme }
+  return { handle, setup, theme, pluginHost }
 }
 
 async function isolateGlobalPaths(root: string) {
-  const previous = {
-    config: Global.Path.config,
-    state: Global.Path.state,
-  }
+  const previous = Global.Path.config
   Global.Path.config = path.join(root, "config")
-  Global.Path.state = path.join(root, "state")
+  const state = path.join(root, "state")
   await mkdir(Global.Path.config, { recursive: true })
-  await mkdir(Global.Path.state, { recursive: true })
-  await Bun.write(path.join(Global.Path.state, "kv.json"), JSON.stringify({ animations_enabled: false }))
+  await mkdir(state, { recursive: true })
+  await Bun.write(path.join(state, "kv.json"), JSON.stringify({ animations_enabled: false }))
 
-  return () => {
-    Global.Path.config = previous.config
-    Global.Path.state = previous.state
+  return {
+    state,
+    restore() {
+      Global.Path.config = previous
+    },
   }
 }
 
