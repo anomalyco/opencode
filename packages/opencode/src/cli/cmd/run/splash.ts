@@ -11,7 +11,6 @@
 import {
   BoxRenderable,
   type ColorInput,
-  RGBA,
   TextAttributes,
   TextRenderable,
   type ScrollbackRenderContext,
@@ -145,28 +144,6 @@ function push(
   lines.push({ left, top, text, fg, bg, attrs })
 }
 
-function color(input: ColorInput, fallback: RGBA): RGBA {
-  if (input instanceof RGBA) {
-    return input
-  }
-
-  if (typeof input === "string") {
-    if (input === "transparent" || input === "none") {
-      return RGBA.fromValues(0, 0, 0, 0)
-    }
-
-    if (input.startsWith("#")) {
-      return RGBA.fromHex(input)
-    }
-  }
-
-  return fallback
-}
-
-function fallback(index: number, hex: string): RGBA {
-  return RGBA.fromIndex(index, RGBA.fromHex(hex))
-}
-
 function draw(
   lines: Array<{ left: number; top: number; text: string; fg: ColorInput; bg?: ColorInput; attrs?: number }>,
   row: string,
@@ -201,9 +178,9 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   const width = Math.max(1, ctx.width)
   const meta = splashMeta(input)
   const lines: Array<{ left: number; top: number; text: string; fg: ColorInput; bg?: ColorInput; attrs?: number }> = []
-  const left = color(input.theme.left, fallback(81, "#38bdf8"))
-  const right = color(input.theme.right, RGBA.defaultForeground(RGBA.fromHex("#f8fafc")))
-  const leftShadow = color(input.theme.leftShadow, fallback(238, "#334155"))
+  const left = input.theme.left
+  const right = input.theme.right
+  const leftShadow = input.theme.leftShadow
   let height = 1
 
   if (kind === "entry") {
