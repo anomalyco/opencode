@@ -107,7 +107,7 @@ export const SettingsServersV2: Component = () => {
                 type="button"
                 variant="ghost-muted"
                 size="small"
-                icon={<IconV2 name="outline-chevron-down" size="large" style={{ transform: "rotate(-90deg)" }} />}
+                icon={<IconV2 name="outline-chevron-down" size="large" style={{ transform: "rotate(90deg)" }} />}
                 aria-label={language.t("common.goBack")}
                 onClick={backToList}
               />
@@ -205,15 +205,6 @@ export const SettingsServersV2: Component = () => {
                             <span class="settings-v2-servers-name">{serverName(item)}</span>
                             <span class="settings-v2-servers-meta">
                               <Show when={health()?.version}>v{health()?.version}</Show>
-                              <Show when={health()?.version && item.type === "http"}> • </Show>
-                              <Show
-                                when={item.type === "http" && item.http.username}
-                                fallback={
-                                  <Show when={item.type === "http"}>{language.t("server.row.noUsername")}</Show>
-                                }
-                              >
-                                {item.http.username}
-                              </Show>
                             </span>
                           </div>
                         </div>
