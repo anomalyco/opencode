@@ -28,15 +28,15 @@ private:
 
 public:
    //--- Initialization
-   int OnInit()
-     {
-      m_sig_breakout.Init();
-      m_sig_pullback.Init();
-      m_sig_ml.Init();
-      
-      m_risk.SetGlobalDDLimit(-0.25);
+    int OnInit()
+      {
+       m_sig_breakout.Init();
+       m_sig_breakout.SetUseH1EMAFilter(false);
+       
+       m_risk.SetGlobalDDLimit(-0.25);
       m_risk.SetMonthlyDDLimit(-0.20);
       m_risk.SetDailyDDLimit(-0.03);
+      m_risk.SetRiskPerTrade(0.005);
       
       m_data.Init();
       
@@ -46,31 +46,33 @@ public:
    //--- Main tick handler
    void OnTick()
      {
-      // 1. Evaluate signals
+      // 1. Evaluate breakout-only validation flow
       double breakout_score = m_sig_breakout.Evaluate();
-      double pullback_score = m_sig_pullback.Evaluate();
-      double ml_score = m_sig_ml.Evaluate();
       
       // 2. Risk check
       if(!m_risk.IsHealthy())
          return;
       
+      if(m_risk.HasOpenPositionForCurrentSymbol())
+         return;
+      
       // 3. Position management
-      double best_score = MathMax(breakout_score, MathMax(pullback_score, ml_score));
-      
-      if(m_risk.CanEnter() && best_score > 0.7)
-        {
-         double lot = m_risk.CalculateLot();
-         if(breakout_score == best_score)
-            m_sig_breakout.PlaceOrder(lot, m_risk);
-         else if(pullback_score == best_score)
-            m_sig_pullback.PlaceOrder(lot, m_risk);
-         else
-            m_sig_ml.PlaceOrder(lot, m_risk);
-        }
-      
-      // 4. Trailing stop
-      m_risk.UpdateTrailingStop();
+      if(m_risk.CanEnter() && MathAbs(breakout_score) > 0.7)
+         {
+         double entry=0, sl=0, tp=0;
+         ENUM_ORDER_TYPE type = ORDER_TYPE_BUY;
+          
+         if(m_sig_breakout.CheckEntrySignal(entry, sl, tp))
+            {
+            type = (breakout_score > 0) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+            double sl_distance = MathAbs(entry - sl);
+            double lot = m_risk.CalculateLotFromSLDistance(type, entry, sl_distance);
+            if(lot <= 0)
+               return;
+
+            m_risk.PlaceOrder(type, lot, entry, sl, tp);
+           }
+         }
      }
    
    //--- Cleanup
