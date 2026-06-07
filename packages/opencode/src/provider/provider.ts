@@ -1024,6 +1024,7 @@ export interface Interface {
     { providerID: ProviderV2.ID; modelID: ModelV2.ID },
     DefaultModelError
   >
+  readonly refresh: () => Effect.Effect<void>
 }
 
 interface State {
@@ -2017,7 +2018,11 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    const refresh = Effect.fn("Provider.refresh")(function* () {
+      yield* InstanceState.invalidate(state)
+    })
+
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, refresh })
   }),
 )
 
