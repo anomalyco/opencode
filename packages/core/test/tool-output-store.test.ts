@@ -43,7 +43,7 @@ const withStore = <A, E, R>(
 const it = testEffect(Layer.empty)
 
 describe("ToolOutputStore", () => {
-  it.live("bounds aggregate text and structured output with one managed file", () =>
+  it.live("bounds the provider-facing text channel with one managed file", () =>
     withStore(({ store, fs }) =>
       Effect.gen(function* () {
         const first = "HEAD-" + "x".repeat(30_000)
@@ -59,15 +59,9 @@ describe("ToolOutputStore", () => {
             ],
           },
         })
-        expect(result.output.structured).toEqual({})
+        expect(result.output.structured).toEqual({ kind: "report" })
         expect(result.outputPaths).toHaveLength(1)
-        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual({
-          structured: { kind: "report" },
-          content: [
-            { type: "text", text: first },
-            { type: "text", text: second },
-          ],
-        })
+        expect(yield* fs.readFileString(result.outputPaths[0])).toBe(first + second)
         if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
         expect(Buffer.byteLength(result.output.content[0].text)).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
       }),
@@ -79,18 +73,18 @@ describe("ToolOutputStore", () => {
       Effect.gen(function* () {
         const structured = { text: "x".repeat(ToolOutputStore.MAX_BYTES) }
         const result = yield* store.bound({ sessionID, toolCallID: "call-json", output: { structured, content: [] } })
-        expect(result.output.structured).toEqual({})
+        expect(result.output.structured).toEqual(structured)
         expect(result.outputPaths).toHaveLength(1)
-        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual({ structured, content: [] })
+        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(structured)
         expect(result.output.content).toHaveLength(1)
       }),
     ),
   )
 
-  it.live("preserves oversized inline media without duplicating its data", () =>
+  it.live("preserves native media and structured metadata without applying a settlement media limit", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
-        const data = "a".repeat(ToolOutputStore.MAX_BYTES)
+        const data = "a".repeat(6 * 1024 * 1024)
         const result = yield* store.bound({
           sessionID,
           toolCallID: "call-file",
@@ -100,7 +94,7 @@ describe("ToolOutputStore", () => {
           },
         })
         expect(result.outputPaths).toEqual([])
-        expect(result.output.structured).toEqual({})
+        expect(result.output.structured).toEqual({ caption: "pixel" })
         expect(result.output.content).toHaveLength(1)
         expect(result.output.content[0]).toEqual({
           type: "file",
@@ -112,51 +106,38 @@ describe("ToolOutputStore", () => {
     ),
   )
 
-  it.live("rejects inline media beyond the settlement media limit", () =>
-    withStore(({ store }) =>
+  it.live("preserves structured metadata and native media when bounding text", () =>
+    withStore(({ store, fs }) =>
       Effect.gen(function* () {
-        const exit = yield* store
-          .bound({
-            sessionID,
-            toolCallID: "call-file-too-large",
-            output: {
-              structured: {},
-              content: [
-                {
-                  type: "file",
-                  source: { type: "data", data: "a".repeat(ToolOutputStore.MAX_INLINE_MEDIA_BYTES + 1) },
-                  mime: "image/png",
-                },
-              ],
-            },
-          })
-          .pipe(Effect.exit)
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit))
-          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.MediaLimitError")
+        const text = "x".repeat(ToolOutputStore.MAX_BYTES + 1)
+        const media = {
+          type: "file" as const,
+          source: { type: "data" as const, data: "aGVsbG8=" },
+          mime: "image/png",
+          name: "pixel.png",
+        }
+        const result = yield* store.bound({
+          sessionID,
+          toolCallID: "call-text-and-media",
+          output: { structured: { caption: "pixel" }, content: [{ type: "text", text }, media] },
+        })
+
+        expect(result.output.structured).toEqual({ caption: "pixel" })
+        expect(result.output.content[1]).toEqual(media)
+        expect(yield* fs.readFileString(result.outputPaths[0])).toBe(text)
       }),
     ),
   )
 
-  it.live("rejects inline media whose aggregate size exceeds the settlement limit", () =>
+  it.live("does not double-count structured data duplicated in projected text", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
-        const exit = yield* store
-          .bound({
-            sessionID,
-            toolCallID: "call-files-too-large",
-            output: {
-              structured: {},
-              content: [
-                { type: "file", source: { type: "data", data: "a".repeat(3 * 1024 * 1024) }, mime: "image/png" },
-                { type: "file", source: { type: "data", data: "b".repeat(3 * 1024 * 1024) }, mime: "image/png" },
-              ],
-            },
-          })
-          .pipe(Effect.exit)
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit))
-          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.MediaLimitError")
+        const text = "x".repeat(30_000)
+        const output = { structured: { output: text }, content: [{ type: "text" as const, text }] }
+        expect(yield* store.bound({ sessionID, toolCallID: "call-duplicated", output })).toEqual({
+          output,
+          outputPaths: [],
+        })
       }),
     ),
   )
@@ -179,22 +160,14 @@ describe("ToolOutputStore", () => {
     ),
   )
 
-  it.live("fails operationally when output cannot be encoded for bounding", () =>
+  it.live("does not encode ignored structured metadata when projected content exists", () =>
     withStore(({ store }) =>
       Effect.gen(function* () {
-        const exit = yield* store
-          .bound({
-            sessionID,
-            toolCallID: "call-unencodable",
-            output: {
-              structured: { value: 1n },
-              content: [{ type: "text", text: "readable text" }],
-            },
-          })
-          .pipe(Effect.exit)
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit))
-          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.StorageError")
+        const output = { structured: { value: 1n }, content: [{ type: "text" as const, text: "readable text" }] }
+        expect(yield* store.bound({ sessionID, toolCallID: "call-unencodable", output })).toEqual({
+          output,
+          outputPaths: [],
+        })
       }),
     ),
   )

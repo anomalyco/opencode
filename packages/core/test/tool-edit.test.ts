@@ -93,7 +93,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   }).pipe(Effect.provide(Layer.mergeAll(registry, resolution, mutation, edit)))
 }
 
-const call = (input: typeof EditTool.Parameters.Type, id = "call-edit") => ({
+const call = (input: typeof EditTool.Input.Type, id = "call-edit") => ({
   sessionID,
   ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "edit", input },

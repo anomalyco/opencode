@@ -10,7 +10,7 @@ import { Tools } from "./tools"
 
 export const name = "glob"
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   pattern: LocationSearch.FilesInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
   path: LocationSearch.FilesInput.fields.path.annotate({
     description: "Relative directory to search. Defaults to the active Location.",
@@ -56,7 +56,7 @@ export const layer = Layer.effectDiscard(
         [name]: Tool.make({
           description:
             "Find files by glob pattern within the active Location or a named project reference. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
-          input: Parameters,
+          input: Input,
           output: LocationSearch.FilesResult,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
           execute: (input, context) =>

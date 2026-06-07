@@ -18,7 +18,7 @@ const payload = (text: string) =>
 
 describe("WebSearchTool provider selection", () => {
   test("rejects out-of-range numeric controls", () => {
-    const decode = Schema.decodeUnknownSync(WebSearchTool.Parameters)
+    const decode = Schema.decodeUnknownSync(WebSearchTool.Input)
     expect(() => decode({ query: "x", numResults: 0 })).toThrow()
     expect(() => decode({ query: "x", numResults: WebSearchTool.MAX_NUM_RESULTS + 1 })).toThrow()
     expect(() => decode({ query: "x", contextMaxCharacters: WebSearchTool.MAX_CONTEXT_CHARACTERS + 1 })).toThrow()
@@ -122,7 +122,7 @@ const websearch = WebSearchTool.layer.pipe(
 )
 const it = testEffect(Layer.mergeAll(registry, permission, http, websearchConfig, websearch))
 
-describe("WebSearchTool contribution", () => {
+describe("WebSearchTool registration", () => {
   it.effect("registers websearch, asserts query permission, and calls Exa", () =>
     Effect.gen(function* () {
       requests.length = 0

@@ -1,7 +1,7 @@
 export * as Tool from "./tool"
 
-import { Tool as LlmTool, ToolFailure, ToolOutput, type ToolCall } from "@opencode-ai/llm"
-import { Effect, Schema } from "effect"
+import { ToolDefinition, ToolFailure, ToolOutput, type ToolCall } from "@opencode-ai/llm"
+import { Effect, JsonSchema, Schema } from "effect"
 import type { AgentV2 } from "../agent"
 import type { SessionMessage } from "../session/message"
 import type { SessionSchema } from "../session/schema"
@@ -17,14 +17,14 @@ export type SchemaType<A> = Schema.Codec<A, any, never, never>
 
 declare const TypeId: unique symbol
 
-export interface Tool<Input extends SchemaType<any>, Output extends SchemaType<any>> {
+export interface Definition<Input extends SchemaType<any>, Output extends SchemaType<any>> {
   readonly [TypeId]: {
     readonly _Input: Input
     readonly _Output: Output
   }
 }
 
-export type AnyTool = Tool<any, any>
+export type AnyTool = Definition<any, any>
 export const Failure = ToolFailure
 export type Failure = ToolFailure
 
@@ -53,7 +53,7 @@ type Config<Input extends SchemaType<any>, Output extends SchemaType<any>> = {
 
 type Runtime = {
   readonly permission?: string
-  readonly definition: (name: string) => ReturnType<typeof LlmTool.toDefinitions>[number]
+  readonly definition: (name: string) => ToolDefinition
   readonly settle: (call: ToolCall, context: Context) => Effect.Effect<ToolOutput, ToolFailure>
 }
 
@@ -61,16 +61,19 @@ const runtimes = new WeakMap<AnyTool, Runtime>()
 
 export function make<Input extends SchemaType<any>, Output extends SchemaType<any>>(
   config: Config<Input, Output>,
-): Tool<Input, Output> {
-  const tool = Object.freeze({}) as Tool<Input, Output>
-  const definitions = new Map<string, ReturnType<typeof LlmTool.toDefinitions>[number]>()
+): Definition<Input, Output> {
+  const tool = Object.freeze({}) as Definition<Input, Output>
+  const definitions = new Map<string, ToolDefinition>()
   runtimes.set(tool, {
     definition: (name) => {
       const cached = definitions.get(name)
       if (cached) return cached
-      const definition = LlmTool.toDefinitions({
-        [name]: LlmTool.make({ description: config.description, parameters: config.input, success: config.output }),
-      })[0]
+      const definition = new ToolDefinition({
+        name,
+        description: config.description,
+        inputSchema: toJsonSchema(config.input),
+        outputSchema: toJsonSchema(config.output),
+      })
       definitions.set(name, definition)
       return definition
     },
@@ -117,10 +120,10 @@ export const validateName = (name: string) =>
     : Effect.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
 
 export const withPermission = <Input extends SchemaType<any>, Output extends SchemaType<any>>(
-  tool: Tool<Input, Output>,
+  tool: Definition<Input, Output>,
   permission: string,
 ) => {
-  const decorated = Object.freeze({}) as Tool<Input, Output>
+  const decorated = Object.freeze({}) as Definition<Input, Output>
   runtimes.set(decorated, { ...runtimeOf(tool), permission })
   return decorated
 }
@@ -133,4 +136,10 @@ function runtimeOf(tool: AnyTool) {
   const runtime = runtimes.get(tool)
   if (!runtime) throw new TypeError("Invalid Core Tool value")
   return runtime
+}
+
+function toJsonSchema(schema: Schema.Top): JsonSchema.JsonSchema {
+  const document = Schema.toJsonSchemaDocument(schema)
+  if (Object.keys(document.definitions).length === 0) return document.schema
+  return { ...document.schema, $defs: document.definitions }
 }

@@ -9,16 +9,16 @@ import { Tools } from "./tools"
 
 export const name = "todowrite"
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   todos: Schema.Array(SessionTodo.Info).annotate({ description: "The updated todo list" }),
 })
 
-export const Success = Schema.Struct({
+export const Output = Schema.Struct({
   todos: Schema.Array(SessionTodo.Info),
 })
-export type Success = typeof Success.Type
+export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Success) => JSON.stringify(output.todos, null, 2)
+export const toModelOutput = (output: Output) => JSON.stringify(output.todos, null, 2)
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -31,8 +31,8 @@ export const layer = Layer.effectDiscard(
         [name]: Tool.make({
           description:
             "Create and maintain a structured task list for the current coding session. Use it to track progress during multi-step work and keep todo statuses current.",
-          input: Parameters,
-          output: Success,
+          input: Input,
+          output: Output,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
           execute: (input, context) =>
             Effect.gen(function* () {

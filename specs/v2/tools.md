@@ -5,8 +5,8 @@
 V2 has one opaque type for locally executable tools:
 
 ```ts
-type Tool<Input, Output>
-type AnyTool = Tool<any, any>
+type Definition<Input, Output>
+type AnyTool = Definition<any, any>
 
 const make: <
   Input extends Schema.Codec<any, any, never, never>,
@@ -23,12 +23,12 @@ const make: <
     readonly input: Schema.Type<Input>
     readonly output: Output["Encoded"]
   }) => ReadonlyArray<Tool.Content>
-}) => Tool<Input, Output>
+}) => Definition<Input, Output>
 ```
 
 Application tools, built-ins, and statically authored plugin tools use this same constructor and execution contract.
 
-`Tool` is opaque and has exactly one executor. Its schemas and executor are not public fields. The Tool module privately derives model definitions and interprets invocations for the registry; it never embeds another executable tool representation.
+`Tool.Definition` is opaque and has exactly one executor. Its schemas and executor are not public fields. The Tool module privately derives model definitions and interprets invocations for the registry; callers normally rely on `Tool.make` inference rather than naming the carrier type.
 
 Input and output codecs are self-contained. Schema conversion cannot require services. Tool dependencies are acquired during construction and captured by `execute`.
 
@@ -83,9 +83,9 @@ A Location plugin receives only the narrow `Tools` registration capability, not 
 Within one placement:
 
 - The latest active registration for a name wins.
-- Closing a registration removes only that contribution.
-- Closing the winner reveals the next-latest active contribution.
-- Mutating the caller's registration record later does not change the captured contribution.
+- Closing a registration removes only that registration.
+- Closing the winner reveals the next-latest active registration.
+- Mutating the caller's registration record later does not change the captured registration.
 
 Location registrations take precedence over process application registrations.
 
@@ -142,19 +142,19 @@ The Location-scoped registry owns effective lookup and settlement. For each loca
 4. Encodes the returned output with the output codec.
 5. Projects encoded output into model-facing content.
 6. Bounds the complete model-facing output.
-7. Persists the settlement and any internal managed-output references.
+7. Returns the settlement and managed-output references to the runner, which persists them durably.
 
 Invalid input never invokes the tool. Invalid output never produces a successful settlement.
 
 `toModelOutput` is pure and total. When omitted, the encoded output remains structured output; an encoded string is also projected as text. Projection does not receive invocation identity because presentation depends only on validated input and output.
 
-Provider-turn materialization captures the effective registration identity for each advertised name without retaining its handler. Settlement rejects the call as stale if that registration was removed or replaced, including when closing an overlay reveals the previously effective registration. The current handler is captured only after this check; detaching or replacing it afterward does not affect the running invocation.
+Provider-turn materialization captures the effective registration identity for each advertised name without retaining its handler. Settlement rejects the call as stale if that registration was removed or replaced, including when closing an overlay reveals the previously effective registration. The current handler is captured only after this check; removing or replacing its registration afterward does not affect the running invocation.
 
 ## Output Bounding
 
 Tools return complete validated domain output. They do not truncate model-facing output or manage retention files.
 
-After projection, one generic settlement boundary bounds textual and structured provider context. Supported inline media remains native up to the producer's media limit and is never encoded into a text preview. Structured data duplicated by native media content is omitted from provider settlement accounting and storage. Oversized textual or structured values are materialized in managed storage and replaced with bounded previews or references; if complete retention fails, settlement fails operationally rather than publishing lossy success. Managed paths are internal settlement metadata and never appear in `Tool.make`, tool output schemas, or projection callbacks solely for retention bookkeeping.
+After projection, one generic settlement boundary bounds the channel actually sent to the provider. When content exists, only its textual parts are measured; structured metadata is retained unchanged without being double-counted, and native media remains unchanged under producer-owned limits. When content is empty, the structured output is measured. Oversized provider-facing text or structured output is retained in managed storage and replaced with a bounded text preview while structured metadata and media are preserved; if complete retention fails, settlement fails operationally rather than publishing lossy success. Managed paths never appear in `Tool.make`, tool output schemas, or projection callbacks solely for retention bookkeeping.
 
 Model-output bounding is not producer memory management. Processes and streaming sources may need separate capture or spooling limits before a tool result exists. Those limits must be modeled at the producer boundary and must not masquerade as model-output truncation. A producer cannot claim a complete retained output after it has already discarded bytes.
 
@@ -182,3 +182,5 @@ Leaf tools translate only errors they deliberately classify as recoverable. Broa
 ## Follow-Up
 
 Location plugin installation should receive the same narrow `Tools` capability. That requires a separate Location-layer ordering change so built-ins register before plugins without introducing a `PluginBoot -> Tools -> PluginBoot` dependency cycle. The carrier, registrar, and plugin-owned Scope semantics are already suitable; no tool-specific plugin hook is needed.
+
+Session's current public result shape still exposes managed `outputPaths`. Extending storage encapsulation across the public Session API requires a separate opaque managed-output reference design; paths are not entirely internal today.

@@ -11,7 +11,7 @@ import { Tools } from "./tools"
 
 export const name = "grep"
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   pattern: LocationSearch.GrepInput.fields.pattern.annotate({
     description: "Regex pattern to search for in file contents",
   }),
@@ -29,10 +29,10 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-type Success = typeof LocationSearch.GrepResult.Encoded
+type Output = typeof LocationSearch.GrepResult.Encoded
 
 /** Format raw Location search matches into the familiar concise model output. */
-export const toModelOutput = (output: Success) => {
+export const toModelOutput = (output: Output) => {
   const lines = output.items.length === 0 ? ["No files found"] : [`Found ${output.items.length} matches`]
   let current = ""
   for (const match of output.items) {
@@ -71,7 +71,7 @@ export const layer = Layer.effectDiscard(
         [name]: Tool.make({
           description:
             "Search file contents by regular expression within the active Location, a named project reference, or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
-          input: Parameters,
+          input: Input,
           output: LocationSearch.GrepResult,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
           execute: (input, context) =>

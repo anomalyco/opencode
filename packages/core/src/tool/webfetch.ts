@@ -16,11 +16,11 @@ export const MAX_TIMEOUT_SECONDS = 120
 
 export const description = `Fetch content from an HTTP or HTTPS URL and return it as text, markdown, or HTML. Markdown is the default.
 
-Use a more targeted tool when one is available. This tool is read-only. Large text results are truncated and saved to a managed file that ordinary Read, Grep, and Bash tools can inspect.`
+Use a more targeted tool when one is available. This tool is read-only. Large text results may be replaced with a preview while the complete output is retained in managed storage.`
 
 const Timeout = Schema.Number.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(MAX_TIMEOUT_SECONDS))
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   url: Schema.String.annotate({ description: "The HTTP or HTTPS URL to fetch content from" }),
   format: Schema.Literals(["text", "markdown", "html"])
     .annotate({ description: "The format to return the content in. Defaults to markdown." })
@@ -30,14 +30,14 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-const Success = Schema.Struct({
+const Output = Schema.Struct({
   url: Schema.String,
   contentType: Schema.String,
-  format: Parameters.fields.format,
+  format: Input.fields.format,
   output: Schema.String,
 })
 
-type Format = (typeof Parameters.Type)["format"]
+type Format = (typeof Input.Type)["format"]
 
 const acceptHeader = (format: Format) => {
   switch (format) {
@@ -134,8 +134,8 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description,
-          input: Parameters,
-          output: Success,
+          input: Input,
+          output: Output,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: output.output })],
           execute: (input, context) =>
             Effect.gen(function* () {

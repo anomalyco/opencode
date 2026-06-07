@@ -115,7 +115,7 @@ const withTool = <A, E, R>(
   }).pipe(Effect.provide(Layer.mergeAll(registry, bash)))
 }
 
-const call = (input: typeof BashTool.Parameters.Type, id = "call-bash") => ({
+const call = (input: typeof BashTool.Input.Type, id = "call-bash") => ({
   sessionID,
   ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "bash", input },

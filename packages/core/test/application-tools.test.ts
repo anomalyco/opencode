@@ -9,7 +9,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { executeTool, settleTool, toolDefinitions } from "./lib/tool"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { Tools } from "@opencode-ai/core/tool/tools"
-import { Effect, Exit, Layer, Schema, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
 const permission = Layer.mock(PermissionV2.Service, {
@@ -136,7 +136,7 @@ describe("ApplicationTools", () => {
           ],
         },
         output: {
-          structured: {},
+          structured: { answer: "HELLO" },
           content: [
             { type: "text", text: "HELLO" },
             { type: "file", source: { type: "data", data: "aGVsbG8=" }, mime: "image/png", name: "result.png" },
@@ -147,7 +147,7 @@ describe("ApplicationTools", () => {
     }),
   )
 
-  it.effect("removes an application tool when its attachment scope closes", () =>
+  it.effect("removes an application tool when its registration scope closes", () =>
     Effect.gen(function* () {
       const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
@@ -165,11 +165,11 @@ describe("ApplicationTools", () => {
     Effect.gen(function* () {
       const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
-      const attachmentScope = yield* Scope.make()
-      yield* applications.register({ contextual: contextual([]) }).pipe(Scope.provide(attachmentScope))
+      const registrationScope = yield* Scope.make()
+      yield* applications.register({ contextual: contextual([]) }).pipe(Scope.provide(registrationScope))
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["contextual"])
 
-      yield* Scope.close(attachmentScope, Exit.void)
+      yield* Scope.close(registrationScope, Exit.void)
       expect(
         yield* settleTool(registry, {
           sessionID,
@@ -181,7 +181,7 @@ describe("ApplicationTools", () => {
     }),
   )
 
-  it.effect("does not leak an attachment into an already closed scope", () =>
+  it.effect("does not leak a registration into an already closed scope", () =>
     Effect.gen(function* () {
       const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
@@ -194,13 +194,36 @@ describe("ApplicationTools", () => {
     }),
   )
 
-  it.effect("captures the attached record before later State rebuilds", () =>
+  it.effect("preserves an interrupted application registration until its scope closes", () =>
     Effect.gen(function* () {
       const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service
-      const attached = { stable: contextual([]) }
-      yield* applications.register(attached)
-      Object.assign(attached, { late: contextual([]) })
+      const scope = yield* Scope.make()
+      const registered = yield* Deferred.make<void>()
+      const fiber = yield* applications
+        .register({ interrupted: contextual([]) })
+        .pipe(
+          Effect.andThen(Deferred.succeed(registered, undefined)),
+          Effect.andThen(Effect.never),
+          Scope.provide(scope),
+          Effect.forkChild,
+        )
+      yield* Deferred.await(registered)
+      yield* Fiber.interrupt(fiber)
+
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["interrupted"])
+      yield* Scope.close(scope, Exit.void)
+      expect(yield* toolDefinitions(registry)).toEqual([])
+    }),
+  )
+
+  it.effect("captures the registered record before later State rebuilds", () =>
+    Effect.gen(function* () {
+      const applications = yield* ApplicationTools.Service
+      const registry = yield* ToolRegistry.Service
+      const registered = { stable: contextual([]) }
+      yield* applications.register(registered)
+      Object.assign(registered, { late: contextual([]) })
 
       yield* Effect.scoped(applications.register({ temporary: contextual([]) }))
 
@@ -208,7 +231,7 @@ describe("ApplicationTools", () => {
     }),
   )
 
-  it.effect("settles with the current same-name application tool and restores earlier attachments", () =>
+  it.effect("settles with the current same-name application tool and restores earlier registrations", () =>
     Effect.gen(function* () {
       const applications = yield* ApplicationTools.Service
       const registry = yield* ToolRegistry.Service

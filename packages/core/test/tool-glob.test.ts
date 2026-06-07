@@ -91,7 +91,7 @@ const reset = () => {
   result = new LocationSearch.FilesResult({ items: [], truncated: false, partial: false })
 }
 
-const call = (input: typeof GlobTool.Parameters.Type, id = "call-glob") => ({
+const call = (input: typeof GlobTool.Input.Type, id = "call-glob") => ({
   sessionID,
   ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "glob", input },

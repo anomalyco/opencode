@@ -18,7 +18,7 @@ import { Tools } from "./tools"
 
 export const name = "edit"
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   path: Schema.String.annotate({
     description:
       "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval. Named project references are read-oriented and are not accepted.",
@@ -30,14 +30,14 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-export const Success = Schema.Struct({
+export const Output = Schema.Struct({
   operation: Schema.Literal("write"),
   target: Schema.String,
   resource: Schema.String,
   existed: Schema.Boolean,
   replacements: Schema.Number,
 })
-export type Success = typeof Success.Type
+export type Output = typeof Output.Type
 
 const normalizeLineEndings = (text: string) => text.replaceAll("\r\n", "\n")
 const detectLineEnding = (text: string): "\n" | "\r\n" => (text.includes("\r\n") ? "\r\n" : "\n")
@@ -70,7 +70,7 @@ const previewLines = (value: string, prefix: "+" | "-") => {
   return shown
 }
 
-export const toModelOutput = (output: Success, oldString: string, newString: string) =>
+export const toModelOutput = (output: Output, oldString: string, newString: string) =>
   [
     `Edited file successfully: ${output.resource}`,
     `Replacements: ${output.replacements}`,
@@ -101,8 +101,8 @@ export const layer = Layer.effectDiscard(
           Tool.make({
             description:
               "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval. Named project references are read-oriented and are not accepted.",
-            input: Parameters,
-            output: Success,
+            input: Input,
+            output: Output,
             toModelOutput: ({ input, output }) => [
               toolText({ type: "text", text: toModelOutput(output, input.oldString, input.newString) }),
             ],
@@ -188,7 +188,7 @@ export const layer = Layer.effectDiscard(
                     content: joinBom(next.text, source.bom || next.bom),
                   }),
                 )
-                return { ...result, replacements } satisfies Success
+                return { ...result, replacements } satisfies Output
               })
             },
           }),

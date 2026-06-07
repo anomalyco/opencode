@@ -7,7 +7,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { executeTool, settleTool, toolDefinitions } from "./lib/tool"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
 const bounds: ToolOutputStore.BoundInput[] = []
@@ -29,6 +29,7 @@ const outputStore = Layer.mock(ToolOutputStore.Service, {
 })
 const registry = ToolRegistry.layer.pipe(Layer.provide(ApplicationTools.layer), Layer.provide(outputStore))
 const it = testEffect(registry)
+const integrated = testEffect(Layer.mergeAll(ApplicationTools.layer, registry))
 const identity = {
   agent: AgentV2.ID.make("build"),
   assistantMessageID: SessionMessage.ID.make("msg_registry"),
@@ -119,6 +120,28 @@ describe("ToolRegistry", () => {
       const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
       yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
+      yield* Scope.close(scope, Exit.void)
+      expect(yield* toolDefinitions(service)).toEqual([])
+    }),
+  )
+
+  it.effect("preserves an interrupted registration until its scope closes", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const scope = yield* Scope.make()
+      const registered = yield* Deferred.make<void>()
+      const fiber = yield* service
+        .register({ echo: make() })
+        .pipe(
+          Effect.andThen(Deferred.succeed(registered, undefined)),
+          Effect.andThen(Effect.never),
+          Scope.provide(scope),
+          Effect.forkChild,
+        )
+      yield* Deferred.await(registered)
+      yield* Fiber.interrupt(fiber)
+
       expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
       yield* Scope.close(scope, Exit.void)
       expect(yield* toolDefinitions(service)).toEqual([])
@@ -237,6 +260,72 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  it.effect("enforces transformed codecs at execution and projection boundaries", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const executed: string[] = []
+      const Transformed = Schema.Boolean.pipe(
+        Schema.decodeTo(Schema.String, {
+          decode: SchemaGetter.transform((value) => (value ? "yes" : "no")),
+          encode: SchemaGetter.transform((value) => value === "yes"),
+        }),
+      )
+      yield* service.register({
+        transformed: Tool.make({
+          description: "Transform values",
+          input: Schema.Struct({ value: Transformed }),
+          output: Schema.Struct({ value: Transformed }),
+          execute: ({ value }) => Effect.sync(() => executed.push(value)).pipe(Effect.as({ value })),
+          toModelOutput: ({ output }) => [{ type: "text", text: String(output.value) }],
+        }),
+      })
+
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "transformed", name: "transformed", input: { value: true } },
+        }),
+      ).toEqual({ type: "text", value: "true" })
+      expect(executed).toEqual(["yes"])
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "invalid-input", name: "transformed", input: { value: "yes" } },
+        }),
+      ).toMatchObject({ type: "error", value: expect.stringContaining("Invalid tool input") })
+      expect(executed).toEqual(["yes"])
+
+      yield* service.register({
+        invalid_output: Tool.make({
+          description: "Return invalid output",
+          input: Schema.Struct({}),
+          output: Schema.Struct({
+            value: Schema.Boolean.pipe(
+              Schema.decodeTo(Schema.String, {
+                decode: SchemaGetter.transform((value) => String(value)),
+                encode: SchemaGetter.transformOrFail((value) =>
+                  value === "valid"
+                    ? Effect.succeed(true)
+                    : Effect.fail(new SchemaIssue.InvalidValue(Option.some(value), { message: "invalid output" })),
+                ),
+              }),
+            ),
+          }),
+          execute: () => Effect.succeed({ value: "invalid" }),
+        }),
+      })
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "invalid-output", name: "invalid_output", input: {} },
+        }),
+      ).toMatchObject({ type: "error", value: expect.stringContaining("invalid value for its output schema") })
+    }),
+  )
+
   it.effect("executes the unchanged registration advertised for a provider turn", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
@@ -285,6 +374,38 @@ describe("ToolRegistry", () => {
       yield* service.register({ echo: make() }).pipe(Scope.provide(overlay))
       const materialized = yield* service.materialize()
       yield* Scope.close(overlay, Exit.void)
+
+      expect((yield* materialized.settle(call("echo"))).result).toEqual({
+        type: "error",
+        value: "Stale tool call: echo",
+      })
+    }),
+  )
+
+  integrated.effect("rejects an application call after a Location override is registered", () =>
+    Effect.gen(function* () {
+      const applications = yield* ApplicationTools.Service
+      const service = yield* ToolRegistry.Service
+      yield* applications.register({ echo: make() })
+      const materialized = yield* service.materialize()
+      yield* service.register({ echo: make() })
+
+      expect((yield* materialized.settle(call("echo"))).result).toEqual({
+        type: "error",
+        value: "Stale tool call: echo",
+      })
+    }),
+  )
+
+  integrated.effect("rejects a Location call after removal reveals an application registration", () =>
+    Effect.gen(function* () {
+      const applications = yield* ApplicationTools.Service
+      const service = yield* ToolRegistry.Service
+      yield* applications.register({ echo: make() })
+      const scope = yield* Scope.make()
+      yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
+      const materialized = yield* service.materialize()
+      yield* Scope.close(scope, Exit.void)
 
       expect((yield* materialized.settle(call("echo"))).result).toEqual({
         type: "error",
