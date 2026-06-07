@@ -2,6 +2,8 @@ research
 dist
 dist-*
 gen
+!src/local/llama-skein/gen/
+!src/local/llama-skein/gen/**
 app.log
 script/build-*.ts
 temporary-*.md
