@@ -148,7 +148,7 @@ Please try to follow the [style guide](./AGENTS.md)
 Bun debugging is currently rough around the edges. We hope this guide helps you get set up and avoid some pain points.
 
 The most reliable way to debug OpenCode is to run it manually in a terminal via `bun run --inspect=<url> dev ...` and attach
-your debugger via that URL. Other methods can result in breakpoints being mapped incorrectly, at least in VSCode (YMMV).
+your debugger via that URL. Other methods can result in breakpoints being mapped incorrectly, at least in VS Code (YMMV).
 
 Caveats:
 
@@ -164,14 +164,14 @@ Other tips and tricks:
 - You might want to use `--inspect-wait` or `--inspect-brk` instead of `--inspect`, depending on your workflow
 - Specifying `--inspect=ws://localhost:6499/` on every invocation can be tiresome, you may want to `export BUN_OPTIONS=--inspect=ws://localhost:6499/` instead
 
-#### VSCode Setup
+#### VS Code Setup
 
-If you use VSCode, you can use our example configurations [.vscode/settings.example.json](.vscode/settings.example.json) and [.vscode/launch.example.json](.vscode/launch.example.json).
+If you use VS Code, you can use our example configurations [.vscode/settings.example.json](.vscode/settings.example.json) and [.vscode/launch.example.json](.vscode/launch.example.json).
 
 Some debug methods that can be problematic:
 
 - Debug configurations with `"request": "launch"` can have breakpoints incorrectly mapped and thus unusable
-- The same problem arises when running OpenCode in the VSCode `JavaScript Debug Terminal`
+- The same problem arises when running OpenCode in the VS Code `JavaScript Debug Terminal`
 
 With that said, you may want to try these methods, as they might work for you.
 
