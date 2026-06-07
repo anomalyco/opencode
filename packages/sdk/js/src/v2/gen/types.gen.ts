@@ -2612,6 +2612,26 @@ export type ProviderAuthError1 = {
   }
 }
 
+export type ReferenceDescriptor =
+  | {
+      name: string
+      kind: "local"
+      path: string
+    }
+  | {
+      name: string
+      kind: "git"
+      repository: string
+      path: string
+      branch?: string
+    }
+  | {
+      name: string
+      kind: "invalid"
+      repository?: string
+      message: string
+    }
+
 export type NotFoundError = {
   name: "NotFoundError"
   data: {
@@ -2754,7 +2774,7 @@ export type UnauthorizedError = {
   message: string
 }
 
-export type V2SessionsResponse = {
+export type SessionsResponse = {
   data: Array<SessionV2Info>
   cursor: {
     previous?: string
@@ -2791,7 +2811,7 @@ export type UnknownError1 = {
   ref?: string
 }
 
-export type V2SessionMessagesResponse = {
+export type SessionMessagesResponse = {
   data: Array<SessionMessage>
   cursor: {
     previous?: string
@@ -7759,6 +7779,34 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
+export type ReferenceListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/reference"
+}
+
+export type ReferenceListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ReferenceListError = ReferenceListErrors[keyof ReferenceListErrors]
+
+export type ReferenceListResponses = {
+  /**
+   * Resolved configured references
+   */
+  200: Array<ReferenceDescriptor>
+}
+
+export type ReferenceListResponse = ReferenceListResponses[keyof ReferenceListResponses]
+
 export type SessionListData = {
   body?: never
   path?: never
@@ -8112,7 +8160,7 @@ export type SessionMessagesResponses = {
   }>
 }
 
-export type SessionMessagesResponse = SessionMessagesResponses[keyof SessionMessagesResponses]
+export type SessionMessagesResponse2 = SessionMessagesResponses[keyof SessionMessagesResponses]
 
 export type SessionPromptData = {
   body?: {
@@ -9655,9 +9703,9 @@ export type V2SessionListError = V2SessionListErrors[keyof V2SessionListErrors]
 
 export type V2SessionListResponses = {
   /**
-   * V2SessionsResponse
+   * SessionsResponse
    */
-  200: V2SessionsResponse
+  200: SessionsResponse
 }
 
 export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListResponses]
@@ -9866,12 +9914,12 @@ export type V2SessionMessagesError = V2SessionMessagesErrors[keyof V2SessionMess
 
 export type V2SessionMessagesResponses = {
   /**
-   * V2SessionMessagesResponse
+   * SessionMessagesResponse
    */
-  200: V2SessionMessagesResponse
+  200: SessionMessagesResponse
 }
 
-export type V2SessionMessagesResponse2 = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
+export type V2SessionMessagesResponse = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
 
 export type V2ModelListData = {
   body?: never
@@ -10039,83 +10087,6 @@ export type V2PermissionRequestListResponses = {
 
 export type V2PermissionRequestListResponse = V2PermissionRequestListResponses[keyof V2PermissionRequestListResponses]
 
-export type V2SessionPermissionListData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: never
-  url: "/api/session/{sessionID}/permission/request"
-}
-
-export type V2SessionPermissionListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError
-   */
-  404: SessionNotFoundError
-}
-
-export type V2SessionPermissionListError = V2SessionPermissionListErrors[keyof V2SessionPermissionListErrors]
-
-export type V2SessionPermissionListResponses = {
-  /**
-   * Success
-   */
-  200: {
-    data: Array<PermissionV2Request>
-  }
-}
-
-export type V2SessionPermissionListResponse = V2SessionPermissionListResponses[keyof V2SessionPermissionListResponses]
-
-export type V2SessionPermissionReplyData = {
-  body: {
-    reply: PermissionV2Reply
-    message?: string
-  }
-  path: {
-    sessionID: string
-    requestID: string
-  }
-  query?: never
-  url: "/api/session/{sessionID}/permission/request/{requestID}/reply"
-}
-
-export type V2SessionPermissionReplyErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * SessionNotFoundError | PermissionNotFoundError
-   */
-  404: SessionNotFoundError | PermissionNotFoundError
-}
-
-export type V2SessionPermissionReplyError = V2SessionPermissionReplyErrors[keyof V2SessionPermissionReplyErrors]
-
-export type V2SessionPermissionReplyResponses = {
-  /**
-   * <No Content>
-   */
-  204: void
-}
-
-export type V2SessionPermissionReplyResponse =
-  V2SessionPermissionReplyResponses[keyof V2SessionPermissionReplyResponses]
-
 export type V2PermissionSavedListData = {
   body?: never
   path?: never
@@ -10179,6 +10150,83 @@ export type V2PermissionSavedRemoveResponses = {
 }
 
 export type V2PermissionSavedRemoveResponse = V2PermissionSavedRemoveResponses[keyof V2PermissionSavedRemoveResponses]
+
+export type V2SessionPermissionListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/permission"
+}
+
+export type V2SessionPermissionListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionPermissionListError = V2SessionPermissionListErrors[keyof V2SessionPermissionListErrors]
+
+export type V2SessionPermissionListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<PermissionV2Request>
+  }
+}
+
+export type V2SessionPermissionListResponse = V2SessionPermissionListResponses[keyof V2SessionPermissionListResponses]
+
+export type V2SessionPermissionReplyData = {
+  body: {
+    reply: PermissionV2Reply
+    message?: string
+  }
+  path: {
+    sessionID: string
+    requestID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/permission/{requestID}/reply"
+}
+
+export type V2SessionPermissionReplyErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError | PermissionNotFoundError
+   */
+  404: PermissionNotFoundError | SessionNotFoundError
+}
+
+export type V2SessionPermissionReplyError = V2SessionPermissionReplyErrors[keyof V2SessionPermissionReplyErrors]
+
+export type V2SessionPermissionReplyResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionPermissionReplyResponse =
+  V2SessionPermissionReplyResponses[keyof V2SessionPermissionReplyResponses]
 
 export type V2FsReadData = {
   body?: never
@@ -10410,7 +10458,7 @@ export type V2SessionQuestionReplyData = {
     requestID: string
   }
   query?: never
-  url: "/api/session/{sessionID}/question/request/{requestID}/reply"
+  url: "/api/session/{sessionID}/question/{requestID}/reply"
 }
 
 export type V2SessionQuestionReplyErrors = {
@@ -10425,7 +10473,7 @@ export type V2SessionQuestionReplyErrors = {
   /**
    * SessionNotFoundError | QuestionNotFoundError
    */
-  404: SessionNotFoundError | QuestionNotFoundError
+  404: QuestionNotFoundError | SessionNotFoundError
 }
 
 export type V2SessionQuestionReplyError = V2SessionQuestionReplyErrors[keyof V2SessionQuestionReplyErrors]
@@ -10446,7 +10494,7 @@ export type V2SessionQuestionRejectData = {
     requestID: string
   }
   query?: never
-  url: "/api/session/{sessionID}/question/request/{requestID}/reject"
+  url: "/api/session/{sessionID}/question/{requestID}/reject"
 }
 
 export type V2SessionQuestionRejectErrors = {
@@ -10461,7 +10509,7 @@ export type V2SessionQuestionRejectErrors = {
   /**
    * SessionNotFoundError | QuestionNotFoundError
    */
-  404: SessionNotFoundError | QuestionNotFoundError
+  404: QuestionNotFoundError | SessionNotFoundError
 }
 
 export type V2SessionQuestionRejectError = V2SessionQuestionRejectErrors[keyof V2SessionQuestionRejectErrors]

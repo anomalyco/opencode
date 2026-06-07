@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -19,6 +19,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it as runtimeIt } from "./lib/effect"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const assertions: PermissionV2.AssertInput[] = []
 const searches: LocationSearch.GrepInput[] = []
@@ -90,12 +91,20 @@ const sessionID = SessionV2.ID.make("ses_grep_tool_test")
 
 const execute = (input: Record<string, unknown>) =>
   ToolRegistry.Service.use((registry) =>
-    registry.execute({ sessionID, call: { type: "tool-call", id: "call-grep", name: "grep", input } }),
+    executeTool(registry, {
+      sessionID,
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call-grep", name: "grep", input },
+    }),
   )
 
 const settle = (input: Record<string, unknown>) =>
   ToolRegistry.Service.use((registry) =>
-    registry.settle({ sessionID, call: { type: "tool-call", id: "call-grep", name: "grep", input } }),
+    settleTool(registry, {
+      sessionID,
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call-grep", name: "grep", input },
+    }),
   )
 
 const reset = () => {
@@ -142,10 +151,10 @@ function provideLive(directory: string, projectReferences = references({})) {
 }
 
 describe("GrepTool", () => {
-  it.effect("registers the grep contribution", () =>
+  it.effect("registers grep", () =>
     Effect.gen(function* () {
       reset()
-      expect(yield* (yield* ToolRegistry.Service).definitions()).toMatchObject([{ name: "grep" }])
+      expect(yield* toolDefinitions(yield* ToolRegistry.Service)).toMatchObject([{ name: "grep" }])
     }),
   )
 
@@ -155,7 +164,7 @@ describe("GrepTool", () => {
       const input = { pattern: "needle", path: "src", include: "*.ts", limit: 2 }
 
       expect(yield* execute(input)).toEqual({ type: "text", value: "No files found" })
-      expect(assertions).toEqual([
+      expect(assertions).toMatchObject([
         {
           sessionID,
           action: "grep",
@@ -226,7 +235,7 @@ describe("GrepTool", () => {
     }),
   )
 
-  it.effect("returns a useful tool error for an invalid regex", () =>
+  it.effect("preserves an unexpected search defect", () =>
     Effect.gen(function* () {
       reset()
       searchFailure = new Ripgrep.InvalidPatternError({
@@ -234,10 +243,7 @@ describe("GrepTool", () => {
         message: "regex parse error: unclosed character class",
       })
 
-      expect(yield* execute({ pattern: "[" })).toEqual({
-        type: "error",
-        value: 'Invalid grep pattern "[": regex parse error: unclosed character class',
-      })
+      expect(Exit.isFailure(yield* execute({ pattern: "[" }).pipe(Effect.exit))).toBe(true)
       expect(searches).toEqual([{ pattern: "[" }])
     }),
   )

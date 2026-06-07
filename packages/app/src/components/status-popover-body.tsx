@@ -3,7 +3,6 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -11,14 +10,12 @@ import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
 import { ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { type ServerHealth } from "@/utils/server-health"
-import { useQueryOptions } from "@/context/server-sync"
-import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
+import { useMcpToggle } from "@/context/mcp"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -97,37 +94,6 @@ const useDefaultServerKey = (
     },
     refresh: () => setState("tick", (value) => value + 1),
   }
-}
-
-const useMcpToggleMutation = () => {
-  const sync = useSync()
-  const sdk = useSDK()
-  const language = useLanguage()
-  const queryClient = useQueryClient()
-  const queryOptions = useQueryOptions()
-
-  return useMutation(() => ({
-    mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
-      if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-        return
-      }
-      if (status?.status === "needs_auth") {
-        await sdk.client.mcp.auth.authenticate({ name })
-        return
-      }
-      await sdk.client.mcp.connect({ name })
-    },
-    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
-    onError: (err) => {
-      showToast({
-        variant: "error",
-        title: language.t("common.requestFailed"),
-        description: err instanceof Error ? err.message : String(err),
-      })
-    },
-  }))
 }
 
 type ServerStatusState = {
@@ -311,7 +277,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     dialogRun += 1
   })
   const sortedServers = createMemo(() => listServersByHealth(global.servers.list(), server.key, global.servers.health))
-  const toggleMcp = useMcpToggleMutation()
+  const toggleMcp = useMcpToggle()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status

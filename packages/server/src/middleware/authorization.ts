@@ -7,12 +7,9 @@ import { HttpApiMiddleware } from "effect/unstable/httpapi"
 const AUTH_TOKEN_QUERY = "auth_token"
 const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
 
-export class V2Authorization extends HttpApiMiddleware.Service<V2Authorization>()(
-  "@opencode/ExperimentalHttpApiV2Authorization",
-  {
-    error: UnauthorizedError,
-  },
-) {}
+export class Authorization extends HttpApiMiddleware.Service<Authorization>()("@opencode/HttpApiAuthorization", {
+  error: UnauthorizedError,
+}) {}
 
 function emptyCredential() {
   return { username: "", password: Redacted.make("") }
@@ -40,12 +37,12 @@ function credentialFromRequest(request: HttpServerRequest.HttpServerRequest) {
   return Effect.succeed(emptyCredential())
 }
 
-export const v2AuthorizationLayer = Layer.effect(
-  V2Authorization,
+export const authorizationLayer = Layer.effect(
+  Authorization,
   Effect.gen(function* () {
     const config = yield* ServerAuth.Config
-    if (!ServerAuth.required(config)) return V2Authorization.of((effect) => effect)
-    return V2Authorization.of((effect) =>
+    if (!ServerAuth.required(config)) return Authorization.of((effect) => effect)
+    return Authorization.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
         const credential = yield* credentialFromRequest(request)

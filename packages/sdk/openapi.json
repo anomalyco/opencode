@@ -5555,6 +5555,64 @@
         ]
       }
     },
+    "/reference": {
+      "get": {
+        "tags": ["reference"],
+        "operationId": "reference.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolved configured references",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReferenceDescriptor"
+                  },
+                  "description": "Resolved configured references"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List configured references resolved in the current workspace.",
+        "summary": "List configured references",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.reference.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session": {
       "get": {
         "tags": ["session"],
@@ -10059,7 +10117,7 @@
     },
     "/api/health": {
       "get": {
-        "tags": ["opencode experimental HttpApi"],
+        "tags": ["opencode HttpApi"],
         "operationId": "v2.health.get",
         "parameters": [],
         "security": [],
@@ -10103,8 +10161,8 @@
             }
           }
         },
-        "description": "Check whether the v2 API server is ready to accept requests.",
-        "summary": "Check v2 server health",
+        "description": "Check whether the API server is ready to accept requests.",
+        "summary": "Check server health",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10115,7 +10173,7 @@
     },
     "/api/agent": {
       "get": {
-        "tags": ["opencode experimental HttpApi"],
+        "tags": ["opencode HttpApi"],
         "operationId": "v2.agent.list",
         "parameters": [
           {
@@ -10184,8 +10242,8 @@
             }
           }
         },
-        "description": "Retrieve currently registered v2 agents.",
-        "summary": "List v2 agents",
+        "description": "Retrieve currently registered agents.",
+        "summary": "List agents",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10196,7 +10254,7 @@
     },
     "/api/session": {
       "get": {
-        "tags": ["v2"],
+        "tags": ["sessions"],
         "operationId": "v2.session.list",
         "parameters": [
           {
@@ -10270,11 +10328,11 @@
         "security": [],
         "responses": {
           "200": {
-            "description": "V2SessionsResponse",
+            "description": "SessionsResponse",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/V2SessionsResponse"
+                  "$ref": "#/components/schemas/SessionsResponse"
                 }
               }
             }
@@ -10311,7 +10369,7 @@
           }
         },
         "description": "Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.",
-        "summary": "List v2 sessions",
+        "summary": "List sessions",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10322,7 +10380,7 @@
     },
     "/api/session/{sessionID}/prompt": {
       "post": {
-        "tags": ["v2"],
+        "tags": ["sessions"],
         "operationId": "v2.session.prompt",
         "parameters": [
           {
@@ -10379,7 +10437,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
                 }
               }
             }
@@ -10395,8 +10460,8 @@
             }
           }
         },
-        "description": "Durably admit one v2 session input and schedule agent-loop execution unless resume is false.",
-        "summary": "Send v2 message",
+        "description": "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+        "summary": "Send message",
         "requestBody": {
           "content": {
             "application/json": {
@@ -10435,7 +10500,7 @@
     },
     "/api/session/{sessionID}/compact": {
       "post": {
-        "tags": ["v2"],
+        "tags": ["sessions"],
         "operationId": "v2.session.compact",
         "parameters": [
           {
@@ -10478,7 +10543,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
                 }
               }
             }
@@ -10494,8 +10566,8 @@
             }
           }
         },
-        "description": "Compact a v2 session conversation.",
-        "summary": "Compact v2 session",
+        "description": "Compact a session conversation.",
+        "summary": "Compact session",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10506,7 +10578,7 @@
     },
     "/api/session/{sessionID}/wait": {
       "post": {
-        "tags": ["v2"],
+        "tags": ["sessions"],
         "operationId": "v2.session.wait",
         "parameters": [
           {
@@ -10549,7 +10621,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
                 }
               }
             }
@@ -10565,8 +10644,8 @@
             }
           }
         },
-        "description": "Wait for a v2 session agent loop to become idle.",
-        "summary": "Wait for v2 session",
+        "description": "Wait for a session agent loop to become idle.",
+        "summary": "Wait for session",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10577,7 +10656,7 @@
     },
     "/api/session/{sessionID}/context": {
       "get": {
-        "tags": ["v2"],
+        "tags": ["sessions"],
         "operationId": "v2.session.context",
         "parameters": [
           {
@@ -10637,7 +10716,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
                 }
               }
             }
@@ -10653,8 +10739,8 @@
             }
           }
         },
-        "description": "Retrieve the active context messages for a v2 session (all messages after the last compaction).",
-        "summary": "Get v2 session context",
+        "description": "Retrieve the active context messages for a session (all messages after the last compaction).",
+        "summary": "Get session context",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10665,7 +10751,7 @@
     },
     "/api/session/{sessionID}/message": {
       "get": {
-        "tags": ["v2 messages"],
+        "tags": ["messages"],
         "operationId": "v2.session.messages",
         "parameters": [
           {
@@ -10707,11 +10793,11 @@
         "security": [],
         "responses": {
           "200": {
-            "description": "V2SessionMessagesResponse",
+            "description": "SessionMessagesResponse",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/V2SessionMessagesResponse"
+                  "$ref": "#/components/schemas/SessionMessagesResponse"
                 }
               }
             }
@@ -10748,7 +10834,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
                 }
               }
             }
@@ -10764,8 +10857,8 @@
             }
           }
         },
-        "description": "Retrieve projected v2 messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
-        "summary": "Get v2 session messages",
+        "description": "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
+        "summary": "Get session messages",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10776,7 +10869,7 @@
     },
     "/api/model": {
       "get": {
-        "tags": ["v2 models"],
+        "tags": ["models"],
         "operationId": "v2.model.list",
         "parameters": [
           {
@@ -10855,8 +10948,8 @@
             }
           }
         },
-        "description": "Retrieve available v2 models ordered by release date.",
-        "summary": "List v2 models",
+        "description": "Retrieve available models ordered by release date.",
+        "summary": "List models",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10867,7 +10960,7 @@
     },
     "/api/provider": {
       "get": {
-        "tags": ["v2 providers"],
+        "tags": ["providers"],
         "operationId": "v2.provider.list",
         "parameters": [
           {
@@ -10946,8 +11039,8 @@
             }
           }
         },
-        "description": "Retrieve active v2 AI providers so clients can show provider availability and configuration.",
-        "summary": "List v2 providers",
+        "description": "Retrieve active AI providers so clients can show provider availability and configuration.",
+        "summary": "List providers",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -10958,7 +11051,7 @@
     },
     "/api/provider/{providerID}": {
       "get": {
-        "tags": ["v2 providers"],
+        "tags": ["providers"],
         "operationId": "v2.provider.get",
         "parameters": [
           {
@@ -11052,8 +11145,8 @@
             }
           }
         },
-        "description": "Retrieve a single v2 AI provider so clients can inspect its availability and endpoint settings.",
-        "summary": "Get v2 provider",
+        "description": "Retrieve a single AI provider so clients can inspect its availability and endpoint settings.",
+        "summary": "Get provider",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -11064,7 +11157,7 @@
     },
     "/api/permission/request": {
       "get": {
-        "tags": ["v2 permissions"],
+        "tags": ["permissions"],
         "operationId": "v2.permission.request.list",
         "parameters": [
           {
@@ -11143,184 +11236,9 @@
         ]
       }
     },
-    "/api/session/{sessionID}/permission/request": {
-      "get": {
-        "tags": ["v2 session permissions"],
-        "operationId": "v2.session.permission.list",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/PermissionV2Request"
-                      }
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Retrieve pending permission requests owned by a session.",
-        "summary": "List session permission requests",
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.permission.list({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/api/session/{sessionID}/permission/request/{requestID}/reply": {
-      "post": {
-        "tags": ["v2 session permissions"],
-        "operationId": "v2.session.permission.reply",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
-            "name": "requestID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^per"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | PermissionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/PermissionNotFoundError"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Respond to a pending permission request owned by a session.",
-        "summary": "Reply to pending permission request",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "reply": {
-                    "$ref": "#/components/schemas/PermissionV2Reply"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["reply"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.permission.reply({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/api/permission/saved": {
       "get": {
-        "tags": ["v2 saved permissions"],
+        "tags": ["permissions"],
         "operationId": "v2.permission.saved.list",
         "parameters": [
           {
@@ -11387,7 +11305,7 @@
     },
     "/api/permission/saved/{id}": {
       "delete": {
-        "tags": ["v2 saved permissions"],
+        "tags": ["permissions"],
         "operationId": "v2.permission.saved.remove",
         "parameters": [
           {
@@ -11435,9 +11353,194 @@
         ]
       }
     },
+    "/api/session/{sessionID}/permission": {
+      "get": {
+        "tags": ["permissions"],
+        "operationId": "v2.session.permission.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PermissionV2Request"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve pending permission requests owned by a session.",
+        "summary": "List session permission requests",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.permission.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/session/{sessionID}/permission/{requestID}/reply": {
+      "post": {
+        "tags": ["permissions"],
+        "operationId": "v2.session.permission.reply",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^per"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | PermissionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PermissionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Respond to a pending permission request owned by a session.",
+        "summary": "Reply to pending permission request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reply": {
+                    "$ref": "#/components/schemas/PermissionV2Reply"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["reply"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.permission.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/fs/read": {
       "get": {
-        "tags": ["v2 filesystem"],
+        "tags": ["filesystem"],
         "operationId": "v2.fs.read",
         "parameters": [
           {
@@ -11538,7 +11641,7 @@
     },
     "/api/fs/list": {
       "get": {
-        "tags": ["v2 filesystem"],
+        "tags": ["filesystem"],
         "operationId": "v2.fs.list",
         "parameters": [
           {
@@ -11635,7 +11738,7 @@
     },
     "/api/command": {
       "get": {
-        "tags": ["v2 commands"],
+        "tags": ["commands"],
         "operationId": "v2.command.list",
         "parameters": [
           {
@@ -11704,8 +11807,8 @@
             }
           }
         },
-        "description": "Retrieve currently registered v2 commands.",
-        "summary": "List v2 commands",
+        "description": "Retrieve currently registered commands.",
+        "summary": "List commands",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -11716,7 +11819,7 @@
     },
     "/api/skill": {
       "get": {
-        "tags": ["v2 skills"],
+        "tags": ["skills"],
         "operationId": "v2.skill.list",
         "parameters": [
           {
@@ -11785,8 +11888,8 @@
             }
           }
         },
-        "description": "Retrieve currently registered v2 skills.",
-        "summary": "List v2 skills",
+        "description": "Retrieve currently registered skills.",
+        "summary": "List skills",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -11797,7 +11900,7 @@
     },
     "/api/event": {
       "get": {
-        "tags": ["v2 events"],
+        "tags": ["events"],
         "operationId": "v2.event.subscribe",
         "parameters": [
           {
@@ -11853,8 +11956,8 @@
             }
           }
         },
-        "description": "Subscribe to native EventV2 payloads for a location.",
-        "summary": "Subscribe to v2 events",
+        "description": "Subscribe to native event payloads for a location.",
+        "summary": "Subscribe to events",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -11865,7 +11968,7 @@
     },
     "/api/question/request": {
       "get": {
-        "tags": ["v2 questions"],
+        "tags": ["session questions"],
         "operationId": "v2.question.request.list",
         "parameters": [
           {
@@ -11944,9 +12047,9 @@
         ]
       }
     },
-    "/api/session/{sessionID}/question/request/{requestID}/reply": {
+    "/api/session/{sessionID}/question/{requestID}/reply": {
       "post": {
-        "tags": ["v2 session questions"],
+        "tags": ["session questions"],
         "operationId": "v2.session.question.reply",
         "parameters": [
           {
@@ -12000,10 +12103,13 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "$ref": "#/components/schemas/QuestionNotFoundError"
+                    },
+                    {
                       "$ref": "#/components/schemas/SessionNotFoundError"
                     },
                     {
-                      "$ref": "#/components/schemas/QuestionNotFoundError"
+                      "$ref": "#/components/schemas/SessionNotFoundError"
                     }
                   ]
                 }
@@ -12031,9 +12137,9 @@
         ]
       }
     },
-    "/api/session/{sessionID}/question/request/{requestID}/reject": {
+    "/api/session/{sessionID}/question/{requestID}/reject": {
       "post": {
-        "tags": ["v2 session questions"],
+        "tags": ["session questions"],
         "operationId": "v2.session.question.reject",
         "parameters": [
           {
@@ -12087,10 +12193,13 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "$ref": "#/components/schemas/QuestionNotFoundError"
+                    },
+                    {
                       "$ref": "#/components/schemas/SessionNotFoundError"
                     },
                     {
-                      "$ref": "#/components/schemas/QuestionNotFoundError"
+                      "$ref": "#/components/schemas/SessionNotFoundError"
                     }
                   ]
                 }
@@ -20157,6 +20266,70 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "ReferenceDescriptor": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["local"]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "kind", "path"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["git"]
+              },
+              "repository": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "kind", "repository", "path"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["invalid"]
+              },
+              "repository": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "kind", "message"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "NotFoundError": {
         "type": "object",
         "required": ["name", "data"],
@@ -20587,7 +20760,7 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
-      "V2SessionsResponse": {
+      "SessionsResponse": {
         "type": "object",
         "properties": {
           "data": {
@@ -20694,7 +20867,7 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
-      "V2SessionMessagesResponse": {
+      "SessionMessagesResponse": {
         "type": "object",
         "properties": {
           "data": {
@@ -28823,6 +28996,10 @@
       "description": "Experimental HttpApi provider routes."
     },
     {
+      "name": "reference",
+      "description": "Configured reference routes."
+    },
+    {
       "name": "session",
       "description": "Experimental HttpApi session routes."
     },
@@ -28839,64 +29016,52 @@
       "description": "Experimental HttpApi workspace routes."
     },
     {
-      "name": "opencode experimental HttpApi",
+      "name": "opencode HttpApi",
       "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
-      "name": "opencode experimental HttpApi",
+      "name": "opencode HttpApi",
       "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
-      "name": "v2",
-      "description": "Experimental v2 routes."
+      "name": "sessions",
+      "description": "Experimental session routes."
     },
     {
-      "name": "v2 messages",
-      "description": "Experimental v2 message routes."
+      "name": "messages",
+      "description": "Experimental message routes."
     },
     {
-      "name": "v2 models",
-      "description": "Experimental v2 model routes."
+      "name": "models",
+      "description": "Experimental model routes."
     },
     {
-      "name": "v2 providers",
-      "description": "Experimental v2 provider routes."
+      "name": "providers",
+      "description": "Experimental provider routes."
     },
     {
-      "name": "v2 permissions",
-      "description": "Experimental v2 permission routes."
+      "name": "permissions",
+      "description": "Experimental permission routes."
     },
     {
-      "name": "v2 session permissions",
-      "description": "Experimental v2 session permission routes."
+      "name": "filesystem",
+      "description": "Experimental location-scoped filesystem routes."
     },
     {
-      "name": "v2 saved permissions",
-      "description": "Experimental v2 saved permission routes."
+      "name": "commands",
+      "description": "Experimental command routes."
     },
     {
-      "name": "v2 filesystem",
-      "description": "Experimental v2 location-scoped filesystem routes."
+      "name": "skills",
+      "description": "Experimental skill routes."
     },
     {
-      "name": "v2 commands",
-      "description": "Experimental v2 command routes."
+      "name": "events",
+      "description": "Experimental event stream route."
     },
     {
-      "name": "v2 skills",
-      "description": "Experimental v2 skill routes."
-    },
-    {
-      "name": "v2 events",
-      "description": "Experimental v2 event stream route."
-    },
-    {
-      "name": "v2 questions",
-      "description": "Experimental v2 question routes."
-    },
-    {
-      "name": "v2 session questions",
-      "description": "Experimental v2 session question routes."
+      "name": "session questions",
+      "description": "Experimental session question routes."
     },
     {
       "name": "pty",

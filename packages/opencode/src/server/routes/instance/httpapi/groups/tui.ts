@@ -1,4 +1,4 @@
-import { TuiEvent } from "@/cli/cmd/tui/event"
+import { TuiEvent } from "@/server/tui-event"
 import { TuiRequest as TuiRequestPayload } from "@/server/shared/tui-control"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
