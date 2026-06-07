@@ -1,0 +1,4 @@
+- Return normalized session metadata for a single session.
+- Includes: title, directory, workspace, parent session, agent, model, cost, token usage, and timestamps.
+- Use this to inspect a session's metadata before reading its transcript.
+- Pair with session_find or session_list to discover session IDs.

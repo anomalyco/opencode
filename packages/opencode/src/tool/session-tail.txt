@@ -1,0 +1,7 @@
+- Return the most recent messages from a session in lightweight text-only format.
+- No tool call outputs, no file metadata — just role, text, agent, and timestamps.
+- Use this for quick context checks when you need the latest conversation state.
+- Use withChildren: true to also include recent messages from child/subagent sessions.
+- Use limit to control how many recent messages to return (default 20, max 50).
+- For detailed transcript reading with pagination and tool outputs, use session_read instead.
+- Pair with session_find or session_list to discover session IDs first.

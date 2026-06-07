@@ -160,6 +160,28 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  session_search: Schema.optional(
+    Schema.Struct({
+      jina_api_key: Schema.optional(Schema.String).annotate({
+        description: "Jina AI API key for semantic session search (https://jina.ai)",
+      }),
+      semantic_enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable semantic search (requires jina_api_key). Defaults to true when key is present.",
+      }),
+      semantic_model: Schema.optional(Schema.String).annotate({
+        description: "Jina embeddings model. Default: jina-embeddings-v5-text-small",
+      }),
+      semantic_endpoint: Schema.optional(Schema.String).annotate({
+        description: "Jina embeddings API endpoint. Default: https://api.jina.ai/v1/embeddings",
+      }),
+      semantic_request_timeout_ms: Schema.optional(Schema.Number).annotate({
+        description: "Timeout for Jina API requests in ms. Default: 30000",
+      }),
+      embedding_cache_max_entries: Schema.optional(Schema.Number).annotate({
+        description: "Max cached embedding entries before LRU eviction. Default: 10000",
+      }),
+    }),
+  ).annotate({ description: "Session search configuration" }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

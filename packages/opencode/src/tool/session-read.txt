@@ -1,0 +1,9 @@
+- Read a session transcript with pagination support.
+- Returns messages as structured entries with text content, file metadata, timestamps, model info, and token counts.
+- File metadata (mime type, URL, filename) is included by default for all messages.
+- Use withToolOutputs: true to include tool call inputs and outputs.
+- Use withChildren: true to also include child/subagent session messages.
+- Use beforeMessageId to paginate backward from a known message, or offset to skip N messages from the start.
+- Use limit to control batch size (default 50, max 100).
+- Use this tool to inspect a specific session's conversation history.
+- Pair with session_find or session_list to discover session IDs first.

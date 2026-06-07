@@ -1,0 +1,5 @@
+- Find sessions by title with case-insensitive substring matching.
+- Returns session metadata: ID, title, directory, timestamps, parent ID, agent, model.
+- Use scope: "local" (default) to search the current project, or "global" for all projects.
+- When multiple sessions match, the result includes an ambiguous flag.
+- Use this tool to discover session IDs before reading transcripts with session_read or session_tail.

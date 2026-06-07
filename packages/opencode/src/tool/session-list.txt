@@ -1,0 +1,7 @@
+- List sessions with optional filters for scope, recency, and title search.
+- Returns all sessions (both parent and child/subagent sessions).
+- Use scope: "local" (default) to list sessions in the current project, or "global" for all projects.
+- Use start to only show sessions updated after a Unix timestamp (in milliseconds).
+- Use search to filter by title substring.
+- Use limit to control batch size (default 20, max 100).
+- Use this tool to discover session IDs before reading transcripts or getting metadata.

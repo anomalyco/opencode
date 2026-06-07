@@ -23,6 +23,20 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
+import { SessionSearchTool } from "./session-search"
+import { SessionSearchGlobalTool } from "./session-search-global"
+import { SessionReadTool } from "./session-read"
+import { SessionTailTool } from "./session-tail"
+import { SessionFindTool } from "./session-find"
+import { SessionGetTool } from "./session-get"
+import { SessionListTool } from "./session-list"
+import { SessionSearch, layer as SessionSearchLayer } from "./session-search/index"
+import { LexicalSearch, layer as LexicalSearchLayer } from "./session-search/lexical"
+import { SemanticSearch, layer as SemanticSearchLayer } from "./session-search/semantic"
+import {
+  Service as EmbeddingCache,
+  defaultLayer as EmbeddingCacheLayer,
+} from "./session-search/embedding-cache"
 import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
@@ -106,7 +120,7 @@ export const layer: Layer.Layer<
   | Truncate.Service
   | RuntimeFlags.Service
   | Database.Service
-> = Layer.effect(
+  > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -133,6 +147,20 @@ export const layer: Layer.Layer<
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
+
+    const searchLayer = SessionSearchLayer.pipe(
+      Layer.provide(LexicalSearchLayer),
+      Layer.provide(SemanticSearchLayer),
+      Layer.provide(EmbeddingCacheLayer),
+    )
+
+    const sessionSearch = yield* Effect.provide(SessionSearchTool, searchLayer)
+    const sessionSearchGlobal = yield* Effect.provide(SessionSearchGlobalTool, searchLayer)
+    const sessionRead = yield* SessionReadTool
+    const sessionTail = yield* SessionTailTool
+    const sessionFind = yield* SessionFindTool
+    const sessionGet = yield* SessionGetTool
+    const sessionList = yield* SessionListTool
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -239,6 +267,13 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          session_read: Tool.init(sessionRead),
+          session_tail: Tool.init(sessionTail),
+          session_find: Tool.init(sessionFind),
+          session_get: Tool.init(sessionGet),
+          session_list: Tool.init(sessionList),
+          session_search: Tool.init(sessionSearch),
+          session_search_global: Tool.init(sessionSearchGlobal),
         })
 
         return {
@@ -260,6 +295,13 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            tool.session_search,
+            tool.session_search_global,
+            tool.session_read,
+            tool.session_tail,
+            tool.session_find,
+            tool.session_get,
+            tool.session_list,
           ],
           task: tool.task,
           read: tool.read,
@@ -389,7 +431,10 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Ripgrep.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)),
+    .pipe(
+      Layer.provide(Database.defaultLayer),
+      Layer.provide(RuntimeFlags.defaultLayer),
+    ),
 )
 
 function isZodType(value: unknown): value is z.ZodType {

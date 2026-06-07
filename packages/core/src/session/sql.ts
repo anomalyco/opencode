@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex, blob } from "drizzle-orm/sqlite-core"
 import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
@@ -199,5 +199,20 @@ export const SessionMailboxTable = sqliteTable(
       table.id,
     ),
     index("session_mailbox_claim_idx").on(table.claim_id),
+  ],
+)
+
+export const SessionSearchEmbeddingTable = sqliteTable(
+  "session_search_embedding",
+  {
+    fingerprint: text().primaryKey(),
+    vector: blob().$type<ArrayBuffer>().notNull(),
+    dimensions: integer().notNull(),
+    model: text().notNull(),
+    created_at: integer().notNull(),
+    last_accessed_at: integer().notNull(),
+  },
+  (table) => [
+    index("idx_embedding_lru").on(table.model, table.last_accessed_at),
   ],
 )

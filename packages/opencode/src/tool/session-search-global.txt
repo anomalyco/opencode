@@ -1,0 +1,8 @@
+- Search session transcripts across all projects globally.
+- Lexical (keyword) search always runs. Semantic search activates when semantic: true AND a Jina API key is configured in opencode.json.
+- Returns ranked results with session ID, title, matching snippet, score, and match mode.
+- Use semantic: true for conceptual/meaning-based search (finds related ideas even with different wording).
+- Use exact: true for literal phrase matching only.
+- Use this to find past discussions across all your projects.
+- Prefer session_search for current-project-only searches (faster).
+- Pair with session_read to read the full transcript of matching sessions.

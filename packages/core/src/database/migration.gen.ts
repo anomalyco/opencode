@@ -37,5 +37,6 @@ export const migrations = (
     import("./migration/20260604172448_event_sourced_session_input"),
     import("./migration/20260605141000_ui_open_project_directory"),
     import("./migration/20260606130000_ui_open_project_directory_identity"),
+    import("./migration/20260607000000_session_search_embedding"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]
