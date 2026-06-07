@@ -77,7 +77,9 @@ test("returns syntax styles and indexed splash colors", async () => {
     expectIndexed(theme.block.highlight)
     expectIndexed(theme.block.warning)
     expectRgba(theme.footer.highlight)
+    expectRgba(theme.footer.statusAccent)
     expectRgba(theme.footer.surface)
+    expect(expectRgba(theme.footer.statusAccent).toInts()).not.toEqual(expectRgba(theme.footer.status).toInts())
   } finally {
     theme.block.syntax?.destroy()
     theme.block.subtleSyntax?.destroy()

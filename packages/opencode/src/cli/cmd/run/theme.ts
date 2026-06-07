@@ -33,6 +33,7 @@ export type RunFooterTheme = {
   muted: ColorInput
   text: ColorInput
   status: ColorInput
+  statusAccent: ColorInput
   shade: ColorInput
   surface: ColorInput
   pane: ColorInput
@@ -503,10 +504,16 @@ function map(
   const opaqueSubtleSyntax = opaqueSyntaxStyle(subtleSyntax, scrollbackTheme.background)
   subtleSyntax?.destroy()
   const footerBackground = alpha(footerTheme.background, 1)
+  const footerMode = mode(footerBackground)
   const shade = fade(footerTheme.backgroundMenu, footerTheme.background, 0.12, 0.56, 0.72)
   const surface = fade(footerTheme.backgroundMenu, footerTheme.background, 0.18, 0.76, 0.9)
   const line = fade(footerTheme.backgroundMenu, footerTheme.background, 0.24, 0.9, 0.98)
-  const status = tint(footerBackground, rgba("#000000"), mode(footerBackground) === "dark" ? 0.12 : 0.06)
+  const status = tint(footerBackground, rgba("#000000"), footerMode === "dark" ? 0.12 : 0.06)
+  const statusAccent = tint(
+    footerBackground,
+    rgba(footerMode === "dark" ? "#ffffff" : "#000000"),
+    footerMode === "dark" ? 0.06 : 0.08,
+  )
 
   return {
     background: footerTheme.background,
@@ -520,6 +527,7 @@ function map(
       muted: footerTheme.textMuted,
       text: footerTheme.text,
       status,
+      statusAccent,
       shade,
       surface,
       pane: footerTheme.backgroundMenu,
@@ -602,6 +610,7 @@ export const RUN_THEME_FALLBACK: RunTheme = {
     muted: seed.muted,
     text: seed.text,
     status: tint(seed.panel, rgba("#000000"), 0.12),
+    statusAccent: tint(seed.panel, rgba("#ffffff"), 0.06),
     shade: alpha(seed.panel, 0.68),
     surface: alpha(seed.panel, 0.86),
     pane: seed.panel,

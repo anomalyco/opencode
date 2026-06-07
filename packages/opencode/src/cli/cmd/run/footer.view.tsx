@@ -441,6 +441,8 @@ export function RunFooterView(props: RunFooterViewProps) {
     return theme().muted
   })
   const statuslineBackground = createMemo(() => theme().status)
+  const hasActivityMeta = createMemo(() => activityMeta().length > 0)
+  const hasModelStatus = createMemo(() => Boolean(modelStatus()))
   const contextHints = createMemo(() => {
     if (!prompt() || shell() || !responsive().statusline.showContextHints) {
       return []
@@ -460,6 +462,8 @@ export function RunFooterView(props: RunFooterViewProps) {
     const limit = responsive().statusline.contextHintLimit
     return limit === undefined ? items : items.slice(0, limit)
   })
+  const hasSingleContextHint = createMemo(() => contextHints().length === 1)
+  const hasContextHints = createMemo(() => contextHints().length > 0)
   const commandHint = createMemo(() => {
     if (!prompt() || !responsive().statusline.showCommandHint) {
       return
@@ -473,6 +477,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return { key: command(), label: "cmd" }
     }
   })
+  const sectionSeparator = () => <span style={{ fg: theme().muted }}>· </span>
 
   createEffect(() => {
     props.onRequestExit?.(composer.requestExit)
@@ -817,11 +822,11 @@ export function RunFooterView(props: RunFooterViewProps) {
                   id="run-direct-footer-statusline-mode"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={modeColor()}
+                  backgroundColor={theme().statusAccent}
                   flexShrink={0}
                 >
-                  <text fg={theme().surface} wrapMode="none" truncate>
-                    {modeLabel()}
+                  <text wrapMode="none" truncate>
+                    <span style={{ fg: modeColor(), bold: true }}>{modeLabel()}</span>
                   </text>
                 </box>
 
@@ -834,7 +839,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   minWidth={12}
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={statuslineBackground()}
+                  backgroundColor="transparent"
                 >
                   <Show when={busy() && !exiting()}>
                     <box id="run-direct-footer-status-spinner" flexShrink={0}>
@@ -862,9 +867,8 @@ export function RunFooterView(props: RunFooterViewProps) {
                 <Show when={activityMeta().length > 0}>
                   <box
                     id="run-direct-footer-statusline-meta"
-                    paddingLeft={1}
                     paddingRight={1}
-                    backgroundColor={statuslineBackground()}
+                    backgroundColor="transparent"
                     flexShrink={1}
                   >
                     <text fg={theme().muted} wrapMode="none" truncate>
@@ -877,9 +881,8 @@ export function RunFooterView(props: RunFooterViewProps) {
                   {(info) => (
                     <box
                       id="run-direct-footer-statusline-model"
-                      paddingLeft={1}
                       paddingRight={1}
-                      backgroundColor={statuslineBackground()}
+                      backgroundColor="transparent"
                       flexShrink={0}
                     >
                       <text fg={theme().text} wrapMode="none">
@@ -903,13 +906,15 @@ export function RunFooterView(props: RunFooterViewProps) {
                   {(hint, index) => (
                     <box
                       id={`run-direct-footer-statusline-${hint.kind}`}
-                      paddingLeft={index() === 0 ? 1 : 0}
                       paddingRight={1}
-                      backgroundColor={theme().line}
+                      backgroundColor="transparent"
                       flexShrink={0}
                       maxWidth={24}
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
+                        <Show when={hasSingleContextHint() && (hasActivityMeta() || hasModelStatus())}>
+                          {sectionSeparator()}
+                        </Show>
                         <span style={{ fg: theme().highlight }}>{hint.key}</span>{" "}
                         <span style={{ fg: theme().muted }}>{hint.label}</span>
                       </text>
@@ -921,13 +926,13 @@ export function RunFooterView(props: RunFooterViewProps) {
                   {(hint) => (
                     <box
                       id="run-direct-footer-statusline-hint"
-                      paddingLeft={contextHints().length > 0 ? 0 : 1}
                       paddingRight={1}
-                      backgroundColor={theme().line}
+                      backgroundColor="transparent"
                       flexShrink={0}
                       maxWidth={18}
                     >
                       <text fg={theme().text} wrapMode="none" truncate>
+                        <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>{sectionSeparator()}</Show>
                         <span style={{ fg: theme().highlight }}>{hint().key}</span>{" "}
                         <span style={{ fg: theme().muted }}>{hint().label}</span>
                       </text>

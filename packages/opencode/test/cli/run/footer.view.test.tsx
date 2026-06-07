@@ -156,13 +156,22 @@ async function renderFooter(
     tuiConfig?: RunTuiConfig
     commands?: RunCommand[]
     theme?: () => RunTheme
+    providers?: RunProvider[]
+    currentModel?: RunInput["model"]
+    currentVariant?: string
+    subagents?: FooterSubagentState
+    backgroundSubagents?: boolean
+    width?: number
+    height?: number
     state?: Partial<FooterState>
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean
   } = {},
 ) {
   const [view] = createSignal<FooterView>({ type: "prompt" })
-  const [subagents] = createSignal<FooterSubagentState>({ tabs: [], details: {}, permissions: [], questions: [] })
+  const [subagents] = createSignal<FooterSubagentState>(
+    input.subagents ?? { tabs: [], details: {}, permissions: [], questions: [] },
+  )
   const state = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
   let offKeymap: (() => void) | undefined
@@ -180,16 +189,16 @@ async function renderFooter(
           agents={() => []}
           resources={() => []}
           commands={() => input.commands ?? []}
-          providers={() => undefined}
-          currentModel={() => undefined}
+          providers={() => input.providers}
+          currentModel={() => input.currentModel}
           variants={() => []}
-          currentVariant={() => undefined}
+          currentVariant={() => input.currentVariant}
           state={state}
           view={view}
           subagent={subagents}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           tuiConfig={config}
-          backgroundSubagents={true}
+          backgroundSubagents={input.backgroundSubagents ?? true}
           agent="opencode"
           onSubmit={input.onSubmit ?? (() => true)}
           onPermissionReply={() => {}}
@@ -213,11 +222,11 @@ async function renderFooter(
 
   const app = await testRender(
     () => (
-      <box width={100} height={8}>
+      <box width={input.width ?? 100} height={input.height ?? 8}>
         <Harness />
       </box>
     ),
-    { width: 100, height: 8, kittyKeyboard: true },
+    { width: input.width ?? 100, height: input.height ?? 8, kittyKeyboard: true },
   )
 
   return {
@@ -892,6 +901,16 @@ test("direct footer shows editable prompts and additional queued work while runn
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
+    const tinted = (RUN_THEME_FALLBACK.footer.status as RGBA).toInts()
+    const accent = (RUN_THEME_FALLBACK.footer.statusAccent as RGBA).toInts()
+    const statusline = app.renderer.root.findDescendantById("run-direct-footer-statusline") as BoxRenderable
+    const mode = app.renderer.root.findDescendantById("run-direct-footer-statusline-mode") as BoxRenderable
+    const main = app.renderer.root.findDescendantById("run-direct-footer-statusline-main") as BoxRenderable
+    const model = app.renderer.root.findDescendantById("run-direct-footer-statusline-model") as BoxRenderable
+    const queued = app.renderer.root.findDescendantById("run-direct-footer-statusline-queued") as BoxRenderable
+    const hint = app.renderer.root.findDescendantById("run-direct-footer-statusline-hint") as BoxRenderable
+
     expect(frame).toContain("esc interrupt")
     expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
     expect(frame).toContain("3 queued")
@@ -899,13 +918,48 @@ test("direct footer shows editable prompts and additional queued work while runn
     expect(frame).toContain("ctrl+x q 3 queued")
     expect(frame).toContain("ctrl+x down subagents")
     expect(frame).toContain("ctrl+p cmd")
-    expect(frame).not.toContain("subagents  ctrl+p cmd")
+    expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
+    expect(frame).toContain("subagents · ctrl+p cmd")
     expect(frame).not.toContain("1 agent")
+    expect(statusline.backgroundColor.toInts()).toEqual(tinted)
+    expect(mode.backgroundColor.toInts()).toEqual(accent)
+    expect(main.backgroundColor.toInts()).toEqual(transparent)
+    expect(model.backgroundColor.toInts()).toEqual(transparent)
+    expect(queued.backgroundColor.toInts()).toEqual(transparent)
+    expect(hint.backgroundColor.toInts()).toEqual(transparent)
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()
     offKeymap?.()
     app.renderer.destroy()
+  }
+})
+
+test("direct footer separates a lone context hint from model and command hint", async () => {
+  const app = await renderFooter({
+    providers: [provider()],
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentVariant: "xhigh",
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
+      details: {},
+      permissions: [],
+      questions: [],
+    },
+    backgroundSubagents: false,
+    width: 160,
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("GPT-5")
+    expect(frame).toContain("xhigh · ctrl+x down subagents · ctrl+p cmd")
+    expect(frame).not.toContain("ctrl+b background")
+    expect(frame).not.toContain("queued")
+  } finally {
+    app.cleanup()
   }
 })
 
@@ -936,6 +990,23 @@ test("direct footer shows full usage metadata when room is available", async () 
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("159.6K (16%) · $4.23")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer mode label keeps left padding without a status pill", async () => {
+  const app = await renderFooter()
+
+  try {
+    await app.renderOnce()
+    const statusline = app
+      .captureCharFrame()
+      .split("\n")
+      .find((line) => line.includes("BUILD") && line.includes("cmd"))
+
+    expect(statusline).toBeDefined()
+    expect(statusline?.startsWith(" BUILD ")).toBe(true)
   } finally {
     app.cleanup()
   }
