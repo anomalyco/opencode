@@ -36,6 +36,7 @@ export type WslServerConfig = {
   id: string
   distro: string
   port?: number
+  username?: string
   password?: string
 }
 
@@ -91,5 +92,6 @@ export type WslServersPlatform = {
 
 export type WslServerAccessConfig = {
   port?: number | null
+  username?: string | null
   password?: string | null
 }

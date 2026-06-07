@@ -336,10 +336,10 @@ function ManagedServerInlineForm(props: { item: WslServerItem; onBack: () => voi
   const platform = usePlatform()
   const api = platform.wslServers!
   const [port, setPort] = createSignal(props.item.config.port?.toString() ?? "")
+  const [username, setUsername] = createSignal(props.item.config.username ?? "opencode")
   const [password, setPassword] = createSignal(props.item.config.password ?? "")
   const [error, setError] = createSignal("")
   const [saving, setSaving] = createSignal(false)
-  const username = () => (props.item.runtime.kind === "ready" ? (props.item.runtime.username ?? "opencode") : "opencode")
   const address = () => {
     if (port().trim()) return `http://127.0.0.1:${port().trim()}`
     if (props.item.runtime.kind === "ready") return props.item.runtime.url
@@ -356,6 +356,7 @@ function ManagedServerInlineForm(props: { item: WslServerItem; onBack: () => voi
     api
       .updateServer(props.item.config.id, {
         port: parsedPort,
+        username: username().trim() || null,
         password: password().trim() || null,
       })
       .then(props.onBack)
@@ -410,7 +411,19 @@ function ManagedServerInlineForm(props: { item: WslServerItem; onBack: () => voi
           </div>
           <div class="settings-v2-server-form-field">
             <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.username")}</label>
-            <TextInputV2 type="text" appearance="large" class="!w-full self-stretch" value={username()} disabled />
+            <TextInputV2
+              type="text"
+              appearance="large"
+              class="!w-full self-stretch"
+              value={username()}
+              placeholder={language.t("dialog.server.add.usernamePlaceholder")}
+              disabled={saving()}
+              onInput={(event) => {
+                setError("")
+                setUsername(event.currentTarget.value)
+              }}
+              onKeyDown={keyDown}
+            />
           </div>
         </div>
         <div class="settings-v2-server-form-field">
@@ -432,6 +445,7 @@ function ManagedServerInlineForm(props: { item: WslServerItem; onBack: () => voi
             <span class="settings-v2-server-dialog-error">{error()}</span>
           </Show>
         </div>
+        <div class="settings-v2-server-form-warning">{language.t("dialog.server.managed.restartWarning")}</div>
       </div>
       <div class="settings-v2-server-form-actions">
         <ButtonV2 variant="neutral" disabled={saving()} onClick={props.onBack}>

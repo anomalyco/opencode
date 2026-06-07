@@ -352,6 +352,7 @@ export const dict = {
   "dialog.server.current": "Current Server",
   "dialog.server.status.default": "Default",
   "dialog.server.managed.addressRandom": "Assigned on start",
+  "dialog.server.managed.restartWarning": "Saving these changes restarts this server.",
   "wsl.server.add": "Add WSL server",
   "wsl.server.addShort": "WSL",
   "wsl.server.label": "WSL",

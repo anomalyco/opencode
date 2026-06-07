@@ -168,18 +168,20 @@ function testControllerOptions() {
 }
 
 test("decodes WSL sidecar access config", () => {
-  expect(decodeWslServerAccessConfig({ port: 4096, password: " secret " })).toEqual({
+  expect(decodeWslServerAccessConfig({ port: 4096, username: " user ", password: " secret " })).toEqual({
     port: 4096,
+    username: "user",
     password: "secret",
   })
-  expect(decodeWslServerAccessConfig({ port: null, password: " " })).toEqual({})
+  expect(decodeWslServerAccessConfig({ port: null, username: " ", password: " " })).toEqual({})
   expect(() => decodeWslServerAccessConfig({ port: 70000 })).toThrow()
   expect(() => decodeWslServerAccessConfig({ port: "4096" })).toThrow()
 })
 
 test("drops invalid persisted WSL sidecar access config", () => {
-  expect(decodePersistedWslServerAccessConfig({ port: 4096, password: "secret" })).toEqual({
+  expect(decodePersistedWslServerAccessConfig({ port: 4096, username: "user", password: "secret" })).toEqual({
     port: 4096,
+    username: "user",
     password: "secret",
   })
   expect(decodePersistedWslServerAccessConfig({ port: 70000, password: "secret" })).toEqual({})

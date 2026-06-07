@@ -181,7 +181,10 @@ export async function spawnLocalServer(
   }
 }
 
-export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
+export async function checkHealth(
+  url: string,
+  credentials?: string | { username?: string | null; password?: string | null } | null,
+): Promise<boolean> {
   let healthUrl: URL
   try {
     healthUrl = new URL("/global/health", url)
@@ -190,8 +193,10 @@ export async function checkHealth(url: string, password?: string | null): Promis
   }
 
   const headers = new Headers()
+  const password = typeof credentials === "string" ? credentials : credentials?.password
   if (password) {
-    const auth = Buffer.from(`opencode:${password}`).toString("base64")
+    const username = typeof credentials === "string" ? "opencode" : (credentials?.username ?? "opencode")
+    const auth = Buffer.from(`${username}:${password}`).toString("base64")
     headers.set("authorization", `Basic ${auth}`)
   }
 

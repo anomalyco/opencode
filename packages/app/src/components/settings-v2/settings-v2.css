@@ -656,6 +656,17 @@
   gap: 8px;
 }
 
+.settings-v2-server-form-warning {
+  border-radius: 6px;
+  border: 0.5px solid color-mix(in srgb, var(--v2-state-fg-warning) 35%, transparent);
+  background: color-mix(in srgb, var(--v2-state-fg-warning) 8%, transparent);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 440;
+  line-height: 1.35;
+  color: var(--v2-state-fg-warning);
+}
+
 .settings-v2-managed-add {
   width: 100%;
   max-width: 680px;

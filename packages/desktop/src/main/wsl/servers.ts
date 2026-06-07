@@ -206,6 +206,7 @@ export function createWslServersController(
     try {
       const sidecar = await spawnSidecar(item.config.distro, {
         port: item.config.port,
+        username: item.config.username,
         password: item.config.password,
       })
       if (!isCurrentStartAttempt(id, attempt)) {

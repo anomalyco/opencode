@@ -5,6 +5,7 @@ const WslServerPort = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.
 
 const WslServerAccessConfigSchema = Schema.Struct({
   port: Schema.optional(Schema.NullOr(WslServerPort)),
+  username: Schema.optional(Schema.NullOr(Schema.String)),
   password: Schema.optional(Schema.NullOr(Schema.String)),
 })
 
@@ -21,9 +22,11 @@ export function decodePersistedWslServerAccessConfig(input: unknown) {
 
 function cleanAccessConfig(input: WslServerAccessConfig) {
   const port = input.port ?? undefined
+  const username = input.username?.trim()
   const password = input.password?.trim()
   return {
     ...(port === undefined ? {} : { port }),
+    ...(username ? { username } : {}),
     ...(password ? { password } : {}),
   }
 }

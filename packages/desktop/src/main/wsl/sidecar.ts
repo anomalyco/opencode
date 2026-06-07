@@ -15,6 +15,7 @@ export type WslSidecar = {
 
 export type WslSidecarOptions = {
   port?: number
+  username?: string
   password?: string
   onLine?: (line: WslCommandLine) => void
   healthTimeoutMs?: number
@@ -29,7 +30,7 @@ export async function spawnWslSidecar(
 
   const port = opts.port ?? (await allocatePort())
   const password = opts.password ?? randomUUID()
-  const username = "opencode"
+  const username = opts.username ?? "opencode"
   const script = [
     "set -euo pipefail",
     'cd "$HOME" || cd /',
@@ -65,7 +66,7 @@ export async function spawnWslSidecar(
   })
   const url = `http://127.0.0.1:${port}`
   const startup = new AbortController()
-  const health = pollWslHealth(() => checkHealth(url, password), startup.signal)
+  const health = pollWslHealth(() => checkHealth(url, { username, password }), startup.signal)
   const timeoutMs = opts.healthTimeoutMs ?? 30_000
   let timeout: ReturnType<typeof setTimeout>
   const timedOut = new Promise<never>(
