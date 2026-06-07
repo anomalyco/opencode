@@ -197,7 +197,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   return (
     <box>
       {/* ── Context ── */}
-      <text fg={theme().text} bold {...clickProps()}>Context</text>
+      <text fg={theme().text} attributes={TextAttributes.BOLD} {...clickProps()}>Context</text>
       <Show when={state().percent !== null}>
         <Bar
           segs={tokenSegs(state().percent!, theme())}
