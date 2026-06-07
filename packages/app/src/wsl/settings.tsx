@@ -37,6 +37,7 @@ export function WslServerSettings(props: {
   controller: Controller
   servers: ReturnType<typeof useFilteredWslServers>
   onEdit: (item: ReturnType<ReturnType<typeof useFilteredWslServers>>[number]) => void
+  highlightedId?: string | null
 }) {
   const platform = usePlatform()
   const language = useLanguage()
@@ -66,7 +67,10 @@ export function WslServerSettings(props: {
           const opencodeAction = () => wslOpencodeAction(check())
           const busy = () => wsl.data?.job?.kind === "install-opencode" && wsl.data.job.distro === item.config.distro
           return (
-            <div class="settings-v2-servers-row">
+            <div
+              class="settings-v2-servers-row"
+              classList={{ "settings-v2-servers-row--highlight": props.highlightedId === item.config.id }}
+            >
               <div class="settings-v2-servers-lead">
                 <ServerHealthIndicator health={props.controller.status()[key]} />
                 <div class="settings-v2-servers-copy">
