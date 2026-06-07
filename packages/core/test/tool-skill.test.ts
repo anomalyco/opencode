@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -100,6 +101,9 @@ describe("SkillTool", () => {
               type: "text",
               value: SkillTool.toModelOutput(info, [reference]),
             })
+            expect(SkillTool.toModelOutput(info, [reference])).toContain(
+              `Base directory for this skill: ${pathToFileURL(directory).href}`,
+            )
             expect(
               yield* settleTool(registry, {
                 sessionID,
