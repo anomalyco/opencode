@@ -16,7 +16,7 @@ import { useServerManagementController } from "../dialog-select-server"
 import { SettingsListV2 } from "./parts/list"
 import { DialogAddWslServer } from "@/wsl/dialog-add-server"
 import { isWslServer, useFilteredWslServers, WslServerSettings } from "@/wsl/settings"
-import type { WslServerConfig, WslServerItem } from "@/wsl/types"
+import type { WslServerItem } from "@/wsl/types"
 import "./settings-v2.css"
 
 type ServerSettingsView = "list" | "http-form" | "managed-add" | "managed-form"
@@ -30,7 +30,7 @@ export const SettingsServersV2: Component = () => {
     view: "list" as ServerSettingsView,
     managedEditId: null as string | null,
   })
-  const [highlightedWslId, setHighlightedWslId] = createSignal<string | null>(null)
+  const [managedAddTitle, setManagedAddTitle] = createSignal<string | null>(null)
   const wslServers = useFilteredWslServers(() => store.filter)
   const editingManaged = createMemo(() => wslServers().find((item) => item.config.id === store.managedEditId))
 
@@ -53,13 +53,12 @@ export const SettingsServersV2: Component = () => {
 
   const backToList = () => {
     controller.resetForm()
+    setManagedAddTitle(null)
     setStore({ view: "list", managedEditId: null })
   }
 
-  const handleManagedAdded = async (_distro: string, config: WslServerConfig) => {
-    setHighlightedWslId(config.id)
+  const handleManagedAdded = () => {
     backToList()
-    setTimeout(() => setHighlightedWslId(null), 1800)
   }
 
   const openHttpAdd = () => {
@@ -74,6 +73,7 @@ export const SettingsServersV2: Component = () => {
 
   const openManagedAdd = () => {
     controller.resetForm()
+    setManagedAddTitle(null)
     setStore({ view: "managed-add", managedEditId: null })
   }
 
@@ -96,7 +96,7 @@ export const SettingsServersV2: Component = () => {
     if (store.view === "http-form") {
       return controller.isAddMode() ? language.t("dialog.server.add.title") : language.t("dialog.server.edit.title")
     }
-    if (store.view === "managed-add") return language.t("wsl.server.add")
+    if (store.view === "managed-add") return managedAddTitle() ?? language.t("wsl.server.add")
     if (store.view === "managed-form") return language.t("dialog.server.edit.title")
     return language.t("status.popover.tab.servers")
   })
@@ -179,7 +179,11 @@ export const SettingsServersV2: Component = () => {
           </Match>
           <Match when={store.view === "managed-add"}>
             <div class="settings-v2-managed-add">
-              <DialogAddWslServer onAdded={handleManagedAdded} onCancel={backToList} />
+              <DialogAddWslServer
+                onAdded={handleManagedAdded}
+                onCancel={backToList}
+                onTitleChange={setManagedAddTitle}
+              />
             </div>
           </Match>
           <Match when={store.view === "managed-form" && editingManaged()}>
@@ -202,7 +206,6 @@ export const SettingsServersV2: Component = () => {
                   controller={controller}
                   servers={wslServers}
                   onEdit={openManagedEdit}
-                  highlightedId={highlightedWslId()}
                 />
                 <For each={filtered()}>
                   {(item) => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { enterWslOpencodeStep, wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
+import { wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
 
 describe("WSL server settings presentation", () => {
   test("retries only settled unsuccessful runtimes", () => {
@@ -43,15 +43,5 @@ describe("WSL server settings presentation", () => {
         error: null,
       }),
     ).toBeUndefined()
-  })
-
-  test("probes the selected distro before entering the OpenCode step", async () => {
-    const calls: string[] = []
-    await enterWslOpencodeStep(
-      "Debian",
-      async (distro) => calls.push(distro),
-      (step) => calls.push(step),
-    )
-    expect(calls).toEqual(["Debian", "opencode"])
   })
 })

@@ -513,7 +513,9 @@
 }
 
 .settings-v2-tab-body.settings-v2-servers {
+  flex: 1;
   gap: 0;
+  min-height: 0;
 }
 
 .settings-v2-tab-header.settings-v2-servers-header {
@@ -552,12 +554,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-
-.settings-v2-servers-row--highlight {
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--v2-text-text-base) 6%, transparent);
-  box-shadow: 0 0 0 8px color-mix(in srgb, var(--v2-text-text-base) 6%, transparent);
 }
 
 .settings-v2-servers-row:not(:last-child) {
@@ -674,11 +670,15 @@
 }
 
 .settings-v2-managed-add {
+  display: flex;
+  flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 680px;
 }
 
 .settings-v2-managed-add > div {
+  flex: 1;
   padding-inline: 0;
 }
 
