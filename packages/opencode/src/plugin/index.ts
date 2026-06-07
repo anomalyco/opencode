@@ -17,6 +17,7 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { AzureAuthPlugin } from "./azure"
+import { AgioneAuthPlugin } from "./agione"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
 import { Effect, Layer, Context } from "effect"
@@ -65,6 +66,7 @@ export function experimentalWebSocketsEnabled(input: { enabled: boolean; channel
 // Built-in plugins that are directly imported (not installed from npm)
 function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
   return [
+    AgioneAuthPlugin,
     // Temporary rollout: pre-release builds use WebSockets by default; releases require explicit opt-in.
     (input) =>
       CodexAuthPlugin(input, {

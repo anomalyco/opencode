@@ -154,6 +154,41 @@ Don't see a provider here? Submit a PR.
 
 ---
 
+### AGIone
+
+AGIone provides an OpenAI-compatible API for multiple model vendors. OpenCode includes a built-in AGIone provider with DeepSeek V4 Pro as the default coding model.
+
+1. Create an API key in the [AGIone console](https://agione.pro/).
+
+2. Run the `/connect` command and search for **AGIone**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your AGIone API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command and select `deepseek/deepseek-v4-pro/d3462`.
+
+   ```txt
+   /models
+   ```
+
+You can also use the provider with an environment variable:
+
+```bash
+AGIONE_API_KEY=<your-api-key> opencode
+```
+
+---
+
 ### Amazon Bedrock
 
 To use Amazon Bedrock with OpenCode:

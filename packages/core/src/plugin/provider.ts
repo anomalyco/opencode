@@ -1,3 +1,4 @@
+import { AgionePlugin } from "./provider/agione"
 import { AlibabaPlugin } from "./provider/alibaba"
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock"
 import { AnthropicPlugin } from "./provider/anthropic"
@@ -32,6 +33,7 @@ import { XAIPlugin } from "./provider/xai"
 import { ZenmuxPlugin } from "./provider/zenmux"
 
 export const ProviderPlugins = [
+  AgionePlugin,
   AlibabaPlugin,
   AmazonBedrockPlugin,
   AnthropicPlugin,
