@@ -172,7 +172,7 @@ export const SettingsServersV2: Component = () => {
           </Match>
           <Match when={store.view === "managed-add"}>
             <div class="settings-v2-managed-add">
-              <DialogAddWslServer onAdded={backToList} />
+              <DialogAddWslServer onAdded={backToList} onCancel={backToList} />
             </div>
           </Match>
           <Match when={store.view === "managed-form" && editingManaged()}>
