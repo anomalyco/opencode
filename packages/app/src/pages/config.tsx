@@ -20,6 +20,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Select } from "@opencode-ai/ui/select"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Switch as Toggle } from "@opencode-ai/ui/switch"
@@ -134,6 +135,14 @@ type CustomState = FormState & {
 
 const CUSTOM_NEW = "provider:_new_custom"
 const SKILL_NEW = "skill:_new_custom"
+
+const CUSTOM_PROVIDER_NPM_PACKAGES: readonly string[] = [OPENAI_COMPATIBLE, "@ai-sdk/openai", "@ai-sdk/anthropic"]
+
+function customProviderNpmPackages(value: string | undefined): string[] {
+  const current = value?.trim()
+  if (current && !CUSTOM_PROVIDER_NPM_PACKAGES.includes(current)) return [current, ...CUSTOM_PROVIDER_NPM_PACKAGES]
+  return [...CUSTOM_PROVIDER_NPM_PACKAGES]
+}
 
 type SkillMarketRepo = {
   id: string
@@ -1949,6 +1958,8 @@ function CustomEditor(props: {
   onAddFetchedModel: (id: string, name: string) => void
 }) {
   const language = useLanguage()
+  const npmOptions = createMemo(() => customProviderNpmPackages(props.form.npm))
+  const selectedNpm = createMemo(() => props.form.npm?.trim() || OPENAI_COMPATIBLE)
 
   return (
     <div class="flex h-full min-h-0 flex-col">
@@ -2040,12 +2051,21 @@ function CustomEditor(props: {
                 validationState={props.form.err.providerID ? "invalid" : undefined}
                 error={props.form.err.providerID}
               />
-              <TextField
-                label={language.t("config.custom.field.npm")}
-                placeholder="@ai-sdk/openai-compatible"
-                value={props.form.npm}
-                onChange={(value) => props.onField("npm", value)}
-              />
+              <div class="flex w-full flex-col items-start gap-2">
+                <label class="text-12-medium text-text-weak">{language.t("config.custom.field.npm")}</label>
+                <Select
+                  options={npmOptions()}
+                  current={npmOptions().find((option) => option === selectedNpm())}
+                  onSelect={(value) => value && props.onField("npm", value)}
+                  variant="secondary"
+                  size="large"
+                  valueClass="font-mono text-13-regular"
+                  triggerStyle={{ width: "100%", "justify-content": "space-between", transform: "none" }}
+                  triggerProps={{ "aria-label": language.t("config.custom.field.npm") }}
+                >
+                  {(option) => <span class="font-mono text-12-medium">{option}</span>}
+                </Select>
+              </div>
               <TextField
                 label={language.t("config.custom.field.name")}
                 placeholder={language.t("config.custom.field.namePlaceholder")}
@@ -2100,11 +2120,11 @@ function CustomEditor(props: {
                   onAdd={props.onAddFetchedModel}
                 />
               </div>
-              <div class="flex flex-col gap-3 mb-3">
+              <div class="config-custom-model-list mb-3 flex flex-col gap-3">
                 <For each={props.form.models}>
                   {(item, idx) => (
                     <div class="rounded-xl border border-border-weak-base bg-surface-base/60 p-2" data-row={item.row}>
-                      <div class="grid gap-2 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                      <div class="config-custom-model-summary grid gap-2 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto]">
                         <IconButton
                           type="button"
                           icon={item.expanded ? "chevron-down" : "chevron-right"}

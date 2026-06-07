@@ -52,14 +52,8 @@
       background: var(--input-base);
 
       &:focus-within:not(:has([data-readonly])) {
-        border-color: transparent;
-        /* border/shadow-xs/select */
-        box-shadow:
-          0 0 0 3px var(--border-weak-selected),
-          0 0 0 1px var(--border-selected),
-          0 1px 2px -1px rgba(19, 16, 16, 0.25),
-          0 1px 2px 0 rgba(19, 16, 16, 0.08),
-          0 1px 3px 0 rgba(19, 16, 16, 0.12);
+        border-color: var(--border-weak-base);
+        box-shadow: none;
       }
 
       &:has([data-invalid]) {

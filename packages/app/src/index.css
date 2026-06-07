@@ -66,6 +66,21 @@
     background-color: color-mix(in srgb, var(--text-base) 62%, transparent);
   }
 
+  .config-custom-model-summary
+    [data-component="input"][data-variant="normal"]
+    [data-slot="input-wrapper"]:not(:has([data-invalid])) {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .config-custom-model-summary
+    [data-component="input"][data-variant="normal"]
+    [data-slot="input-wrapper"]:focus-within:not(:has([data-readonly])):not(:has([data-invalid])) {
+    border-color: transparent;
+    box-shadow: none;
+  }
+
   [data-component="sidebar-session"] {
     --sidebar-session-accent: #c98a6d;
     --sidebar-session-hover-bg: #2c2924;
