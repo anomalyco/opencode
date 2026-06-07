@@ -351,6 +351,7 @@ export function RunCommandMenuBody(props: {
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
+  const activeSubagentCount = createMemo(() => props.subagents().filter((item) => item.status === "running").length)
   const entries = createMemo<CommandEntry[]>(() => {
     const builtins = ["editor", "new"]
     const session: CommandEntry[] = [
@@ -367,7 +368,7 @@ export function RunCommandMenuBody(props: {
             action: "subagent" as const,
             category: "Session",
             display: "View subagents",
-            footer: `${props.subagents().length} active`,
+            footer: activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
             keywords: props
               .subagents()
               .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
@@ -658,7 +659,7 @@ export function RunSubagentSelectBody(props: {
         offset={menu.offset}
         rows={menu.rows}
         limit={SUBAGENT_LIST_ROWS}
-        empty="No active subagents"
+        empty="No subagents found"
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}

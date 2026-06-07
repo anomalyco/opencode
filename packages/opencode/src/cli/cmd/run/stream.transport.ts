@@ -31,7 +31,6 @@ import { replayActiveText, replayLocalRows, replaySession } from "./session-repl
 import {
   bootstrapSubagentCalls,
   bootstrapSubagentData,
-  clearFinishedSubagents,
   createSubagentData,
   listSubagentPermissions,
   listSubagentQuestions,
@@ -755,7 +754,6 @@ function createLayer(input: StreamInput) {
             permissions,
             questions,
           })
-          clearFinishedSubagents(state.subagent)
 
           for (const request of [
             ...state.data.permissions,
@@ -1199,13 +1197,6 @@ function createLayer(input: StreamInput) {
           if (state.wait) {
             yield* Effect.fail(new Error("prompt already running"))
             return
-          }
-
-          const prev = listSubagentTabs(state.subagent)
-          if (clearFinishedSubagents(state.subagent)) {
-            const snapshot = currentSubagentState()
-            traceTabs(input.trace, prev, snapshot.tabs)
-            syncFooter([], undefined, snapshot)
           }
 
           const item: Wait = {

@@ -751,22 +751,6 @@ export function bootstrapSubagentCalls(input: {
   return changed || beforeCallCount !== detail.data.call.size || queueChanged(detail.data, before)
 }
 
-export function clearFinishedSubagents(data: SubagentData) {
-  let changed = false
-
-  for (const [sessionID, tab] of data.tabs.entries()) {
-    if (tab.status === "running") {
-      continue
-    }
-
-    data.tabs.delete(sessionID)
-    data.details.delete(sessionID)
-    changed = true
-  }
-
-  return changed
-}
-
 export function reduceSubagentData(input: {
   data: SubagentData
   event: Event

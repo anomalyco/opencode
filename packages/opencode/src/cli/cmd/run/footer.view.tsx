@@ -148,6 +148,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     return current.type === "subagent" ? current.sessionID : undefined
   })
   const tabs = createMemo(() => subagent().tabs)
+  const activeTabs = createMemo(() => tabs().filter((item) => item.status === "running"))
   const selectedTab = createMemo(() => tabs().find((item) => item.sessionID === selected()))
   const selectedIndex = createMemo(() => {
     const sessionID = selected()
@@ -157,9 +158,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
-  const foregroundSubagents = createMemo(
-    () => props.backgroundSubagents && tabs().some((item) => item.status === "running" && !item.background),
-  )
+  const foregroundSubagents = createMemo(() => props.backgroundSubagents && activeTabs().some((item) => !item.background))
   const model = createMemo(() => {
     const current = props.currentModel()
     return current ? modelInfo(props.providers(), current) : { model: props.state().model, provider: undefined }
@@ -455,7 +454,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     if (queuedPrompts().length > 0 && queuedShortcut()) {
       items.push({ kind: "queued", key: queuedShortcut(), label: `${queue()} queued` })
     }
-    if (tabs().length > 0 && subagentShortcut()) {
+    if (activeTabs().length > 0 && subagentShortcut()) {
       items.push({ kind: "subagents", key: subagentShortcut(), label: "subagents" })
     }
 

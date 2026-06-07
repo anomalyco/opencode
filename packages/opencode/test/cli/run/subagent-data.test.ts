@@ -4,7 +4,6 @@ import { entryBody } from "@/cli/cmd/run/entry.body"
 import {
   bootstrapSubagentCalls,
   bootstrapSubagentData,
-  clearFinishedSubagents,
   createSubagentData,
   reduceSubagentData,
   snapshotSubagentData,
@@ -434,23 +433,6 @@ describe("run subagent data", () => {
       "› Inspect footer tabs",
       "_Thinking:_ planning next steps",
       "hello world",
-    ])
-  })
-
-  test("clears finished tabs on the next parent prompt", () => {
-    const data = createSubagentData()
-
-    bootstrapSubagentData({
-      data,
-      messages: [taskMessage("child-1", "completed"), taskMessage("child-2", "running")],
-      children: [{ id: "child-1" }, { id: "child-2" }],
-      permissions: [],
-      questions: [],
-    })
-
-    expect(clearFinishedSubagents(data)).toBe(true)
-    expect(snapshotSubagentData(data).tabs).toEqual([
-      expect.objectContaining({ sessionID: "child-2", status: "running" }),
     ])
   })
 })

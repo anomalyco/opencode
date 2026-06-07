@@ -508,6 +508,54 @@ test("direct command panel shows subagent entry when available", async () => {
   }
 })
 
+test("direct command panel keeps completed subagents available", async () => {
+  const [commands] = createSignal<RunCommand[] | undefined>([])
+  const [subagents] = createSignal([
+    subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow", status: "completed" }),
+  ])
+  const [variants] = createSignal<string[]>([])
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunCommandMenuBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          commands={commands}
+          subagents={subagents}
+          queued={() => []}
+          variants={variants}
+          variantCycle="ctrl+t"
+          onClose={() => {}}
+          onModel={() => {}}
+          onEditor={() => {}}
+          onSkill={() => {}}
+          onSubagent={() => {}}
+          onQueued={() => {}}
+          onVariant={() => {}}
+          onVariantCycle={() => {}}
+          onCommand={() => {}}
+          onNew={() => {}}
+          onExit={() => {}}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: RUN_COMMAND_PANEL_ROWS,
+    },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("View subagents")
+    expect(frame).toContain("1 recent")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("direct subagent panel renders active subagents", async () => {
   const [tabs] = createSignal([
     subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" }),
@@ -958,6 +1006,33 @@ test("direct footer separates a lone context hint from model and command hint", 
     expect(frame).toContain("xhigh · ctrl+x down subagents · ctrl+p cmd")
     expect(frame).not.toContain("ctrl+b background")
     expect(frame).not.toContain("queued")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer hides the subagent hint when only completed subagents remain", async () => {
+  const app = await renderFooter({
+    providers: [provider()],
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentVariant: "xhigh",
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow", status: "completed" })],
+      details: {},
+      permissions: [],
+      questions: [],
+    },
+    backgroundSubagents: false,
+    width: 160,
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("GPT-5")
+    expect(frame).toContain("xhigh · ctrl+p cmd")
+    expect(frame).not.toContain("ctrl+x down subagents")
   } finally {
     app.cleanup()
   }
