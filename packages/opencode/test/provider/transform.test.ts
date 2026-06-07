@@ -1744,6 +1744,117 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
     ])
   })
+
+  test("drops an assistant message whose only text part is whitespace", () => {
+    // Regression: github-copilot Claude (via /v1/messages) returned HTTP 400
+    // "text content blocks must contain non-whitespace text" when history contained an
+    // assistant turn whose single content block was a lone space (e.g. an empty response
+    // from a cheap fallback model that was later replayed to Claude).
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: [{ type: "text", text: " " }] },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("drops whitespace-only text parts but keeps real text", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: " " },
+          { type: "text", text: "Hello" },
+          { type: "text", text: "\n\t" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([{ type: "text", text: "Hello" }])
+  })
+
+  test("preserves a single-space separator between signed reasoning blocks", () => {
+    // MessageV2 emits a " " separator alongside signed reasoning; it must survive so the
+    // AI SDK can merge it, otherwise signed-reasoning replay positioning changes.
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking", providerOptions: { anthropic: { signature: "sig1" } } },
+          { type: "text", text: " " },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    const texts = result[0].content.filter((p: any) => p.type === "text")
+    expect(texts).toHaveLength(1)
+    expect(texts[0].text).toBe(" ")
+    expect(result[0].content.some((p: any) => p.type === "reasoning")).toBe(true)
+  })
+
+  test("drops whitespace text when reasoning is empty/unsigned (no separator leak)", () => {
+    // The space must not survive merely because a reasoning part is present: an empty,
+    // unsigned reasoning part is filtered out, which would otherwise leave a lone " ".
+    const msgs = [
+      { role: "user", content: "Hi" },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "" },
+          { type: "text", text: " " },
+        ],
+      },
+      { role: "user", content: "Bye" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hi")
+    expect(result[1].content).toBe("Bye")
+  })
+
+  test("drops whitespace-only text for bedrock claude", () => {
+    const bedrockModel = {
+      ...anthropicModel,
+      id: "amazon-bedrock/anthropic.claude-opus-4-6",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "anthropic.claude-opus-4-6",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: [{ type: "text", text: " " }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "  " },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toEqual([{ type: "text", text: "Answer" }])
+  })
 })
 
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {

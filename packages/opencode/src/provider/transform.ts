@@ -130,18 +130,32 @@ function normalizeMessages(
   })
 
   // Anthropic rejects messages with empty content - filter out empty string messages
-  // and remove empty text/reasoning parts from array content
+  // and remove empty/whitespace-only text and empty reasoning parts from array content.
+  // Anthropic returns 400 "text content blocks must contain non-whitespace text" for any
+  // text block that is empty OR whitespace-only, so whitespace must be treated like empty.
   if (model.api.npm === "@ai-sdk/anthropic") {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
+          if (msg.content.trim() === "") return undefined
           return msg
         }
         if (!Array.isArray(msg.content)) return msg
+        // MessageV2.toModelMessages substitutes a single space for empty assistant text
+        // that sits between signed reasoning blocks; the AI SDK merges that separator into
+        // an adjacent block so it never reaches the API as a standalone whitespace block.
+        // Preserve a whitespace-only text part only when this message still carries
+        // signed/redacted Anthropic reasoning that survives filtering below; otherwise drop
+        // it, since a standalone whitespace text block is rejected by Anthropic.
+        const hasSignedReasoning = msg.content.some(
+          (part) =>
+            part.type === "reasoning" &&
+            (part.providerOptions?.anthropic?.signature != null ||
+              part.providerOptions?.anthropic?.redactedData != null),
+        )
         const filtered = msg.content.filter((part) => {
           if (part.type === "text") {
-            return part.text !== ""
+            return hasSignedReasoning ? part.text !== "" : part.text.trim() !== ""
           }
           if (part.type === "reasoning") {
             return (
@@ -158,18 +172,22 @@ function normalizeMessages(
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
-  // Bedrock specific transforms
+  // Bedrock specific transforms. Claude on Bedrock has the same Anthropic content rules, so
+  // empty/whitespace-only text blocks are rejected too. Unlike the direct Anthropic path,
+  // MessageV2.toModelMessages does not emit the single-space reasoning separator for Bedrock
+  // (its substitution is gated on the 'anthropic' signature namespace), so whitespace-only
+  // text is always stray here and can be dropped unconditionally.
   if (model.api.npm === "@ai-sdk/amazon-bedrock") {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
+          if (msg.content.trim() === "") return undefined
           return msg
         }
         if (!Array.isArray(msg.content)) return msg
         const filtered = msg.content.filter((part) => {
           if (part.type === "text") {
-            return part.text !== ""
+            return part.text.trim() !== ""
           }
           if (part.type === "reasoning") {
             return (
