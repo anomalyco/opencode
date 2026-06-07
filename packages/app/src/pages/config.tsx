@@ -326,24 +326,65 @@ function pkg(spec: string | [string, Record<string, unknown>]) {
   return { name: spec, version: "latest" }
 }
 
-function skillMeta(text: string, path: string) {
+function cleanFrontmatterValue(value: string) {
+  return value.trim().replace(/\s+/g, " ")
+}
+
+function frontmatterData(text: string) {
   const hit = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)
-  if (!hit) {
+  if (!hit) return
+
+  const lines = hit[1].split(/\r?\n/)
+  const data: Record<string, string> = {}
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index].match(/^([A-Za-z0-9_-]+):\s*(.*)$/)
+    if (!line) continue
+
+    const key = line[1]
+    const raw = line[2].trim()
+    const block = raw.match(/^([|>])[-+]?$/)
+
+    if (block) {
+      const blockLines: string[] = []
+      for (let next = index + 1; next < lines.length; next++) {
+        const blockLine = lines[next]
+        if (/^[A-Za-z0-9_-]+:\s*/.test(blockLine) || (blockLine.trim() && !/^\s/.test(blockLine))) {
+          index = next - 1
+          break
+        }
+
+        blockLines.push(blockLine)
+        index = next
+      }
+
+      const indents = blockLines
+        .filter((blockLine) => blockLine.trim())
+        .map((blockLine) => blockLine.match(/^\s*/)?.[0].length ?? 0)
+      const indent = indents.length ? Math.min(...indents) : 0
+      data[key] = cleanFrontmatterValue(
+        blockLines
+          .map((blockLine) => blockLine.slice(Math.min(indent, blockLine.length)))
+          .join(block[1] === ">" ? " " : "\n"),
+      )
+      continue
+    }
+
+    data[key] = cleanFrontmatterValue(raw.replace(/^['"]|['"]$/g, ""))
+  }
+
+  return data
+}
+
+function skillMeta(text: string, path: string) {
+  const data = frontmatterData(text)
+  if (!data) {
     return {
       name: name(dir(path)),
       description: "Skill metadata is incomplete.",
       warn: "Missing frontmatter. Add `name` and `description` to `SKILL.md`.",
     }
   }
-
-  const data = hit[1]
-    .split(/\r?\n/)
-    .map((line) => line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/))
-    .filter((line): line is RegExpMatchArray => !!line)
-    .reduce<Record<string, string>>((acc, line) => {
-      acc[line[1]] = line[2].trim().replace(/^['"]|['"]$/g, "")
-      return acc
-    }, {})
 
   const miss = [!data.name && "`name`", !data.description && "`description`"].filter((item): item is string => !!item)
 
@@ -895,7 +936,7 @@ function SkillListButton(props: {
       />
       <div class="flex items-start gap-3">
         <div
-          class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200"
+          class="mt-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-all duration-200"
           classList={{
             "bg-surface-danger-base/15 text-text-danger-base": !!props.warn,
             "bg-surface-secondary text-text-strong": props.active && !props.warn,
@@ -903,12 +944,12 @@ function SkillListButton(props: {
               !props.active && !props.warn,
           }}
         >
-          <Icon name="book" size="normal" />
+          <Icon name="book" size="large" class="scale-110" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex min-w-0 flex-wrap items-center gap-2">
             <div
-              class="min-w-0 truncate text-15-medium transition-colors"
+              class="min-w-0 truncate text-[18px] font-medium leading-[1.35] tracking-tight transition-colors"
               classList={{
                 "text-text-danger-base": !!props.warn,
                 "text-text-strong": !props.warn,
@@ -2656,7 +2697,6 @@ export default function ConfigPage() {
       path: item.path,
       editable: true,
       source: "opencode",
-      note: t("config.agents.note"),
       group: "opencode" as const,
       origin: ".opencode",
     })),
@@ -2755,6 +2795,8 @@ export default function ConfigPage() {
           if (!match.test(item.path)) return []
 
           const label = stem(rel(root, item.path))
+          const text = await platform.readConfigFile?.(item.path).catch(() => null)
+          const description = text ? frontmatterData(text)?.description : undefined
 
           return [
             {
@@ -2764,10 +2806,10 @@ export default function ConfigPage() {
               editable: file(item.path),
               note:
                 extra.group === "plugin" && opts?.code
-                  ? "Plugin agent prompt source file."
+                  ? (description ?? "Plugin agent prompt source file.")
                   : extra.group === "plugin"
-                    ? "Plugin agent prompt file."
-                    : t("config.agents.note"),
+                    ? (description ?? "Plugin agent prompt file.")
+                    : description,
               ...extra,
             },
           ]
@@ -2891,7 +2933,7 @@ export default function ConfigPage() {
         source: "external",
         group: "plugin" as const,
         origin: "runtime",
-        note: item.description ?? "Loaded runtime agent from config or plugin.",
+        note: item.description,
         content: item.prompt ?? "No prompt content is available for this runtime agent.",
       }))
   })
@@ -4840,11 +4882,7 @@ export default function ConfigPage() {
                                   <ListButton
                                     active={state.pick === item.id}
                                     title={item.label}
-                                    note={
-                                      loadedMap().get(item.label)?.description ||
-                                      agentModeLabel(loadedMap().get(item.label)?.mode) ||
-                                      item.note
-                                    }
+                                    note={loadedMap().get(item.label)?.description || item.note}
                                     meta={short(item.path, space()?.agentsRoot)}
                                     onClick={() => void open(item)}
                                   />
@@ -4891,11 +4929,7 @@ export default function ConfigPage() {
                                             <ListButton
                                               active={state.pick === item.id}
                                               title={item.label}
-                                              note={
-                                                loadedMap().get(item.label)?.description ||
-                                                agentModeLabel(loadedMap().get(item.label)?.mode) ||
-                                                item.note
-                                              }
+                                              note={loadedMap().get(item.label)?.description || item.note}
                                               meta={[item.origin, short(item.path, item.root)]
                                                 .filter(Boolean)
                                                 .join(" · ")}
@@ -4926,11 +4960,7 @@ export default function ConfigPage() {
                                   <ListButton
                                     active={state.pick === item.id}
                                     title={item.label}
-                                    note={
-                                      loadedMap().get(item.label)?.description ||
-                                      agentModeLabel(loadedMap().get(item.label)?.mode) ||
-                                      item.note
-                                    }
+                                    note={loadedMap().get(item.label)?.description || item.note}
                                     meta={[item.project, item.origin, short(item.path, item.root)]
                                       .filter(Boolean)
                                       .join(" · ")}
