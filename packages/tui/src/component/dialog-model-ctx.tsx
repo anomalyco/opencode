@@ -4,9 +4,9 @@ import { useSync } from "../context/sync"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 import { DialogSelect } from "../ui/dialog-select"
-import { createClient, createConfig } from "@/local/llama-skein/gen/client"
-import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
-import type { ResourceSnapshot } from "@/local/llama-skein/gen/types.gen"
+import { createClient, createConfig } from "../local/llama-skein/gen/client"
+import { LlamaSkeinClient } from "../local/llama-skein/gen/sdk.gen"
+import type { ResourceSnapshot } from "../local/llama-skein/gen/types.gen"
 
 const MIN_WORKFLOW_CTX = 65536
 const MAX_CTX = 262144
