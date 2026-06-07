@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.15.12",
+  "version": "1.15.13",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -23,7 +23,9 @@
     "./icons/app": "./src/components/app-icons/types.ts",
     "./fonts/*": "./src/assets/fonts/*",
     "./audio/*": "./src/assets/audio/*",
-    "./v2/*": "./src/v2/*"
+    "./v2/*.css": "./src/v2/components/*.css",
+    "./v2/*": "./src/v2/components/*.tsx",
+    "./v2/styles/*": "./src/v2/styles/*"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
@@ -47,8 +49,8 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/bounds": "0.1.3",

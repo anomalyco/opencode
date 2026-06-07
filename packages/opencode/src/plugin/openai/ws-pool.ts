@@ -97,9 +97,9 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         maxConnectionAge,
         init?.signal,
       )
-      let resolveFirstEvent: (started: boolean) => void = () => {}
+      let resolveFirstEvent: (event: boolean | OpenAIWebSocket.WrappedError) => void = () => {}
       let rejectFirstEvent: (error: Error) => void = () => {}
-      const firstEvent = new Promise<boolean>((resolve, reject) => {
+      const firstEvent = new Promise<boolean | OpenAIWebSocket.WrappedError>((resolve, reject) => {
         resolveFirstEvent = resolve
         rejectFirstEvent = reject
       })
@@ -108,7 +108,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         body,
         idleTimeout,
         signal: init?.signal ?? undefined,
-        onFirstEvent: () => resolveFirstEvent(true),
+        onFirstEvent: (error) => resolveFirstEvent(error ?? true),
         onTerminal: (event) => {
           entry.busy = false
           entry.lastUsedAt = Date.now()
@@ -121,6 +121,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onConnectionInvalid: (error) => {
           log.warn("websocket invalidated", { key, error: error.message })
           entry.busy = false
+          entry.lastUsedAt = Date.now()
           if (!entry.fallback) recordStreamFailure(entry)
           invalidate(entry)
           resolveFirstEvent(false)
@@ -140,7 +141,14 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           throw error
         },
       })
-      if (await firstEvent) return response
+      const first = await firstEvent
+      if (first !== false) {
+        if (first === true || first.status < 200 || first.status > 599) return response
+        return new Response(first.body, {
+          status: first.status,
+          headers: { "content-type": "application/json", ...first.headers },
+        })
+      }
       if (!entry.fallback) return response
       log.debug("http fallback", { key, reason: "websocket_retries_exhausted" })
       return httpFetch(input, httpInit)
@@ -179,6 +187,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     const now = Date.now()
     for (const [key, entry] of pool) {
       if (entry.busy) continue
+      if (entry.fallback) continue
       if (now - entry.lastUsedAt < idleTimeout) continue
       log.debug("websocket idle prune", { key })
       invalidate(entry)
@@ -193,7 +202,16 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     pool.clear()
   }
 
-  return Object.assign(websocketFetch, { close })
+  function remove(sessionID: string) {
+    const key = `${sessionID}:conversation`
+    const entry = pool.get(key)
+    if (!entry) return
+    log.debug("websocket pool remove", { key })
+    invalidate(entry)
+    pool.delete(key)
+  }
+
+  return Object.assign(websocketFetch, { close, remove })
 }
 
 function connectionLimitError(event: Record<string, unknown>) {
