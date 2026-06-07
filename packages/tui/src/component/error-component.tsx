@@ -6,11 +6,7 @@ import { useClipboard } from "../context/clipboard"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { destroyRenderer } from "../util/renderer"
 
-export function ErrorComponent(props: {
-  error: Error
-  reset: () => void
-  mode?: "dark" | "light"
-}) {
+export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light" }) {
   const term = useTerminalDimensions()
   const renderer = useRenderer()
   const clipboard = useClipboard()

@@ -73,7 +73,11 @@ export async function read() {
   if (text) return { data: text, mime: "text/plain" }
 }
 
-export function copyCommand(os: NodeJS.Platform, wayland: boolean, has: (name: string) => boolean): string[] | undefined {
+export function copyCommand(
+  os: NodeJS.Platform,
+  wayland: boolean,
+  has: (name: string) => boolean,
+): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
   if (os === "linux" && wayland && has("wl-copy")) return ["wl-copy"]
   if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard"]

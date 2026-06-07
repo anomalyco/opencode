@@ -52,7 +52,11 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
   return { found: false, index: left }
 }
 
-export const { context: SyncContext, use: useSync, provider: SyncProvider } = createSimpleContext({
+export const {
+  context: SyncContext,
+  use: useSync,
+  provider: SyncProvider,
+} = createSimpleContext({
   name: "Sync",
   init: () => {
     const startup = useTuiStartup()

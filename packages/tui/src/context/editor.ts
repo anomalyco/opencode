@@ -116,7 +116,8 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     const editor = props.integration ?? editorIntegration
     const value = process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT
     const parsedPort = value ? Number.parseInt(value, 10) : undefined
-    const port = parsedPort && Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : undefined
+    const port =
+      parsedPort && Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : undefined
     const zedTerminal = process.env.ZED_TERM === "true" || process.env.TERM_PROGRAM?.toLowerCase() === "zed"
     const mentionListeners = new Set<(mention: EditorMention) => void>()
     const WebSocketImpl = props.WebSocketImpl ?? WebSocket
@@ -319,9 +320,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(
-          resolveEditorConnection(directory, port, editor.connection) || (zedTerminal && editor.selection),
-        )
+        return Boolean(resolveEditorConnection(directory, port, editor.connection) || (zedTerminal && editor.selection))
       },
       connected() {
         return store.status === "connected"
