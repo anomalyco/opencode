@@ -862,6 +862,146 @@ function ListButton(props: {
   )
 }
 
+function SkillListButton(props: {
+  active: boolean
+  title: string
+  note?: string
+  warn?: boolean
+  warnLabel?: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      class="group relative w-full overflow-hidden rounded-2xl border px-3.5 py-3 text-left transition-all duration-200 focus:outline-none focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
+      classList={{
+        "border-border-danger-base/50 bg-surface-danger-base/10 shadow-[inset_0_1px_0_color-mix(in_srgb,white_7%,transparent)]":
+          props.active && !!props.warn,
+        "border-border-base bg-surface-base-active shadow-[0_14px_30px_-26px_rgba(0,0,0,0.9),inset_0_1px_0_color-mix(in_srgb,white_7%,transparent)]":
+          props.active && !props.warn,
+        "border-border-danger-base/35 bg-background-base/55 hover:border-border-danger-base/70 hover:bg-surface-danger-base/10":
+          !props.active && !!props.warn,
+        "border-border-weak-base/70 bg-background-base/50 hover:border-border-base hover:bg-surface-base/85 hover:shadow-[0_14px_30px_-28px_rgba(0,0,0,0.9)]":
+          !props.active && !props.warn,
+      }}
+      onClick={props.onClick}
+    >
+      <div
+        class="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--text-strong)_18%,transparent),transparent)] transition-opacity duration-200"
+        classList={{
+          "opacity-100": props.active,
+          "opacity-0 group-hover:opacity-100": !props.active,
+        }}
+      />
+      <div class="flex items-start gap-3">
+        <div
+          class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200"
+          classList={{
+            "bg-surface-danger-base/15 text-text-danger-base": !!props.warn,
+            "bg-surface-secondary text-text-strong": props.active && !props.warn,
+            "bg-surface-secondary/70 text-text-base group-hover:bg-surface-secondary group-hover:text-text-strong":
+              !props.active && !props.warn,
+          }}
+        >
+          <Icon name="book" size="normal" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <div
+              class="min-w-0 truncate text-15-medium transition-colors"
+              classList={{
+                "text-text-danger-base": !!props.warn,
+                "text-text-strong": !props.warn,
+              }}
+            >
+              {props.title}
+            </div>
+            <Show when={props.warnLabel}>
+              <span class="shrink-0 rounded-full border border-border-danger-base/45 bg-surface-danger-base/15 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
+                {props.warnLabel}
+              </span>
+            </Show>
+          </div>
+          <Show when={props.note}>
+            <div
+              class="mt-2 line-clamp-2 text-13-regular leading-5 transition-colors"
+              classList={{
+                "text-text-base": props.active,
+                "text-text-weak": !props.active,
+              }}
+            >
+              {props.note}
+            </div>
+          </Show>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function ProjectSkillGroup(props: {
+  label: string
+  path?: string
+  count: number
+  open: boolean
+  onToggle: () => void
+  children: JSX.Element
+}) {
+  return (
+    <div class="relative overflow-hidden rounded-2xl border border-border-weak-base/80 bg-background-base/65 shadow-[inset_0_1px_0_color-mix(in_srgb,white_5%,transparent)] transition-colors hover:border-border-base">
+      <div class="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--text-strong)_16%,transparent),transparent)]" />
+      <button
+        type="button"
+        aria-expanded={props.open ? "true" : "false"}
+        class="group flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left transition-colors hover:bg-surface-base/55 focus:outline-none focus-visible:bg-surface-base-hover"
+        classList={{
+          "border-b border-border-weak-base/70 bg-surface-base/40": props.open,
+        }}
+        onClick={props.onToggle}
+      >
+        <div class="flex min-w-0 items-center gap-3">
+          <div
+            class="flex size-9 shrink-0 items-center justify-center rounded-xl border text-text-base transition-colors"
+            classList={{
+              "border-border-base bg-surface-secondary text-text-strong": props.open,
+              "border-border-weak-base bg-surface-secondary/60 group-hover:border-border-base group-hover:text-text-strong":
+                !props.open,
+            }}
+          >
+            <Icon name="folder" size="small" />
+          </div>
+          <div class="min-w-0">
+            <div class="truncate text-13-medium text-text-strong">{props.label}</div>
+            <Show when={props.path}>
+              <div class="mt-1 truncate font-mono text-[11px] leading-4 text-text-weak">{props.path}</div>
+            </Show>
+          </div>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <div class="rounded-full border border-border-weak-base bg-surface-secondary px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+            {props.count}
+          </div>
+          <div
+            class="flex size-7 items-center justify-center rounded-full border transition-colors"
+            classList={{
+              "border-border-base bg-surface-base-active text-text-strong": props.open,
+              "border-border-weak-base bg-background-base text-text-weak group-hover:border-border-base group-hover:text-text-base":
+                !props.open,
+            }}
+          >
+            <Icon name={props.open ? "chevron-down" : "chevron-right"} size="small" />
+          </div>
+        </div>
+      </button>
+      <Show when={props.open}>
+        <div class="bg-surface-base/20 px-2 py-2">
+          <div class="flex flex-col gap-2">{props.children}</div>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
 type ProviderSdkBadgeTone = "codex" | "claude" | "deepseek" | "openai" | "neutral"
 
 type ProviderSdkBadge = {
@@ -4837,7 +4977,7 @@ export default function ConfigPage() {
                       >
                         <div class="flex flex-col gap-3">
                           <Show when={skillOpenCode().length > 0}>
-                            <div class="flex flex-col">
+                            <div class="flex flex-col gap-2">
                               <div class="flex items-center justify-between gap-3 px-1">
                                 <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
                                   {t("config.skills.group.opencode")}
@@ -4846,30 +4986,25 @@ export default function ConfigPage() {
                                   {skillOpenCode().length}
                                 </div>
                               </div>
-                              <For each={skillOpenCode()}>
-                                {(item) => (
-                                  <ListButton
-                                    active={state.pick === item.id}
-                                    title={item.label}
-                                    meta={short(item.path, space()?.skillsRoot)}
-                                    warn={!!item.warn}
-                                    tone={item.warn ? "danger" : undefined}
-                                    extra={
-                                      <Show when={item.warn}>
-                                        <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                          {t("config.skills.badge.needsMetadata")}
-                                        </span>
-                                      </Show>
-                                    }
-                                    onClick={() => void open(item)}
-                                  />
-                                )}
-                              </For>
+                              <div class="flex flex-col gap-2.5">
+                                <For each={skillOpenCode()}>
+                                  {(item) => (
+                                    <SkillListButton
+                                      active={state.pick === item.id}
+                                      title={item.label}
+                                      note={item.note}
+                                      warn={!!item.warn}
+                                      warnLabel={item.warn ? t("config.skills.badge.needsMetadata") : undefined}
+                                      onClick={() => void open(item)}
+                                    />
+                                  )}
+                                </For>
+                              </div>
                             </div>
                           </Show>
 
                           <Show when={skillClaude().length > 0}>
-                            <div class="flex flex-col">
+                            <div class="flex flex-col gap-2">
                               <div class="flex items-center justify-between gap-3 px-1">
                                 <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
                                   {t("config.skills.group.claude")}
@@ -4878,30 +5013,25 @@ export default function ConfigPage() {
                                   {skillClaude().length}
                                 </div>
                               </div>
-                              <For each={skillClaude()}>
-                                {(item) => (
-                                  <ListButton
-                                    active={state.pick === item.id}
-                                    title={item.label}
-                                    meta={item.path}
-                                    warn={!!item.warn}
-                                    tone={item.warn ? "danger" : undefined}
-                                    extra={
-                                      <Show when={item.warn}>
-                                        <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                          {t("config.skills.badge.needsMetadata")}
-                                        </span>
-                                      </Show>
-                                    }
-                                    onClick={() => void open(item)}
-                                  />
-                                )}
-                              </For>
+                              <div class="flex flex-col gap-2.5">
+                                <For each={skillClaude()}>
+                                  {(item) => (
+                                    <SkillListButton
+                                      active={state.pick === item.id}
+                                      title={item.label}
+                                      note={item.note}
+                                      warn={!!item.warn}
+                                      warnLabel={item.warn ? t("config.skills.badge.needsMetadata") : undefined}
+                                      onClick={() => void open(item)}
+                                    />
+                                  )}
+                                </For>
+                              </div>
                             </div>
                           </Show>
 
                           <Show when={skillExternal().length > 0}>
-                            <div class="flex flex-col">
+                            <div class="flex flex-col gap-2">
                               <div class="flex items-center justify-between gap-3 px-1">
                                 <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
                                   {t("config.skills.group.external")}
@@ -4910,25 +5040,20 @@ export default function ConfigPage() {
                                   {skillExternal().length}
                                 </div>
                               </div>
-                              <For each={skillExternal()}>
-                                {(item) => (
-                                  <ListButton
-                                    active={state.pick === item.id}
-                                    title={item.label}
-                                    meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
-                                    warn={!!item.warn}
-                                    tone={item.warn ? "danger" : undefined}
-                                    extra={
-                                      <Show when={item.warn}>
-                                        <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                          {t("config.skills.badge.needsMetadata")}
-                                        </span>
-                                      </Show>
-                                    }
-                                    onClick={() => void open(item)}
-                                  />
-                                )}
-                              </For>
+                              <div class="flex flex-col gap-2.5">
+                                <For each={skillExternal()}>
+                                  {(item) => (
+                                    <SkillListButton
+                                      active={state.pick === item.id}
+                                      title={item.label}
+                                      note={item.note}
+                                      warn={!!item.warn}
+                                      warnLabel={item.warn ? t("config.skills.badge.needsMetadata") : undefined}
+                                      onClick={() => void open(item)}
+                                    />
+                                  )}
+                                </For>
+                              </div>
                             </div>
                           </Show>
 
@@ -4945,56 +5070,26 @@ export default function ConfigPage() {
                               <div class="mt-2 flex flex-col gap-3">
                                 <For each={projectSkills()}>
                                   {(group) => (
-                                    <div class="flex flex-col rounded-xl border border-border-weak-base bg-background-base/70">
-                                      <button
-                                        type="button"
-                                        class="flex items-center justify-between gap-3 border-b border-border-weak-base px-3 py-2 text-left"
-                                        onClick={() => keepSkillsScroll(() => toggleGroup(group.path ?? group.label))}
-                                      >
-                                        <div class="flex min-w-0 items-start gap-2">
-                                          <div class="mt-0.5 text-text-weak">
-                                            <Icon
-                                              name={
-                                                groupOpen(group.path ?? group.label) ? "chevron-down" : "chevron-right"
-                                              }
-                                              size="small"
-                                            />
-                                          </div>
-                                          <div class="min-w-0">
-                                            <div class="truncate text-12-medium text-text-strong">{group.label}</div>
-                                            <Show when={group.path}>
-                                              <div class="mt-1 break-all font-mono text-[11px] leading-5 text-text-weak">
-                                                {group.path}
-                                              </div>
-                                            </Show>
-                                          </div>
-                                        </div>
-                                        <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                                          {group.items.length}
-                                        </div>
-                                      </button>
-                                      <Show when={groupOpen(group.path ?? group.label)}>
-                                        <For each={group.items}>
-                                          {(item) => (
-                                            <ListButton
-                                              active={state.pick === item.id}
-                                              title={item.label}
-                                              meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
-                                              warn={!!item.warn}
-                                              tone={item.warn ? "danger" : undefined}
-                                              extra={
-                                                <Show when={item.warn}>
-                                                  <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                                    {t("config.skills.badge.needsMetadata")}
-                                                  </span>
-                                                </Show>
-                                              }
-                                              onClick={() => keepSkillsScroll(() => void open(item))}
-                                            />
-                                          )}
-                                        </For>
-                                      </Show>
-                                    </div>
+                                    <ProjectSkillGroup
+                                      label={group.label}
+                                      path={group.path}
+                                      count={group.items.length}
+                                      open={groupOpen(group.path ?? group.label)}
+                                      onToggle={() => keepSkillsScroll(() => toggleGroup(group.path ?? group.label))}
+                                    >
+                                      <For each={group.items}>
+                                        {(item) => (
+                                          <SkillListButton
+                                            active={state.pick === item.id}
+                                            title={item.label}
+                                            note={item.note}
+                                            warn={!!item.warn}
+                                            warnLabel={item.warn ? t("config.skills.badge.needsMetadata") : undefined}
+                                            onClick={() => keepSkillsScroll(() => void open(item))}
+                                          />
+                                        )}
+                                      </For>
+                                    </ProjectSkillGroup>
                                   )}
                                 </For>
                               </div>
