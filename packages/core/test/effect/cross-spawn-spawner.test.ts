@@ -284,6 +284,29 @@ describe("cross-spawn spawner", () => {
         expect(running).toBe(false)
       }),
     )
+
+    fx.live(
+      "resolves exit code before inherited stdio handles close",
+      Effect.gen(function* () {
+        const handle = yield* js(
+          [
+            'const { spawn } = require("node:child_process")',
+            'spawn(process.execPath, ["-e", "setTimeout(() => {}, 2000)"], {',
+            '  stdio: ["ignore", process.stdout, process.stderr]',
+            "})",
+            "process.exit(7)",
+          ].join("\n"),
+        )
+        const code = yield* handle.exitCode.pipe(
+          Effect.timeoutOrElse({
+            duration: "1000 millis",
+            orElse: () => Effect.fail(new Error("exit code waited for stdio close")),
+          }),
+        )
+        expect(code).toBe(ChildProcessSpawner.ExitCode(7))
+      }),
+      5_000,
+    )
   })
 
   describe("error handling", () => {

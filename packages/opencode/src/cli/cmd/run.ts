@@ -752,6 +752,21 @@ export const RunCommand = effectCmd({
           }
           return error
         }
+
+        async function waitForIdle(stream: Promise<string | undefined>) {
+          while (true) {
+            const next = await Promise.race([
+              stream.then((error) => ({ type: "stream" as const, error })),
+              new Promise<{ type: "poll" }>((resolve) => setTimeout(() => resolve({ type: "poll" }), 250)),
+            ])
+            if (next.type === "stream") return next.error
+
+            const state = await client.session.status().catch(() => undefined)
+            const status = state?.data?.[sessionID]
+            if (!status || status.type === "idle") return undefined
+          }
+        }
+
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
         const client = args.attach ? attachSDK(cwd) : sdk
 
@@ -761,39 +776,50 @@ export const RunCommand = effectCmd({
         await share(client, sessionID)
 
         if (!args.interactive) {
-          const events = await client.event.subscribe()
-          loop(client, events).catch((e) => {
-            console.error(e)
+          const abort = new AbortController()
+          const events = await client.event.subscribe(undefined, { signal: abort.signal, sseMaxRetryAttempts: 1 })
+          const stream = loop(client, events).catch((error) => {
+            if (abort.signal.aborted) return undefined
+            console.error(error)
             process.exit(1)
           })
 
-          if (args.command) {
-            const result = await client.session.command({
+          try {
+            if (args.command) {
+              const result = await client.session.command({
+                sessionID,
+                agent,
+                model: args.model,
+                command: args.command,
+                arguments: message,
+                variant: args.variant,
+              })
+              if (result.error) {
+                if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+                process.exitCode = 1
+                return
+              }
+              await waitForIdle(stream)
+              return
+            }
+
+            const model = pick(args.model)
+            const result = await client.session.prompt({
               sessionID,
               agent,
-              model: args.model,
-              command: args.command,
-              arguments: message,
+              model,
               variant: args.variant,
+              parts: [...files, { type: "text", text: message }],
             })
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
+              return
             }
-            return
-          }
-
-          const model = pick(args.model)
-          const result = await client.session.prompt({
-            sessionID,
-            agent,
-            model,
-            variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
-          })
-          if (result.error) {
-            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
-            process.exitCode = 1
+            await waitForIdle(stream)
+          } finally {
+            abort.abort()
+            void events.stream.return(undefined).catch(() => {})
           }
           return
         }

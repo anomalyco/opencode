@@ -5,6 +5,7 @@
 // `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import path from "node:path"
 import { cliIt } from "../../lib/cli-process"
 
 describe("opencode run (non-interactive subprocess)", () => {
@@ -18,6 +19,35 @@ describe("opencode run (non-interactive subprocess)", () => {
         const result = yield* opencode.run("say hi")
         opencode.expectExit(result, 0)
         expect(result.stdout).toContain("hello from the test llm")
+      }),
+    60_000,
+  )
+
+  // Regression for attached `opencode run`: the prompt endpoint can return
+  // before the subscribed event stream has delivered the final tool/text output.
+  // The CLI must wait for session idle/output and close the SSE subscription
+  // before exiting, otherwise callers can see exit 0 with empty stdout.
+  cliIt.concurrent(
+    "waits for attached read/write tool output before exiting",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const file = path.join(home, "compress.py")
+        yield* Effect.promise(() => Bun.write(file, "old algorithm\n"))
+        yield* llm.tool("read", { filePath: file })
+        yield* llm.tool("write", { filePath: file, content: "better algorithm\n" })
+        yield* llm.text("done after edit")
+        const server = yield* opencode.serve()
+        const result = yield* opencode.run(
+          "Read compress.py and rewrite it with a better algorithm. Edit the file and exit.",
+          {
+            extraArgs: ["--attach", server.url, "--dangerously-skip-permissions"],
+            timeoutMs: 20_000,
+          },
+        )
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toContain("done after edit")
+        expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("better algorithm\n")
+        expect(result.durationMs).toBeLessThan(20_000)
       }),
     60_000,
   )
