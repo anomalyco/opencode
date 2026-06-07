@@ -229,6 +229,13 @@ async function renderFooter(
   }
 }
 
+function expectPaletteList(list: BoxRenderable, selectedIndex: number) {
+  expect(list.backgroundColor.toInts()).toEqual((RUN_THEME_FALLBACK.footer.shade as RGBA).toInts())
+  expect((list.getChildren()[selectedIndex] as BoxRenderable).backgroundColor.toInts()).toEqual(
+    (RUN_THEME_FALLBACK.footer.selected as RGBA).toInts(),
+  )
+}
+
 test("direct footer updates composer background when theme changes", async () => {
   const surface = RGBA.fromHex("#123456")
   const [theme, setTheme] = createSignal(RUN_THEME_FALLBACK)
@@ -352,6 +359,8 @@ test("direct command panel renders grouped command palette", async () => {
     expect(frame).toContain("Project Commands")
     expect(frame).toContain("review")
     expect(frame).toContain("/review")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
     expect(frame).not.toContain("/internal")
     expect(frame).not.toContain("Choose model for future turns")
     expect(frame).not.toContain("Cycle reasoning effort for future turns")
@@ -438,11 +447,15 @@ test("direct subagent panel renders active subagents", async () => {
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const list = app.renderer.root.findDescendantById("run-direct-footer-subagent-list") as BoxRenderable
 
     expect(frame).toContain("Select subagent")
     expect(frame).toContain("Inspect auth flow")
     expect(frame).toContain("Write migration plan")
     expect(frame).toContain("done")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
+    expectPaletteList(list, 0)
     expect(rows).toBe(8)
   } finally {
     app.renderer.destroy()
@@ -471,9 +484,15 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Queued prompts")
-    expect(app.captureCharFrame()).toContain("fix the auth test")
-    expect(app.captureCharFrame()).toContain("queued")
+    const frame = app.captureCharFrame()
+    const list = app.renderer.root.findDescendantById("run-direct-footer-queued-list") as BoxRenderable
+
+    expect(frame).toContain("Queued prompts")
+    expect(frame).toContain("fix the auth test")
+    expect(frame).toContain("queued")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
+    expectPaletteList(list, 0)
   } finally {
     app.renderer.destroy()
   }
@@ -891,6 +910,7 @@ test("direct model panel renders current model selector", async () => {
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const list = app.renderer.root.findDescendantById("run-direct-footer-model-list") as BoxRenderable
 
     expect(frame).toContain("Select model")
     expect(frame).toContain("Search")
@@ -899,7 +919,10 @@ test("direct model panel renders current model selector", async () => {
     expect(frame).toContain("current")
     expect(frame).toContain("GPT Free")
     expect(frame).toContain("Free")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
     expect(frame).not.toContain("Old Model")
+    expectPaletteList(list, 2)
   } finally {
     app.renderer.destroy()
   }
@@ -930,12 +953,16 @@ test("direct variant panel renders current variant selector", async () => {
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const list = app.renderer.root.findDescendantById("run-direct-footer-variant-list") as BoxRenderable
 
     expect(frame).toContain("Select variant")
     expect(frame).toContain("Default")
     expect(frame).toContain("high")
     expect(frame).toContain("minimal")
     expect(frame).toContain("current")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
+    expectPaletteList(list, 1)
   } finally {
     app.renderer.destroy()
   }

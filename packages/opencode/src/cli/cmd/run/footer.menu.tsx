@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, type ColorInput } from "@opentui/core"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { transparent, type RunFooterTheme } from "./theme"
 
@@ -126,6 +126,7 @@ export function RunFooterMenu(props: {
   paddingRight?: number
   grouped?: boolean
   background?: boolean
+  headerColor?: ColorInput
 }) {
   const limit = () => props.limit ?? FOOTER_MENU_ROWS
   const border = () => props.border ?? true
@@ -244,7 +245,7 @@ export function RunFooterMenu(props: {
           if (row.type === "header") {
             return (
               <box paddingLeft={props.paddingLeft ?? 1} paddingRight={props.paddingRight ?? 1}>
-                <text fg={props.theme().highlight} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                <text fg={props.headerColor ?? props.theme().highlight} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
                   {row.label}
                 </text>
               </box>

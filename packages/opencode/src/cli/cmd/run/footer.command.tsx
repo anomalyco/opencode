@@ -204,95 +204,121 @@ function PanelShell(props: {
   onQuery: (query: string) => void
   children: JSX.Element
   dark?: boolean
+  chrome?: "default" | "minimal"
 }) {
   const background = () => (props.dark ? props.theme().shade : props.theme().surface)
-  return (
-    <box id={props.id} width="100%" flexDirection="column" backgroundColor="transparent" flexShrink={0}>
+  const minimal = () => props.chrome === "minimal"
+  const content = (
+    <>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
       <box
-        width="100%"
-        flexDirection="column"
-        border={["left"]}
-        borderColor={props.theme().highlight}
-        backgroundColor="transparent"
-        customBorderChars={PANEL_BORDER}
-        flexShrink={0}
-      >
-        <box height={1} flexShrink={0} backgroundColor={background()} />
-        <box
-          width="100%"
-          height={1}
-          paddingLeft={PANEL_PAD}
-          paddingRight={PANEL_PAD}
-          flexDirection="row"
-          gap={1}
-          flexShrink={0}
-          backgroundColor={background()}
-        >
-          <text fg={props.theme().text} attributes={TextAttributes.BOLD} wrapMode="none" flexShrink={0}>
-            {props.title}
-          </text>
-          {props.countVisible !== false ? (
-            <text fg={props.theme().muted} wrapMode="none" flexShrink={0}>
-              {countLabel(props.count, props.total, props.query)}
-            </text>
-          ) : null}
-          <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
-          <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
-            esc
-          </text>
-        </box>
-        <box height={1} flexShrink={0} backgroundColor={background()} />
-        <box
-          width="100%"
-          height={1}
-          paddingLeft={PANEL_PAD}
-          paddingRight={PANEL_PAD}
-          flexShrink={0}
-          backgroundColor={background()}
-        >
-          <input
-            width="100%"
-            focusedBackgroundColor={background()}
-            focusedTextColor={props.theme().text}
-            placeholder={props.placeholder}
-            placeholderColor={props.theme().muted}
-            cursorColor={props.theme().highlight}
-            onInput={props.onQuery}
-            ref={(input) => {
-              props.inputRef(input)
-              input.traits = { status: "FILTER" }
-              queueMicrotask(() => {
-                if (!input.isDestroyed) {
-                  input.focus()
-                }
-              })
-            }}
-          />
-        </box>
-        <box height={1} flexShrink={0} backgroundColor={background()} />
-        <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={background()}>
-          {props.children}
-        </box>
-      </box>
-      <box
-        id={`${props.id}-bottom`}
         width="100%"
         height={1}
-        border={["left"]}
-        borderColor={props.theme().highlight}
-        backgroundColor="transparent"
-        customBorderChars={PANEL_BOTTOM_BORDER}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        flexDirection="row"
+        gap={1}
         flexShrink={0}
+        backgroundColor={background()}
       >
-        <box
+        <text fg={props.theme().text} attributes={TextAttributes.BOLD} wrapMode="none" flexShrink={0}>
+          {props.title}
+        </text>
+        {props.countVisible !== false ? (
+          <text fg={props.theme().muted} wrapMode="none" flexShrink={0}>
+            {countLabel(props.count, props.total, props.query)}
+          </text>
+        ) : null}
+        <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
+        <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
+          esc
+        </text>
+      </box>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box
+        width="100%"
+        height={1}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        flexShrink={0}
+        backgroundColor={background()}
+      >
+        <input
           width="100%"
-          height={1}
-          border={["bottom"]}
-          borderColor={background()}
-          backgroundColor="transparent"
-          customBorderChars={HALF_BLOCK_BORDER}
+          focusedBackgroundColor={background()}
+          focusedTextColor={props.theme().text}
+          placeholder={props.placeholder}
+          placeholderColor={props.theme().muted}
+          cursorColor={props.theme().highlight}
+          onInput={props.onQuery}
+          ref={(input) => {
+            props.inputRef(input)
+            input.traits = { status: "FILTER" }
+            queueMicrotask(() => {
+              if (!input.isDestroyed) {
+                input.focus()
+              }
+            })
+          }}
         />
       </box>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={background()}>
+        {props.children}
+      </box>
+    </>
+  )
+  return (
+    <box id={props.id} width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
+      {minimal() ? (
+        <box width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
+          {content}
+        </box>
+      ) : (
+        <box
+          width="100%"
+          flexDirection="column"
+          border={["left"]}
+          borderColor={props.theme().highlight}
+          backgroundColor="transparent"
+          customBorderChars={PANEL_BORDER}
+          flexShrink={0}
+        >
+          {content}
+        </box>
+      )}
+      {minimal() ? (
+        <box id={`${props.id}-bottom`} width="100%" height={1} border={false} backgroundColor="transparent" flexShrink={0}>
+          <box
+            width="100%"
+            height={1}
+            border={["bottom"]}
+            borderColor={background()}
+            backgroundColor="transparent"
+            customBorderChars={HALF_BLOCK_BORDER}
+          />
+        </box>
+      ) : (
+        <box
+          id={`${props.id}-bottom`}
+          width="100%"
+          height={1}
+          border={["left"]}
+          borderColor={props.theme().highlight}
+          backgroundColor="transparent"
+          customBorderChars={PANEL_BOTTOM_BORDER}
+          flexShrink={0}
+        >
+          <box
+            width="100%"
+            height={1}
+            border={["bottom"]}
+            borderColor={background()}
+            backgroundColor="transparent"
+            customBorderChars={HALF_BLOCK_BORDER}
+          />
+        </box>
+      )}
     </box>
   )
 }
@@ -474,6 +500,7 @@ export function RunCommandMenuBody(props: {
       }}
       onQuery={setQuery}
       dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-command-list"
@@ -489,6 +516,7 @@ export function RunCommandMenuBody(props: {
         paddingRight={PANEL_PAD}
         grouped={!query().trim()}
         background
+        headerColor={props.theme().muted}
       />
     </PanelShell>
   )
@@ -570,6 +598,8 @@ export function RunSubagentSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-subagent-list"
@@ -584,6 +614,7 @@ export function RunSubagentSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={false}
+        background
       />
     </PanelShell>
   )
@@ -666,6 +697,8 @@ export function RunQueuedPromptSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-queued-list"
@@ -680,6 +713,7 @@ export function RunQueuedPromptSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={false}
+        background
       />
     </PanelShell>
   )
@@ -763,6 +797,8 @@ export function RunVariantSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-variant-list"
@@ -777,6 +813,7 @@ export function RunVariantSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={false}
+        background
       />
     </PanelShell>
   )
@@ -883,6 +920,8 @@ export function RunModelSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-model-list"
@@ -897,6 +936,8 @@ export function RunModelSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={!query().trim()}
+        background
+        headerColor={props.theme().muted}
       />
     </PanelShell>
   )
