@@ -44,6 +44,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
+    const loadAdapter = yield* Effect.cached(
+      Effect.tryPromise({
+        try: () => import("./image/photon"),
+        catch: () => new ResizerUnavailableError(),
+      }).pipe(Effect.flatMap((adapter) => adapter.make)),
+    )
     const normalize = Effect.fn("Image.normalize")(function* (resource: string, content: FileSystem.BinaryContent) {
       const image = Object.assign(
         {},
@@ -51,11 +57,8 @@ export const layer = Layer.effect(
           entry.type === "document" && entry.info.attachments?.image ? [entry.info.attachments.image] : [],
         ),
       )
-      const adapter = yield* Effect.tryPromise({
-        try: () => import("./image/photon"),
-        catch: () => new ResizerUnavailableError(),
-      })
-      return yield* adapter.normalize(resource, content, {
+      const normalize = yield* loadAdapter
+      return yield* normalize(resource, content, {
         autoResize: image.auto_resize ?? true,
         maxWidth: image.max_width ?? 2_000,
         maxHeight: image.max_height ?? 2_000,
