@@ -171,9 +171,7 @@ describe("PermissionV2", () => {
 
       expect(yield* service.ask(assertion({ resources: ["tool_123"] }))).toMatchObject({ effect: "allow" })
       expect(
-        yield* service.ask(
-          assertion({ action: "external_directory", resources: ["/tmp/tool-output/*"] }),
-        ),
+        yield* service.ask(assertion({ action: "external_directory", resources: ["/tmp/tool-output/*"] })),
       ).toMatchObject({ effect: "deny" })
     }),
   )
