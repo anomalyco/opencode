@@ -13,7 +13,7 @@ import { Global } from "@opencode-ai/core/global"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CurrentWorkingDirectory } from "./tui-cwd"
 import { ConfigPlugin } from "@/config/plugin"
-import { TuiKeybind } from "@opencode-ai/tui/keybind"
+import { TuiKeybind } from "@opencode-ai/tui/config/keybind"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Filesystem } from "@/util/filesystem"
@@ -94,12 +94,12 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     Effect.gen(function* () {
       const plugins = config.plugin
       if (!plugins) return config
-      for (let i = 0; i < plugins.length; i++) {
-        plugins[i] = yield* Effect.promise(() =>
-          ConfigPlugin.resolvePluginSpec(plugins[i] as ConfigPlugin.Origin["spec"], configFilepath),
-        )
+      return {
+        ...config,
+        plugin: yield* Effect.forEach(plugins, (plugin) =>
+          Effect.promise(() => ConfigPlugin.resolvePluginSpec(plugin as ConfigPlugin.Origin["spec"], configFilepath)),
+        ),
       }
-      return config
     })
 
   const load = (text: string, configFilepath: string): Effect.Effect<Info> =>
@@ -177,7 +177,10 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
         ...acc.plugin_origins,
         ...data.plugin.map((spec) => ({ spec: spec as ConfigPlugin.Origin["spec"], scope, source: file })),
       ])
-      acc.result.plugin = plugins.map((item) => item.spec)
+      acc.result = {
+        ...acc.result,
+        plugin: plugins.map((item) => item.spec),
+      }
       acc.plugin_origins = plugins
     })
 

@@ -1,21 +1,19 @@
-export * as TuiConfig from "./config"
+export * as TuiConfig from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Schema } from "effect"
 import { createContext, type JSX, useContext } from "solid-js"
 import { TuiKeybind } from "./keybind"
 
-type DeepMutable<T> = T extends (...args: never[]) => unknown
-  ? T
-  : T extends readonly unknown[]
-    ? { -readonly [Key in keyof T]: DeepMutable<T[Key]> }
-    : T extends object
-      ? { -readonly [Key in keyof T]: DeepMutable<T[Key]> }
-      : T
-
-export const AttentionSoundNames = ["default", "question", "permission", "error", "done", "subagent_done"] as const
-export type AttentionSoundName = (typeof AttentionSoundNames)[number]
-export type AttentionSoundPaths = Partial<Record<AttentionSoundName, string>>
+export const AttentionSoundName = Schema.Literals([
+  "default",
+  "question",
+  "permission",
+  "error",
+  "done",
+  "subagent_done",
+])
+export type AttentionSoundName = Schema.Schema.Type<typeof AttentionSoundName>
 
 export const PluginOptions = Schema.Record(Schema.String, Schema.Unknown)
 export const PluginSpec = Schema.Union([
@@ -36,14 +34,8 @@ export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
 
-export const AttentionSounds = Schema.Struct({
-  default: Schema.optional(Schema.String),
-  question: Schema.optional(Schema.String),
-  permission: Schema.optional(Schema.String),
-  error: Schema.optional(Schema.String),
-  done: Schema.optional(Schema.String),
-  subagent_done: Schema.optional(Schema.String),
-})
+export const AttentionSounds = Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))
+export type AttentionSoundPaths = Schema.Schema.Type<typeof AttentionSounds>
 export const Attention = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   notifications: Schema.optional(Schema.Boolean),
@@ -75,7 +67,7 @@ export const Info = Schema.Struct({
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })
-export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+export type Info = Schema.Schema.Type<typeof Info>
 
 export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse"> & {
   attention: {
@@ -91,9 +83,10 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   mouse: boolean
 }
 
-export type ResolveOptions = {
-  terminalSuspend: boolean
-}
+export const ResolveOptions = Schema.Struct({
+  terminalSuspend: Schema.Boolean,
+})
+export type ResolveOptions = Schema.Schema.Type<typeof ResolveOptions>
 
 export function resolve(input: Info, options: ResolveOptions): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }

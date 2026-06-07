@@ -3,7 +3,7 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import {
-  AttentionSoundNames,
+  AttentionSoundName,
   Info,
   LeaderTimeoutDefault,
   PluginSpec,
@@ -20,7 +20,14 @@ test("defines package-owned plugin specs and attention sound names", () => {
   expect(decodePlugin("example-plugin")).toBe("example-plugin")
   expect(decodePlugin(["example-plugin", { enabled: true }])).toEqual(["example-plugin", { enabled: true }])
   expect(() => decodePlugin(["example-plugin"])).toThrow()
-  expect(AttentionSoundNames).toEqual(["default", "question", "permission", "error", "done", "subagent_done"])
+  expect(AttentionSoundName.literals).toEqual([
+    "default",
+    "question",
+    "permission",
+    "error",
+    "done",
+    "subagent_done",
+  ])
 })
 
 test("validates config constraints", () => {

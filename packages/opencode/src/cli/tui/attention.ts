@@ -9,7 +9,8 @@ import type {
   TuiAttentionSoundPack,
   TuiAttentionSoundPackInfo,
 } from "@opencode-ai/plugin/tui"
-import { AttentionSoundNames, type AttentionSoundName, type TuiConfig } from "@opencode-ai/tui/config"
+import { AttentionSoundName, type TuiConfig } from "@opencode-ai/tui/config"
+import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
 import * as TuiAudio from "./audio"
 import defaultSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
@@ -99,7 +100,7 @@ function normalizePack(pack: TuiAttentionSoundPack): RegisteredSoundPack | undef
     sounds: Object.fromEntries(
       Object.entries(pack.sounds).filter(
         (item): item is [TuiAttentionSoundName, string] =>
-          AttentionSoundNames.includes(item[0] as AttentionSoundName) &&
+          Schema.is(AttentionSoundName)(item[0]) &&
           typeof item[1] === "string" &&
           item[1].trim().length > 0,
       ),
@@ -199,7 +200,7 @@ export function createTuiAttention(input: {
         const requestedSound = typeof request.sound === "object" ? request.sound : undefined
         const soundSkip = volume === undefined ? undefined : focusSkip(requestedSound?.when ?? "always", focus)
         const soundName =
-          requestedSound?.name && AttentionSoundNames.includes(requestedSound.name as AttentionSoundName)
+          requestedSound?.name && Schema.is(AttentionSoundName)(requestedSound.name)
             ? requestedSound.name
             : "default"
         const sound = volume === undefined || soundSkip ? false : await playSound(soundName, volume)

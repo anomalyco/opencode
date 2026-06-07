@@ -5,14 +5,6 @@ import type { Binding } from "@opentui/keymap"
 import type { BindingCommandMap, BindingConfig, BindingDefaults } from "@opentui/keymap/extras"
 import { Schema } from "effect"
 
-type DeepMutable<T> = T extends (...args: never[]) => unknown
-  ? T
-  : T extends readonly (infer Item)[]
-    ? DeepMutable<Item>[]
-    : T extends object
-      ? { -readonly [Key in keyof T]: DeepMutable<T[Key]> }
-      : T
-
 const KeyStroke = Schema.Struct({
   name: Schema.String,
   ctrl: Schema.optional(Schema.Boolean),
@@ -39,7 +31,7 @@ export const BindingValueSchema = Schema.Union([
   BindingItem,
   Schema.Array(BindingItem),
 ])
-export type BindingValueSchema = DeepMutable<Schema.Schema.Type<typeof BindingValueSchema>>
+export type BindingValueSchema = Schema.Schema.Type<typeof BindingValueSchema>
 
 type Definition = {
   default: BindingValueSchema

@@ -8,7 +8,7 @@ import path from "node:path"
 import { onCleanup } from "solid-js"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import type { TuiKeybind } from "../../../src/keybind"
+import type { TuiKeybind } from "../../../src/config/keybind"
 import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
 
 async function wait(fn: () => boolean, timeout = 2000) {
