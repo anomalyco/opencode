@@ -2318,3 +2318,45 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+unix(
+  "denied tool permission does not crash and loop continues with continue_loop_on_deny",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { llm, dir } = yield* useServerConfig((url) => ({
+          ...providerCfg(url),
+          experimental: { continue_loop_on_deny: true },
+        }))
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          title: "PermDenyContinue",
+          permission: [{ permission: "bash", pattern: "*", action: "deny" }],
+        })
+
+        yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "run a command" }],
+        })
+
+        yield* llm.tool("bash", { command: "echo denied", workdir: dir, description: "Echo denied" })
+        yield* llm.text("understood, command is restricted")
+
+        const result = yield* prompt.loop({ sessionID: session.id })
+        expect(result.info.role).toBe("assistant")
+        expect(yield* llm.calls).toBe(2)
+
+        const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+        const assistantParts = msgs.flatMap((m) => m.parts)
+        expect(
+          assistantParts.some(
+            (p) => p.type === "text" && p.text === "understood, command is restricted",
+          ),
+        ).toBe(true)
+      }),
+    ),
+  10_000,
+)

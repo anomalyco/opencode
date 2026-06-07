@@ -356,6 +356,29 @@ describe("session.llm.ai-sdk adapter", () => {
     })
   })
 
+  test("preserves CorrectedError and DeniedError identity in tool-error", async () => {
+    const corrected = new PermissionV1.CorrectedError({ feedback: "try /tmp instead" })
+    const denied = new PermissionV1.DeniedError({ ruleset: [{ permission: "read", pattern: "/etc/*", action: "deny" }] })
+
+    for (const error of [corrected, denied]) {
+      const events = await Effect.runPromise(
+        LLMAISDK.toLLMEvents(LLMAISDK.adapterState(), {
+          type: "tool-error",
+          toolCallId: "call_perm",
+          toolName: "read",
+          input: {},
+          error,
+        }),
+      )
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({
+        type: "tool-error",
+        error,
+      })
+      expect((events[0] as any).error).toBe(error)
+    }
+  })
+
   test("emits undefined usage when every AI SDK usage field is missing", async () => {
     // If every numeric field is undefined the translator should signal "no usage info"
     // by emitting undefined, not by polluting the event with usage: {}. Downstream cost

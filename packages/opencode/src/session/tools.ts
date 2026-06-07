@@ -13,6 +13,7 @@ import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
@@ -93,7 +94,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
               { args },
             )
-            const result = yield* item.execute(args, ctx)
+            const result = yield* item.execute(args, ctx).pipe(
+              Effect.catchDefect((defect) =>
+                isPermissionError(defect) ? Effect.fail(defect as Error) : Effect.die(defect),
+              ),
+            )
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({
@@ -207,5 +212,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
   return tools
 })
+
+function isPermissionError(defect: unknown): defect is PermissionV1.RejectedError | PermissionV1.CorrectedError | PermissionV1.DeniedError {
+  return (
+    defect instanceof PermissionV1.RejectedError ||
+    defect instanceof PermissionV1.CorrectedError ||
+    defect instanceof PermissionV1.DeniedError
+  )
+}
 
 export * as SessionTools from "./tools"

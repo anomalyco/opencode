@@ -384,7 +384,15 @@ export const layer = Layer.effect(
           Effect.catchCause((cause) => {
             const defect = Cause.squash(cause)
             error = defect instanceof Error ? defect : new Error(String(defect))
-            log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+            if (
+              defect instanceof PermissionV1.RejectedError ||
+              defect instanceof PermissionV1.CorrectedError ||
+              defect instanceof PermissionV1.DeniedError
+            ) {
+              log.info("subtask permission denied", { agent: task.agent, description: task.description })
+            } else {
+              log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+            }
             return Effect.void
           }),
           Effect.onInterrupt(() =>
