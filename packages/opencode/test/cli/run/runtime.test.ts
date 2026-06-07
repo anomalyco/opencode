@@ -1,18 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpencodeClient } from "@opencode-ai/sdk/v2"
+import { runInteractiveMode } from "@/cli/cmd/run/runtime"
 import type { FooterApi, RunProvider } from "@/cli/cmd/run/types"
 
-type ModelInfo = {
-  providers: RunProvider[]
-  variants: string[]
-  limits: Record<string, number>
-}
-
-type SessionInfo = {
-  first: boolean
-  history: []
-  variant: string | undefined
-}
+type SessionMessage = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["messages"]>>["data"]>[number]
 
 const provider: RunProvider = {
   id: "openai",
@@ -71,16 +62,6 @@ const provider: RunProvider = {
   },
 }
 
-let modelInfoTask: Promise<ModelInfo> = Promise.resolve({
-  providers: [provider],
-  variants: [],
-  limits: {},
-})
-let sessionInfo: SessionInfo = {
-  first: false,
-  history: [],
-  variant: undefined,
-}
 const transportProviders: RunProvider[][] = []
 
 function defer<T>() {
@@ -149,119 +130,106 @@ function footer(): FooterApi {
   }
 }
 
-void mock.module("@/cli/cmd/run/runtime.boot", () => ({
-  resolveModelInfo: () => modelInfoTask,
-  resolveRunTuiConfig: () =>
-    Promise.resolve({
-      keybinds: new Map(),
-      leader_timeout: 2000,
-      diff_style: "auto" as const,
-    }),
-  resolveSessionInfo: () => Promise.resolve(sessionInfo),
-}))
-
-void mock.module("@/cli/cmd/run/runtime.lifecycle", () => ({
-  createRuntimeLifecycle: async () => ({
-    footer: footer(),
-    onResize: () => () => {},
-    refreshTheme: () => {},
-    resetForReplay: () => Promise.resolve(),
-    close: () => Promise.resolve(),
-  }),
-}))
-
-void mock.module("@/cli/cmd/run/stream.transport", () => ({
-  createSessionTransport: async (input: { providers?: () => RunProvider[]; footer: FooterApi }) => {
-    transportProviders.push(input.providers?.() ?? [])
-    setTimeout(() => {
-      input.footer.close()
-    }, 0)
-    return {
-      runPromptTurn: async () => {},
-      selectSubagent: () => {},
-      replayOnResize: async () => false,
-      close: async () => {},
-    }
-  },
-}))
-
-void mock.module("@/cli/cmd/run/otel", () => ({
-  withRunSpan: async (_name: string, _attrs: Record<string, unknown>, fn: (span: object) => Promise<unknown>) => fn({}),
-  recordRunSpanError: () => {},
-  setRunSpanAttributes: () => {},
-}))
-
-void mock.module("@/cli/cmd/run/trace", () => ({
-  trace: () => undefined,
-}))
-
-void mock.module("@/cli/cmd/run/variant.shared", () => ({
-  cycleVariant: () => undefined,
-  formatModelLabel: (model: { modelID: string } | undefined) => model?.modelID ?? "",
-  pickVariant: () => undefined,
-  resolveSavedVariant: () => Promise.resolve(undefined),
-  resolveVariant: (input: string | undefined, session: string | undefined, saved: string | undefined) =>
-    input ?? session ?? saved,
-  saveVariant: () => Promise.resolve(),
-}))
-
-const { runInteractiveMode } = await import("@/cli/cmd/run/runtime")
-
 afterEach(() => {
   mock.restore()
   transportProviders.length = 0
-  modelInfoTask = Promise.resolve({
-    providers: [provider],
-    variants: [],
-    limits: {},
-  })
-  sessionInfo = {
-    first: false,
-    history: [],
-    variant: undefined,
-  }
 })
 
 describe("run interactive runtime", () => {
   test("waits for provider metadata before eager replay transport bootstrap", async () => {
-    const gate = defer<ModelInfo>()
-    modelInfoTask = gate.promise
+    const providersStarted = defer<void>()
+    const providers = defer<void>()
 
     const sdk = new OpencodeClient()
+    spyOn(sdk.config, "providers").mockImplementation(async () => {
+      providersStarted.resolve()
+      await providers.promise
+      return ok({ providers: [provider], default: {} })
+    })
+    spyOn(sdk.session, "messages").mockImplementation(() =>
+      ok([
+        {
+          info: {
+            id: "msg-user-1",
+            sessionID: "ses-1",
+            role: "user",
+            time: {
+              created: 1,
+            },
+            agent: "build",
+            model: {
+              providerID: "openai",
+              modelID: "gpt-5",
+              variant: undefined,
+            },
+          },
+          parts: [
+            {
+              id: "part-user-1",
+              sessionID: "ses-1",
+              messageID: "msg-user-1",
+              type: "text",
+              text: "hello",
+            },
+          ],
+        } satisfies SessionMessage,
+      ]),
+    )
     spyOn(sdk.session, "get").mockRejectedValue(new Error("not needed"))
     spyOn(sdk.app, "agents").mockImplementation(() => ok([]))
     spyOn(sdk.experimental.resource, "list").mockImplementation(() => ok({}))
     spyOn(sdk.command, "list").mockImplementation(() => ok([]))
 
-    const task = runInteractiveMode({
-      sdk,
-      directory: "/tmp",
-      sessionID: "ses-1",
-      sessionTitle: "Session",
-      resume: true,
-      replay: true,
-      replayLimit: 100,
-      agent: "build",
-      model: {
-        providerID: "openai",
-        modelID: "gpt-5",
+    const task = runInteractiveMode(
+      {
+        sdk,
+        directory: "/tmp",
+        sessionID: "ses-1",
+        sessionTitle: "Session",
+        resume: true,
+        replay: true,
+        replayLimit: 100,
+        agent: "build",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-5",
+        },
+        variant: undefined,
+        files: [],
+        thinking: true,
+        backgroundSubagents: false,
       },
-      variant: undefined,
-      files: [],
-      thinking: true,
-      backgroundSubagents: false,
-    })
+      {
+        createRuntimeLifecycle: async () => ({
+          footer: footer(),
+          onResize: () => () => {},
+          refreshTheme: () => {},
+          resetForReplay: () => Promise.resolve(),
+          close: () => Promise.resolve(),
+        }),
+        streamTransport: Promise.resolve({
+          createSessionTransport: async (input: { providers?: () => RunProvider[]; footer: FooterApi }) => {
+            transportProviders.push(input.providers?.() ?? [])
+            setTimeout(() => {
+              input.footer.close()
+            }, 0)
+            return {
+              runPromptTurn: async () => {},
+              selectSubagent: () => {},
+              replayOnResize: async () => false,
+              close: async () => {},
+            }
+          },
+          formatUnknownError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+        }),
+      },
+    )
 
-    await Promise.resolve()
-    await Promise.resolve()
+    await providersStarted.promise
 
     expect(transportProviders).toEqual([])
 
-    gate.resolve({
-      providers: [provider],
-      variants: [],
-      limits: {},
-    })
+    providers.resolve()
 
     await task
 
