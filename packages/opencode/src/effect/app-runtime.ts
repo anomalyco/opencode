@@ -9,6 +9,7 @@ import { Account } from "@/account/account"
 import { Config } from "@/config/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
@@ -62,6 +63,7 @@ export const AppLayer = Layer.mergeAll(
   Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
+  Search.defaultLayer,
   Storage.defaultLayer,
   Snapshot.defaultLayer,
   Plugin.defaultLayer,
