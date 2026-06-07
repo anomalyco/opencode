@@ -258,7 +258,13 @@ export function RunPermissionBody(props: {
   })
 
   return (
-    <box id="run-direct-footer-permission-body" width="100%" height="100%" flexDirection="column">
+    <box
+      id="run-direct-footer-permission-body"
+      width="100%"
+      height="100%"
+      flexDirection="column"
+      backgroundColor={props.theme.surface}
+    >
       <box
         id="run-direct-footer-permission-head"
         flexDirection="column"

@@ -141,7 +141,15 @@ export function RunFooterView(props: RunFooterViewProps) {
   const modeling = createMemo(() => active().type === "prompt" && route().type === "model")
   const varianting = createMemo(() => active().type === "prompt" && route().type === "variant")
   const panel = createMemo(
-    () => selectingQueued() || selectingSubagent() || commanding() || skilling() || modeling() || varianting(),
+    () =>
+      active().type === "permission" ||
+      active().type === "question" ||
+      selectingQueued() ||
+      selectingSubagent() ||
+      commanding() ||
+      skilling() ||
+      modeling() ||
+      varianting(),
   )
   const selected = createMemo(() => {
     const current = route()
