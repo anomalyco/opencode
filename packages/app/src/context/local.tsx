@@ -5,6 +5,7 @@ import { batch, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
+import { useSettings } from "@/context/settings"
 import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useSDK } from "./sdk"
@@ -62,6 +63,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const serverSDK = useServerSDK()
     const providers = useProviders()
     const models = useModels()
+    const settings = useSettings()
 
     const id = createMemo(() => params.id || undefined)
     const list = createMemo(() => sync.data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
@@ -108,6 +110,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const pickAgent = (name: string | undefined) => {
       const items = list()
       if (items.length === 0) return
+      if (settings.general.newLayoutDesigns() && !settings.general.showCustomAgents()) {
+        return items.find((item) => item.name === "build") ?? items[0]
+      }
       return items.find((item) => item.name === name) ?? items[0]
     }
 
