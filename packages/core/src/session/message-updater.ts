@@ -10,10 +10,8 @@ export type MemoryState = {
 export interface Adapter {
   readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
-  readonly getCurrentCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined>
   readonly getCurrentShell: (callID: string) => Effect.Effect<SessionMessage.Shell | undefined>
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void>
-  readonly updateCompaction: (compaction: SessionMessage.Compaction) => Effect.Effect<void>
   readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void>
   readonly appendMessage: (message: SessionMessage.Message) => Effect.Effect<void>
 }
@@ -23,7 +21,6 @@ export function memory(state: MemoryState): Adapter {
     state.messages.findLastIndex((message) => message.id === messageID)
   // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
   const latestAssistantIndex = () => state.messages.findLastIndex((message) => message.type === "assistant")
-  const activeCompactionIndex = () => state.messages.findLastIndex((message) => message.type === "compaction")
   const activeShellIndex = (callID: string) =>
     state.messages.findLastIndex((message) => message.type === "shell" && message.callID === callID)
 
@@ -44,14 +41,6 @@ export function memory(state: MemoryState): Adapter {
         return assistant?.type === "assistant" ? assistant : undefined
       })
     },
-    getCurrentCompaction() {
-      return Effect.sync(() => {
-        const index = activeCompactionIndex()
-        if (index < 0) return
-        const compaction = state.messages[index]
-        return compaction?.type === "compaction" ? compaction : undefined
-      })
-    },
     getCurrentShell(callID) {
       return Effect.sync(() => {
         const index = activeShellIndex(callID)
@@ -67,15 +56,6 @@ export function memory(state: MemoryState): Adapter {
         const current = state.messages[index]
         if (current?.type !== "assistant") return
         state.messages[index] = assistant
-      })
-    },
-    updateCompaction(compaction) {
-      return Effect.sync(() => {
-        const index = activeCompactionIndex()
-        if (index < 0) return
-        const current = state.messages[index]
-        if (current?.type !== "compaction") return
-        state.messages[index] = compaction
       })
     },
     updateShell(shell) {
@@ -123,7 +103,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.agent.switched": (event) => {
         return adapter.appendMessage(
           new SessionMessage.AgentSwitched({
-            id: event.id,
+            id: event.data.messageID,
             type: "agent-switched",
             metadata: event.metadata,
             agent: event.data.agent,
@@ -134,7 +114,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.model.switched": (event) => {
         return adapter.appendMessage(
           new SessionMessage.ModelSwitched({
-            id: event.id,
+            id: event.data.messageID,
             type: "model-switched",
             metadata: event.metadata,
             model: event.data.model,
@@ -142,10 +122,11 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.moved": () => Effect.void,
       "session.next.prompted": (event) => {
         return adapter.appendMessage(
           new SessionMessage.User({
-            id: event.id,
+            id: event.data.messageID,
             type: "user",
             metadata: event.metadata,
             text: event.data.prompt.text,
@@ -156,12 +137,24 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.prompt.admitted": () => Effect.void,
+      "session.next.prompt.promoted": () => Effect.void,
+      "session.next.interrupt.requested": () => Effect.void,
+      "session.next.context.updated": (event) =>
+        adapter.appendMessage(
+          new SessionMessage.System({
+            id: event.data.messageID,
+            type: "system",
+            text: event.data.text,
+            time: { created: event.data.timestamp },
+          }),
+        ),
       "session.next.synthetic": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Synthetic({
             sessionID: event.data.sessionID,
             text: event.data.text,
-            id: event.id,
+            id: event.data.messageID,
             type: "synthetic",
             time: { created: event.data.timestamp },
           }),
@@ -170,7 +163,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.shell.started": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Shell({
-            id: event.id,
+            id: event.data.messageID,
             type: "shell",
             metadata: event.metadata,
             callID: event.data.callID,
@@ -205,7 +198,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
           yield* adapter.appendMessage(
             new SessionMessage.Assistant({
-              id: event.id,
+              id: event.data.assistantMessageID,
               type: "assistant",
               agent: event.data.agent,
               model: event.data.model,
@@ -233,43 +226,22 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.text.started": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.content.push(
-                  castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })),
-                )
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.content.push(
+            castDraft(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" })),
+          )
         })
       },
       "session.next.text.delta": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestText(draft, event.data.textID)
-                if (match) match.text += event.data.delta
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestText(draft, event.data.textID)
+          if (match) match.text += event.data.delta
         })
       },
       "session.next.text.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestText(draft, event.data.textID)
-                if (match) match.text = event.data.text
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestText(draft, event.data.textID)
+          if (match) match.text = event.data.text
         })
       },
       "session.next.tool.input.started": (event) => {
@@ -336,6 +308,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 input: match.state.input,
                 structured: event.data.structured,
                 content: [...event.data.content],
+                outputPaths: event.data.outputPaths ? [...event.data.outputPaths] : [],
                 result: event.data.result,
               }),
             )
@@ -366,92 +339,49 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.reasoning.started": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.content.push(
-                  castDraft(
-                    new SessionMessage.AssistantReasoning({
-                      type: "reasoning",
-                      id: event.data.reasoningID,
-                      text: "",
-                      providerMetadata: event.data.providerMetadata,
-                    }),
-                  ),
-                )
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.content.push(
+            castDraft(
+              new SessionMessage.AssistantReasoning({
+                type: "reasoning",
+                id: event.data.reasoningID,
+                text: "",
+                providerMetadata: event.data.providerMetadata,
               }),
-            )
-          }
+            ),
+          )
         })
       },
       "session.next.reasoning.delta": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestReasoning(draft, event.data.reasoningID)
-                if (match) match.text += event.data.delta
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestReasoning(draft, event.data.reasoningID)
+          if (match) match.text += event.data.delta
         })
       },
       "session.next.reasoning.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                const match = latestReasoning(draft, event.data.reasoningID)
-                if (match) {
-                  match.text = event.data.text
-                  if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
-                }
-              }),
-            )
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestReasoning(draft, event.data.reasoningID)
+          if (match) {
+            match.text = event.data.text
+            if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
           }
         })
       },
       "session.next.retried": () => Effect.void,
-      "session.next.compaction.started": (event) => {
+      "session.next.compaction.started": () => Effect.void,
+      "session.next.compaction.delta": () => Effect.void,
+      "session.next.compaction.ended": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Compaction({
-            id: event.id,
+            id: event.data.messageID,
             type: "compaction",
             metadata: event.metadata,
             reason: event.data.reason,
-            summary: "",
+            summary: event.data.text,
+            recent: event.data.recent,
             time: { created: event.data.timestamp },
           }),
         )
-      },
-      "session.next.compaction.delta": (event) => {
-        return Effect.gen(function* () {
-          const currentCompaction = yield* adapter.getCurrentCompaction()
-          if (currentCompaction) {
-            yield* adapter.updateCompaction(
-              produce(currentCompaction, (draft) => {
-                draft.summary += event.data.text
-              }),
-            )
-          }
-        })
-      },
-      "session.next.compaction.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentCompaction = yield* adapter.getCurrentCompaction()
-          if (currentCompaction) {
-            yield* adapter.updateCompaction(
-              produce(currentCompaction, (draft) => {
-                draft.summary = event.data.text
-                draft.include = event.data.include
-              }),
-            )
-          }
-        })
       },
     })
   })

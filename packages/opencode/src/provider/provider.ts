@@ -27,6 +27,7 @@ import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
@@ -294,6 +295,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const profile = configProfile ?? envProfile
 
       const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
+      const configApiKey = providerConfig?.options?.apiKey
 
       // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
       // until the scope of the Env API is clarified (test only or runtime?)
@@ -313,7 +315,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
       )
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+      if (
+        !profile &&
+        !awsAccessKeyId &&
+        !awsBearerToken &&
+        !configApiKey &&
+        !awsWebIdentityTokenFile &&
+        !containerCreds
+      )
         return { autoload: false }
 
       const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
@@ -324,7 +333,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       // Only use credential chain if no bearer token exists
       // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
-      if (!awsBearerToken) {
+      if (!awsBearerToken && !configApiKey) {
         // Build credential provider options (only pass profile if specified)
         const credentialProviderOptions = profile ? { profile } : {}
 
@@ -340,6 +349,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: true,
         options: providerOptions,
+        vars(options: Record<string, any>) {
+          return { AWS_REGION: options.region ?? defaultRegion }
+        },
         async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
           if (model?.api.npm === "@ai-sdk/amazon-bedrock/mantle") return selectBedrockMantleLanguageModel(sdk, modelID)
 
@@ -664,7 +676,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             for (const m of result.models) {
               if (!input.models[m.id]) {
                 models[m.id] = {
-                  id: ProviderV2.ModelID.make(m.id),
+                  id: ModelV2.ID.make(m.id),
                   providerID: ProviderV2.ID.make("gitlab"),
                   name: `Agent Platform (${m.name})`,
                   family: "",
@@ -850,6 +862,93 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    "snowflake-cortex": Effect.fnUntraced(function* (input: Info) {
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(input.id)
+
+      const account =
+        env["SNOWFLAKE_ACCOUNT"] ??
+        (auth?.type === "api" ? auth.metadata?.account : undefined) ??
+        input.options?.account
+
+      const pat = env["SNOWFLAKE_CORTEX_PAT"] ?? (auth?.type === "api" ? auth.key : undefined) ?? input.options?.apiKey
+
+      if (!account || !pat) {
+        const missing = [!account && "SNOWFLAKE_ACCOUNT", !pat && "SNOWFLAKE_CORTEX_PAT"].filter(Boolean).join(", ")
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(
+              `Snowflake Cortex: missing credentials (${missing}). Set via env var, opencode auth, or provider options.`,
+            )
+          },
+        }
+      }
+
+      const baseURL = `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`
+
+      return {
+        autoload: input.source === "config",
+        options: {
+          baseURL,
+          apiKey: pat,
+          fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
+            if (init?.body && typeof init.body === "string") {
+              try {
+                const body = JSON.parse(init.body)
+                if ("max_tokens" in body) {
+                  body.max_completion_tokens = body.max_tokens
+                  delete body.max_tokens
+                  init = { ...init, body: JSON.stringify(body) }
+                }
+              } catch {}
+            }
+
+            const response = await fetch(url, init)
+
+            // Cortex returns 400 "conversation complete" as a normal stop condition
+            if (!response.ok && response.status === 400) {
+              try {
+                const errorData = await response.clone().json()
+                const errorMessage = String(errorData.message || errorData.error || "")
+                if (errorMessage.toLowerCase().includes("conversation complete")) {
+                  return new Response(
+                    JSON.stringify({
+                      choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }],
+                    }),
+                    { status: 200, headers: new Headers({ "content-type": "application/json" }) },
+                  )
+                }
+              } catch {}
+            }
+
+            // Cortex returns role:"" in streaming deltas; the AI SDK schema requires "assistant"
+            if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
+              const reader = response.body.getReader()
+              const encoder = new TextEncoder()
+              const decoder = new TextDecoder()
+              const stream = new ReadableStream({
+                async pull(ctrl) {
+                  const { done, value } = await reader.read()
+                  if (done) {
+                    ctrl.close()
+                    return
+                  }
+                  const text = decoder.decode(value, { stream: true })
+                  ctrl.enqueue(encoder.encode(text.replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
+                },
+                cancel() {
+                  reader.cancel()
+                },
+              })
+              return new Response(stream, { headers: response.headers, status: response.status })
+            }
+
+            return response
+          },
+        },
+      }
+    }),
   }
 }
 
@@ -920,7 +1019,7 @@ const ProviderLimit = Schema.Struct({
 })
 
 export const Model = Schema.Struct({
-  id: ProviderV2.ModelID,
+  id: ModelV2.ID,
   providerID: ProviderV2.ID,
   api: ProviderApiInfo,
   name: Schema.String,
@@ -978,7 +1077,7 @@ export function defaultModelIDs<T extends { models: Record<string, { id: string 
 
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
   providerID: ProviderV2.ID,
-  modelID: ProviderV2.ModelID,
+  modelID: ModelV2.ID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
   cause: Schema.optional(Schema.Defect),
 }) {
@@ -1016,20 +1115,14 @@ export type Error = ModelNotFoundError | InitError | NoProvidersError | NoModels
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderV2.ID, Info>>
   readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
-  readonly getModel: (
-    providerID: ProviderV2.ID,
-    modelID: ProviderV2.ModelID,
-  ) => Effect.Effect<Model, ModelNotFoundError>
+  readonly getModel: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Model, ModelNotFoundError>
   readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
   readonly closest: (
     providerID: ProviderV2.ID,
     query: string[],
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
-  readonly defaultModel: () => Effect.Effect<
-    { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID },
-    DefaultModelError
-  >
+  readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
 }
 
 interface State {
@@ -1080,7 +1173,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
-    id: ProviderV2.ModelID.make(model.id),
+    id: ModelV2.ID.make(model.id),
     providerID: ProviderV2.ID.make(provider.id),
     name: model.name,
     family: model.family,
@@ -1138,7 +1231,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
       const base = fromModelsDevModel(provider, model)
       models[id] = {
         ...base,
-        id: ProviderV2.ModelID.make(id),
+        id: ModelV2.ID.make(id),
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
         options: opts.provider?.body
@@ -1163,7 +1256,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
-function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelID, enableExperimentalModels: boolean) {
+function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
   const available = provider
     ? Object.keys(provider.models).filter((id) => {
         const model = provider.models[id]
@@ -1279,7 +1372,7 @@ export const layer = Layer.effect(
                 id,
                 {
                   ...model,
-                  id: ProviderV2.ModelID.make(id),
+                  id: ModelV2.ID.make(id),
                   providerID,
                 },
               ]),
@@ -1314,7 +1407,7 @@ export const layer = Layer.effect(
               return existingModel?.name ?? modelID
             })
             const parsedModel: Model = {
-              id: ProviderV2.ModelID.make(modelID),
+              id: ModelV2.ID.make(modelID),
               api: {
                 id: apiID,
                 npm: apiNpm,
@@ -1703,7 +1796,7 @@ export const layer = Layer.effect(
       InstanceState.use(state, (s) => s.providers[providerID]),
     )
 
-    const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ProviderV2.ModelID) {
+    const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ModelV2.ID) {
       const s = yield* InstanceState.get(state)
       const provider = s.providers[providerID]
       if (!provider) {
@@ -1792,7 +1885,7 @@ export const layer = Layer.effect(
       if (experimental.model) {
         return {
           ...experimental.model,
-          id: ProviderV2.ModelID.make(experimental.model.id),
+          id: ModelV2.ID.make(experimental.model.id),
           providerID: ProviderV2.ID.make(experimental.model.providerID),
         }
       }
@@ -1846,16 +1939,16 @@ export const layer = Layer.effect(
 
       const s = yield* InstanceState.get(state)
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
-        Effect.map((x): { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }[] => {
+        Effect.map((x): { providerID: ProviderV2.ID; modelID: ModelV2.ID }[] => {
           if (!isRecord(x) || !Array.isArray(x.recent)) return []
           return x.recent.flatMap((item) => {
             if (!isRecord(item)) return []
             if (typeof item.providerID !== "string") return []
             if (typeof item.modelID !== "string") return []
-            return [{ providerID: ProviderV2.ID.make(item.providerID), modelID: ProviderV2.ModelID.make(item.modelID) }]
+            return [{ providerID: ProviderV2.ID.make(item.providerID), modelID: ModelV2.ID.make(item.modelID) }]
           })
         }),
-        Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }[])),
+        Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ModelV2.ID }[])),
       )
       for (const entry of recent) {
         const provider = s.providers[entry.providerID]
@@ -1904,7 +1997,7 @@ export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
     providerID: ProviderV2.ID.make(providerID),
-    modelID: ProviderV2.ModelID.make(rest.join("/")),
+    modelID: ModelV2.ID.make(rest.join("/")),
   }
 }
 

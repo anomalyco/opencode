@@ -10,9 +10,10 @@ import type { Provider } from "@/provider/provider"
 import { OAUTH_DUMMY_KEY } from "@/auth"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const baseModel: Provider.Model = {
-  id: ProviderV2.ModelID.make("gpt-5-mini"),
+  id: ModelV2.ID.make("gpt-5-mini"),
   providerID: ProviderV2.ID.make("openai"),
   api: {
     id: "gpt-5-mini",

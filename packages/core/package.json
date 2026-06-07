@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.15.13",
+  "version": "1.16.2",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -17,7 +17,9 @@
     "opencode": "./bin/opencode"
   },
   "exports": {
+    "./public": "./src/public/index.ts",
     "./session/runner": "./src/session/runner/index.ts",
+    "./system-context": "./src/system-context/index.ts",
     "./*": "./src/*.ts"
   },
   "imports": {
@@ -30,6 +32,11 @@
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
+    },
+    "#fff": {
+      "bun": "./src/filesystem/fff.bun.ts",
+      "node": "./src/filesystem/fff.node.ts",
+      "default": "./src/filesystem/fff.bun.ts"
     }
   },
   "devDependencies": {
@@ -79,6 +86,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@lydell/node-pty": "catalog:",
+    "@ff-labs/fff-bun": "0.9.3",
     "@npmcli/arborist": "9.4.0",
     "@npmcli/config": "10.8.1",
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
@@ -89,7 +97,8 @@
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
     "@opentelemetry/sdk-trace-base": "2.6.1",
     "@parcel/watcher": "2.5.1",
-    "@openrouter/ai-sdk-provider": "2.8.1",
+    "@silvia-odwyer/photon-node": "0.3.4",
+    "@openrouter/ai-sdk-provider": "2.9.0",
     "ai-gateway-provider": "3.1.2",
     "bun-pty": "0.4.8",
     "cross-spawn": "catalog:",

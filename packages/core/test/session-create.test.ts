@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
+import path from "path"
 import { Effect, Layer, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
-import { eq } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -16,10 +18,12 @@ import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
+import { tmpdir } from "./fixture/tmpdir"
 
 const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
@@ -211,11 +215,99 @@ describe("SessionV2.create", () => {
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
       yield* session.prompt({ sessionID: created.id, prompt: new Prompt({ text: "Hello" }), resume: false })
-      yield* SessionInput.promoteSteers(db, events, created.id)
+      yield* SessionInput.promoteSteers(db, events, created.id, Number.MAX_SAFE_INTEGER)
 
       expect(
-        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ cursor: 1, event: { type: "session.next.prompted", data: { prompt: { text: "Hello" } } } }])
+        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
+      ).toMatchObject([
+        { cursor: 1, event: { type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } } },
+        { cursor: 2, event: { type: "session.next.prompt.promoted" } },
+      ])
+    }),
+  )
+
+  it.effect("replays one prompt lifecycle into a fresh target database", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const sourceEvents = yield* EventV2.Service
+      const sourceDb = (yield* Database.Service).db
+      const created = yield* session.create({ id: SessionV2.ID.make("ses_fresh_target_replay"), location })
+      const admitted = yield* session.prompt({
+        sessionID: created.id,
+        prompt: new Prompt({ text: "Replay lifecycle" }),
+        resume: false,
+      })
+      yield* SessionInput.promoteSteers(sourceDb, sourceEvents, created.id, Number.MAX_SAFE_INTEGER)
+      const serialized = (yield* sourceDb
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, created.id))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)).map((event) => ({
+        id: event.id,
+        aggregateID: event.aggregate_id,
+        seq: event.seq,
+        type: event.type,
+        data: event.data,
+      }))
+
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const targetDatabase = Database.layerFromPath(path.join(tmp.path, "target.sqlite"))
+      const targetEvents = EventV2.layer.pipe(Layer.provide(targetDatabase))
+      const targetProjector = SessionProjector.layer.pipe(Layer.provide(targetEvents), Layer.provide(targetDatabase))
+      const targetStore = SessionStore.layer.pipe(Layer.provide(targetDatabase))
+
+      yield* Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const events = yield* EventV2.Service
+        const store = yield* SessionStore.Service
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: ProjectV2.ID.global, worktree: location.directory, sandboxes: [] })
+          .run()
+          .pipe(Effect.orDie)
+
+        expect(yield* store.get(created.id)).toBeUndefined()
+        expect(yield* events.replayAll(serialized.slice(0, 2))).toBe(created.id)
+        expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({
+          id: admitted.id,
+          sessionID: created.id,
+          prompt: { text: "Replay lifecycle" },
+          delivery: "steer",
+          admittedSeq: 1,
+        })
+        expect(yield* store.context(created.id)).toEqual([])
+
+        expect(yield* events.replayAll(serialized.slice(2))).toBe(created.id)
+        expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({
+          id: admitted.id,
+          sessionID: created.id,
+          prompt: { text: "Replay lifecycle" },
+          delivery: "steer",
+          admittedSeq: 1,
+          promotedSeq: 2,
+        })
+        expect(yield* store.context(created.id)).toMatchObject([
+          { id: admitted.id, type: "user", text: "Replay lifecycle" },
+        ])
+        expect(
+          (yield* db
+            .select()
+            .from(EventTable)
+            .where(eq(EventTable.aggregate_id, created.id))
+            .orderBy(asc(EventTable.seq))
+            .all()
+            .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
+        ).toEqual([
+          [0, EventV2.versionedType(SessionV1.Event.Created.type, 1)],
+          [1, EventV2.versionedType(SessionEvent.PromptLifecycle.Admitted.type, 1)],
+          [2, EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1)],
+        ])
+      }).pipe(Effect.provide(Layer.fresh(Layer.mergeAll(targetDatabase, targetEvents, targetProjector, targetStore))))
     }),
   )
 
@@ -242,18 +334,64 @@ describe("SessionV2.create", () => {
           Effect.map((error) => (error instanceof SessionV2.OperationUnavailableError ? error.operation : "not-found")),
         )
 
-      expect(yield* unavailable(session.move({ sessionID: created.id, location }))).toBe("move")
       expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
       expect(yield* unavailable(session.skill({ sessionID: created.id, skill: "review" }))).toBe("skill")
       expect(yield* unavailable(session.switchAgent({ sessionID: created.id, agent: "build" }))).toBe("switchAgent")
+    }),
+  )
+
+  it.effect("switches the selected model through the durable Session event", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      const model = ModelV2.Ref.make({
+        id: ModelV2.ID.make("sonnet"),
+        providerID: ProviderV2.ID.anthropic,
+        variant: ModelV2.VariantID.make("high"),
+      })
+
+      yield* session.switchModel({ sessionID: created.id, model })
+
+      expect(yield* session.get(created.id)).toMatchObject({ model })
       expect(
-        yield* unavailable(
-          session.switchModel({
-            sessionID: created.id,
+        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
+      ).toMatchObject([{ event: { type: "session.next.model.switched", data: { model } } }])
+    }),
+  )
+
+  it.effect("persists repeated switches as distinct durable Session events", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      const model = ModelV2.Ref.make({ id: ModelV2.ID.make("sonnet"), providerID: ProviderV2.ID.anthropic })
+
+      yield* session.switchModel({ sessionID: created.id, model })
+      yield* session.switchModel({ sessionID: created.id, model })
+
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
+      ).toHaveLength(3)
+      expect(yield* session.get(created.id)).toMatchObject({ model })
+    }),
+  )
+
+  it.effect("rejects a model switch for a missing Session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const missing = SessionV2.ID.make("ses_missing_model_switch")
+
+      expect(
+        yield* session
+          .switchModel({
+            sessionID: missing,
             model: ModelV2.Ref.make({ id: ModelV2.ID.make("sonnet"), providerID: ProviderV2.ID.anthropic }),
-          }),
-        ),
-      ).toBe("switchModel")
+          })
+          .pipe(
+            Effect.flip,
+            Effect.map((error) => error._tag),
+          ),
+      ).toBe("Session.NotFoundError")
     }),
   )
 })

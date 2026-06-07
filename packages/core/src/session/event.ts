@@ -7,6 +7,9 @@ import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionSchema } from "./schema"
+import { Location } from "../location"
+import { RelativePath } from "../schema"
+import { SessionMessageID } from "./message-id"
 
 export { FileAttachment }
 
@@ -50,6 +53,7 @@ export const AgentSwitched = EventV2.define({
   ...options,
   schema: {
     ...Base,
+    messageID: SessionMessageID.ID,
     agent: Schema.String,
   },
 })
@@ -60,27 +64,85 @@ export const ModelSwitched = EventV2.define({
   ...options,
   schema: {
     ...Base,
+    messageID: SessionMessageID.ID,
     model: ModelV2.Ref,
   },
 })
 export type ModelSwitched = typeof ModelSwitched.Type
+
+export const Moved = EventV2.define({
+  type: "session.next.moved",
+  ...options,
+  schema: {
+    ...Base,
+    location: Location.Ref,
+    subdirectory: RelativePath.pipe(Schema.optional),
+  },
+})
+export type Moved = typeof Moved.Type
 
 export const Prompted = EventV2.define({
   type: "session.next.prompted",
   ...options,
   schema: {
     ...Base,
+    messageID: SessionMessageID.ID,
     prompt: Prompt,
     delivery: Schema.Literals(["steer", "queue"]),
   },
 })
 export type Prompted = typeof Prompted.Type
 
+export namespace PromptLifecycle {
+  export const Admitted = EventV2.define({
+    type: "session.next.prompt.admitted",
+    ...options,
+    schema: {
+      ...Base,
+      messageID: SessionMessageID.ID,
+      prompt: Prompt,
+      delivery: Schema.Literals(["steer", "queue"]),
+    },
+  })
+  export type Admitted = typeof Admitted.Type
+
+  export const Promoted = EventV2.define({
+    type: "session.next.prompt.promoted",
+    ...options,
+    schema: {
+      ...Base,
+      messageID: SessionMessageID.ID,
+      prompt: Prompt,
+      timeCreated: V2Schema.DateTimeUtcFromMillis,
+    },
+  })
+  export type Promoted = typeof Promoted.Type
+}
+
+export const InterruptRequested = EventV2.define({
+  type: "session.next.interrupt.requested",
+  ...options,
+  schema: Base,
+})
+export type InterruptRequested = typeof InterruptRequested.Type
+
+export const ContextUpdated = EventV2.define({
+  type: "session.next.context.updated",
+  ...options,
+  schema: {
+    ...Base,
+    messageID: SessionMessageID.ID,
+    text: Schema.String,
+  },
+})
+export type ContextUpdated = typeof ContextUpdated.Type
+
 export const Synthetic = EventV2.define({
   type: "session.next.synthetic",
   ...options,
   schema: {
     ...Base,
+    messageID: SessionMessageID.ID,
     text: Schema.String,
   },
 })
@@ -92,6 +154,7 @@ export namespace Shell {
     ...options,
     schema: {
       ...Base,
+      messageID: SessionMessageID.ID,
       callID: Schema.String,
       command: Schema.String,
     },
@@ -116,6 +179,7 @@ export namespace Step {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       agent: Schema.String,
       model: ModelV2.Ref,
       snapshot: Schema.String.pipe(Schema.optional),
@@ -128,7 +192,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantMessageID: EventV2.ID,
+      assistantMessageID: SessionMessageID.ID,
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
@@ -150,7 +214,7 @@ export namespace Step {
     ...stepSettlementOptions,
     schema: {
       ...Base,
-      assistantMessageID: EventV2.ID,
+      assistantMessageID: SessionMessageID.ID,
       error: UnknownError,
     },
   })
@@ -163,6 +227,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       textID: Schema.String,
     },
   })
@@ -173,6 +238,7 @@ export namespace Text {
     type: "session.next.text.delta",
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       textID: Schema.String,
       delta: Schema.String,
     },
@@ -184,6 +250,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       textID: Schema.String,
       text: Schema.String,
     },
@@ -197,6 +264,7 @@ export namespace Reasoning {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       reasoningID: Schema.String,
       providerMetadata: ProviderMetadata.pipe(Schema.optional),
     },
@@ -208,6 +276,7 @@ export namespace Reasoning {
     type: "session.next.reasoning.delta",
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       reasoningID: Schema.String,
       delta: Schema.String,
     },
@@ -219,6 +288,7 @@ export namespace Reasoning {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: SessionMessageID.ID,
       reasoningID: Schema.String,
       text: Schema.String,
       providerMetadata: ProviderMetadata.pipe(Schema.optional),
@@ -230,7 +300,7 @@ export namespace Reasoning {
 export namespace Tool {
   const ToolBase = {
     ...Base,
-    assistantMessageID: EventV2.ID,
+    assistantMessageID: SessionMessageID.ID,
     callID: Schema.String,
   }
 
@@ -303,6 +373,7 @@ export namespace Tool {
       ...ToolBase,
       structured: ToolOutput.Structured,
       content: Schema.Array(ToolOutput.Content),
+      outputPaths: Schema.Array(Schema.String).pipe(Schema.optional),
       result: Schema.Unknown.pipe(Schema.optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
@@ -357,6 +428,7 @@ export namespace Compaction {
     ...options,
     schema: {
       ...Base,
+      messageID: SessionMessageID.ID,
       reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
     },
   })
@@ -364,15 +436,16 @@ export namespace Compaction {
 
   export const Delta = EventV2.define({
     type: "session.next.compaction.delta",
-    ...options,
     schema: {
       ...Base,
+      messageID: SessionMessageID.ID,
       text: Schema.String,
     },
   })
   export type Delta = typeof Delta.Type
 
-  export const Ended = EventV2.define({
+  // Retain the unpublished v1 decoder so stored beta events remain replayable.
+  export const EndedV1 = EventV2.define({
     type: "session.next.compaction.ended",
     ...options,
     schema: {
@@ -381,13 +454,30 @@ export namespace Compaction {
       include: Schema.String.pipe(Schema.optional),
     },
   })
+
+  export const Ended = EventV2.define({
+    type: "session.next.compaction.ended",
+    sync: { aggregate: "sessionID", version: 2 },
+    schema: {
+      ...Base,
+      messageID: SessionMessageID.ID,
+      reason: Started.data.fields.reason,
+      text: Schema.String,
+      recent: Schema.String,
+    },
+  })
   export type Ended = typeof Ended.Type
 }
 
 const DurableDefinitions = [
   AgentSwitched,
   ModelSwitched,
+  Moved,
   Prompted,
+  PromptLifecycle.Admitted,
+  PromptLifecycle.Promoted,
+  InterruptRequested,
+  ContextUpdated,
   Synthetic,
   Shell.Started,
   Shell.Ended,
@@ -406,10 +496,9 @@ const DurableDefinitions = [
   Reasoning.Ended,
   Retried,
   Compaction.Started,
-  Compaction.Delta,
   Compaction.Ended,
 ] as const
-const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta] as const
+const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta, Compaction.Delta] as const
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
 export type DurableEvent = typeof Durable.Type

@@ -9,7 +9,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { validateSession } from "../../src/cli/cmd/tui/validate-session"
+import { validateSession } from "../../src/cli/tui/validate-session"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -25,6 +25,7 @@ import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixt
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Database } from "@opencode-ai/core/database/database"
 import { httpApiLayer } from "./httpapi-layer"
 
@@ -310,7 +311,7 @@ function seedMessage(directory: string, sessionID: string) {
             role: "user",
             time: { created: Date.now() },
             agent: "test",
-            model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
             tools: {},
           } satisfies SessionV1.User)
           const part = yield* svc.updatePart({
@@ -392,7 +393,7 @@ describe("HttpApi SDK", () => {
         const url = new URL(request!.url)
 
         expect(file.response.status).toBe(200)
-        expect(file.data).toMatchObject({ content: "hello" })
+        expect(file.data).toMatchObject({ data: { content: "hello" } })
         expect(url.searchParams.get("directory")).toBe(directory)
         expect(url.searchParams.get("workspace")).toBe(workspaceID)
         expect(url.searchParams.get("location[directory]")).toBe(directory)
