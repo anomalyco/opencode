@@ -72,12 +72,29 @@ function rawAll(db: Client, sql: string) {
   throw new Error("SQLite client does not support raw all queries")
 }
 
+function createSessionMessageSeqIndexes(db: Client) {
+  db.run("DROP INDEX IF EXISTS session_message_session_idx")
+  db.run("DROP INDEX IF EXISTS session_message_session_type_idx")
+  db.run("DROP INDEX IF EXISTS session_message_session_seq_idx")
+  db.run("DROP INDEX IF EXISTS session_message_session_type_time_created_id_idx")
+  db.run("CREATE UNIQUE INDEX session_message_session_seq_idx ON session_message (session_id, seq)")
+  db.run("CREATE INDEX IF NOT EXISTS session_message_session_type_seq_idx ON session_message (session_id, type, seq)")
+  db.run(
+    "CREATE INDEX IF NOT EXISTS session_message_session_time_created_id_idx ON session_message (session_id, time_created, id)",
+  )
+  db.run("CREATE INDEX IF NOT EXISTS session_message_time_created_idx ON session_message (time_created)")
+}
+
 function repairSessionMessageSchema(db: Client) {
   const columns = rawAll(db, "PRAGMA table_info(session_message)")
   if (columns.length === 0) return
-  if (!columns.some((column) => column.name === "seq")) return
+  const names = new Set(columns.map((column) => column.name))
+  if (names.has("seq")) {
+    createSessionMessageSeqIndexes(db)
+    return
+  }
 
-  log.warn("repairing stale session_message schema", { column: "seq" })
+  log.warn("repairing stale session_message schema", { missing: "seq" })
   db.run("PRAGMA foreign_keys = OFF")
   try {
     db.run("BEGIN TRANSACTION")
@@ -92,6 +109,7 @@ function repairSessionMessageSchema(db: Client) {
         id text PRIMARY KEY,
         session_id text NOT NULL,
         type text NOT NULL,
+        seq integer NOT NULL,
         time_created integer NOT NULL,
         time_updated integer NOT NULL,
         data text NOT NULL,
@@ -100,15 +118,20 @@ function repairSessionMessageSchema(db: Client) {
       )
     `)
     db.run(`
-      INSERT INTO session_message_next (id, session_id, type, time_created, time_updated, data)
-      SELECT id, session_id, type, time_created, time_updated, data
+      INSERT INTO session_message_next (id, session_id, type, seq, time_created, time_updated, data)
+      SELECT
+        id,
+        session_id,
+        type,
+        row_number() OVER (PARTITION BY session_id ORDER BY time_created, id) - 1,
+        time_created,
+        time_updated,
+        data
       FROM session_message
     `)
     db.run("DROP TABLE session_message")
     db.run("ALTER TABLE session_message_next RENAME TO session_message")
-    db.run("CREATE INDEX session_message_session_idx ON session_message (session_id)")
-    db.run("CREATE INDEX session_message_session_type_idx ON session_message (session_id, type)")
-    db.run("CREATE INDEX session_message_time_created_idx ON session_message (time_created)")
+    createSessionMessageSeqIndexes(db)
     db.run("COMMIT")
     log.info("repaired stale session_message schema")
   } catch (err) {
