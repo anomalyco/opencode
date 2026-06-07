@@ -441,7 +441,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const statuslineBackground = createMemo(() => theme().status)
   const hasActivityMeta = createMemo(() => activityMeta().length > 0)
-  const hasModelStatus = createMemo(() => Boolean(modelStatus()))
+  const hasModelStatus = createMemo(() => responsive().statusline.showModel && Boolean(modelStatus()))
   const contextHints = createMemo(() => {
     if (!prompt() || shell() || !responsive().statusline.showContextHints) {
       return []
