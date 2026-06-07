@@ -84,7 +84,7 @@ export const SessionListCommand = effectCmd({
         default: "table",
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
-    const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount }))
+    const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount, directory: process.cwd() }))
 
     if (sessions.length === 0) return
 
