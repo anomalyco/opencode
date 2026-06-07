@@ -1283,6 +1283,7 @@ export const dict = {
   "config.providers.group.existing": "Existing, not enabled",
   "config.providers.existingNote":
     "These providers are known to OpenCode, but they are not currently connected in your runtime.",
+  "config.providers.modelsBadge": "{{count}} models",
   "config.providers.note.models": "{{count}} models available",
   "config.providers.note.customEnabled": "{{count}} models available · custom provider enabled in config",
   "config.providers.note.customDisabled": "{{count}} models available · custom provider disabled in config",

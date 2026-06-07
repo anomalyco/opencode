@@ -9,6 +9,63 @@
 }
 
 @layer components {
+  .config-scrollbar {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  .config-scrollbar:hover,
+  .config-scrollbar:focus-within {
+    scrollbar-color: color-mix(in srgb, var(--border-strong-base) 42%, transparent) transparent;
+  }
+
+  .config-scrollbar::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+    background: transparent;
+  }
+
+  .config-scrollbar::-webkit-scrollbar-track,
+  .config-scrollbar::-webkit-scrollbar-track-piece {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .config-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .config-scrollbar::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .config-scrollbar::-webkit-scrollbar-thumb {
+    min-width: 32px;
+    min-height: 32px;
+    border: 4px solid transparent;
+    border-radius: 999px;
+    background-color: transparent;
+    background-clip: content-box;
+    box-shadow: none;
+    transition: background-color 160ms ease;
+  }
+
+  .config-scrollbar:hover::-webkit-scrollbar-thumb,
+  .config-scrollbar:focus-within::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--border-strong-base) 42%, transparent);
+  }
+
+  .config-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--text-weak) 58%, transparent);
+  }
+
+  .config-scrollbar::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--text-base) 62%, transparent);
+  }
+
   [data-component="sidebar-session"] {
     --sidebar-session-accent: #c98a6d;
     --sidebar-session-hover-bg: #2c2924;

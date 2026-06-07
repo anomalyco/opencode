@@ -1243,6 +1243,7 @@ export const dict = {
   "config.providers.group.enabled": "已启用",
   "config.providers.group.existing": "已存在，未启用",
   "config.providers.existingNote": "这些提供商已被 OpenCode 识别，但当前没有连接到你的运行时。",
+  "config.providers.modelsBadge": "{{count}} 个模型",
   "config.providers.note.models": "{{count}} 个可用模型",
   "config.providers.note.customEnabled": "{{count}} 个可用模型 · 自定义提供商已在配置中启用",
   "config.providers.note.customDisabled": "{{count}} 个可用模型 · 自定义提供商已在配置中禁用",

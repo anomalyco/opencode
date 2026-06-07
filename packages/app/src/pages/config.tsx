@@ -19,6 +19,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Switch as Toggle } from "@opencode-ai/ui/switch"
@@ -852,6 +853,116 @@ function ListButton(props: {
   )
 }
 
+type ProviderSdkBadgeTone = "codex" | "claude" | "deepseek" | "openai" | "neutral"
+
+type ProviderSdkBadge = {
+  label: string
+  icon: string
+  tone: ProviderSdkBadgeTone
+}
+
+function providerSdkBadge(item: ProviderItem): ProviderSdkBadge | undefined {
+  if (!item.sdk) return undefined
+
+  const sdk = item.sdk.toLowerCase()
+  const identity = `${item.id} ${item.name}`.toLowerCase()
+
+  if (identity.includes("deepseek")) return { label: "DeepSeek", icon: "deepseek", tone: "deepseek" }
+  if (identity.includes("anthropic") || identity.includes("claude") || sdk.includes("anthropic")) {
+    return { label: "Claude Code", icon: "anthropic", tone: "claude" }
+  }
+  if (item.id === "openai") return { label: "OpenAI", icon: "openai", tone: "openai" }
+  if (identity.includes("codex") || sdk === "@ai-sdk/openai") {
+    return { label: "Codex", icon: "openai", tone: "codex" }
+  }
+  if (sdk.includes("openai")) return { label: "OpenAI", icon: "openai", tone: "openai" }
+  if (sdk.includes("google")) return { label: "Google", icon: "google", tone: "neutral" }
+  if (sdk.includes("xai")) return { label: "xAI", icon: "xai", tone: "neutral" }
+  if (sdk.includes("mistral")) return { label: "Mistral", icon: "mistral", tone: "neutral" }
+
+  return { label: item.sdk.replace(/^@ai-sdk\//, ""), icon: item.id, tone: "neutral" }
+}
+
+function ProviderSdkChip(props: { badge: ProviderSdkBadge }) {
+  return (
+    <span
+      class="inline-flex h-7 w-fit items-center gap-1.5 rounded-full border px-2.5 text-12-medium shadow-[0_8px_20px_-16px_rgba(0,0,0,0.65)]"
+      classList={{
+        "border-[#74d6ca]/45 bg-[#2f8179] text-white": props.badge.tone === "codex",
+        "border-[#d16b27]/30 bg-[#fff0d8] text-[#a33f0a]": props.badge.tone === "claude",
+        "border-[#7daeff]/50 bg-[#dceaff] text-[#1856c9]": props.badge.tone === "deepseek",
+        "border-border-strong-base bg-surface-base text-text-base": props.badge.tone === "openai",
+        "border-border-weak-base bg-surface-secondary text-text-base": props.badge.tone === "neutral",
+      }}
+    >
+      <ProviderIcon id={props.badge.icon} class="size-4 shrink-0" />
+      <span>{props.badge.label}</span>
+    </span>
+  )
+}
+
+function ProviderListButton(props: {
+  active: boolean
+  item: ProviderItem
+  models: string
+  onClick: () => void
+  extra?: JSX.Element
+}) {
+  const badge = createMemo(() => providerSdkBadge(props.item))
+  const press = (event: KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return
+    event.preventDefault()
+    props.onClick()
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      class="group flex w-full cursor-pointer items-start justify-between gap-4 rounded-2xl border px-4 py-4 text-left transition-all duration-150 focus:outline-none focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
+      classList={{
+        "border-border-base bg-surface-base-active shadow-[inset_0_1px_0_color-mix(in_srgb,white_7%,transparent)]":
+          props.active,
+        "border-border-weak-base/70 bg-background-base/45 hover:border-border-base hover:bg-surface-base/85":
+          !props.active,
+      }}
+      onClick={props.onClick}
+      onKeyDown={press}
+    >
+      <div class="min-w-0 flex-1">
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <div class="min-w-0 truncate text-15-medium text-text-strong transition-colors">{props.item.id}</div>
+          <span
+            class="shrink-0 rounded-full border px-2 py-0.5 text-11-medium transition-colors"
+            classList={{
+              "border-border-base bg-surface-secondary text-text-base": props.active,
+              "border-border-weak-base bg-surface-secondary/70 text-text-weak": !props.active,
+            }}
+          >
+            {props.models}
+          </span>
+        </div>
+        <Show when={badge()}>
+          {(value) => (
+            <div class="mt-3">
+              <ProviderSdkChip badge={value()} />
+            </div>
+          )}
+        </Show>
+      </div>
+      <Show when={props.extra}>
+        <div
+          class="shrink-0 pt-0.5"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          {props.extra}
+        </div>
+      </Show>
+    </div>
+  )
+}
+
 function Wait(props: { text: string }) {
   return (
     <div class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
@@ -976,7 +1087,7 @@ function MarkdownField(props: {
           back = el
         }}
         aria-hidden="true"
-        class="pointer-events-none absolute inset-0 overflow-auto px-4 py-3 text-13-mono leading-6 whitespace-pre-wrap break-words"
+        class="config-scrollbar pointer-events-none absolute inset-0 overflow-auto px-4 py-3 text-13-mono leading-6 whitespace-pre-wrap break-words"
         style={{ "font-family": font() }}
       >
         <div class="min-h-full w-full" innerHTML={html()} />
@@ -990,7 +1101,7 @@ function MarkdownField(props: {
         ref={(el) => {
           box = el
         }}
-        class="absolute inset-0 size-full min-h-0 resize-none overflow-auto bg-transparent px-4 py-3 text-13-mono leading-6 focus:outline-none"
+        class="config-scrollbar absolute inset-0 size-full min-h-0 resize-none overflow-auto bg-transparent px-4 py-3 text-13-mono leading-6 focus:outline-none"
         style={{
           color: "transparent",
           "-webkit-text-fill-color": "transparent",
@@ -1184,7 +1295,7 @@ function Editor(props: {
                 when={(props.tree ?? []).length > 0}
                 fallback={<div class="text-12-regular text-text-weak">{language.t("config.editor.noFiles")}</div>}
               >
-                <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+                <div class="config-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
                   <Tree
                     list={props.tree ?? []}
                     root={props.treeRoot}
@@ -1262,7 +1373,7 @@ function ProviderDetail(props: {
               : language.t("config.provider.toggle.connected")}
           </Toggle>
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+        <div class="config-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
           <div class="mb-3 text-11-medium uppercase tracking-[0.08em] text-text-weak">
             {language.t("config.provider.modelsTitle")}
           </div>
@@ -1423,7 +1534,7 @@ function ClawEditor(props: {
           onEnabled={(value) => props.onChange("enabled", value)}
         />
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+        <div class="config-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex w-full flex-col gap-6">
             <div class="grid gap-4 lg:grid-cols-2">
               <TextField
@@ -1544,7 +1655,7 @@ function GenericAgentEditor(props: {
           onEnabled={(value) => props.onChange("enabled", value)}
         />
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+        <div class="config-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex w-full flex-col gap-6">
             <div class="grid gap-4 lg:grid-cols-2">
               <div class="min-w-0">
@@ -1689,7 +1800,7 @@ function HermesEditor(props: {
           onEnabled={(value) => props.onChange("enabled", value)}
         />
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+        <div class="config-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex w-full flex-col gap-6">
             <div class="grid gap-4 lg:grid-cols-2">
               <div class="min-w-0">
@@ -1917,7 +2028,7 @@ function CustomEditor(props: {
           </Show>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+        <div class="config-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
           <div class="mx-auto flex max-w-[920px] flex-col gap-6">
             <div class="grid gap-4 lg:grid-cols-2">
               <TextField
@@ -4295,7 +4406,7 @@ export default function ConfigPage() {
                 <div class="mt-1 text-12-regular text-text-weak">{t("config.description")}</div>
               </div>
             </div>
-            <div class="flex-1 overflow-y-auto p-2">
+            <div class="config-scrollbar flex-1 overflow-y-auto p-2">
               <div class="flex flex-col">
                 <SectionButton
                   current={state.section === "agents-md"}
@@ -4432,7 +4543,7 @@ export default function ConfigPage() {
                 ref={(el) => {
                   skillsList = el
                 }}
-                class="min-h-0 flex-1 overflow-y-auto p-3"
+                class="config-scrollbar min-h-0 flex-1 overflow-y-auto p-3"
               >
                 <div class="flex flex-col">
                   <Switch>
@@ -4461,7 +4572,7 @@ export default function ConfigPage() {
                       >
                         <div class="flex flex-col gap-3">
                           <Show when={providerOn().length > 0}>
-                            <div class="flex flex-col">
+                            <div class="flex flex-col gap-2.5">
                               <div class="flex items-center justify-between gap-3 px-1">
                                 <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
                                   {t("config.providers.group.enabled")}
@@ -4472,15 +4583,10 @@ export default function ConfigPage() {
                               </div>
                               <For each={providerOn()}>
                                 {(item) => (
-                                  <ListButton
+                                  <ProviderListButton
                                     active={state.pick === `provider:${item.id}`}
-                                    title={item.id}
-                                    note={
-                                      item.custom
-                                        ? t("config.providers.note.customEnabled", { count: item.models.length })
-                                        : t("config.providers.note.models", { count: item.models.length })
-                                    }
-                                    meta={item.custom ? item.sdk : undefined}
+                                    item={item}
+                                    models={t("config.providers.modelsBadge", { count: item.models.length })}
                                     onClick={() => setState("pick", `provider:${item.id}`)}
                                     extra={
                                       <Toggle
@@ -4524,20 +4630,13 @@ export default function ConfigPage() {
                                 <div class="rounded-xl border border-border-weak-base bg-surface-base px-3 py-2 text-12-regular text-text-weak">
                                   {t("config.providers.existingNote")}
                                 </div>
-                                <div class="flex flex-col">
+                                <div class="flex flex-col gap-2.5">
                                   <For each={providerOff()}>
                                     {(item) => (
-                                      <ListButton
+                                      <ProviderListButton
                                         active={state.pick === `provider:${item.id}`}
-                                        title={item.id}
-                                        note={
-                                          item.custom
-                                            ? item.allowed
-                                              ? t("config.providers.note.customEnabled", { count: item.models.length })
-                                              : t("config.providers.note.customDisabled", { count: item.models.length })
-                                            : t("config.providers.note.known", { count: item.models.length })
-                                        }
-                                        meta={item.custom ? item.sdk : undefined}
+                                        item={item}
+                                        models={t("config.providers.modelsBadge", { count: item.models.length })}
                                         onClick={() => setState("pick", `provider:${item.id}`)}
                                         extra={
                                           <Toggle
@@ -5439,7 +5538,7 @@ function SkillMarket(props: {
           </Button>
         </div>
       </div>
-      <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <div class="config-scrollbar min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
           <div class="flex min-h-0 flex-col gap-3">
             <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
