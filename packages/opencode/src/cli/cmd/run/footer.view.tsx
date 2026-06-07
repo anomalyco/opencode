@@ -854,10 +854,10 @@ export function RunFooterView(props: RunFooterViewProps) {
                 </Show>
 
                 <For each={contextHints()}>
-                  {(hint) => (
+                  {(hint, index) => (
                     <box
                       id={`run-direct-footer-statusline-${hint.kind}`}
-                      paddingLeft={1}
+                      paddingLeft={index() === 0 ? 1 : 0}
                       paddingRight={1}
                       backgroundColor={theme().line}
                       flexShrink={0}
@@ -875,7 +875,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   {(hint) => (
                     <box
                       id="run-direct-footer-statusline-hint"
-                      paddingLeft={1}
+                      paddingLeft={contextHints().length > 0 ? 0 : 1}
                       paddingRight={1}
                       backgroundColor={theme().line}
                       flexShrink={0}

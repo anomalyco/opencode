@@ -713,6 +713,7 @@ test("direct footer shows editable prompts and additional queued work while runn
     expect(frame).toContain("ctrl+x q 3 queued")
     expect(frame).toContain("ctrl+x down subagents")
     expect(frame).toContain("ctrl+p cmd")
+    expect(frame).not.toContain("subagents  ctrl+p cmd")
     expect(frame).not.toContain("1 agent")
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
