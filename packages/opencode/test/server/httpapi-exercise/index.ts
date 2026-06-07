@@ -841,8 +841,9 @@ const scenarios: Scenario[] = [
     .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.cursor.invalid")
+    .seeded((ctx) => ctx.session({ title: "Invalid message cursor owner" }))
     .at((ctx) => ({
-      path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
+      path: `${route("/api/session/{sessionID}/message", { sessionID: ctx.state.id })}?${new URLSearchParams({
         cursor: cursor({ id: "msg_httpapi_missing", time: 0, order: "desc", direction: "next" }),
         order: "asc",
       })}`,
@@ -851,8 +852,9 @@ const scenarios: Scenario[] = [
     .status(400, undefined, "none"),
   http.protected
     .post("/api/session/{sessionID}/prompt", "v2.session.prompt.invalid")
+    .seeded((ctx) => ctx.session({ title: "Invalid prompt owner" }))
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/prompt", { sessionID: "ses_httpapi_missing" }),
+      path: route("/api/session/{sessionID}/prompt", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
       body: {},
     }))
