@@ -101,8 +101,11 @@ function rgba(hex: string, value?: number): RGBA {
 }
 
 function mode(bg: RGBA): "dark" | "light" {
-  const lum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
-  return lum > 0.5 ? "light" : "dark"
+  return luminance(bg) > 0.5 ? "light" : "dark"
+}
+
+function luminance(color: RGBA): number {
+  return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
 }
 
 function fade(color: RGBA, base: RGBA, fallback: number, scale: number, limit: number): RGBA {
@@ -508,12 +511,13 @@ function map(
   const shade = fade(footerTheme.backgroundMenu, footerTheme.background, 0.12, 0.56, 0.72)
   const surface = fade(footerTheme.backgroundMenu, footerTheme.background, 0.18, 0.76, 0.9)
   const line = fade(footerTheme.backgroundMenu, footerTheme.background, 0.24, 0.9, 0.98)
-  const status = tint(footerBackground, rgba("#000000"), footerMode === "dark" ? 0.12 : 0.06)
-  const statusAccent = tint(
-    footerBackground,
-    rgba(footerMode === "dark" ? "#ffffff" : "#000000"),
-    footerMode === "dark" ? 0.06 : 0.08,
-  )
+  const statusBase = tint(footerBackground, rgba("#000000"), footerMode === "dark" ? 0.12 : 0.06)
+  const statusAccentBase =
+    footerMode === "dark" ? tint(footerBackground, rgba("#ffffff"), 0.06) : tint(statusBase, rgba("#000000"), 0.04)
+  const collapsedStatus = footerMode === "dark" && luminance(statusBase) <= 0.04
+  // Pure-black backgrounds need a slight lift or the row disappears into the terminal background.
+  const status = collapsedStatus ? tint(statusBase, statusAccentBase, 0.7) : statusBase
+  const statusAccent = collapsedStatus ? tint(status, rgba("#ffffff"), 0.06) : statusAccentBase
 
   return {
     background: footerTheme.background,
