@@ -880,10 +880,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                       paddingLeft={1}
                       paddingRight={1}
                       backgroundColor={statuslineBackground()}
-                      flexShrink={1}
-                      maxWidth={responsive().statusline.modelMaxWidth}
+                      flexShrink={0}
                     >
-                      <text fg={theme().text} wrapMode="none" truncate>
+                      <text fg={theme().text} wrapMode="none">
                         {info().model}
                         <Show when={info().provider}>
                           {(provider) => <span style={{ fg: theme().muted }}> {provider()}</span>}

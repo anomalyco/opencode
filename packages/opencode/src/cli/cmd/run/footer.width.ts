@@ -22,7 +22,6 @@ export function footerWidthPolicy(width: number) {
       showContextHints: compact,
       contextHintLimit: !compact ? 0 : spacious ? undefined : model ? 2 : 1,
       showModel: model,
-      modelMaxWidth: spacious ? 40 : 24,
     },
   }
 }

@@ -10,7 +10,6 @@ describe("run footer width", () => {
     expect(narrow.statusline.showContextHints).toBe(false)
     expect(narrow.statusline.contextHintLimit).toBe(0)
     expect(narrow.statusline.showModel).toBe(false)
-    expect(narrow.statusline.modelMaxWidth).toBe(24)
 
     const command = footerWidthPolicy(65)
     expect(command.statusline.showCommandHint).toBe(false)
@@ -28,11 +27,9 @@ describe("run footer width", () => {
     const model = footerWidthPolicy(120)
     expect(model.statusline.contextHintLimit).toBe(2)
     expect(model.statusline.showModel).toBe(true)
-    expect(model.statusline.modelMaxWidth).toBe(24)
 
     const spacious = footerWidthPolicy(150)
     expect(spacious.statusline.contextHintLimit).toBeUndefined()
     expect(spacious.statusline.showModel).toBe(true)
-    expect(spacious.statusline.modelMaxWidth).toBe(40)
   })
 })
