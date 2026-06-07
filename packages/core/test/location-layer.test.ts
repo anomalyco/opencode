@@ -10,6 +10,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { toolDefinitions } from "./lib/tool"
 import { FSUtil } from "../src/fs-util"
 import { Auth } from "../src/auth"
 import { EventV2 } from "../src/event"
@@ -50,11 +51,11 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap(([blocked, allowed]) =>
         Effect.gen(function* () {
-          yield* (yield* ApplicationTools.Service).attach({
+          yield* (yield* ApplicationTools.Service).register({
             application_context: Tool.make({
               description: "Read application context",
-              parameters: Schema.Struct({}),
-              success: Schema.Struct({ ok: Schema.Boolean }),
+              input: Schema.Struct({}),
+              output: Schema.Struct({ ok: Schema.Boolean }),
               execute: () => Effect.succeed({ ok: true }),
             }),
           })
@@ -77,7 +78,7 @@ describe("LocationServiceMap", () => {
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
               return {
                 providers: yield* catalog.provider.all(),
-                tools: yield* (yield* ToolRegistry.Service).definitions(),
+                tools: yield* toolDefinitions(yield* ToolRegistry.Service),
               }
             }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
 
