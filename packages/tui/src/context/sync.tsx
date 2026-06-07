@@ -55,7 +55,11 @@ export type SyncDependencies = {
   logger: { error(message: string, extra?: Record<string, unknown>): void }
 }
 
-export const { context: SyncContext, use: useSync, provider: SyncProvider } = createSimpleContext({
+export const {
+  context: SyncContext,
+  use: useSync,
+  provider: SyncProvider,
+} = createSimpleContext({
   name: "Sync",
   init: (dependencies: SyncDependencies) => {
     const environment = useTuiEnvironment()

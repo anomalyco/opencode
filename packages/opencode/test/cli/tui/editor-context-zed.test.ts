@@ -3,12 +3,7 @@ import { mkdir, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, expect, spyOn, test } from "bun:test"
-import {
-  isZedTerminal,
-  offsetToPosition,
-  resolveZedDbPath,
-  resolveZedSelection,
-} from "../../../src/cli/tui/editor-zed"
+import { isZedTerminal, offsetToPosition, resolveZedDbPath, resolveZedSelection } from "../../../src/cli/tui/editor-zed"
 import { tmpdir } from "../../fixture/fixture"
 
 const originalZedTerm = process.env.ZED_TERM

@@ -86,13 +86,15 @@ export function discoverEditorConnection(directory: string) {
             : []
           const score = Math.max(0, ...folders.map(contains))
           if (!score) return []
-          return [{
-            url: `ws://127.0.0.1:${port}`,
-            authToken: typeof value.authToken === "string" ? value.authToken : undefined,
-            source: `lock:${port}`,
-            score,
-            mtime: statSync(file).mtimeMs,
-          }]
+          return [
+            {
+              url: `ws://127.0.0.1:${port}`,
+              authToken: typeof value.authToken === "string" ? value.authToken : undefined,
+              source: `lock:${port}`,
+              score,
+              mtime: statSync(file).mtimeMs,
+            },
+          ]
         } catch {
           return []
         }
@@ -110,11 +112,13 @@ function resolveZedDbPath() {
     path.join(os.homedir(), "Library", "Application Support", "Zed", "db", "0-stable", "db.sqlite"),
     path.join(os.homedir(), ".local", "share", "zed", "db", "0-stable", "db.sqlite"),
   ].filter((item): item is string => Boolean(item))
-  return candidates.find((item) => {
-    try {
-      return statSync(item).isFile()
-    } catch {
-      return false
-    }
-  }) ?? ""
+  return (
+    candidates.find((item) => {
+      try {
+        return statSync(item).isFile()
+      } catch {
+        return false
+      }
+    }) ?? ""
+  )
 }

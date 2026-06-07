@@ -30,7 +30,8 @@ export function cliErrorMessage(input: unknown): string | undefined {
   }
 
   const provider = configData(input, "ProviderInitError")
-  if (provider) return `Failed to initialize provider "${field(provider, "providerID")}". Check credentials and configuration.`
+  if (provider)
+    return `Failed to initialize provider "${field(provider, "providerID")}". Check credentials and configuration.`
 
   const json = configData(input, "ConfigJsonError")
   if (json) {

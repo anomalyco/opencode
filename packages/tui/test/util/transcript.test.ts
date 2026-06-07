@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  formatAssistantHeader,
-  formatMessage,
-  formatPart,
-  formatTranscript,
-} from "../../src/util/transcript"
+import { formatAssistantHeader, formatMessage, formatPart, formatTranscript } from "../../src/util/transcript"
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 
 const providers: Provider[] = [

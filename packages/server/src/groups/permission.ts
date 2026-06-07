@@ -83,6 +83,4 @@ export const PermissionGroup = HttpApiGroup.make("server.permission")
         }),
       ),
   )
-  .annotateMerge(
-    OpenApi.annotations({ title: "permissions", description: "Experimental permission routes." }),
-  )
+  .annotateMerge(OpenApi.annotations({ title: "permissions", description: "Experimental permission routes." }))

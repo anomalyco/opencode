@@ -115,7 +115,8 @@ export const layer = Layer.effect(
       if (found) yield* stopProcess(found).pipe(Effect.ignore)
 
       const entrypoint = compiled ? undefined : process.argv[1]
-      if (!compiled && entrypoint === undefined) return yield* Effect.fail(new Error("Failed to resolve CLI entrypoint"))
+      if (!compiled && entrypoint === undefined)
+        return yield* Effect.fail(new Error("Failed to resolve CLI entrypoint"))
       yield* Effect.try({
         try: () => {
           spawn(process.execPath, [...(entrypoint ? [entrypoint] : []), "serve", "--register"], {

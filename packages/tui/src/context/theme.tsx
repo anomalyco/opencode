@@ -96,14 +96,15 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     function syncCustomThemes() {
-      return (platform?.themes?.discover() ?? Promise.resolve({})).then((themes) => {
-        setCustomThemes(
-          Object.entries(themes).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
-            if (isTheme(theme)) result[name] = theme
-            return result
-          }, {}),
-        )
-      })
+      return (platform?.themes?.discover() ?? Promise.resolve({}))
+        .then((themes) => {
+          setCustomThemes(
+            Object.entries(themes).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
+              if (isTheme(theme)) result[name] = theme
+              return result
+            }, {}),
+          )
+        })
         .catch(() => setStore("active", "opencode"))
     }
 

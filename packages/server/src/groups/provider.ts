@@ -33,8 +33,7 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
         OpenApi.annotations({
           identifier: "v2.provider.get",
           summary: "Get provider",
-          description:
-            "Retrieve a single AI provider so clients can inspect its availability and endpoint settings.",
+          description: "Retrieve a single AI provider so clients can inspect its availability and endpoint settings.",
         }),
       ),
   )

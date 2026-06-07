@@ -480,30 +480,33 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const attention = props.host.attention({ renderer, config: tuiConfig, kv })
   const platform = useTuiPlatform()
 
-  const api = createTuiApi(createTuiApiAdapters({
-    version: build.version,
-    tuiConfig,
-    dialog,
-    keymap,
-    kv,
-    route,
-    routes: pluginRuntime.routes,
-    event,
-    sdk,
-    sync,
-    theme: themeState,
-    toast,
-    renderer,
-    attention,
-    Slot: pluginRuntime.Slot,
-  }))
+  const api = createTuiApi(
+    createTuiApiAdapters({
+      version: build.version,
+      tuiConfig,
+      dialog,
+      keymap,
+      kv,
+      route,
+      routes: pluginRuntime.routes,
+      event,
+      sdk,
+      sync,
+      theme: themeState,
+      toast,
+      renderer,
+      attention,
+      Slot: pluginRuntime.Slot,
+    }),
+  )
   const [ready, setReady] = createSignal(false)
-  props.pluginHost.start({
-    api,
-    config: tuiConfig,
-    runtime: pluginRuntime,
-    dispose: () => attention.dispose(),
-  })
+  props.pluginHost
+    .start({
+      api,
+      config: tuiConfig,
+      runtime: pluginRuntime,
+      dispose: () => attention.dispose(),
+    })
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
     })
@@ -529,7 +532,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
 
-    await platform.clipboard?.write?.(text)
+    await platform.clipboard
+      ?.write?.(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
 
@@ -691,7 +695,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: async () => {
           const workspace = currentWorktreeWorkspace()
           if (!workspace?.directory) return
-          await platform.clipboard?.write?.(workspace.directory)
+          await platform.clipboard
+            ?.write?.(workspace.directory)
             .then(() => toast.show({ message: "Copied worktree path", variant: "info" }))
             .catch(toast.error)
           dialog.clear()

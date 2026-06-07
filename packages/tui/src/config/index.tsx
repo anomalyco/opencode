@@ -16,10 +16,7 @@ export const AttentionSoundName = Schema.Literals([
 export type AttentionSoundName = Schema.Schema.Type<typeof AttentionSoundName>
 
 export const PluginOptions = Schema.Record(Schema.String, Schema.Unknown)
-export const PluginSpec = Schema.Union([
-  Schema.String,
-  Schema.mutable(Schema.Tuple([Schema.String, PluginOptions])),
-])
+export const PluginSpec = Schema.Union([Schema.String, Schema.mutable(Schema.Tuple([Schema.String, PluginOptions]))])
 
 export const LeaderTimeoutDefault = 2000
 export const LeaderTimeout = Schema.Int.check(Schema.isGreaterThan(0)).annotate({

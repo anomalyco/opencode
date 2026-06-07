@@ -43,7 +43,11 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
         "permission.saved.list",
         Effect.fn(function* (ctx) {
           const location = yield* Location.Service
-          return { data: yield* (yield* PermissionSaved.Service).list({ projectID: ctx.query.projectID ?? location.project.id }) }
+          return {
+            data: yield* (yield* PermissionSaved.Service).list({
+              projectID: ctx.query.projectID ?? location.project.id,
+            }),
+          }
         }),
       )
       .handle(

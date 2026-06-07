@@ -106,10 +106,13 @@ const legacyDefaults: Record<string, unknown> = {
   "/config": {},
 }
 
-const gracefulFetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
-  const response = await fetch(input, init)
-  if (response.status !== 404) return response
-  const fallback = legacyDefaults[new URL(input instanceof Request ? input.url : input).pathname]
-  if (fallback === undefined) return response
-  return Response.json(fallback)
-}, { preconnect: fetch.preconnect })
+const gracefulFetch = Object.assign(
+  async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init)
+    if (response.status !== 404) return response
+    const fallback = legacyDefaults[new URL(input instanceof Request ? input.url : input).pathname]
+    if (fallback === undefined) return response
+    return Response.json(fallback)
+  },
+  { preconnect: fetch.preconnect },
+)
