@@ -1,65 +1,69 @@
 import { describe, expect } from "bun:test"
-import { Tool, ToolFailure } from "@opencode-ai/llm"
-import { PermissionV2 } from "@opencode-ai/core/permission"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { Tool } from "@opencode-ai/core/tool/tool"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
-import { Effect, Exit, Layer, Schema, Scope } from "effect"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { executeTool, settleTool, toolDefinitions } from "./lib/tool"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
-const assertions: PermissionV2.AssertInput[] = []
-let denyAction: string | undefined
-const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
-    assert: (input) =>
-      Effect.sync(() => assertions.push(input)).pipe(
-        Effect.andThen(
-          input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
-        ),
-      ),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
 const bounds: ToolOutputStore.BoundInput[] = []
+const retentionFailure = new ToolOutputStore.StorageError({ operation: "write", cause: new Error("disk full") })
 const outputStore = Layer.mock(ToolOutputStore.Service, {
-  bound: (input) => Effect.sync(() => bounds.push(input)).pipe(Effect.as({ output: input.output, outputPaths: [] })),
+  bound: (input) => {
+    if (input.toolCallID === "call-retention-failure") return Effect.fail(retentionFailure)
+    return Effect.sync(() => bounds.push(input)).pipe(
+      Effect.as(
+        input.toolCallID === "call-bounded"
+          ? {
+              output: { structured: {}, content: [{ type: "text" as const, text: "bounded reference" }] },
+              outputPaths: ["/managed/generic"],
+            }
+          : { output: input.output, outputPaths: [] },
+      ),
+    )
+  },
 })
-const registry = ToolRegistry.layer.pipe(
-  Layer.provide(permission),
-  Layer.provide(ApplicationTools.layer),
-  Layer.provide(outputStore),
-)
-const it = testEffect(Layer.mergeAll(permission, registry))
+const registry = ToolRegistry.layer.pipe(Layer.provide(ApplicationTools.layer), Layer.provide(outputStore))
+const it = testEffect(registry)
+const identity = {
+  agent: AgentV2.ID.make("build"),
+  assistantMessageID: SessionMessage.ID.make("msg_registry"),
+}
+const sessionID = SessionV2.ID.make("ses_registry")
+const call = (name: string, id = `call-${name}`): ToolRegistry.ExecuteInput => ({
+  sessionID,
+  ...identity,
+  call: { type: "tool-call", id, name, input: { text: name } },
+})
 
-const echo = Tool.make({
-  description: "Echo text",
-  parameters: Schema.Struct({ text: Schema.String }),
-  success: Schema.Struct({ text: Schema.String }),
-  execute: ({ text }) => Effect.succeed({ text }),
-})
+const make = (permission?: string) => {
+  const tool = Tool.make({
+    description: "Echo text",
+    input: Schema.Struct({ text: Schema.String }),
+    output: Schema.Struct({ text: Schema.String }),
+    execute: ({ text }) => Effect.succeed({ text }),
+    toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
+  })
+  return permission ? Tool.withPermission(tool, permission) : tool
+}
 
 describe("ToolRegistry", () => {
-  it.effect("matches V1 whole-tool filtering, edit aliases, and ordered wildcard precedence", () =>
+  it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      const transform = yield* registry.transform()
-      const sessionID = SessionV2.ID.make("ses_registry_filter")
-      yield* transform((editor) => {
-        editor.set("question", { tool: echo })
-        editor.set("bash", { tool: echo })
-        editor.set("edit", { tool: echo })
-        editor.set("write", { tool: echo })
-        editor.set("apply_patch", { tool: echo })
+      const service = yield* ToolRegistry.Service
+      yield* service.register({
+        question: make(),
+        bash: make(),
+        edit: make("edit"),
+        write: make("edit"),
+        apply_patch: make("edit"),
       })
-
-      const names = (rules: PermissionV2.Ruleset) =>
-        registry.definitions(rules).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
+      const names = (rules: Parameters<ToolRegistry.Interface["materialize"]>[0]) =>
+        toolDefinitions(service, rules).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
 
       expect(yield* names([{ action: "question", resource: "*", effect: "deny" }])).toEqual([
         "bash",
@@ -67,253 +71,254 @@ describe("ToolRegistry", () => {
         "write",
         "apply_patch",
       ])
-
       expect(
         yield* names([
           { action: "*", resource: "*", effect: "deny" },
           { action: "question", resource: "private", effect: "allow" },
         ]),
       ).toEqual(["question"])
-
       expect(
         yield* names([
           { action: "question", resource: "private", effect: "allow" },
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
-
-      expect(yield* names([{ action: "question", resource: "*", effect: "ask" }])).toContain("question")
       expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["question", "bash"])
-      expect(
-        yield* names([
-          { action: "edit", resource: "*", effect: "deny" },
-          { action: "edit", resource: "*.md", effect: "ask" },
-        ]),
-      ).toEqual(["question", "bash", "edit", "write", "apply_patch"])
-      expect(
-        yield* names([
-          { action: "edit", resource: "*.md", effect: "allow" },
-          { action: "edit", resource: "*", effect: "deny" },
-        ]),
-      ).toEqual(["question", "bash"])
     }),
   )
 
-  it.effect("settles only through concrete leaf authorization, not catalog visibility", () =>
+  it.effect("keeps permission decoration isolated between registrations", () =>
     Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      const transform = yield* registry.transform()
-      const sessionID = SessionV2.ID.make("ses_registry_stale")
-      let executed = false
-      yield* transform((editor) =>
-        editor.set("question", {
-          tool: echo,
-          permission: { action: "question", resource: "*" },
-          authorize: ({ assertPermission }) =>
-            assertPermission({ action: "question", resources: ["actual"] }).pipe(
-              Effect.mapError(() => new ToolFailure({ message: "Denied" })),
-            ),
-          execute: () =>
-            Effect.sync(() => {
-              executed = true
-              return { text: "unexpected" }
-            }),
-        }),
-      )
+      const service = yield* ToolRegistry.Service
+      const shared = make()
+      yield* service.register({ first: shared })
+      yield* service.register({ second: Tool.withPermission(shared, "edit") })
+      Tool.withPermission(shared, "question")
 
       expect(
-        (yield* registry.definitions([{ action: "question", resource: "*", effect: "deny" }])).map((tool) => tool.name),
-      ).toEqual([])
-      expect(
-        yield* registry.settle({
-          sessionID,
-          call: { type: "tool-call", id: "call-stale", name: "question", input: { text: "hello" } },
-        }),
-      ).toMatchObject({ result: { type: "json", value: { text: "unexpected" } } })
-      expect(assertions.at(-1)).toMatchObject({ action: "question", resources: ["actual"] })
-      expect(executed).toBe(true)
+        (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map(
+          (definition) => definition.name,
+        ),
+      ).toEqual(["first"])
     }),
   )
 
-  it.effect("rebuilds advertised definitions when a scoped transform closes", () =>
+  it.effect("reuses model definitions across provider turns", () =>
     Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ echo: make() })
+      const first = yield* toolDefinitions(service)
+      const second = yield* toolDefinitions(service)
+
+      expect(second[0]).toBe(first[0])
+    }),
+  )
+
+  it.effect("removes a scoped registration", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
-      const transform = yield* registry.transform().pipe(Scope.provide(scope))
-
-      yield* transform((editor) => editor.set("echo", { tool: echo, authorize: () => Effect.void }))
-      expect(yield* registry.definitions()).toMatchObject([{ name: "echo", description: "Echo text" }])
-
+      yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
       yield* Scope.close(scope, Exit.void)
-      expect(yield* registry.definitions()).toEqual([])
+      expect(yield* toolDefinitions(service)).toEqual([])
     }),
   )
 
-  it.effect("returns an error result for an unknown tool", () =>
+  it.effect("returns model errors without swallowing interruption or defects", () =>
     Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-
+      const service = yield* ToolRegistry.Service
+      yield* service.register({
+        failed: Tool.make({
+          description: "Failed",
+          input: Schema.Struct({}),
+          output: Schema.Struct({ ok: Schema.Boolean }),
+          execute: () => Effect.fail(new Tool.Failure({ message: "Denied" })),
+        }),
+      })
       expect(
-        yield* registry.execute({
-          sessionID: SessionV2.ID.make("ses_registry_test"),
-          call: { type: "tool-call", id: "call-missing", name: "missing", input: {} },
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "failed", name: "failed", input: {} },
+        }),
+      ).toEqual({ type: "error", value: "Denied" })
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "missing", name: "missing", input: {} },
         }),
       ).toEqual({ type: "error", value: "Unknown tool: missing" })
-    }),
-  )
 
-  it.effect("does not execute a tool when authorization fails", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      let executed = false
-      const transform = yield* registry.transform()
-
-      yield* transform((editor) =>
-        editor.set("denied", {
-          authorize: () => Effect.fail(new ToolFailure({ message: "Denied" })),
-          tool: Tool.make({
-            description: "Denied tool",
-            parameters: Schema.Struct({}),
-            success: Schema.Struct({ ok: Schema.Boolean }),
-            execute: () =>
-              Effect.sync(() => {
-                executed = true
-                return { ok: true }
-              }),
-          }),
+      yield* service.register({
+        defect: Tool.make({
+          description: "Defect",
+          input: Schema.Struct({}),
+          output: Schema.Struct({}),
+          execute: () => Effect.die("unexpected executor defect"),
         }),
-      )
-
+      })
       expect(
-        yield* registry.execute({
-          sessionID: SessionV2.ID.make("ses_registry_test"),
-          call: { type: "tool-call", id: "call-denied", name: "denied", input: {} },
-        }),
-      ).toEqual({ type: "error", value: "Denied" })
-      expect(executed).toBe(false)
+        yield* service.materialize().pipe(
+          Effect.flatMap((materialized) =>
+            materialized.settle({
+              sessionID,
+              ...identity,
+              call: { type: "tool-call", id: "defect", name: "defect", input: {} },
+            }),
+          ),
+          Effect.catchDefect(Effect.succeed),
+        ),
+      ).toBe("unexpected executor defect")
     }),
   )
 
-  it.effect("binds invocation identity while preserving leaf-owned permission inputs", () =>
+  it.effect("propagates retention failures through settlement", () =>
     Effect.gen(function* () {
-      assertions.length = 0
-      denyAction = undefined
-      const registry = yield* ToolRegistry.Service
-      const transform = yield* registry.transform()
-      const sessionID = SessionV2.ID.make("ses_registry_context")
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ echo: make() })
+      const materialized = yield* service.materialize()
+      const exit = yield* materialized.settle(call("echo", "call-retention-failure")).pipe(Effect.exit)
 
-      yield* transform((editor) =>
-        editor.set("context", {
-          tool: Tool.make({
-            description: "Context tool",
-            parameters: Schema.Struct({}),
-            success: Schema.Struct({ ok: Schema.Boolean }),
-          }),
-          execute: ({ assertPermission, call, source }) =>
-            assertPermission({
-              action: "inspect",
-              resources: [call.id],
-              save: ["*"],
-              metadata: { tool: call.name },
-            }).pipe(
-              Effect.as({ ok: source === undefined }),
-              Effect.catch(() => Effect.fail(new ToolFailure({ message: "Denied" }))),
-            ),
-        }),
-      )
-
-      expect(
-        yield* registry.execute({
-          sessionID,
-          call: { type: "tool-call", id: "call-context", name: "context", input: {} },
-        }),
-      ).toEqual({ type: "json", value: { ok: true } })
-      expect(assertions).toEqual([
-        {
-          sessionID,
-          action: "inspect",
-          resources: ["call-context"],
-          save: ["*"],
-          metadata: { tool: "context" },
-        },
-      ])
-      expect(assertions[0]).not.toHaveProperty("source")
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBe(retentionFailure)
     }),
   )
 
-  it.effect("keeps ordered multi-assert policy flow in the leaf and stops on denial", () =>
+  it.effect("exposes settlement only through materialization", () =>
     Effect.gen(function* () {
-      assertions.length = 0
-      denyAction = "execute"
-      let executed = false
-      const registry = yield* ToolRegistry.Service
-      const transform = yield* registry.transform()
-
-      yield* transform((editor) =>
-        editor.set("ordered", {
-          tool: Tool.make({
-            description: "Ordered policy tool",
-            parameters: Schema.Struct({}),
-            success: Schema.Struct({ ok: Schema.Boolean }),
-          }),
-          execute: ({ assertPermission }) =>
-            Effect.gen(function* () {
-              yield* assertPermission({ action: "external_directory", resources: ["/outside/*"] })
-              yield* assertPermission({ action: "execute", resources: ["pwd"] })
-              executed = true
-              return { ok: true }
-            }).pipe(Effect.catch(() => Effect.fail(new ToolFailure({ message: "Denied" })))),
-        }),
-      )
-
-      expect(
-        yield* registry.execute({
-          sessionID: SessionV2.ID.make("ses_registry_context"),
-          call: { type: "tool-call", id: "call-ordered", name: "ordered", input: {} },
-        }),
-      ).toEqual({ type: "error", value: "Denied" })
-      expect(assertions.map((input) => input.action)).toEqual(["external_directory", "execute"])
-      expect(executed).toBe(false)
-      denyAction = undefined
+      const service = yield* ToolRegistry.Service
+      expect("definitions" in service).toBe(false)
+      expect("execute" in service).toBe(false)
+      expect("settle" in service).toBe(false)
+      expect(typeof service.materialize).toBe("function")
     }),
   )
 
-  it.effect("settles encoded structured output with canonical projected content", () =>
+  it.effect("passes complete invocation identity to the canonical handler", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const contexts: Tool.Context[] = []
+      yield* service.register({
+        context: Tool.make({
+          description: "Context",
+          input: Schema.Struct({}),
+          output: Schema.Struct({ ok: Schema.Boolean }),
+          execute: (_, context) => Effect.sync(() => contexts.push(context)).pipe(Effect.as({ ok: true })),
+        }),
+      })
+      yield* executeTool(service, {
+        sessionID,
+        ...identity,
+        call: { type: "tool-call", id: "call-context", name: "context", input: {} },
+      })
+      expect(contexts).toEqual([{ sessionID, ...identity, toolCallID: "call-context" }])
+    }),
+  )
+
+  it.effect("encodes output and applies generic settlement bounding", () =>
     Effect.gen(function* () {
       bounds.length = 0
-      const registry = yield* ToolRegistry.Service
-      const transform = yield* registry.transform()
-
-      yield* transform((editor) =>
-        editor.set("projected", {
-          tool: Tool.make({
-            description: "Projected tool",
-            parameters: Schema.Struct({ prefix: Schema.String }),
-            success: Schema.Struct({ count: Schema.NumberFromString }),
-            execute: () => Effect.succeed({ count: 2 }),
-            toModelOutput: ({ callID, parameters, output }) => [
-              { type: "text", text: `${callID}:${parameters.prefix}:${output.count}` },
-            ],
-          }),
-        }),
-      )
-
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ bounded: make() })
       expect(
-        yield* registry.settle({
-          sessionID: SessionV2.ID.make("ses_registry_test"),
-          call: { type: "tool-call", id: "call-projected", name: "projected", input: { prefix: "count" } },
+        yield* settleTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-bounded", name: "bounded", input: { text: "complete" } },
         }),
-      ).toMatchObject({
-        result: { type: "text", value: "call-projected:count:2" },
-        output: { structured: { count: "2" }, content: [{ type: "text", text: "call-projected:count:2" }] },
+      ).toEqual({
+        result: { type: "text", value: "bounded reference" },
+        output: { structured: {}, content: [{ type: "text", text: "bounded reference" }] },
+        outputPaths: ["/managed/generic"],
       })
-      expect(bounds).toEqual([
-        {
-          sessionID: SessionV2.ID.make("ses_registry_test"),
-          toolCallID: "call-projected",
-          output: { structured: { count: "2" }, content: [{ type: "text", text: "call-projected:count:2" }] },
-        },
-      ])
+      expect(bounds).toHaveLength(1)
+    }),
+  )
+
+  it.effect("executes the unchanged registration advertised for a provider turn", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ echo: make() })
+      const materialized = yield* service.materialize()
+
+      expect((yield* materialized.settle(call("echo"))).result).toEqual({ type: "text", value: "echo" })
+    }),
+  )
+
+  it.effect("rejects a call when its advertised registration was removed", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const scope = yield* Scope.make()
+      yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
+      const materialized = yield* service.materialize()
+      yield* Scope.close(scope, Exit.void)
+
+      expect((yield* materialized.settle(call("echo"))).result).toEqual({
+        type: "error",
+        value: "Stale tool call: echo",
+      })
+    }),
+  )
+
+  it.effect("rejects only the replaced name from a multi-tool provider turn", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ first: make(), second: make() })
+      const materialized = yield* service.materialize()
+      yield* service.register({ first: make() })
+
+      expect((yield* materialized.settle(call("first"))).result).toEqual({
+        type: "error",
+        value: "Stale tool call: first",
+      })
+      expect((yield* materialized.settle(call("second"))).result).toEqual({ type: "text", value: "second" })
+    }),
+  )
+
+  it.effect("treats revealing a previous overlay as stale", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ echo: make() })
+      const overlay = yield* Scope.make()
+      yield* service.register({ echo: make() }).pipe(Scope.provide(overlay))
+      const materialized = yield* service.materialize()
+      yield* Scope.close(overlay, Exit.void)
+
+      expect((yield* materialized.settle(call("echo"))).result).toEqual({
+        type: "error",
+        value: "Stale tool call: echo",
+      })
+    }),
+  )
+
+  it.effect("keeps captured execution running after registration mutation", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* service
+        .register({
+          echo: Tool.make({
+            description: "Echo text",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Struct({ text: Schema.String }),
+            execute: ({ text }) =>
+              Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as({ text })),
+            toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
+          }),
+        })
+        .pipe(Scope.provide(scope))
+      const materialized = yield* service.materialize()
+      const settlement = yield* materialized.settle(call("echo")).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      yield* Scope.close(scope, Exit.void)
+      yield* service.register({ echo: make() })
+      yield* Deferred.succeed(release, undefined)
+
+      expect(yield* Fiber.join(settlement)).toMatchObject({ result: { type: "text", value: "echo" } })
     }),
   )
 })

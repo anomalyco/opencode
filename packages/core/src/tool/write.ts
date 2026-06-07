@@ -7,11 +7,13 @@
  */
 export * as WriteTool from "./write"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
-import { Cause, Effect, Layer, Schema } from "effect"
+import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { Effect, Layer, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
 import { LocationMutation } from "../location-mutation"
-import { ToolRegistry } from "./registry"
+import { PermissionV2 } from "../permission"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const name = "write"
 
@@ -35,14 +37,6 @@ export type Success = typeof Success.Type
 export const toModelOutput = (output: Success) =>
   `${output.existed ? "Wrote" : "Created"} file successfully: ${output.resource}`
 
-const definition = Tool.make({
-  description:
-    "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval. Named project references are read-oriented and are not accepted.",
-  parameters: Parameters,
-  success: Success,
-  toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
-})
-
 /** Deferred V2 write UX integrations remain visible at the model-facing seam. */
 // TODO: Add formatter integration after V2 formatter runtime exists.
 // TODO: Publish watcher/file-edit events after V2 watcher integration exists.
@@ -51,28 +45,50 @@ const definition = Tool.make({
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
+    const tools = yield* Tools.Service
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        execute: ({ parameters, assertPermission }) =>
-          Effect.gen(function* () {
-            const target = yield* mutation.resolve({ path: parameters.path, kind: "file" })
-            const external = target.externalDirectory
-            if (external) yield* assertPermission(LocationMutation.externalDirectoryPermission(external))
-            yield* assertPermission({ action: "edit", resources: [target.resource], save: ["*"] })
-            return yield* files.writeTextPreservingBom({ target, content: parameters.content })
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.fail(
-                new ToolFailure({ message: `Unable to write ${parameters.path}`, error: Cause.squash(cause) }),
-              ),
-            ),
-          ),
-      }),
-    )
+    yield* tools
+      .register({
+        [name]: Tool.withPermission(
+          Tool.make({
+            description:
+              "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval. Named project references are read-oriented and are not accepted.",
+            input: Parameters,
+            output: Success,
+            toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+            execute: (input, context) =>
+              Effect.gen(function* () {
+                const source = {
+                  type: "tool" as const,
+                  messageID: context.assistantMessageID,
+                  callID: context.toolCallID,
+                }
+                const target = yield* mutation.resolve({ path: input.path, kind: "file" })
+                const external = target.externalDirectory
+                if (external)
+                  yield* permission.assert({
+                    ...LocationMutation.externalDirectoryPermission(external),
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source,
+                  })
+                yield* permission.assert({
+                  action: "edit",
+                  resources: [target.resource],
+                  save: ["*"],
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source,
+                })
+                return yield* files.writeTextPreservingBom({ target, content: input.content })
+              }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to write ${input.path}` }))),
+          }),
+          "edit",
+        ),
+      })
+      .pipe(Effect.orDie)
   }),
 )

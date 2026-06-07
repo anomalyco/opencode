@@ -1,7 +1,7 @@
 export * as ToolOutputStore from "./tool-output-store"
 
 import path from "path"
-import { Context, Duration, Effect, Layer, Option, Schedule } from "effect"
+import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { Config } from "./config"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
@@ -11,26 +11,10 @@ import type { ToolOutput } from "@opencode-ai/llm"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024
+export const MAX_INLINE_MEDIA_BYTES = 5 * 1024 * 1024
 export const RETENTION = Duration.days(7)
 
 export const MANAGED_DIRECTORY = "tool-output"
-
-export interface WriteInput {
-  readonly sessionID: SessionSchema.ID
-  readonly toolCallID: string
-  readonly content: string
-  readonly mime?: string
-  readonly name?: string
-}
-
-export interface TruncateInput extends WriteInput {
-  readonly maxLines?: number
-  readonly maxBytes?: number
-}
-
-export type TruncateResult =
-  | { readonly content: string; readonly truncated: false }
-  | { readonly content: string; readonly truncated: true; readonly outputPath: string }
 
 export interface BoundInput {
   readonly sessionID: SessionSchema.ID
@@ -43,11 +27,22 @@ export interface BoundResult {
   readonly outputPaths: ReadonlyArray<string>
 }
 
+export class StorageError extends Schema.TaggedErrorClass<StorageError>()("ToolOutputStore.StorageError", {
+  operation: Schema.Literals(["encode", "write"]),
+  cause: Schema.Defect,
+}) {}
+
+export class MediaLimitError extends Schema.TaggedErrorClass<MediaLimitError>()("ToolOutputStore.MediaLimitError", {
+  mime: Schema.String,
+  bytes: Schema.Int,
+  limit: Schema.Int,
+}) {}
+
+export type Error = StorageError | MediaLimitError
+
 export interface Interface {
   readonly limits: () => Effect.Effect<{ readonly maxLines: number; readonly maxBytes: number }>
-  readonly write: (input: WriteInput) => Effect.Effect<string>
-  readonly truncate: (input: TruncateInput) => Effect.Effect<TruncateResult>
-  readonly bound: (input: BoundInput) => Effect.Effect<BoundResult>
+  readonly bound: (input: BoundInput) => Effect.Effect<BoundResult, Error>
   readonly cleanup: () => Effect.Effect<void>
 }
 
@@ -109,6 +104,12 @@ const boundedPreview = (text: string, marker: string, maxLines: number, maxBytes
   return bounded.tail ? `${bounded.head}\n\n${marker}\n\n${bounded.tail}` : `${bounded.head}\n\n${marker}`
 }
 
+const lineCount = (text: string) => {
+  let count = 1
+  for (const char of text) if (char === "\n") count++
+  return count
+}
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -116,7 +117,6 @@ export const layer = Layer.effect(
     const global = yield* Global.Service
     const config = yield* Effect.serviceOption(Config.Service)
     const directory = path.join(global.data, MANAGED_DIRECTORY)
-
     const limits = Effect.fn("ToolOutputStore.limits")(function* () {
       if (Option.isNone(config)) return { maxLines: MAX_LINES, maxBytes: MAX_BYTES }
       const entries = yield* config.value.entries().pipe(Effect.catch(() => Effect.succeed([] as Config.Entry[])))
@@ -127,68 +127,54 @@ export const layer = Layer.effect(
       return { maxLines: configured.max_lines ?? MAX_LINES, maxBytes: configured.max_bytes ?? MAX_BYTES }
     })
 
-    const write = Effect.fn("ToolOutputStore.write")(function* (input: WriteInput) {
+    const write = Effect.fn("ToolOutputStore.write")(function* (content: string) {
       const file = path.join(directory, `tool_${Identifier.ascending()}`)
-      yield* fs.ensureDir(directory).pipe(Effect.orDie)
-      yield* fs.writeFileString(file, input.content, { flag: "wx" }).pipe(Effect.orDie)
+      yield* fs.ensureDir(directory).pipe(Effect.mapError((cause) => new StorageError({ operation: "write", cause })))
+      yield* fs
+        .writeFileString(file, content, { flag: "wx" })
+        .pipe(Effect.mapError((cause) => new StorageError({ operation: "write", cause })))
       return file
     })
 
-    const truncate = Effect.fn("ToolOutputStore.truncate")(function* (input: TruncateInput) {
-      const configured = yield* limits()
-      const maxLines = input.maxLines ?? configured.maxLines
-      const maxBytes = input.maxBytes ?? configured.maxBytes
-      if (input.content.split("\n").length <= maxLines && Buffer.byteLength(input.content, "utf-8") <= maxBytes) {
-        return { content: input.content, truncated: false } as const
-      }
-      const outputPath = yield* write(input)
-      const marker = `... output truncated; full content saved to ${outputPath} ...`
-      return {
-        content: boundedPreview(input.content, marker, maxLines, maxBytes),
-        truncated: true,
-        outputPath,
-      } as const
-    })
-
     const bound = Effect.fn("ToolOutputStore.bound")(function* (input: BoundInput) {
-      const text = input.output.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n\n")
-      const structured = yield* Effect.sync(() => JSON.stringify(input.output.structured)).pipe(
-        Effect.catch(() => Effect.succeed(String(input.output.structured))),
-      )
-      const content = text || input.output.content.length > 0 ? text : structured
-      if (content === undefined) return { output: input.output, outputPaths: [] }
+      const outputLimits = yield* limits()
+      const media = input.output.content.filter((item) => item.type === "file")
+      let mediaBytes = 0
+      for (const item of media) {
+        if (item.source.type !== "data") continue
+        mediaBytes += Buffer.byteLength(item.source.data, "utf-8")
+        if (mediaBytes > MAX_INLINE_MEDIA_BYTES)
+          return yield* new MediaLimitError({ mime: item.mime, bytes: mediaBytes, limit: MAX_INLINE_MEDIA_BYTES })
+      }
+      const contextual = {
+        structured: media.length > 0 ? {} : input.output.structured,
+        content: input.output.content.filter((item) => item.type === "text"),
+      }
+      const encoded = yield* Effect.try({
+        try: () => JSON.stringify(contextual, null, 2),
+        catch: (cause) => new StorageError({ operation: "encode", cause }),
+      })
+      if (lineCount(encoded) <= outputLimits.maxLines && Buffer.byteLength(encoded, "utf-8") <= outputLimits.maxBytes)
+        return {
+          output: { structured: contextual.structured, content: input.output.content },
+          outputPaths: [],
+        }
 
-      const truncated = yield* truncate({
-        sessionID: input.sessionID,
-        toolCallID: input.toolCallID,
-        content,
-        mime: "text/plain",
-        name: `${input.toolCallID}.txt`,
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("Unable to retain complete tool output", cause).pipe(
-            Effect.andThen(limits()),
-            Effect.map(({ maxLines, maxBytes }) => {
-              const marker = "... output truncated; omitted content could not be retained ..."
-              return {
-                content: boundedPreview(content, marker, maxLines, maxBytes),
-                truncated: true as const,
-              }
-            }),
-          ),
-        ),
-      )
-      if (!truncated.truncated) return { output: input.output, outputPaths: [] }
+      const outputPath = yield* write(encoded)
+      const marker = `... output truncated; full content saved to ${outputPath} ...`
 
       return {
         output: {
-          structured: input.output.structured,
+          structured: {},
           content: [
-            { type: "text" as const, text: truncated.content },
-            ...input.output.content.filter((item) => item.type === "file"),
+            {
+              type: "text" as const,
+              text: boundedPreview(encoded, marker, outputLimits.maxLines, outputLimits.maxBytes),
+            },
+            ...media,
           ],
         },
-        outputPaths: "outputPath" in truncated ? [truncated.outputPath] : [],
+        outputPaths: [outputPath],
       }
     })
 
@@ -207,7 +193,7 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ limits, write, truncate, bound, cleanup })
+    return Service.of({ limits, bound, cleanup })
   }),
 )
 
