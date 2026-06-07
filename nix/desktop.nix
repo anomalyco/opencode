@@ -3,6 +3,7 @@
   stdenv,
   bun,
   nodejs,
+  darwin,
   electron_41,
   makeWrapper,
   writableTmpDirAsHomeHook,
@@ -14,7 +15,12 @@ let
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "opencode-desktop";
-  inherit (opencode) version src node_modules;
+  inherit (opencode)
+    version
+    src
+    node_modules
+    patches
+    ;
 
   nativeBuildInputs = [
     bun
@@ -23,6 +29,9 @@ stdenv.mkDerivation (finalAttrs: {
     writableTmpDirAsHomeHook
   ] ++ lib.optionals stdenv.hostPlatform.isLinux [
     autoPatchelfHook
+  ] ++ lib.optionals stdenv.hostPlatform.isDarwin [
+    # Ad-hoc sign the .app: --config.mac.identity=null below skips signing.
+    darwin.autoSignDarwinBinariesHook
   ];
 
   buildInputs = lib.optionals stdenv.hostPlatform.isLinux [

@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect"
-import { REDACTED, secretFindings } from "./redaction"
-import type { HttpInteraction, RequestSnapshot } from "./schema"
+import { REDACTED, secretFindings } from "./redaction.js"
+import type { HttpInteraction, RequestMatcher, RequestSnapshot } from "./types.js"
 
 const JsonValue = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownOption(JsonValue)
@@ -20,7 +20,7 @@ export const canonicalizeJson = (value: unknown): unknown => {
   return value
 }
 
-export type RequestMatcher = (incoming: RequestSnapshot, recorded: RequestSnapshot) => boolean
+export type { RequestMatcher } from "./types.js"
 
 export const canonicalSnapshot = (snapshot: RequestSnapshot): string =>
   JSON.stringify({
@@ -40,7 +40,7 @@ export const safeText = (value: unknown) => {
   if (value === undefined) return "undefined"
   if (secretFindings(value).length > 0) return JSON.stringify(REDACTED)
   const text = JSON.stringify(value)
-  if (!text) return String(value)
+  if (!text) return typeof value
   return text.length > 300 ? `${text.slice(0, 300)}...` : text
 }
 

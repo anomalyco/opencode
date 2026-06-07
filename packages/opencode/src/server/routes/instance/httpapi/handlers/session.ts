@@ -1,8 +1,9 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
-import { Bus } from "@/bus"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
-import { PermissionID } from "@/permission/schema"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
@@ -34,6 +35,7 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
+import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
 
 const tryParseJson = (text: string) =>
@@ -55,7 +57,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
@@ -159,9 +161,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       if (body.trim().length === 0) return yield* create({})
 
       const json = yield* tryParseJson(body)
-      const payload = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
+      const decoded = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
+      const payload = decoded
+        ? {
+            ...decoded,
+            permission: decoded.permission ? [...decoded.permission] : undefined,
+          }
+        : decoded
       return yield* create({ payload })
     })
 
@@ -177,6 +185,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const current = yield* requireSession(ctx.params.sessionID)
       if (ctx.payload.title !== undefined) {
         yield* session.setTitle({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
+      }
+      if (ctx.payload.metadata !== undefined) {
+        yield* session.setMetadata({ sessionID: ctx.params.sessionID, metadata: ctx.payload.metadata })
       }
       if (ctx.payload.permission !== undefined) {
         yield* session.setPermission({
@@ -195,7 +206,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload?: typeof ForkPayload.Type
     }) {
       return yield* SessionError.mapStorageNotFound(
-        session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload?.messageID }),
+        session.fork({
+          sessionID: ctx.params.sessionID,
+          messageID: ctx.payload?.messageID,
+        }),
       )
     })
 
@@ -303,7 +317,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
             yield* Effect.logError("prompt_async failed").pipe(
               Effect.annotateLogs({ sessionID: ctx.params.sessionID, cause }),
             )
-            yield* bus.publish(Session.Event.Error, {
+            yield* events.publish(Session.Event.Error, {
               sessionID: ctx.params.sessionID,
               error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
             })
@@ -346,11 +360,20 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const permissionRespond = Effect.fn("SessionHttpApi.permissionRespond")(function* (ctx: {
-      params: { sessionID: SessionID; permissionID: PermissionID }
+      params: { sessionID: SessionID; permissionID: PermissionV1.ID }
       payload: typeof PermissionResponsePayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response })
+      yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }).pipe(
+        Effect.catchTag("Permission.NotFoundError", (error) =>
+          Effect.fail(
+            new PermissionNotFoundError({
+              requestID: String(error.requestID),
+              message: `Permission request not found: ${error.requestID}`,
+            }),
+          ),
+        ),
+      )
       return true
     })
 
@@ -373,10 +396,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const updatePart = Effect.fn("SessionHttpApi.updatePart")(function* (ctx: {
       params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
-      payload: typeof MessageV2.Part.Type
+      payload: typeof SessionV1.Part.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      const payload = ctx.payload as MessageV2.Part
+      const payload = ctx.payload as SessionV1.Part
       if (
         payload.id !== ctx.params.partID ||
         payload.messageID !== ctx.params.messageID ||
