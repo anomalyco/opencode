@@ -20,67 +20,60 @@ export function parse(command: string) {
   return parseBash(command)
 }
 
-type Located = { command: Command; base: string }
-
-function* walk(node: Node | Script | undefined, base: string): Generator<Located> {
+export function* commands(node: Node | Script | undefined): Generator<Command> {
   if (!node) return
   switch (node.type) {
     case "Script":
     case "CompoundList":
-      for (const statement of node.commands) yield* walk(statement, base)
+      for (const statement of node.commands) yield* commands(statement)
       return
     case "Statement":
-      yield* walk(node.command, base)
+      yield* commands(node.command)
       return
     case "AndOr":
     case "Pipeline":
-      for (const child of node.commands) yield* walk(child, base)
+      for (const child of node.commands) yield* commands(child)
       return
     case "Subshell":
     case "BraceGroup":
-      yield* walk(node.body, base)
+      yield* commands(node.body)
       return
     case "If":
-      yield* walk(node.clause, base)
-      yield* walk(node.then, base)
-      yield* walk(node.else, base)
+      yield* commands(node.clause)
+      yield* commands(node.then)
+      yield* commands(node.else)
       return
     case "For":
     case "Select":
-      yield* walk(node.body, base)
+      yield* commands(node.body)
       return
     case "While":
-      yield* walk(node.clause, base)
-      yield* walk(node.body, base)
+      yield* commands(node.clause)
+      yield* commands(node.body)
       return
     case "Case":
-      for (const item of node.items) yield* walk(item.body, base)
+      for (const item of node.items) yield* commands(item.body)
       return
     case "Function":
     case "Coproc":
-      yield* walk(node.body, base)
+      yield* commands(node.body)
       return
     case "Command":
-      yield { command: node, base }
-      if (node.name?.parts) for (const nested of nestedScripts(node.name)) yield* walk(nested.script, nested.source)
-      for (const word of node.suffix)
-        if (word.parts) for (const nested of nestedScripts(word)) yield* walk(nested.script, nested.source)
+      yield node
+      if (node.name?.parts) for (const script of nestedScripts(node.name)) yield* commands(script)
+      for (const word of node.suffix) if (word.parts) for (const script of nestedScripts(word)) yield* commands(script)
       return
   }
 }
 
-export function* commands(node: Node | Script | undefined): Generator<Command> {
-  for (const located of walk(node, "")) yield located.command
-}
-
 export function commandParts(command: string): ParsedCommand[] {
   const out: ParsedCommand[] = []
-  for (const { command: node, base } of walk(parse(command), command)) {
+  for (const node of commands(parse(command))) {
     if (node.name?.value === "[") continue
     const parts: CommandPart[] = []
     if (node.name) parts.push({ type: "command_name", text: node.name.text })
     for (const word of node.suffix) if (isToken(word)) parts.push({ type: "word", text: word.text })
-    out.push({ parts, source: base.slice(node.pos, node.end).trim() })
+    out.push({ parts, source: command.slice(node.pos, node.end).trim() })
   }
   return out
 }
@@ -133,30 +126,17 @@ function isToken(word: Word): boolean {
   return !(parts.length === 1 && BARE.has(parts[0].type))
 }
 
-type Nested = { script: Script; source: string }
-
-function collectScripts(parts: readonly WordPart[] | undefined, out: Nested[]): void {
-  if (!parts) return
-  for (const part of parts) {
-    if ("script" in part && part.script) out.push({ script: part.script, source: innerSource(part) })
-    if ("parts" in part && part.parts) collectScripts(part.parts as readonly WordPart[], out)
-    if ("operand" in part && part.operand?.parts) collectScripts(part.operand.parts, out)
-  }
-}
-
-function nestedScripts(word: Word): Nested[] {
-  const out: Nested[] = []
+function nestedScripts(word: Word): Script[] {
+  const out: Script[] = []
   collectScripts(word.parts, out)
   return out
 }
 
-function innerSource(part: WordPart): string {
-  const text = part.text
-  if (part.type === "CommandExpansion") {
-    if (text.startsWith("$(")) return text.slice(2, -1)
-    if (text.startsWith("`")) return text.slice(1, -1)
-    if (text.startsWith("${")) return text.slice(2, -1)
+function collectScripts(parts: readonly WordPart[] | undefined, out: Script[]): void {
+  if (!parts) return
+  for (const part of parts) {
+    if ("script" in part && part.script) out.push(part.script)
+    if ("parts" in part && part.parts) collectScripts(part.parts as readonly WordPart[], out)
+    if ("operand" in part && part.operand?.parts) collectScripts(part.operand.parts, out)
   }
-  if (part.type === "ProcessSubstitution") return text.slice(2, -1)
-  return text
 }
