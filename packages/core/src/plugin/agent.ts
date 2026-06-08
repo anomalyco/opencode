@@ -9,6 +9,8 @@ import { PermissionV2 } from "../permission"
 import { PluginV2 } from "../plugin"
 
 const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
+const BUILD_SYSTEM =
+  "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
@@ -21,7 +23,6 @@ Guidelines:
 - Use Glob for broad file pattern matching
 - Use Grep for searching file contents with regex
 - Use Read when you know the specific file path you need to read
-- Use Bash for file operations like copying, moving, or listing directory contents
 - Adapt your search approach based on the thoroughness level specified by the caller
 - Return file paths as absolute paths in your final response
 - For clear communication, avoid using emojis
@@ -104,33 +105,32 @@ export const Plugin = PluginV2.define({
     const worktree = location.directory
     const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
-      { permission: "external_directory", pattern: "*", action: "ask" },
+      { action: "external_directory", resource: "*", effect: "ask" },
       ...whitelistedDirs.map(
-        (pattern): PermissionV2.Rule => ({ permission: "external_directory", pattern, action: "allow" }),
+        (resource): PermissionV2.Rule => ({ action: "external_directory", resource, effect: "allow" }),
       ),
     ]
     const defaults: PermissionV2.Ruleset = [
-      { permission: "*", pattern: "*", action: "allow" },
+      { action: "*", resource: "*", effect: "allow" },
       ...readonlyExternalDirectory,
-      { permission: "question", pattern: "*", action: "deny" },
-      { permission: "plan_enter", pattern: "*", action: "deny" },
-      { permission: "plan_exit", pattern: "*", action: "deny" },
-      { permission: "repo_clone", pattern: "*", action: "deny" },
-      { permission: "repo_overview", pattern: "*", action: "deny" },
-      { permission: "read", pattern: "*", action: "allow" },
-      { permission: "read", pattern: "*.env", action: "ask" },
-      { permission: "read", pattern: "*.env.*", action: "ask" },
-      { permission: "read", pattern: "*.env.example", action: "allow" },
+      { action: "question", resource: "*", effect: "deny" },
+      { action: "plan_enter", resource: "*", effect: "deny" },
+      { action: "plan_exit", resource: "*", effect: "deny" },
+      { action: "read", resource: "*", effect: "allow" },
+      { action: "read", resource: "*.env", effect: "ask" },
+      { action: "read", resource: "*.env.*", effect: "ask" },
+      { action: "read", resource: "*.env.example", effect: "allow" },
     ]
 
     yield* agent.update((editor) => {
-      editor.update(AgentV2.ID.make("build"), (item) => {
+      editor.update(AgentV2.defaultID, (item) => {
         item.description = "The default agent. Executes tools based on configured permissions."
+        item.system ??= BUILD_SYSTEM
         item.mode = "primary"
         item.permissions.push(
           ...PermissionV2.merge(defaults, [
-            { permission: "question", pattern: "*", action: "allow" },
-            { permission: "plan_enter", pattern: "*", action: "allow" },
+            { action: "question", resource: "*", effect: "allow" },
+            { action: "plan_enter", resource: "*", effect: "allow" },
           ]),
         )
       })
@@ -140,15 +140,15 @@ export const Plugin = PluginV2.define({
         item.mode = "primary"
         item.permissions.push(
           ...PermissionV2.merge(defaults, [
-            { permission: "question", pattern: "*", action: "allow" },
-            { permission: "plan_exit", pattern: "*", action: "allow" },
-            { permission: "external_directory", pattern: path.join(Global.Path.data, "plans", "*"), action: "allow" },
-            { permission: "edit", pattern: "*", action: "deny" },
-            { permission: "edit", pattern: path.join(".opencode", "plans", "*.md"), action: "allow" },
+            { action: "question", resource: "*", effect: "allow" },
+            { action: "plan_exit", resource: "*", effect: "allow" },
+            { action: "external_directory", resource: path.join(Global.Path.data, "plans", "*"), effect: "allow" },
+            { action: "edit", resource: "*", effect: "deny" },
+            { action: "edit", resource: path.join(".opencode", "plans", "*.md"), effect: "allow" },
             {
-              permission: "edit",
-              pattern: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
-              action: "allow",
+              action: "edit",
+              resource: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
+              effect: "allow",
             },
           ]),
         )
@@ -158,9 +158,7 @@ export const Plugin = PluginV2.define({
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
         item.mode = "subagent"
-        item.permissions.push(
-          ...PermissionV2.merge(defaults, [{ permission: "todowrite", pattern: "*", action: "deny" }]),
-        )
+        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "todowrite", resource: "*", effect: "deny" }]))
       })
 
       editor.update(AgentV2.ID.make("explore"), (item) => {
@@ -172,14 +170,12 @@ export const Plugin = PluginV2.define({
           ...PermissionV2.merge(
             defaults,
             [
-              { permission: "*", pattern: "*", action: "deny" },
-              { permission: "grep", pattern: "*", action: "allow" },
-              { permission: "glob", pattern: "*", action: "allow" },
-              { permission: "list", pattern: "*", action: "allow" },
-              { permission: "bash", pattern: "*", action: "allow" },
-              { permission: "webfetch", pattern: "*", action: "allow" },
-              { permission: "websearch", pattern: "*", action: "allow" },
-              { permission: "read", pattern: "*", action: "allow" },
+              { action: "*", resource: "*", effect: "deny" },
+              { action: "grep", resource: "*", effect: "allow" },
+              { action: "glob", resource: "*", effect: "allow" },
+              { action: "webfetch", resource: "*", effect: "allow" },
+              { action: "websearch", resource: "*", effect: "allow" },
+              { action: "read", resource: "*", effect: "allow" },
             ],
             readonlyExternalDirectory,
           ),
@@ -190,21 +186,21 @@ export const Plugin = PluginV2.define({
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_COMPACTION
-        item.permissions.push(...PermissionV2.merge(defaults, [{ permission: "*", pattern: "*", action: "deny" }]))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
 
       editor.update(AgentV2.ID.make("title"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_TITLE
-        item.permissions.push(...PermissionV2.merge(defaults, [{ permission: "*", pattern: "*", action: "deny" }]))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
 
       editor.update(AgentV2.ID.make("summary"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_SUMMARY
-        item.permissions.push(...PermissionV2.merge(defaults, [{ permission: "*", pattern: "*", action: "deny" }]))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
     })
   }),

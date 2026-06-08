@@ -15,7 +15,6 @@
   box-shadow: 0 0 0 0.5px var(--accordion-v2-border);
   overflow: hidden;
 
-  font-family: var(--v2-font-family-sans), "Inter", system-ui, sans-serif;
   color: var(--accordion-v2-fg);
 
   -webkit-font-smoothing: antialiased;
@@ -59,7 +58,6 @@
   cursor: default;
   user-select: none;
 
-  font-family: inherit;
   font-size: 13px;
   font-weight: 440;
   line-height: 100%;

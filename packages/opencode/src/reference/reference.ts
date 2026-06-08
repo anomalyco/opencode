@@ -1,6 +1,6 @@
 import path from "path"
 import { Effect, Context, Layer, Scope } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { ConfigReference } from "@/config/reference"
@@ -83,11 +83,11 @@ function branchLabel(branch: string | undefined) {
 
 function normalizedTarget(target?: string) {
   if (!target) return
-  return process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
+  return process.platform === "win32" ? FSUtil.normalizePath(target) : target
 }
 
 function containsReferencePath(referencePath: string, target: string) {
-  return AppFileSystem.contains(normalizedTarget(referencePath) ?? referencePath, target)
+  return FSUtil.contains(normalizedTarget(referencePath) ?? referencePath, target)
 }
 
 function uniqueGitReferences(references: Resolved[]) {
@@ -125,7 +125,7 @@ const materializers = Effect.fn("Reference.materializers")(function* (
 })
 
 function materializeAll(input: { flags: RuntimeFlags.Info; materializers: Materializer[] }) {
-  if (!input.flags.experimentalScout) return Effect.void
+  if (!input.flags.experimentalReferences) return Effect.void
   return Effect.forEach(
     input.materializers,
     Effect.fnUntraced(function* (item) {
@@ -205,7 +205,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       init: Effect.fn("Reference.init")(function* () {
-        if (!flags.experimentalScout) return
+        if (!flags.experimentalReferences) return
         yield* InstanceState.useEffect(state, (s) => s.materializeAll).pipe(Effect.forkIn(scope), Effect.asVoid)
       }),
       list: Effect.fn("Reference.list")(function* () {
@@ -215,13 +215,13 @@ export const layer = Layer.effect(
         return yield* InstanceState.use(state, (s) => s.references.find((reference) => reference.name === name))
       }),
       ensure: Effect.fn("Reference.ensure")(function* (target?: string) {
-        if (!flags.experimentalScout) return
+        if (!flags.experimentalReferences) return
         const full = normalizedTarget(target)
         if (!full) return yield* InstanceState.useEffect(state, (s) => s.materializeAll)
         return yield* InstanceState.useEffect(state, (s) => materializeByPath(s.materializeByPath, full))
       }),
       contains: Effect.fn("Reference.contains")(function* (target?: string) {
-        if (!flags.experimentalScout) return false
+        if (!flags.experimentalReferences) return false
         const full = normalizedTarget(target)
         if (!full) return false
         return yield* InstanceState.use(state, (s) => containsGitReferencePath(s.references, full))

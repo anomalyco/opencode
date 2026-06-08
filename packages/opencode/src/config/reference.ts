@@ -1,27 +1,6 @@
 export * as ConfigReference from "./reference"
 
-import { Schema } from "effect"
-
-const Git = Schema.Struct({
-  repository: Schema.String.annotate({
-    description: "Git repository URL, host/path reference, or GitHub owner/repo shorthand",
-  }),
-  branch: Schema.optional(Schema.String).annotate({
-    description: "Branch or ref Scout should clone and inspect",
-  }),
-})
-
-const Local = Schema.Struct({
-  path: Schema.String.annotate({
-    description: "Absolute path, ~/ path, or workspace-relative path to a local reference directory",
-  }),
-})
-
-export const Entry = Schema.Union([Schema.String, Git, Local]).annotate({ identifier: "ReferenceConfigEntry" })
-export type Entry = Schema.Schema.Type<typeof Entry>
-
-export const Info = Schema.Record(Schema.String, Entry).annotate({ identifier: "ReferenceConfig" })
-export type Info = Schema.Schema.Type<typeof Info>
+import { ConfigReferenceV1 } from "@opencode-ai/core/v1/config/reference"
 
 export type NormalizedEntry =
   | {
@@ -47,7 +26,7 @@ export function validateAlias(name: string) {
   }
 }
 
-export function normalizeEntry(entry: Entry): NormalizedEntry {
+export function normalizeEntry(entry: ConfigReferenceV1.Entry): NormalizedEntry {
   if (typeof entry === "string") {
     if (entry.startsWith(".") || entry.startsWith("/") || entry.startsWith("~")) {
       return { kind: "local", path: entry }
@@ -59,7 +38,7 @@ export function normalizeEntry(entry: Entry): NormalizedEntry {
   return { kind: "git", repository: entry.repository, branch: entry.branch }
 }
 
-export function normalize(info: Info): NormalizedInfo {
+export function normalize(info: ConfigReferenceV1.Info): NormalizedInfo {
   return Object.fromEntries(
     Object.entries(info).map(([name, entry]) => {
       const aliasError = validateAlias(name)
