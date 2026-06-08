@@ -10,7 +10,6 @@ function formatter(id: string = runID) {
       ["timestamp", output.timestamp],
       ["level", output.level],
       ["run", id],
-      ["fiber", output.fiberId],
       ...messages.flatMap((value) => (plain(value) ? flatten(value) : [["message", value] as const])),
       ...(output.cause === undefined ? [] : [["cause", output.cause] as const]),
       ...flatten(output.spans),

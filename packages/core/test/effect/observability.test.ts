@@ -76,6 +76,7 @@ test("file logger appends concurrent runs with a run on every line", async () =>
   expect(lines.filter((line) => line.includes("run=run-a"))).toHaveLength(50)
   expect(lines.filter((line) => line.includes("run=run-b"))).toHaveLength(50)
   expect(lines.every((line) => line.startsWith("timestamp=") && line.includes(" level=INFO "))).toBe(true)
+  expect(lines.every((line) => !line.includes(" fiber="))).toBe(true)
   expect(lines.every((line) => !line.startsWith("{"))).toBe(true)
 })
 
