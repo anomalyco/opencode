@@ -83,6 +83,16 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           }),
         )
       },
+      reorder(keys: string[]) {
+        setStore(
+          produce((tabs) => {
+            const byKey = new Map(tabs.map((tab) => [tabKey(tab), tab]))
+            const next = keys.map((key) => byKey.get(key)).filter((tab): tab is Tab => !!tab)
+            if (next.length !== tabs.length) return
+            tabs.splice(0, tabs.length, ...next)
+          }),
+        )
+      },
       removeTab: (index: number) => {
         const tab = store[index]
         if (!tab) return
