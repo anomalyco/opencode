@@ -198,13 +198,13 @@ describe("ProviderTransform.options - minimax m3 thinking", () => {
     ).toEqual({ type: "adaptive" })
   })
 
-  test("explicitly enables adaptive thinking with the openai-compatible SDK", () => {
+  test("uses the native default with the openai-compatible SDK", () => {
     expect(
       ProviderTransform.options({
         model: createModel("@ai-sdk/openai-compatible"),
         sessionID: "test-session-123",
       }).thinking,
-    ).toEqual({ type: "adaptive" })
+    ).toBeUndefined()
   })
 })
 

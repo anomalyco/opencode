@@ -1086,11 +1086,8 @@ export function options(input: {
   }
 
   const modelId = input.model.api.id.toLowerCase()
-  // Set MiniMax thinking explicitly instead of relying on its interface-specific defaults.
-  if (
-    modelId.includes("minimax-m3") &&
-    ["@ai-sdk/anthropic", "@ai-sdk/openai-compatible"].includes(input.model.api.npm)
-  ) {
+  // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
+  if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
     result["thinking"] = { type: "adaptive" }
   }
 
