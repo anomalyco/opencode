@@ -130,7 +130,9 @@ export function createWslServersController(
 
   const checkOpencode = async (distro: string, opts?: { signal?: AbortSignal }) => {
     const resolved = await (options?.resolveOpencode ?? resolveWslOpencode)(distro, opts)
-    const version = resolved ? await (options?.readCommandVersion ?? readWslCommandVersion)(resolved, distro, opts) : null
+    const version = resolved
+      ? await (options?.readCommandVersion ?? readWslCommandVersion)(resolved, distro, opts)
+      : null
     return opencodeCheck(distro, resolved, version, appVersion)
   }
 
