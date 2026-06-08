@@ -393,7 +393,7 @@ export const {
           const inWindow = (() => {
             const messages = store.message[sessionID]
             if (!messages) return true
-            return Binary.search(messages, messageID, (m) => m.id).found
+            return search(messages, messageID, (m) => m.id).found
           })()
           if (!parts) {
             if (!inWindow && store.messageNewerCursor[sessionID]) break
