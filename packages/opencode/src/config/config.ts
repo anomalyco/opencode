@@ -289,9 +289,9 @@ export const layer = Layer.effect(
       const hasIgnore = yield* fs.existsSafe(gitignore)
       if (!hasIgnore) {
         yield* fs
-          .writeFileString(
+          .writeWithDirs(
             gitignore,
-            ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+            Buffer.from(["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n")),
           )
           .pipe(
             Effect.catchIf(
