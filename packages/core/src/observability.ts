@@ -1,7 +1,7 @@
 export * as Observability from "./observability"
 
-import { Logging } from "./logging"
-import { Otlp } from "./otlp"
+import { Logging } from "./observability/logging"
+import { Otlp } from "./observability/otlp"
 
 export const enabled = Otlp.enabled
 export const layer = enabled ? Otlp.layer : Logging.layer
