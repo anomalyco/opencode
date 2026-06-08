@@ -146,6 +146,14 @@ export function ps(file: string) {
   return meta(file)?.ps === true
 }
 
+export function psCommand(command: string) {
+  return [
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+    "$OutputEncoding = [Console]::OutputEncoding",
+    command,
+  ].join("; ")
+}
+
 function info(file: string): Item {
   const item = full(file)
   const n = name(item)
@@ -188,7 +196,7 @@ export function args(file: string, command: string, cwd: string) {
     ]
   }
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (ps(file)) return ["-NoProfile", "-Command", psCommand(command)]
   return ["-c", command]
 }
 
