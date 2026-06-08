@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -896,6 +896,64 @@ describe("tool.task", () => {
 
       expect((yield* jobs.get(child.id))?.status).toBe("cancelled")
       expect((yield* jobs.get(grandchild.id))?.status).toBe("cancelled")
+    }),
+  )
+
+  it.instance("fails fast when session error event fires during subagent prompt", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const child = yield* sessions.create({ parentID: chat.id, title: "error test child" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const started = defer<void>()
+
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.promise(() => {
+            started.resolve()
+            return new Promise<never>(() => {})
+          }),
+      }
+
+      const fiber = yield* def
+        .execute(
+          {
+            description: "test",
+            prompt: "hi",
+            subagent_type: "general",
+            task_id: child.id,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.forkChild)
+
+      // Wait for the prompt to start, then give a small grace period
+      yield* Effect.promise(() => started.promise)
+      yield* Effect.sleep("500 millis")
+
+      yield* events.publish(Session.Event.Error, {
+        sessionID: child.id,
+        error: { name: "UnknownError" as const, data: { message: "Provider quota exhausted" } },
+      })
+
+      const exit = yield* Fiber.await(fiber).pipe(Effect.timeoutOption("10 seconds"))
+      expect(exit._tag === "Some" && Exit.isFailure(exit.value)).toBe(true)
+      if (exit._tag === "Some" && Exit.isFailure(exit.value))
+        expect(Cause.pretty(exit.value.cause)).toContain("Provider quota exhausted")
+
     }),
   )
 })

@@ -10,10 +10,12 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Fiber, Option, Schema, Scope } from "effect"
+import * as Stream from "effect/Stream"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventV2Bridge } from "@/event-v2-bridge"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -88,6 +90,7 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const events = yield* EventV2Bridge.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -171,9 +174,14 @@ export const TaskTool = Tool.define(
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
+      type TaskRaceResult =
+        | { kind: "prompt"; value: SessionV1.WithParts }
+        | { kind: "error"; message: string }
+
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
-        const result = yield* ops.prompt({
+
+        const promptInput = {
           messageID: MessageID.ascending(),
           sessionID: nextSession.id,
           model: {
@@ -188,8 +196,49 @@ export const TaskTool = Tool.define(
             ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
           },
           parts,
-        })
-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+        }
+
+        // Subscribe to error events BEFORE the prompt starts to avoid a race
+        // where the error fires before the listener is wired up.
+        const errorFiber = yield* events
+          .subscribe(Session.Event.Error)
+          .pipe(
+            Stream.filter((event) => event.data.sessionID === nextSession.id),
+            Stream.take(1),
+            Stream.runHead,
+            Effect.map((maybeEvent): TaskRaceResult => {
+              const err = Option.isSome(maybeEvent) ? maybeEvent.value.data.error : undefined
+              const message = err
+                ? typeof err === "object" && err !== null
+                  ? JSON.stringify((err as Record<string, unknown>).data ?? err)
+                  : String(err)
+                : "Subagent session error"
+              return { kind: "error", message }
+            }),
+            Effect.forkIn(scope),
+          )
+
+        const promptEff = ops.prompt(promptInput).pipe(
+          Effect.map((value): TaskRaceResult => ({ kind: "prompt", value })),
+        )
+
+        const timeoutEff = Effect.sleep("120 seconds").pipe(
+          Effect.map(
+            (): TaskRaceResult => ({
+              kind: "error",
+              message: "Subagent session timed out after 120s of inactivity",
+            }),
+          ),
+        )
+
+        const result = yield* Effect.raceFirst(
+          promptEff,
+          Effect.raceFirst(Fiber.join(errorFiber), timeoutEff),
+        ).pipe(
+          Effect.ensuring(Fiber.interrupt(errorFiber)),
+        )
+        if (result.kind === "error") return yield* Effect.fail(new Error(result.message))
+        return result.value.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
