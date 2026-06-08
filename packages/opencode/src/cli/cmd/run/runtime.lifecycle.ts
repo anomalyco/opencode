@@ -8,10 +8,13 @@
 //
 // Also wires SIGINT so Ctrl-c clears a live prompt draft first, then falls
 // back to the usual two-press exit sequence through RunFooter.requestExit().
+import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
+import { Global } from "@opencode-ai/core/global"
+import { openEditor } from "@opencode-ai/tui/editor"
+import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
 import { Session as SessionApi } from "@/session/session"
-import { registerOpencodeKeymap } from "@/cli/cmd/tui/keymap"
 import * as Locale from "@/util/locale"
 import { withRunSpan } from "./otel"
 import { resolveInteractiveStdin } from "./runtime.stdin"
@@ -30,7 +33,7 @@ import type {
 } from "./types"
 import { formatModelLabel } from "./variant.shared"
 
-const FOOTER_HEIGHT = 7
+const FOOTER_HEIGHT = 4
 
 type SplashState = {
   entry: boolean
@@ -78,6 +81,7 @@ export type LifecycleInput = {
 export type Lifecycle = {
   footer: FooterApi
   onResize(fn: () => void): () => void
+  refreshTheme(): void
   resetForReplay(input: { sessionTitle?: string; sessionID?: string; history: RunPrompt[] }): Promise<void>
   close(input: { showExit: boolean; sessionTitle?: string; sessionID?: string; history?: RunPrompt[] }): Promise<void>
 }
@@ -132,6 +136,17 @@ function footerLabels(input: Pick<RunInput, "agent" | "model" | "variant">): Foo
     agentLabel,
     modelLabel: formatModelLabel(input.model, input.variant),
   }
+}
+
+function directoryLabel(directory: string) {
+  const resolved = path.resolve(directory)
+  const display =
+    resolved === Global.Path.home
+      ? "~"
+      : resolved.startsWith(`${Global.Path.home}${path.sep}`)
+        ? resolved.replace(Global.Path.home, "~")
+        : resolved
+  return display.replaceAll("\\", "/")
 }
 
 function queueSplash(
@@ -204,6 +219,11 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           title: splash.title,
           session_id: input.sessionID,
         })
+        const labels = footerLabels({
+          agent: input.agent,
+          model: input.model,
+          variant: input.variant,
+        })
         const footerTask = import("./footer")
         const wrote = queueSplash(
           renderer,
@@ -213,17 +233,15 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
             ...meta,
             theme: theme.splash,
             showSession: splash.showSession,
+            detail: directoryLabel(input.directory),
           }),
         )
         await renderer.idle().catch(() => {})
 
         const { RunFooter } = await footerTask
+        let closed = false
+        let sigintRegistered = false
 
-        const labels = footerLabels({
-          agent: input.agent,
-          model: input.model,
-          variant: input.variant,
-        })
         const footer = new RunFooter(renderer, {
           directory: input.directory,
           findFiles: input.findFiles,
@@ -249,15 +267,54 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           onVariantSelect: input.onVariantSelect,
           onInterrupt: input.onInterrupt,
           onBackground: input.onBackground,
+          onEditorOpen: async ({ value }) => {
+            if (closed || renderer.isDestroyed) {
+              return
+            }
+
+            await renderer.idle().catch(() => {})
+            const ignore = () => {}
+            detachSigint()
+            process.on("SIGINT", ignore)
+            try {
+              return await openEditor({
+                value,
+                cwd: input.directory,
+                renderer,
+                stdin: source.stdin,
+              })
+            } finally {
+              process.off("SIGINT", ignore)
+              attachSigint()
+            }
+          },
           onSubagentSelect: input.onSubagentSelect,
         })
 
         const sigint = () => {
           footer.requestExit()
         }
-        process.on("SIGINT", sigint)
 
-        let closed = false
+        const attachSigint = () => {
+          if (closed || sigintRegistered) {
+            return
+          }
+
+          process.on("SIGINT", sigint)
+          sigintRegistered = true
+        }
+
+        const detachSigint = () => {
+          if (!sigintRegistered) {
+            return
+          }
+
+          process.off("SIGINT", sigint)
+          sigintRegistered = false
+        }
+
+        attachSigint()
+
         const close = async (next: {
           showExit: boolean
           sessionTitle?: string
@@ -276,7 +333,8 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
               "session.id": next.sessionID || input.getSessionID?.() || input.sessionID || undefined,
             },
             async () => {
-              process.off("SIGINT", sigint)
+              detachSigint()
+              let wroteExit = false
 
               try {
                 await footer.idle().catch(() => {})
@@ -285,7 +343,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
                 if (!renderer.isDestroyed && show) {
                   const sessionID = next.sessionID || input.getSessionID?.() || input.sessionID
                   const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history)
-                  queueSplash(
+                  wroteExit = queueSplash(
                     renderer,
                     state,
                     "exit",
@@ -294,7 +352,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
                         title: splash.title,
                         session_id: sessionID,
                       }),
-                      theme: theme.splash,
+                      theme: footer.currentTheme().splash,
                     }),
                   )
                   await renderer.idle().catch(() => {})
@@ -305,6 +363,9 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
                 footer.destroy()
                 unregisterKeymap?.()
                 shutdown(renderer)
+                if (!wroteExit) {
+                  process.stdout.write("\n")
+                }
                 source.cleanup?.()
               }
             },
@@ -313,6 +374,9 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
 
         return {
           footer,
+          refreshTheme() {
+            footer.refreshTheme()
+          },
           onResize(fn) {
             let width = renderer.terminalWidth
             let height = renderer.terminalHeight
@@ -347,8 +411,9 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
                   title: splash.title,
                   session_id: next.sessionID ?? input.getSessionID?.() ?? input.sessionID,
                 }),
-                theme: theme.splash,
+                theme: footer.currentTheme().splash,
                 showSession: splash.showSession,
+                detail: directoryLabel(input.directory),
               }),
             )
             renderer.requestRender()

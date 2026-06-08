@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
@@ -18,6 +18,118 @@ function request(headers: Record<string, string>, variant?: string) {
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("partitions existing model variant bodies without changing config shape", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const plugin = yield* PluginV2.Service
+      const providerID = ProviderV2.ID.opencode
+      const modelID = ModelV2.ID.make("alpha-gpt-next")
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  opencode: {
+                    api: { type: "aisdk", package: "@ai-sdk/openai", url: "https://opencode.test/v1" },
+                    models: {
+                      "alpha-gpt-next": {
+                        variants: [
+                          {
+                            id: "high",
+                            body: {
+                              reasoningEffort: "high",
+                              reasoningSummary: "auto",
+                              include: ["reasoning.encrypted_content"],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* plugin.add({
+        ...ConfigProviderPlugin.Plugin,
+        effect: ConfigProviderPlugin.Plugin.effect.pipe(
+          Effect.provideService(Config.Service, config),
+          Effect.provideService(Catalog.Service, catalog),
+        ),
+      })
+
+      const model = yield* catalog.model.get(providerID, modelID)
+      expect(model.variants).toMatchObject([
+        {
+          id: "high",
+          body: {},
+          options: {
+            reasoningEffort: "high",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
+          },
+        },
+      ])
+    }),
+  )
+
+  it.effect("uses the effective provider package across layered config", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const plugin = yield* PluginV2.Service
+      const providerID = ProviderV2.ID.opencode
+      const modelID = ModelV2.ID.make("alpha-gpt-next")
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  opencode: {
+                    api: { type: "aisdk", package: "@ai-sdk/openai", url: "https://opencode.test/v1" },
+                  },
+                },
+              }),
+            }),
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  opencode: {
+                    models: {
+                      "alpha-gpt-next": {
+                        variants: [{ id: "high", body: { reasoningEffort: "high" } }],
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* plugin.add({
+        ...ConfigProviderPlugin.Plugin,
+        effect: ConfigProviderPlugin.Plugin.effect.pipe(
+          Effect.provideService(Config.Service, config),
+          Effect.provideService(Catalog.Service, catalog),
+        ),
+      })
+
+      const model = yield* catalog.model.get(providerID, modelID)
+      expect(model.variants[0]).toMatchObject({
+        id: "high",
+        body: {},
+        options: { reasoningEffort: "high" },
+      })
+    }),
+  )
+
   it.effect("loads configured providers and applies later model overrides", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -30,6 +142,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
             new Config.Document({
               type: "document",
               info: decode({
+                model: "custom/first",
                 providers: {
                   custom: {
                     name: "Configured",
@@ -59,11 +172,15 @@ describe("ConfigProviderPlugin.Plugin", () => {
             new Config.Document({
               type: "document",
               info: decode({
+                model: "custom/default",
                 providers: {
                   custom: {
                     api: { type: "aisdk", package: "custom-sdk", url: "https://example.test" },
                     request: request({ last: "last", shared: "last" }),
                     models: {
+                      default: {
+                        name: "Default",
+                      },
                       chat: {
                         api: { id: "api-chat" },
                         name: "Last",
@@ -106,6 +223,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const provider = yield* catalog.provider.get(providerID)
       const model = yield* catalog.model.get(providerID, modelID)
+      expect(Option.getOrUndefined(yield* catalog.model.default())?.id).toBe(ModelV2.ID.make("default"))
       expect(provider.name).toBe("Renamed")
       expect(provider.env).toEqual(["CUSTOM_API_KEY"])
       expect(provider.enabled).toEqual({ via: "custom", data: {} })
