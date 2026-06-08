@@ -3,11 +3,8 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Effect, Layer } from "effect"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "../../src/session/message-v2"
 import { testEffect } from "../lib/effect"
-
-void Log.init({ print: false })
 
 // Skip tests if no API key is available
 const hasApiKey = !!process.env.ANTHROPIC_API_KEY

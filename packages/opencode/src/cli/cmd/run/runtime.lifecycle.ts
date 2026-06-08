@@ -16,7 +16,6 @@ import { openEditor } from "@opencode-ai/tui/editor"
 import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
 import { Session as SessionApi } from "@/session/session"
 import * as Locale from "@/util/locale"
-import { withRunSpan } from "./otel"
 import { resolveInteractiveStdin } from "./runtime.stdin"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
 import { resolveRunTheme } from "./theme"
@@ -175,18 +174,6 @@ function queueSplash(
 // scrollback commits and footer repaints happen in the same frame. After
 // the entry splash, RunFooter takes over the footer region.
 export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lifecycle> {
-  return withRunSpan(
-    "RunLifecycle.boot",
-    {
-      "opencode.agent.name": input.agent,
-      "opencode.directory": input.directory,
-      "opencode.first": input.first,
-      "opencode.model.provider": input.model?.providerID,
-      "opencode.model.id": input.model?.modelID,
-      "opencode.model.variant": input.variant,
-      "session.id": input.getSessionID?.() || input.sessionID || undefined,
-    },
-    async () => {
       const source = resolveInteractiveStdin()
       let unregisterKeymap: (() => void) | undefined
 
@@ -326,13 +313,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           }
 
           closed = true
-          return withRunSpan(
-            "RunLifecycle.close",
-            {
-              "opencode.show_exit": next.showExit,
-              "session.id": next.sessionID || input.getSessionID?.() || input.sessionID || undefined,
-            },
-            async () => {
               detachSigint()
               let wroteExit = false
 
@@ -368,8 +348,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
                 }
                 source.cleanup?.()
               }
-            },
-          )
         }
 
         return {
@@ -425,6 +403,4 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
         source.cleanup?.()
         throw error
       }
-    },
-  )
 }

@@ -4,7 +4,6 @@ import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import { Log } from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
@@ -32,7 +31,6 @@ import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
 
-const log = Log.create({ service: "provider" })
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
@@ -648,7 +646,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         async discoverModels(): Promise<Record<string, Model>> {
           if (!apiKey) {
-            log.info("gitlab model discovery skipped: no apiKey")
             return {}
           }
 
@@ -657,18 +654,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             const getHeaders = (): Record<string, string> =>
               auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
 
-            log.info("gitlab model discovery starting", { instanceUrl })
             const result = await discoverWorkflowModels({ instanceUrl, getHeaders }, { workingDirectory: directory })
 
             if (!result.models.length) {
-              log.info("gitlab model discovery skipped: no models found", {
-                project: result.project
-                  ? {
-                      id: result.project.id,
-                      path: result.project.pathWithNamespace,
-                    }
-                  : null,
-              })
               return {}
             }
 
@@ -717,13 +705,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               }
             }
 
-            log.info("gitlab model discovery complete", {
-              count: Object.keys(models).length,
-              models: Object.keys(models),
-            })
             return models
           } catch (e) {
-            log.warn("gitlab model discovery failed", { error: e })
             return {}
           }
         },
@@ -1298,7 +1281,6 @@ export const layer = Layer.effect(
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
-        using _ = log.time("state")
         const bridge = yield* EffectBridge.make()
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
@@ -1324,7 +1306,6 @@ export const layer = Layer.effect(
           get: (key: string) => env.get(key),
         }
 
-        log.info("init")
 
         function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
           const existing = providers[providerID]
@@ -1526,7 +1507,6 @@ export const layer = Layer.effect(
           if (disabled.has(providerID)) continue
           const data = database[providerID]
           if (!data) {
-            log.error("Provider does not exist in model list " + providerID)
             continue
           }
           const result = yield* fn(data)
@@ -1561,7 +1541,6 @@ export const layer = Layer.effect(
                 }
               }
             } catch (e) {
-              log.warn("state discovery error", { id: "gitlab", error: e })
             }
           })
         }
@@ -1614,7 +1593,6 @@ export const layer = Layer.effect(
             continue
           }
 
-          log.info("found", { providerID })
         }
 
         return {
@@ -1632,9 +1610,6 @@ export const layer = Layer.effect(
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
-        using _ = log.time("getSDK", {
-          providerID: model.providerID,
-        })
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
 
@@ -1752,10 +1727,6 @@ export const layer = Layer.effect(
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
         if (bundledLoader) {
-          log.info("using bundled provider", {
-            providerID: model.providerID,
-            pkg: model.api.npm,
-          })
           const factory = await bundledLoader()
           const loaded = factory({
             name: model.providerID,
@@ -1767,7 +1738,6 @@ export const layer = Layer.effect(
 
         const installedPath = await (async () => {
           if (model.api.npm.startsWith("file://")) {
-            log.info("loading local provider", { pkg: model.api.npm })
             return model.api.npm
           }
           const item = await Npm.add(model.api.npm)
