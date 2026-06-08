@@ -2452,6 +2452,40 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("minimax M2.x stays excluded (no adaptive thinking)", () => {
+    const model = createMockModel({
+      id: "minimax/minimax-m2.7",
+      providerID: "minimax",
+      api: {
+        id: "MiniMax-M2.7",
+        url: "https://api.minimax.io/anthropic",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({})
+  })
+
+  test("minimax-m3 returns adaptive thinking options", () => {
+    const model = createMockModel({
+      id: "minimax/minimax-m3",
+      providerID: "minimax",
+      api: {
+        id: "MiniMax-M3",
+        url: "https://api.minimax.io/anthropic",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+    expect(result.medium).toEqual({
+      thinking: {
+        type: "adaptive",
+      },
+      effort: "medium",
+    })
+  })
+
   test("glm returns empty object", () => {
     const model = createMockModel({
       id: "glm/glm-4",

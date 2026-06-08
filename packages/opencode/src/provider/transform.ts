@@ -595,6 +595,10 @@ function anthropicAdaptiveEfforts(apiId: string): string[] | null {
   ) {
     return ["low", "medium", "high", "max"]
   }
+  // MiniMax-M3 is Anthropic-compatible and accepts the adaptive thinking format.
+  if (apiId.toLowerCase().includes("minimax-m3")) {
+    return ["low", "medium", "high", "max"]
+  }
   return null
 }
 
@@ -648,7 +652,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("deepseek-reasoner") ||
     id.includes("deepseek-r1") ||
     id.includes("deepseek-v3") ||
-    id.includes("minimax") ||
+    // MiniMax M2.x leaks reasoning into content and has no usable thinking
+    // controls; M3 is Anthropic-compatible and handled via adaptiveEfforts below.
+    (id.includes("minimax") && !id.includes("minimax-m3")) ||
     id.includes("glm") ||
     id.includes("kimi") ||
     id.includes("k2p") ||
