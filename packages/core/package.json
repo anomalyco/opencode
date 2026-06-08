@@ -18,7 +18,7 @@
   },
   "exports": {
     "./public": "./src/public/index.ts",
-    "./observability": "./src/observability/index.ts",
+    "./observability": "./src/observability/observability.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./system-context": "./src/system-context/index.ts",
     "./*": "./src/*.ts"
