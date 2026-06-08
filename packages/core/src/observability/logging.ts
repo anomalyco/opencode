@@ -1,7 +1,9 @@
-import { Formatter, Logger, type LogLevel } from "effect"
+import { Effect, FileSystem, Formatter, Logger, Option, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
 import { runID } from "./shared"
+
+const maxSize = 20 * 1024 * 1024
 
 function formatter(id: string = runID) {
   return Logger.map(Logger.formatStructured, (output) => {
@@ -43,7 +45,14 @@ function format(input: unknown) {
 }
 
 export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
-  return Logger.toFile(formatter(id), file, { flag: "a", batchWindow: 0 })
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const info = yield* fs.stat(file).pipe(Effect.option)
+    if (Option.match(info, { onNone: () => false, onSome: (value) => Number(value.size) > maxSize })) {
+      yield* fs.truncate(file)
+    }
+    return yield* Logger.toFile(formatter(id), file, { flag: "a", batchWindow: 0 })
+  })
 }
 
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))

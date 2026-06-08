@@ -107,3 +107,25 @@ test("file logger flattens nested objects", async () => {
   expect(line).toContain("session.id=session-1")
   expect(line).not.toContain("request={")
 })
+
+test("file logger truncates an oversized log when it starts", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-test-"))
+  await using _ = {
+    async [Symbol.asyncDispose]() {
+      await fs.rm(dir, { recursive: true, force: true })
+    },
+  }
+  const file = path.join(dir, "opencode.log")
+  await fs.writeFile(file, Buffer.alloc(20 * 1024 * 1024 + 1, "x"))
+
+  await Effect.logInfo("after restart").pipe(
+    Effect.provide(Logger.layer([fileLogger(file, "run-a")]).pipe(Layer.provide(NodeFileSystem.layer), Layer.orDie)),
+    Effect.scoped,
+    Effect.runPromise,
+  )
+
+  const content = await Bun.file(file).text()
+  expect(content).toContain('message="after restart"')
+  expect(content).not.toContain("xxxxx")
+  expect(content.length).toBeLessThan(1024)
+})
