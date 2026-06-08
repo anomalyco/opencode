@@ -127,6 +127,9 @@ export const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const { db } = database
+    const visibleAgentNames = Effect.fnUntraced(function* () {
+      return (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+    })
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
@@ -340,7 +343,7 @@ export const layer = Layer.effect(
 
       const taskAgent = yield* agents.get(task.agent)
       if (!taskAgent) {
-        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+        const available = yield* visibleAgentNames()
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
         const error = new NamedError.Unknown({ message: `Agent not found: "${task.agent}".${hint}` })
         yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
@@ -488,7 +491,7 @@ export const layer = Layer.effect(
             }
             const agent = yield* agents.get(input.agent)
             if (!agent) {
-              const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+              const available = yield* visibleAgentNames()
               const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
               const error = new NamedError.Unknown({ message: `Agent not found: "${input.agent}".${hint}` })
               yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
@@ -681,7 +684,7 @@ export const layer = Layer.effect(
       const agentName = input.agent
       const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
-        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+        const available = yield* visibleAgentNames()
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
         const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
         yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
@@ -1303,7 +1306,7 @@ export const layer = Layer.effect(
 
           const agent = yield* agents.get(lastUser.agent)
           if (!agent) {
-            const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+            const available = yield* visibleAgentNames()
             const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
             const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
@@ -1552,7 +1555,7 @@ export const layer = Layer.effect(
 
       const agent = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!agent) {
-        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+        const available = yield* visibleAgentNames()
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
         const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
         yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })

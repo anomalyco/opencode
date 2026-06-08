@@ -82,7 +82,7 @@ export const StatsCommand = effectCmd({
 
 const getAllSessions = Effect.fnUntraced(function* () {
   const { db } = yield* Database.Service
-  return (yield* db.select().from(SessionTable).all().pipe(Effect.orDie)).map((row) => Session.fromRow(row))
+  return (yield* db.select().from(SessionTable).limit(1000).all().pipe(Effect.orDie)).map((row) => Session.fromRow(row))
 })
 
 const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (

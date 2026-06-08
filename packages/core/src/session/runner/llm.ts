@@ -7,7 +7,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -165,7 +165,6 @@ export const layer = Layer.effect(
           : Effect.die(defect),
       )
 
-    const sameModel = Schema.toEquivalence(Schema.UndefinedOr(ModelV2.Ref))
     const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent)], { concurrency: "unbounded" }).pipe(
         Effect.map(SystemContext.combine),
@@ -208,7 +207,7 @@ export const layer = Layer.effect(
           session.location,
           agent.id,
         ).pipe(retryAgentMismatch(undefined)))
-      if ((yield* agents.select(session.agent)).id !== agent.id || !sameModel(session.model, session.model))
+      if ((yield* agents.select(session.agent)).id !== agent.id)
         return yield* Effect.die(rebuildPreparedTurn())
       const model = yield* models.resolve(session)
       const cached = contextCache.get(session.id)

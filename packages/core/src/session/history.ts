@@ -49,6 +49,7 @@ const messageRows = Effect.fnUntraced(function* (
       ),
     )
     .orderBy(asc(SessionMessageTable.seq))
+    .limit(500)
     .all()
     .pipe(Effect.orDie)
   return rows

@@ -75,6 +75,7 @@ export const layer = Layer.effect(
         .from(TodoTable)
         .where(eq(TodoTable.session_id, sessionID))
         .orderBy(asc(TodoTable.position))
+        .limit(200)
         .all()
         .pipe(Effect.orDie)
       return rows.map((row) => ({

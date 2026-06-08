@@ -520,6 +520,7 @@ export const layer = Layer.effect(
               Effect.provideService(Database.Service, database),
             )
 
+            const inputKey = JSON.stringify(input)
             if (
               recentParts.length !== DOOM_LOOP_THRESHOLD ||
               !recentParts.every(
@@ -527,7 +528,7 @@ export const layer = Layer.effect(
                   part.type === "tool" &&
                   part.tool === value.name &&
                   part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(input),
+                  JSON.stringify(part.state.input) === inputKey,
               )
             ) {
               return

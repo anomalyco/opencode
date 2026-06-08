@@ -372,7 +372,7 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Project.list")(function* () {
-      return (yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)).map(fromRow)
+      return (yield* db.select().from(ProjectTable).limit(200).all().pipe(Effect.orDie)).map(fromRow)
     })
 
     const get = Effect.fn("Project.get")(function* (id: ProjectV2.ID) {
