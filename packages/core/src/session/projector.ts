@@ -114,7 +114,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
     const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type })
     const updateMessage = (message: SessionMessage.Message) => {
-      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+      if (event.seq == null) return Effect.die("Synchronized Session event is missing aggregate sequence")
       const encoded = encodeMessage(message)
       const { id, type, ...data } = encoded
       return db
@@ -191,7 +191,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
 }
 
 function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: SessionMessage.Message) {
-  if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+  if (event.seq == null) return Effect.die("Synchronized Session event is missing aggregate sequence")
   const encoded = encodeMessage(message)
   const { id, type, ...data } = encoded
   return db
@@ -330,7 +330,7 @@ export const layer = Layer.effectDiscard(
       }),
     )
     yield* events.project(SessionEvent.AgentSwitched, (event) => {
-      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+      if (event.seq == null) return Effect.die("Synchronized Session event is missing aggregate sequence")
       return db
         .update(SessionTable)
         .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
@@ -351,7 +351,7 @@ export const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* run(db, event)
-        if (event.seq === undefined)
+        if (event.seq == null)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
         yield* SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)
       }),
@@ -367,7 +367,7 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         if (existing) return yield* Effect.die(new PromptAlreadyProjected())
         yield* run(db, event)
-        if (event.seq === undefined)
+        if (event.seq == null)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
         yield* SessionInput.projectLegacyPrompted(db, {
           id: messageID,
@@ -381,7 +381,7 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.PromptLifecycle.Admitted, (event) =>
       Effect.gen(function* () {
-        if (event.seq === undefined)
+        if (event.seq == null)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
         yield* SessionInput.projectAdmitted(db, {
           admittedSeq: event.seq,
@@ -395,7 +395,7 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.PromptLifecycle.Promoted, (event) =>
       Effect.gen(function* () {
-        if (event.seq === undefined)
+        if (event.seq == null)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
         yield* insertMessage(
           db,
@@ -412,7 +412,7 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.InterruptRequested, () => Effect.void)
     yield* events.project(SessionEvent.ContextUpdated, (event) => {
-      if (!event.replay || event.seq === undefined) return run(db, event)
+      if (!event.replay || event.seq == null) return run(db, event)
       return run(db, event).pipe(
         Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)),
       )

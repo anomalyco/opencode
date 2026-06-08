@@ -45,7 +45,7 @@ export const layer = Layer.effect(
           payload: { id: event.id, type: event.type, properties: event.data },
         })
         const sync = EventV2.registry.get(event.type)?.sync
-        if (sync === undefined || event.seq === undefined || event.version === undefined) return
+        if (sync === undefined || event.seq == null || event.version == null) return
         const aggregateID = (event.data as Record<string, unknown>)[sync.aggregate]
         if (typeof aggregateID !== "string") return
         GlobalBus.emit("event", {

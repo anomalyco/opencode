@@ -413,7 +413,7 @@ export const layer = Layer.effect(
               sessionID,
               timestamp: yield* DateTime.now,
             })
-            if (event.seq === undefined)
+            if (event.seq == null)
               return yield* Effect.die("Interrupt request event is missing aggregate sequence")
             yield* execution.interrupt(sessionID, event.seq)
           }),
