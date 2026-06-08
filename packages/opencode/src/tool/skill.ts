@@ -2,7 +2,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Schema } from "effect"
 import * as Stream from "effect/Stream"
-import { Ripgrep } from "../file/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
@@ -15,19 +15,16 @@ export const SkillTool = Tool.define(
   "skill",
   Effect.gen(function* () {
     const skill = yield* Skill.Service
-    const rg = yield* Ripgrep.Service
+    const searchSvc = yield* Search.Service
 
     return {
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const info = yield* skill.get(params.name)
-          if (!info) {
-            const all = yield* skill.all()
-            const available = all.map((item) => item.name).join(", ")
-            throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
-          }
+          const info = yield* skill
+            .require(params.name)
+            .pipe(Effect.catchTag("Skill.NotFoundError", (error) => Effect.die(new Error(error.message))))
 
           yield* ctx.ask({
             permission: "skill",
@@ -39,7 +36,7 @@ export const SkillTool = Tool.define(
           const dir = path.dirname(info.location)
           const base = pathToFileURL(dir).href
           const limit = 10
-          const files = yield* rg.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
+          const files = yield* searchSvc.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
             Stream.filter((file) => !file.includes("SKILL.md")),
             Stream.map((file) => path.resolve(dir, file)),
             Stream.take(limit),

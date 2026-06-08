@@ -1,14 +1,17 @@
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Git } from "@/git"
 import {
   repositoryCachePath,
   sameRepositoryReference,
   parseRepositoryReference,
+  parseRemoteRepositoryReference,
   validateRepositoryBranch,
-  isRemoteRepositoryReference,
+  InvalidRepositoryBranchError,
+  InvalidRepositoryReferenceError,
+  UnsupportedLocalRepositoryError,
   type RemoteReference,
 } from "@/util/repository"
 
@@ -138,23 +141,26 @@ export function isError(error: unknown): error is Error {
 }
 
 export const parseRemoteReference = Effect.fn("RepositoryCache.parseRemoteReference")(function* (repository: string) {
-  const reference = parseRepositoryReference(repository)
-  if (!reference) {
+  try {
+    return parseRemoteRepositoryReference(repository)
+  } catch (error) {
+    if (error instanceof InvalidRepositoryReferenceError || error instanceof UnsupportedLocalRepositoryError) {
+      return yield* new InvalidRepositoryError({ repository: error.repository, message: error.message })
+    }
     return yield* new InvalidRepositoryError({
       repository,
-      message: "Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand",
+      message: errorMessage(error),
     })
   }
-  if (!isRemoteRepositoryReference(reference)) {
-    return yield* new InvalidRepositoryError({ repository, message: "Local file repositories are not supported" })
-  }
-  return reference
 })
 
 export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(function* (branch: string) {
   try {
     validateRepositoryBranch(branch)
   } catch (error) {
+    if (error instanceof InvalidRepositoryBranchError) {
+      return yield* new InvalidBranchError({ branch: error.branch, message: error.message })
+    }
     return yield* new InvalidBranchError({ branch, message: errorMessage(error) })
   }
 })
@@ -162,7 +168,7 @@ export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(functi
 const ensureWithServices = Effect.fn("RepositoryCache.ensureWithServices")(function* (
   input: EnsureInput,
   services: {
-    fs: AppFileSystem.Interface
+    fs: FSUtil.Interface
     git: Git.Interface
   },
 ) {
@@ -292,10 +298,10 @@ const ensureWithServices = Effect.fn("RepositoryCache.ensureWithServices")(funct
   )
 })
 
-export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service> = Layer.effect(
+export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const git = yield* Git.Service
 
     return Service.of({
@@ -307,7 +313,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
 )
 
 export const defaultLayer: Layer.Layer<Service> = layer.pipe(
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
 )
 

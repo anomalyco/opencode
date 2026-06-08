@@ -1,11 +1,13 @@
 import type { Config } from "@/config/config"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import type { MessageV2 } from "./message-v2"
 
 const COMPACTION_BUFFER = 20_000
 
-export function usable(input: { cfg: Config.Info; model: Provider.Model; outputTokenMax?: number }) {
+export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outputTokenMax?: number }) {
   const context = input.model.limit.context
   if (context === 0) return 0
 
@@ -18,8 +20,8 @@ export function usable(input: { cfg: Config.Info; model: Provider.Model; outputT
 }
 
 export function isOverflow(input: {
-  cfg: Config.Info
-  tokens: MessageV2.Assistant["tokens"]
+  cfg: ConfigV1.Info
+  tokens: SessionV1.Assistant["tokens"]
   model: Provider.Model
   outputTokenMax?: number
 }) {

@@ -26,6 +26,19 @@ const request = LLM.request({
 
 const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
 
+type OpenAIToolOutput = Extract<
+  OpenAIResponses.OpenAIResponsesBody["input"][number],
+  { readonly type: "function_call_output" }
+>
+
+const expectToolOutput = (body: OpenAIResponses.OpenAIResponsesBody): OpenAIToolOutput => {
+  const output = body.input.find(
+    (item): item is OpenAIToolOutput => "type" in item && item.type === "function_call_output",
+  )
+  expect(output).toBeDefined()
+  return output!
+}
+
 describe("OpenAI Responses route", () => {
   it.effect("prepares OpenAI Responses target", () =>
     Effect.gen(function* () {
@@ -41,6 +54,105 @@ describe("OpenAI Responses route", () => {
         max_output_tokens: 20,
         temperature: 0,
       })
+    }),
+  )
+
+  it.effect("lowers semantic service tier options", () =>
+    Effect.gen(function* () {
+      const input = LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "priority" } } })
+      expect(input.providerOptions).toEqual({ openai: { serviceTier: "priority" } })
+      const prepared = yield* LLMClient.prepare(input)
+
+      expect(prepared.body).toMatchObject({ service_tier: "priority" })
+      expect(prepared.body).not.toHaveProperty("serviceTier")
+    }),
+  )
+
+  it.effect("omits unsupported semantic service tiers", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "unsupported" } } }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("service_tier")
+    }),
+  )
+
+  it.effect("flattens top-level object unions in function schemas", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.updateRequest(request, {
+          tools: [
+            {
+              name: "read",
+              description: "Read a path or resource.",
+              inputSchema: {
+                type: "object",
+                anyOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      path: { type: "string" },
+                      reference: { anyOf: [{ type: "string" }, { type: "null" }] },
+                      limit: { type: "integer", maximum: 2000 },
+                    },
+                    required: ["path"],
+                  },
+                  {
+                    type: "object",
+                    properties: { resource: { type: "string" }, limit: { type: "integer", maximum: 51200 } },
+                    required: ["resource"],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "read",
+          description: "Read a path or resource.",
+          parameters: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+              reference: { type: "string" },
+              limit: { type: "integer", maximum: 2000 },
+              resource: { type: "string" },
+            },
+            additionalProperties: false,
+          },
+        },
+      ])
+    }),
+  )
+
+  it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Before."),
+            Message.system("Treat </system-update> literally."),
+            Message.assistant("After."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Before." },
+            { type: "input_text", text: "<system-update>\nTreat &lt;/system-update&gt; literally.\n</system-update>" },
+          ],
+        },
+        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
     }),
   )
 
@@ -248,6 +360,84 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  // Regression: screenshot/read tool results must stay structured so base64
+  // image data is not JSON-stringified into `function_call_output.output`.
+  it.effect("lowers image tool-result content as structured input_image items", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_tool_result_image",
+          model,
+          messages: [
+            Message.user("Show me the screenshot."),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { filePath: "shot.png" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_text", text: "Image read successfully" },
+        { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+      ])
+    }),
+  )
+
+  it.effect("lowers single-image tool-result content as structured input_image array", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_tool_result_image_only",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "screenshot",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "image/png", data: "AAECAw==" }],
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+      ])
+    }),
+  )
+
+  it.effect("rejects non-image media in tool-result content with a clear error", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_result_unsupported_media",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "fetch",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("OpenAI Responses")
+      expect(error.message).toContain("audio/mpeg")
+    }),
+  )
+
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
@@ -302,7 +492,7 @@ describe("OpenAI Responses route", () => {
               promptCacheKey: "session_123",
               reasoningEffort: "high",
               reasoningSummary: "auto",
-              includeEncryptedReasoning: true,
+              include: ["reasoning.encrypted_content"],
             },
           },
         }),
@@ -313,6 +503,108 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
       expect(prepared.body.reasoning).toEqual({ effort: "high", summary: "auto" })
       expect(prepared.body.text).toEqual({ verbosity: "low" })
+    }),
+  )
+
+  it.effect("accepts the full ResponseIncludable union", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          providerOptions: {
+            openai: {
+              include: ["reasoning.encrypted_content", "code_interpreter_call.outputs", "web_search_call.results"],
+            },
+          },
+        }),
+      )
+
+      expect(prepared.body.include).toEqual([
+        "reasoning.encrypted_content",
+        "code_interpreter_call.outputs",
+        "web_search_call.results",
+      ])
+    }),
+  )
+
+  it.effect("filters unknown includable values out of the include array", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          // The user passed one invalid entry alongside a valid one. Keep the
+          // valid one so the request still succeeds rather than failing on a
+          // typo from upstream config.
+          providerOptions: { openai: { include: ["reasoning.encrypted_content", "bogus.thing"] } },
+        }),
+      )
+
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+    }),
+  )
+
+  it.effect("treats an explicit empty include as no include at all", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: [] } } }),
+      )
+
+      expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
+  it.effect("treats an all-invalid include as no include at all", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: ["bogus.thing"] } } }),
+      )
+
+      expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
+  it.effect("omits include when no include is set", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({ model, prompt: "hi", providerOptions: { openai: { store: false } } }),
+      )
+
+      expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
+  it.effect("requests encrypted reasoning by default for GPT-5 reasoning models", () =>
+    Effect.gen(function* () {
+      // The native OpenAI facade configures GPT-5 stateless (store: false) with
+      // reasoningSummary: "auto" by default. Without `include`, a follow-up
+      // turn cannot replay reasoning state, so the facade also opts into
+      // `reasoning.encrypted_content` automatically.
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+      expect(prepared.body.reasoning).toEqual({ effort: "medium", summary: "auto" })
+    }),
+  )
+
+  it.effect("lets callers opt out of the GPT-5 default include", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
+          prompt: "hi",
+          providerOptions: { openai: { include: [] } },
+        }),
+      )
+
+      expect(prepared.body.include).toBeUndefined()
     }),
   )
 
@@ -456,6 +748,94 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("streams each reasoning summary part as a separate block", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, { providerOptions: { openai: { store: false } } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("FirstSecond")
+      expect(response.events).toMatchObject([
+        { type: "step-start", index: 0 },
+        {
+          type: "reasoning-start",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:0", text: "First" },
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        {
+          type: "reasoning-start",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+        { type: "step-finish", index: 0, reason: "stop" },
+        { type: "finish", reason: "stop" },
+      ])
+    }),
+  )
+
+  it.effect("closes reasoning summary parts when storage is not disabled", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        { type: "reasoning-end", id: "rs_1:1", providerMetadata: { openai: { itemId: "rs_1" } } },
+      ])
+    }),
+  )
+
   it.effect("continues a stateless reasoning conversation", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
@@ -479,6 +859,7 @@ describe("OpenAI Responses route", () => {
             ]),
             Message.user("Summarize it."),
           ],
+          providerOptions: { openai: { store: false } },
         }),
       ).pipe(
         Effect.provide(
@@ -536,6 +917,7 @@ describe("OpenAI Responses route", () => {
               { type: "text", text: "After." },
             ]),
           ],
+          providerOptions: { openai: { store: false } },
         }),
       )
 
@@ -548,6 +930,102 @@ describe("OpenAI Responses route", () => {
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
         { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("references stored reasoning items by id", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "Checked the previous diff.",
+                providerMetadata: { openai: { itemId: "rs_1" } },
+              },
+            ]),
+          ],
+          providerOptions: { openai: { store: true } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([{ type: "item_reference", id: "rs_1" }])
+    }),
+  )
+
+  it.effect("references stored provider-executed hosted tool results by id", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({
+                id: "ws_1",
+                name: "web_search",
+                input: { query: "effect 4" },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              }),
+              {
+                type: "tool-result",
+                id: "ws_1",
+                name: "web_search",
+                result: { type: "json", value: { type: "web_search_call", id: "ws_1", status: "completed" } },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              },
+            ]),
+            Message.user("Continue."),
+          ],
+          providerOptions: { openai: { store: true } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "item_reference", id: "ws_1" },
+        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
+    }),
+  )
+
+  it.effect("joins streamed summary blocks into one continuation reasoning item", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_multi_summary_continuation",
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "First",
+                providerMetadata: { openai: { itemId: "rs_1" } },
+              },
+              {
+                type: "reasoning",
+                text: "Second",
+                providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+              },
+            ]),
+          ],
+          providerOptions: { openai: { store: false } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "rs_1",
+          encrypted_content: "encrypted-state",
+          summary: [
+            { type: "summary_text", text: "First" },
+            { type: "summary_text", text: "Second" },
+          ],
+        },
       ])
     }),
   )
@@ -776,7 +1254,7 @@ describe("OpenAI Responses route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("OpenAI Responses user media content only supports images")
+      expect(error.message).toContain("OpenAI Responses does not support media type application/pdf")
     }),
   )
 
@@ -786,7 +1264,11 @@ describe("OpenAI Responses route", () => {
         Effect.provide(fixedResponse(sseEvents({ type: "error", code: "rate_limit_exceeded", message: "Slow down" }))),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Slow down" }])
+      // Prefix the code so consumers see the failure mode, not just the
+      // sometimes-generic provider message. The bare message alone meant
+      // production errors like rate limits were indistinguishable from
+      // unrelated stream failures.
+      expect(response.events).toEqual([{ type: "provider-error", message: "rate_limit_exceeded: Slow down" }])
     }),
   )
 
@@ -797,6 +1279,105 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+    }),
+  )
+
+  it.effect("falls back to error code when message is empty", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error", message: "" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+    }),
+  )
+
+  // Regression: `response.failed` carries the failure details under
+  // `response.error`, not at the top level. The previous handler only
+  // checked top-level `message`/`code` and so always emitted the bare
+  // "OpenAI Responses response failed" string, hiding the real cause.
+  it.effect("surfaces response.failed details from response.error", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.failed",
+              response: {
+                id: "resp_failed_1",
+                error: { code: "server_error", message: "Upstream model unavailable" },
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "server_error: Upstream model unavailable" }])
+    }),
+  )
+
+  it.effect("surfaces response.failed code when no nested message is present", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.failed",
+              response: { id: "resp_failed_2", error: { code: "invalid_prompt" } },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "invalid_prompt" }])
+    }),
+  )
+
+  it.effect("surfaces error event details even when they arrive nested under response.error", () =>
+    Effect.gen(function* () {
+      // Some OpenAI-compatible proxies and older SDK versions wrap the
+      // top-level error fields into a nested `response.error` payload
+      // when they bubble up an HTTP error as an SSE `error` event. Honour
+      // both shapes so the user still sees the underlying cause instead
+      // of the catch-all string.
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              response: { error: { code: "context_length_exceeded", message: "prompt too long" } },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "context_length_exceeded: prompt too long",
+          classification: "context-overflow",
+        },
+      ])
+    }),
+  )
+
+  it.effect("falls back to a stable default when both error and response are absent", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses stream error" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when response.failed has no error payload", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "response.failed", response: { id: "resp_failed_3" } }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses response failed" }])
     }),
   )
 

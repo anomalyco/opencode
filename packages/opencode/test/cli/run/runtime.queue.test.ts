@@ -4,6 +4,7 @@ import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "@/cli/cmd/
 
 function footer() {
   const prompts = new Set<(input: RunPrompt) => void>()
+  const queuedRemoves = new Set<(messageID: string) => void>()
   const closes = new Set<() => void>()
   const events: FooterEvent[] = []
   const commits: StreamCommit[] = []
@@ -17,6 +18,12 @@ function footer() {
       prompts.add(fn)
       return () => {
         prompts.delete(fn)
+      }
+    },
+    onQueuedRemove(fn) {
+      queuedRemoves.add(fn)
+      return () => {
+        queuedRemoves.delete(fn)
       }
     },
     onClose(fn) {
@@ -65,6 +72,9 @@ function footer() {
       for (const fn of [...prompts]) {
         fn(next)
       }
+    },
+    removeQueued(messageID: string) {
+      for (const fn of [...queuedRemoves]) fn(messageID)
     },
   }
 }
@@ -133,6 +143,7 @@ describe("run runtime queue", () => {
         text: "hello",
         phase: "start",
         source: "system",
+        messageID: expect.any(String),
       },
     ])
   })
@@ -195,6 +206,22 @@ describe("run runtime queue", () => {
     await task
   })
 
+  test("shell mode does not emit a turn duration summary", async () => {
+    const ui = footer()
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async () => {
+        ui.api.close()
+      },
+    })
+
+    ui.submit("ls", "shell")
+    await task
+
+    expect(ui.events.some((event) => event.type === "turn.duration")).toBe(false)
+  })
+
   test("preserves whitespace for initial input", async () => {
     const ui = footer()
     const seen: string[] = []
@@ -215,6 +242,7 @@ describe("run runtime queue", () => {
         text: "  hello  ",
         phase: "start",
         source: "system",
+        messageID: expect.any(String),
       },
     ])
   })
@@ -250,6 +278,7 @@ describe("run runtime queue", () => {
             text: "/fmt bash",
             phase: "start",
             source: "system",
+            messageID: expect.any(String),
           },
         ])
         ui.api.close()
@@ -287,6 +316,82 @@ describe("run runtime queue", () => {
     await task
 
     expect(seen).toEqual(["one", "two"])
+  })
+
+  test("exposes ordinary in-flight prompts for removal before sending", async () => {
+    const ui = footer()
+    const turns: RunPrompt[] = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input) => {
+        turns.push(input)
+        await gate
+      },
+    })
+
+    ui.submit("one")
+    ui.submit("two")
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(turns.map((item) => item.text)).toEqual(["one"])
+    expect(turns[0]?.messageID).toEqual(expect.any(String))
+    expect(ui.commits.map((item) => item.text)).toEqual(["one"])
+    const first = ui.events.find((item) => item.type === "queued.prompts")
+    const event = ui.events.findLast((item) => item.type === "queued.prompts")
+    expect(first?.type === "queued.prompts" ? first.prompts : []).toEqual([])
+    expect(
+      first?.type === "queued.prompts" && event?.type === "queued.prompts" ? first.prompts === event.prompts : true,
+    ).toBe(false)
+    expect(ui.events.findLast((item) => item.type === "queue")).toEqual({ type: "queue", queue: 1 })
+    expect(event?.type === "queued.prompts" ? event.prompts.map((item) => item.prompt.text) : []).toEqual(["two"])
+    if (event?.type === "queued.prompts") ui.removeQueued(event.prompts[0]!.messageID)
+    await Promise.resolve()
+
+    wake?.()
+    ui.api.close()
+    await task
+    expect(turns.map((item) => item.text)).toEqual(["one"])
+  })
+
+  test("removing one managed queued prompt preserves the others", async () => {
+    const ui = footer()
+    const turns: string[] = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input) => {
+        turns.push(input.text)
+        if (input.text === "active") await gate
+        if (input.text === "queued three") ui.api.close()
+      },
+    })
+
+    ui.submit("active")
+    ui.submit("queued one")
+    ui.submit("queued two")
+    ui.submit("queued three")
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const event = ui.events.findLast((item) => item.type === "queued.prompts")
+    if (event?.type === "queued.prompts") {
+      const second = event.prompts.find((item) => item.prompt.text === "queued two")
+      if (second) ui.removeQueued(second.messageID)
+    }
+
+    wake?.()
+    await task
+    expect(turns).toEqual(["active", "queued one", "queued three"])
   })
 
   test("drains a prompt queued during an in-flight turn", async () => {

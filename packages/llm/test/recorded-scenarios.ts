@@ -1,19 +1,21 @@
 import { expect } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import {
   LLM,
   LLMEvent,
   LLMResponse,
   Message,
+  ToolRuntime,
   ToolChoice,
   ToolDefinition,
+  toDefinitions,
   type ContentPart,
   type FinishReason,
   type LLMRequest,
   type Model,
 } from "../src"
 import { LLMClient } from "../src/route"
-import { tool } from "../src/tool"
+import { Tool } from "../src/tool"
 
 export const weatherToolName = "get_weather"
 
@@ -40,7 +42,7 @@ export const weatherTool = ToolDefinition.make({
   },
 })
 
-export const weatherRuntimeTool = tool({
+export const weatherRuntimeTool = Tool.make({
   description: weatherTool.description,
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -87,14 +89,60 @@ const restroomImage = () =>
   )
 
 export const runWeatherToolLoop = (request: LLMRequest) =>
-  LLMClient.stream({
-    request,
-    tools: { [weatherToolName]: weatherRuntimeTool },
-    stopWhen: LLMClient.stepCountIs(10),
-  }).pipe(
-    Stream.runCollect,
-    Effect.map((events) => Array.from(events)),
-  )
+  Effect.gen(function* () {
+    const tools = { [weatherToolName]: weatherRuntimeTool }
+    let next = LLM.updateRequest(request, { tools: toDefinitions(tools) })
+    const events: LLMEvent[] = []
+
+    for (let step = 0; step < 10; step++) {
+      const response = yield* LLMClient.generate(next)
+      events.push(...response.events.filter((event) => event.type !== "finish"))
+      const calls = response.events.filter(LLMEvent.is.toolCall).filter((call) => !call.providerExecuted)
+      if (calls.length === 0) {
+        const finish = response.events.find(LLMEvent.is.finish)
+        if (finish) events.push(finish)
+        return events
+      }
+
+      const dispatched = yield* Effect.forEach(calls, (call) =>
+        ToolRuntime.dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
+      )
+      events.push(...dispatched.flatMap(([, result]) => result.events))
+      next = LLM.updateRequest(next, {
+        messages: [
+          ...next.messages,
+          Message.assistant(assistantContent(response.events)),
+          ...dispatched.map(([call, result]) => Message.tool({ id: call.id, name: call.name, result: result.result })),
+        ],
+      })
+    }
+
+    throw new Error("Weather tool loop exceeded 10 steps")
+  })
+
+const assistantContent = (events: ReadonlyArray<LLMEvent>) => {
+  const content: ContentPart[] = []
+  for (const event of events) {
+    if (event.type === "text-delta" || event.type === "reasoning-delta") {
+      const type = event.type === "text-delta" ? "text" : "reasoning"
+      const last = content.at(-1)
+      if (last?.type === type) {
+        content[content.length - 1] = { ...last, text: `${last.text}${event.text}` }
+      } else {
+        content.push({ type, text: event.text })
+      }
+      continue
+    }
+    if (event.type === "text-end" || event.type === "reasoning-end") {
+      const type = event.type === "text-end" ? "text" : "reasoning"
+      const last = content.at(-1)
+      if (last?.type === type) content[content.length - 1] = { ...last, providerMetadata: event.providerMetadata }
+      continue
+    }
+    if (event.type === "tool-call") content.push(event)
+  }
+  return content
+}
 
 export const expectFinish = (
   events: ReadonlyArray<LLMEvent>,
@@ -158,7 +206,7 @@ const normalizeImageText = (value: string) =>
 const encryptedReasoningOptions = {
   openai: {
     store: false,
-    includeEncryptedReasoning: true,
+    include: ["reasoning.encrypted_content"],
     reasoningEffort: "low",
     reasoningSummary: "auto",
   },
@@ -317,6 +365,47 @@ const runImageScenario = (context: GoldenScenarioContext) =>
     ])
   })
 
+// Reproduces a tool-result image round trip: a tool returns image bytes, and
+// the next model turn must receive provider-native image content instead of a
+// JSON-stringified base64 blob.
+const screenshotToolName = "read_screenshot"
+const runImageToolResultScenario = (context: GoldenScenarioContext) =>
+  Effect.gen(function* () {
+    const image = yield* restroomImage()
+    const response = yield* generate(
+      LLM.request({
+        id: `${context.id}_image_tool_result`,
+        model: context.model,
+        system: "Read images carefully. Reply only with the visible text, lowercase, no punctuation.",
+        cache: "none",
+        generation: generation(context, context.maxTokens ?? 40),
+        messages: [
+          Message.user("Use the read_screenshot tool, then reply with the words shown."),
+          Message.assistant([{ type: "tool-call", id: "call_screenshot_1", name: screenshotToolName, input: {} }]),
+          Message.tool({
+            id: "call_screenshot_1",
+            name: screenshotToolName,
+            resultType: "content",
+            result: [
+              { type: "text", text: "Image read successfully" },
+              { type: "media", mediaType: "image/png", data: image },
+            ],
+          }),
+        ],
+        tools: [
+          ToolDefinition.make({
+            name: screenshotToolName,
+            description: "Capture a screenshot of the current screen.",
+            inputSchema: { type: "object", properties: {}, additionalProperties: false },
+          }),
+        ],
+      }),
+    )
+
+    expectFinish(response.events, "stop")
+    expect(normalizeImageText(response.text)).toBe(RESTROOM_IMAGE_TEXT)
+  })
+
 const runReasoningScenario = (context: GoldenScenarioContext) =>
   runGeneratedConversation(context, [
     user("Think briefly, then reply exactly with: Hello!"),
@@ -359,6 +448,11 @@ const goldenScenarios = {
   "tool-call": { title: "streams tool call", tags: ["tool", "tool-call", "golden"], run: runToolCallScenario },
   "tool-loop": { title: "drives a tool loop", tags: ["tool", "tool-loop", "golden"], run: runToolLoopScenario },
   image: { title: "reads image text", tags: ["media", "image", "vision", "golden"], run: runImageScenario },
+  "image-tool-result": {
+    title: "reads image returned from tool result",
+    tags: ["media", "image", "vision", "tool", "tool-result", "golden"],
+    run: runImageToolResultScenario,
+  },
   reasoning: { title: "uses reasoning", tags: ["reasoning", "golden"], run: runReasoningScenario },
   "reasoning-continuation": {
     title: "continues encrypted reasoning",

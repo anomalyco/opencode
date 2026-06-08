@@ -1,4 +1,3 @@
-import { Redactor } from "@opencode-ai/http-recorder"
 import * as Anthropic from "../../src/providers/anthropic"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
 import * as Google from "../../src/providers/google"
@@ -64,7 +63,7 @@ const redactCloudflareURL = (url: string) =>
     .replace(/\/v1\/[^/]+\/[^/]+\/compat\//, "/v1/{account}/{gateway}/compat/")
 
 const cloudflareOptions = {
-  redactor: Redactor.defaults({ url: { transform: redactCloudflareURL } }),
+  redact: { url: redactCloudflareURL },
 }
 
 describeRecordedGoldenScenarios([
@@ -73,7 +72,7 @@ describeRecordedGoldenScenarios([
     prefix: "openai-chat",
     model: openAIChat,
     requires: ["OPENAI_API_KEY"],
-    scenarios: ["text", "tool-call", "tool-loop"],
+    scenarios: ["text", "tool-call", "tool-loop", { id: "image-tool-result", maxTokens: 40 }],
   },
   {
     name: "OpenAI Responses gpt-5.5",
@@ -87,6 +86,7 @@ describeRecordedGoldenScenarios([
       { id: "reasoning-continuation", temperature: false },
       { id: "tool-call", temperature: false },
       { id: "tool-loop", temperature: false },
+      { id: "image-tool-result", temperature: false, maxTokens: 40 },
     ],
   },
   {
@@ -102,7 +102,7 @@ describeRecordedGoldenScenarios([
     prefix: "anthropic-messages",
     model: anthropicHaiku,
     requires: ["ANTHROPIC_API_KEY"],
-    options: { redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }) },
+    options: { redact: { allowRequestHeaders: ["anthropic-version"] } },
     scenarios: ["text", "tool-call"],
   },
   {
@@ -111,15 +111,23 @@ describeRecordedGoldenScenarios([
     model: anthropicOpus,
     requires: ["ANTHROPIC_API_KEY"],
     tags: ["flagship"],
-    options: { redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }) },
-    scenarios: [{ id: "tool-loop", temperature: false }],
+    options: { redact: { allowRequestHeaders: ["anthropic-version"] } },
+    scenarios: [
+      { id: "tool-loop", temperature: false },
+      { id: "image-tool-result", temperature: false, maxTokens: 40 },
+    ],
   },
   {
     name: "Gemini 2.5 Flash",
     prefix: "gemini",
     model: gemini,
     requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
-    scenarios: [{ id: "text", maxTokens: 80 }, "tool-call", { id: "image", maxTokens: 160 }],
+    scenarios: [
+      { id: "text", maxTokens: 80 },
+      "tool-call",
+      { id: "image", maxTokens: 160 },
+      { id: "image-tool-result", maxTokens: 40 },
+    ],
   },
   {
     name: "xAI Grok 3 Mini",

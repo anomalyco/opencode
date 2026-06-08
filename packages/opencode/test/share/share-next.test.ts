@@ -7,22 +7,23 @@ import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/s
 import { Account } from "../../src/account/account"
 import { AccountRepo } from "../../src/account/repo"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
 import type { SessionID } from "../../src/session/schema"
 import { ShareNext } from "@/share/share-next"
-import { SessionShareTable } from "../../src/share/share.sql"
-import { Database } from "@/storage/db"
+import { SessionShareTable } from "@opencode-ai/core/share/sql"
+import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 
 const env = Layer.mergeAll(
   Session.defaultLayer,
-  AccountRepo.layer,
+  AccountRepo.defaultLayer,
+  Database.defaultLayer,
   NodeFileSystem.layer,
   CrossSpawnSpawner.defaultLayer,
 )
@@ -42,9 +43,10 @@ const none = HttpClient.make(() => Effect.die("unexpected http call"))
 function live(client: HttpClient.HttpClient) {
   const http = Layer.succeed(HttpClient.HttpClient, client)
   return ShareNext.layer.pipe(
-    Layer.provide(Bus.layer),
-    Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(http))),
+    Layer.provide(EventV2Bridge.defaultLayer),
+    Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(http))),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(Database.defaultLayer),
     Layer.provide(http),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Session.defaultLayer),
@@ -54,15 +56,16 @@ function live(client: HttpClient.HttpClient) {
 function wired(client: HttpClient.HttpClient) {
   const http = Layer.succeed(HttpClient.HttpClient, client)
   return Layer.mergeAll(
-    Bus.layer,
+    EventV2Bridge.defaultLayer,
     ShareNext.layer,
     Session.defaultLayer,
-    AccountRepo.layer,
+    AccountRepo.defaultLayer,
+    Database.defaultLayer,
     NodeFileSystem.layer,
     CrossSpawnSpawner.defaultLayer,
   ).pipe(
-    Layer.provide(Bus.layer),
-    Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(http))),
+    Layer.provide(EventV2Bridge.defaultLayer),
+    Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(http))),
     Layer.provide(Config.defaultLayer),
     Layer.provide(http),
     Layer.provide(Provider.defaultLayer),
@@ -70,7 +73,15 @@ function wired(client: HttpClient.HttpClient) {
 }
 
 const share = (id: SessionID) =>
-  Database.use((db) => db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, id)).get())
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    return yield* db
+      .select()
+      .from(SessionShareTable)
+      .where(eq(SessionShareTable.session_id, id))
+      .get()
+      .pipe(Effect.orDie)
+  })
 
 const seed = (url: string, org?: string) =>
   AccountRepo.Service.use((repo) =>
@@ -169,7 +180,7 @@ describe("ShareNext", () => {
           expect(result.url).toBe("https://legacy-share.example.com/share/abc")
           expect(result.secret).toBe("sec_123")
 
-          const row = share(session.id)
+          const row = yield* share(session.id)
           expect(row?.id).toBe("shr_abc")
           expect(row?.url).toBe("https://legacy-share.example.com/share/abc")
           expect(row?.secret).toBe("sec_123")
@@ -207,7 +218,7 @@ describe("ShareNext", () => {
             yield* ShareNext.use.remove(session.id)
           }).pipe(Effect.provide(live(client)))
 
-          expect(share(session.id)).toBeUndefined()
+          expect(yield* share(session.id)).toBeUndefined()
           expect(seen.map((req) => [req.method, req.url])).toEqual([
             ["POST", "https://legacy-share.example.com/api/share"],
             ["DELETE", "https://legacy-share.example.com/api/share/shr_abc"],
@@ -228,7 +239,7 @@ describe("ShareNext", () => {
         )
 
         expect(Exit.isFailure(exit)).toBe(true)
-        expect(share(session.id)).toBeUndefined()
+        expect(yield* share(session.id)).toBeUndefined()
       }),
     ),
   )
@@ -245,28 +256,26 @@ describe("ShareNext", () => {
         })
 
         return Effect.gen(function* () {
-          const bus = yield* Bus.Service
+          const events = yield* EventV2Bridge.Service
           const share = yield* ShareNext.Service
           const session = yield* Session.Service
 
           const info = yield* session.create({ title: "first" })
           yield* share.init()
           yield* Effect.sleep(50)
-          yield* Effect.sync(() =>
-            Database.use((db) =>
-              db
-                .insert(SessionShareTable)
-                .values({
-                  session_id: info.id,
-                  id: "shr_abc",
-                  url: "https://legacy-share.example.com/share/abc",
-                  secret: "sec_123",
-                })
-                .run(),
-            ),
-          )
+          const { db } = yield* Database.Service
+          yield* db
+            .insert(SessionShareTable)
+            .values({
+              session_id: info.id,
+              id: "shr_abc",
+              url: "https://legacy-share.example.com/share/abc",
+              secret: "sec_123",
+            })
+            .run()
+            .pipe(Effect.orDie)
 
-          yield* bus.publish(Session.Event.Diff, {
+          yield* events.publish(Session.Event.Diff, {
             sessionID: info.id,
             diff: [
               {
@@ -279,7 +288,7 @@ describe("ShareNext", () => {
               },
             ],
           })
-          yield* bus.publish(Session.Event.Diff, {
+          yield* events.publish(Session.Event.Diff, {
             sessionID: info.id,
             diff: [
               {
@@ -292,7 +301,11 @@ describe("ShareNext", () => {
               },
             ],
           })
-          yield* Effect.sleep(1_250)
+          yield* pollWithTimeout(
+            Effect.sync(() => (seen.length === 1 ? true : undefined)),
+            "timed out waiting for share sync",
+            "5 seconds",
+          )
 
           expect(seen).toHaveLength(1)
           expect(seen[0].url).toBe("https://legacy-share.example.com/api/share/shr_abc/sync")

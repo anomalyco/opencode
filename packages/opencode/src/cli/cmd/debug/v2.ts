@@ -3,6 +3,7 @@ import { Effect, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
 
 export const V2Command = effectCmd({
@@ -37,7 +38,7 @@ export const V2Command = effectCmd({
       Effect.withSpan("Cli.debug.v2"),
       Effect.provide(
         LocationServiceMap.get({
-          directory: process.cwd(),
+          directory: AbsolutePath.make(process.cwd()),
         }),
       ),
       Effect.provide(LocationServiceMap.layer),

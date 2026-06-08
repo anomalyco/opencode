@@ -68,6 +68,7 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | GPT 5                  | gpt-5                  | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
 | GPT 5 Codex            | gpt-5-codex            | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
 | GPT 5 Nano             | gpt-5-nano             | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
+| Claude Opus 4.8        | claude-opus-4-8        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.7        | claude-opus-4-7        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6        | claude-opus-4-6        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.5        | claude-opus-4-5        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
@@ -80,18 +81,22 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | Gemini 3.5 Flash       | gemini-3.5-flash       | `https://opencode.ai/zen/v1/models/gemini-3.5-flash` | `@ai-sdk/google`            |
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`   | `@ai-sdk/google`            |
-| Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5.1                | glm-5.1                | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5                  | glm-5                  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Kimi K2.5              | kimi-k2.5              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Kimi K2.6              | kimi-k2.6              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| Nemotron 3 Super Free  | nemotron-3-super-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
 OpenCode 設定で使う [model id](/docs/config/#models) は `opencode/<model-id>` 形式です。たとえば、GPT 5.5 では設定に `opencode/gpt-5.5` を使用します。
 
@@ -115,16 +120,21 @@ https://opencode.ai/zen/v1/models
 | --------------------------------- | ------ | ------- | ----------- | ------------ |
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | DeepSeek V4 Flash Free            | Free   | Free    | Free        | -            |
-| Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
+| MiMo-V2.5 Free                    | Free   | Free    | Free        | -            |
+| Nemotron 3 Ultra Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | GLM 5.1                           | $1.40  | $4.40   | $0.26       | -            |
 | GLM 5                             | $1.00  | $3.20   | $0.20       | -            |
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10       | -            |
 | Kimi K2.6                         | $0.95  | $4.00   | $0.16       | -            |
+| Qwen3.7 Max                       | $2.50  | $7.50   | $0.50       | $3.125       |
+| Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04       | $0.50        |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
-| Grok Build 0.1                    | 1.00   | $2.00   | $0.20       | -            |
+| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03       | -            |
+| Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
+| Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.7                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.6                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.5                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -168,7 +178,8 @@ https://opencode.ai/zen/v1/models
 無料モデル:
 
 - DeepSeek V4 Flash Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
-- Nemotron 3 Super Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
+- MiMo-V2.5 Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
+- Nemotron 3 Ultra Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Big Pickle はステルスモデルで、期間限定で OpenCode で無料提供されています。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 
 ご不明な点があれば、<a href={email}>お問い合わせください</a>。
@@ -219,7 +230,8 @@ https://opencode.ai/zen/v1/models
 
 - Big Pickle: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - DeepSeek V4 Flash Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
-- Nemotron 3 Super Free（NVIDIA の無料エンドポイント）: [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) に基づいて提供されます。試用専用であり、本番環境や機密性の高いデータには使用しないでください。プロンプトと出力は、NVIDIA が自社のモデルとサービスを改善するために記録します。個人情報や機密データは送信しないでください。
+- MiMo-V2.5 Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
+- Nemotron 3 Ultra Free（NVIDIA の無料エンドポイント）: 試用専用です — 個人情報や機密データは送信しないでください。お客様の利用は、セキュリティ目的および NVIDIA の製品とサービスの改善のために記録されます。改善目的で記録されたセッションデータは、お客様の身元や永続的な識別子とは関連付けられません。当社のデータ処理慣行の詳細については、[プライバシーポリシー](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)をご覧ください。このエンドポイントを利用することで、お客様はそのような情報の当社による収集、記録、利用、および [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) に同意したものとみなされます。
 - OpenAI APIs: リクエストは [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) に従って 30 日間保持されます。
 - Anthropic APIs: リクエストは [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) に従って 30 日間保持されます。
 

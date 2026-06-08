@@ -4,9 +4,8 @@ import { useKeyboard, type JSX } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { RunFooterMenu, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
-import { formatBindings } from "./keymap.shared"
 import type { RunFooterTheme } from "./theme"
-import type { FooterKeybinds, FooterSubagentTab, RunCommand, RunInput, RunProvider } from "./types"
+import type { FooterQueuedPrompt, FooterSubagentTab, RunCommand, RunInput, RunProvider } from "./types"
 
 type PanelEntry = RunFooterMenuItem & {
   category: string
@@ -15,6 +14,9 @@ type PanelEntry = RunFooterMenuItem & {
 
 type CommandEntry =
   | (PanelEntry & { action: "model" })
+  | (PanelEntry & { action: "editor" })
+  | (PanelEntry & { action: "skill" })
+  | (PanelEntry & { action: "queued" })
   | (PanelEntry & { action: "subagent" })
   | (PanelEntry & { action: "variant.cycle" })
   | (PanelEntry & { action: "variant.list" })
@@ -33,9 +35,17 @@ type VariantEntry = PanelEntry & {
   current: boolean
 }
 
+type SkillEntry = PanelEntry & {
+  name: string
+}
+
 type SubagentEntry = PanelEntry & {
   sessionID: string
   current: boolean
+}
+
+type QueuedEntry = PanelEntry & {
+  prompt: FooterQueuedPrompt
 }
 
 type MenuState = ReturnType<typeof createFooterMenuState>
@@ -101,6 +111,10 @@ function categoryRank(category: string) {
 function subagentStatusLabel(status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return "done"
+  }
+
+  if (status === "cancelled") {
+    return "cancelled"
   }
 
   if (status === "error") {
@@ -199,94 +213,129 @@ function PanelShell(props: {
   inputRef: (input: InputRenderable) => void
   onQuery: (query: string) => void
   children: JSX.Element
+  dark?: boolean
+  chrome?: "default" | "minimal"
 }) {
-  return (
-    <box id={props.id} width="100%" flexDirection="column" backgroundColor="transparent" flexShrink={0}>
+  const background = () => (props.dark ? props.theme().shade : props.theme().surface)
+  const minimal = () => props.chrome === "minimal"
+  const content = (
+    <>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
       <box
-        width="100%"
-        flexDirection="column"
-        border={["left"]}
-        borderColor={props.theme().highlight}
-        backgroundColor="transparent"
-        customBorderChars={PANEL_BORDER}
-        flexShrink={0}
-      >
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
-        <box
-          width="100%"
-          height={1}
-          paddingLeft={PANEL_PAD}
-          paddingRight={PANEL_PAD}
-          flexDirection="row"
-          gap={1}
-          flexShrink={0}
-          backgroundColor={props.theme().surface}
-        >
-          <text fg={props.theme().text} attributes={TextAttributes.BOLD} wrapMode="none" flexShrink={0}>
-            {props.title}
-          </text>
-          {props.countVisible !== false ? (
-            <text fg={props.theme().muted} wrapMode="none" flexShrink={0}>
-              {countLabel(props.count, props.total, props.query)}
-            </text>
-          ) : null}
-          <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
-          <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
-            esc
-          </text>
-        </box>
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
-        <box
-          width="100%"
-          height={1}
-          paddingLeft={PANEL_PAD}
-          paddingRight={PANEL_PAD}
-          flexShrink={0}
-          backgroundColor={props.theme().surface}
-        >
-          <input
-            width="100%"
-            focusedBackgroundColor={props.theme().surface}
-            focusedTextColor={props.theme().text}
-            placeholder={props.placeholder}
-            placeholderColor={props.theme().muted}
-            cursorColor={props.theme().highlight}
-            onInput={props.onQuery}
-            ref={(input) => {
-              props.inputRef(input)
-              input.traits = { status: "FILTER" }
-              queueMicrotask(() => {
-                if (!input.isDestroyed) {
-                  input.focus()
-                }
-              })
-            }}
-          />
-        </box>
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
-        <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={props.theme().surface}>
-          {props.children}
-        </box>
-      </box>
-      <box
-        id={`${props.id}-bottom`}
         width="100%"
         height={1}
-        border={["left"]}
-        borderColor={props.theme().highlight}
-        backgroundColor="transparent"
-        customBorderChars={PANEL_BOTTOM_BORDER}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        flexDirection="row"
+        gap={1}
         flexShrink={0}
+        backgroundColor={background()}
       >
-        <box
+        <text fg={props.theme().text} attributes={TextAttributes.BOLD} wrapMode="none" flexShrink={0}>
+          {props.title}
+        </text>
+        {props.countVisible !== false ? (
+          <text fg={props.theme().muted} wrapMode="none" flexShrink={0}>
+            {countLabel(props.count, props.total, props.query)}
+          </text>
+        ) : null}
+        <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
+        <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
+          esc
+        </text>
+      </box>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box
+        width="100%"
+        height={1}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        flexShrink={0}
+        backgroundColor={background()}
+      >
+        <input
           width="100%"
-          height={1}
-          border={["bottom"]}
-          borderColor={props.theme().surface}
-          backgroundColor="transparent"
-          customBorderChars={HALF_BLOCK_BORDER}
+          focusedBackgroundColor={background()}
+          focusedTextColor={props.theme().text}
+          placeholder={props.placeholder}
+          placeholderColor={props.theme().muted}
+          cursorColor={props.theme().highlight}
+          onInput={props.onQuery}
+          ref={(input) => {
+            props.inputRef(input)
+            input.traits = { status: "FILTER" }
+            queueMicrotask(() => {
+              if (!input.isDestroyed) {
+                input.focus()
+              }
+            })
+          }}
         />
       </box>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={background()}>
+        {props.children}
+      </box>
+    </>
+  )
+  return (
+    <box id={props.id} width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
+      {minimal() ? (
+        <box width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
+          {content}
+        </box>
+      ) : (
+        <box
+          width="100%"
+          flexDirection="column"
+          border={["left"]}
+          borderColor={props.theme().highlight}
+          backgroundColor="transparent"
+          customBorderChars={PANEL_BORDER}
+          flexShrink={0}
+        >
+          {content}
+        </box>
+      )}
+      {minimal() ? (
+        <box
+          id={`${props.id}-bottom`}
+          width="100%"
+          height={1}
+          border={false}
+          backgroundColor="transparent"
+          flexShrink={0}
+        >
+          <box
+            width="100%"
+            height={1}
+            border={["bottom"]}
+            borderColor={background()}
+            backgroundColor="transparent"
+            customBorderChars={HALF_BLOCK_BORDER}
+          />
+        </box>
+      ) : (
+        <box
+          id={`${props.id}-bottom`}
+          width="100%"
+          height={1}
+          border={["left"]}
+          borderColor={props.theme().highlight}
+          backgroundColor="transparent"
+          customBorderChars={PANEL_BOTTOM_BORDER}
+          flexShrink={0}
+        >
+          <box
+            width="100%"
+            height={1}
+            border={["bottom"]}
+            borderColor={background()}
+            backgroundColor="transparent"
+            customBorderChars={HALF_BLOCK_BORDER}
+          />
+        </box>
+      )}
     </box>
   )
 }
@@ -295,11 +344,15 @@ export function RunCommandMenuBody(props: {
   theme: Accessor<RunFooterTheme>
   commands: Accessor<RunCommand[] | undefined>
   subagents: Accessor<FooterSubagentTab[]>
+  queued: Accessor<FooterQueuedPrompt[]>
   variants: Accessor<string[]>
-  keybinds: FooterKeybinds
+  variantCycle: string
   onClose: () => void
   onModel: () => void
+  onEditor: () => void
+  onSkill: () => void
   onSubagent: () => void
+  onQueued: () => void
   onVariant: () => void
   onVariantCycle: () => void
   onCommand: (name: string) => void
@@ -308,42 +361,30 @@ export function RunCommandMenuBody(props: {
 }) {
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
+  const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
+  const activeSubagentCount = createMemo(() => props.subagents().filter((item) => item.status === "running").length)
   const entries = createMemo<CommandEntry[]>(() => {
-    const builtins = ["new"]
-    return [
+    const builtins = ["editor", "new"]
+    const session: CommandEntry[] = [
       {
-        action: "model",
-        category: "Suggested",
-        display: "Switch model",
+        action: "editor",
+        category: "Session",
+        display: "Open editor",
+        footer: "/editor",
+        keywords: "editor compose draft external editor",
       },
       ...(props.subagents().length > 0
         ? [
             {
               action: "subagent" as const,
-              category: "Suggested",
+              category: "Session",
               display: "View subagents",
-              footer: `${props.subagents().length} active`,
+              footer:
+                activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
               keywords: props
                 .subagents()
                 .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
                 .join(" "),
-            },
-          ]
-        : []),
-      {
-        action: "variant.cycle",
-        category: "Suggested",
-        display: "Variant cycle",
-        footer: formatBindings(props.keybinds.variantCycle, props.keybinds.leader),
-        keywords: "variant cycle",
-      },
-      ...(props.variants().length > 0
-        ? [
-            {
-              action: "variant.list" as const,
-              category: "Suggested",
-              display: "Switch model variant",
-              keywords: `variant variants ${props.variants().join(" ")}`,
             },
           ]
         : []),
@@ -355,23 +396,82 @@ export function RunCommandMenuBody(props: {
         footer: "/new",
         keywords: "new session clear",
       },
-      ...(props.commands() ?? [])
-        .filter((item) => item.source !== "skill" && !builtins.includes(item.name))
-        .map(
-          (item) =>
-            ({
-              action: "slash",
-              category: item.source === "mcp" ? "MCP Commands" : "Project Commands",
-              name: item.name,
-              display: item.name,
-              footer: `/${item.name}`,
-              keywords:
-                item.source === "mcp"
-                  ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
-                  : `/${item.name} ${item.name} ${item.description ?? ""}`,
-            }) satisfies CommandEntry,
-        )
-        .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display)),
+    ]
+    const prompt: CommandEntry[] =
+      props.commands() === undefined || skills().length > 0
+        ? [
+            {
+              action: "skill" as const,
+              category: "Prompt",
+              display: "Skills",
+              footer: "/skills",
+              keywords: `skill skills ${skills()
+                .map((item) => `${item.name} ${item.description ?? ""}`)
+                .join(" ")}`.trim(),
+            },
+          ]
+        : []
+    const agent: CommandEntry[] = [
+      {
+        action: "model",
+        category: "Agent",
+        display: "Switch model",
+      },
+      ...(props.queued().length > 0
+        ? [
+            {
+              action: "queued" as const,
+              category: "Agent",
+              display: "Manage queued prompts",
+              footer: `${props.queued().length} queued`,
+              keywords: props
+                .queued()
+                .map((item) => item.prompt.text)
+                .join(" "),
+            },
+          ]
+        : []),
+      {
+        action: "variant.cycle",
+        category: "Agent",
+        display: "Variant cycle",
+        footer: props.variantCycle,
+        keywords: "variant cycle",
+      },
+      ...(props.variants().length > 0
+        ? [
+            {
+              action: "variant.list" as const,
+              category: "Agent",
+              display: "Switch model variant",
+              keywords: `variant variants ${props.variants().join(" ")}`,
+            },
+          ]
+        : []),
+    ]
+    const commands = (props.commands() ?? [])
+      .filter((item) => item.source !== "skill" && !builtins.includes(item.name))
+      .map(
+        (item) =>
+          ({
+            action: "slash",
+            category: item.source === "mcp" ? "MCP Commands" : "Project Commands",
+            name: item.name,
+            display: item.name,
+            footer: `/${item.name}`,
+            keywords:
+              item.source === "mcp"
+                ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
+                : `/${item.name} ${item.name} ${item.description ?? ""}`,
+          }) satisfies CommandEntry,
+      )
+      .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display))
+
+    return [
+      ...session,
+      ...prompt,
+      ...agent,
+      ...commands,
       { action: "exit", category: "System", display: "Exit", footer: "/exit", keywords: "/exit exit" },
     ]
   })
@@ -383,8 +483,23 @@ export function RunCommandMenuBody(props: {
       return
     }
 
+    if (item.action === "editor") {
+      props.onEditor()
+      return
+    }
+
+    if (item.action === "skill") {
+      props.onSkill()
+      return
+    }
+
     if (item.action === "subagent") {
       props.onSubagent()
+      return
+    }
+
+    if (item.action === "queued") {
+      props.onQueued()
       return
     }
 
@@ -446,6 +561,8 @@ export function RunCommandMenuBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-command-list"
@@ -460,6 +577,8 @@ export function RunCommandMenuBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={!query().trim()}
+        background
+        headerColor={props.theme().muted}
       />
     </PanelShell>
   )
@@ -541,6 +660,8 @@ export function RunSubagentSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-subagent-list"
@@ -550,11 +671,190 @@ export function RunSubagentSelectBody(props: {
         offset={menu.offset}
         rows={menu.rows}
         limit={SUBAGENT_LIST_ROWS}
-        empty="No active subagents"
+        empty="No subagents found"
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={false}
+        background
+      />
+    </PanelShell>
+  )
+}
+
+export function RunQueuedPromptSelectBody(props: {
+  theme: Accessor<RunFooterTheme>
+  prompts: Accessor<FooterQueuedPrompt[]>
+  onClose: () => void
+  onEdit: (prompt: FooterQueuedPrompt) => void | Promise<void>
+  onDelete: (prompt: FooterQueuedPrompt) => void | Promise<void>
+  onRows?: (rows: number) => void
+}) {
+  let field: InputRenderable | undefined
+  const [query, setQuery] = createSignal("")
+  const entries = createMemo<QueuedEntry[]>(() =>
+    props.prompts().map((prompt) => ({
+      category: "",
+      display: prompt.prompt.text.replaceAll("\n", " "),
+      footer: "queued · ctrl+e edit · ctrl+d remove",
+      keywords: prompt.prompt.text,
+      prompt,
+    })),
+  )
+  const items = createMemo<QueuedEntry[]>(() => match(query(), entries()))
+  const menu = createFooterMenuState({ count: () => items().length, limit: SUBAGENT_LIST_ROWS })
+  const selected = () => items()[menu.selected()]
+
+  createEffect(() => {
+    query()
+    menu.reset()
+  })
+
+  createEffect(() => {
+    props.onRows?.(menu.rows() + PANEL_FRAME_ROWS)
+  })
+
+  useKeyboard((event) => {
+    if (event.defaultPrevented) {
+      return
+    }
+
+    const item = selected()
+    const ctrl = event.ctrl && !event.meta && !event.shift && !event.super
+    if (item && (event.name === "delete" || (ctrl && event.name === "d"))) {
+      event.preventDefault()
+      props.onDelete(item.prompt)
+      return
+    }
+
+    if (item && ctrl && event.name === "e") {
+      event.preventDefault()
+      props.onEdit(item.prompt)
+      return
+    }
+
+    handleKey({
+      event,
+      menu,
+      field: () => field,
+      setQuery,
+      select: () => {
+        const item = selected()
+        if (item) props.onEdit(item.prompt)
+      },
+      close: props.onClose,
+    })
+  })
+
+  return (
+    <PanelShell
+      id="run-direct-footer-queued-panel"
+      title="Queued prompts"
+      query={query()}
+      count={items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={(input) => {
+        field = input
+      }}
+      onQuery={setQuery}
+      dark
+      chrome="minimal"
+    >
+      <RunFooterMenu
+        id="run-direct-footer-queued-list"
+        theme={props.theme}
+        items={items}
+        selected={menu.selected}
+        offset={menu.offset}
+        rows={menu.rows}
+        limit={SUBAGENT_LIST_ROWS}
+        empty="No queued prompts"
+        border={false}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        grouped={false}
+        background
+      />
+    </PanelShell>
+  )
+}
+
+export function RunSkillSelectBody(props: {
+  theme: Accessor<RunFooterTheme>
+  commands: Accessor<RunCommand[] | undefined>
+  onClose: () => void
+  onSelect: (name: string) => void
+}) {
+  let field: InputRenderable | undefined
+  const [query, setQuery] = createSignal("")
+  const entries = createMemo<SkillEntry[]>(() =>
+    (props.commands() ?? [])
+      .filter((item) => item.source === "skill")
+      .map((item) => ({
+        category: "",
+        display: item.name,
+        description: item.description?.replace(/\s+/g, " ").trim() || undefined,
+        keywords: `skill ${item.name} ${item.description ?? ""}`,
+        name: item.name,
+      }))
+      .sort((a, b) => a.display.localeCompare(b.display)),
+  )
+  const items = createMemo<SkillEntry[]>(() => match(query(), entries()))
+  const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
+  const select = () => {
+    const item = items()[menu.selected()]
+    if (!item) {
+      return
+    }
+
+    props.onSelect(item.name)
+  }
+
+  createEffect(() => {
+    query()
+    menu.reset()
+  })
+
+  useKeyboard((event) => {
+    if (event.defaultPrevented) {
+      return
+    }
+
+    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  })
+
+  return (
+    <PanelShell
+      id="run-direct-footer-skill-panel"
+      title="Skills"
+      query={query()}
+      count={items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={(input) => {
+        field = input
+      }}
+      onQuery={setQuery}
+      dark
+      chrome="minimal"
+    >
+      <RunFooterMenu
+        id="run-direct-footer-skill-list"
+        theme={props.theme}
+        items={items}
+        selected={menu.selected}
+        offset={menu.offset}
+        rows={() => PANEL_LIST_ROWS}
+        limit={PANEL_LIST_ROWS}
+        empty={props.commands() ? "No skills found" : "Skills loading"}
+        border={false}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        grouped={false}
+        background
       />
     </PanelShell>
   )
@@ -638,6 +938,8 @@ export function RunVariantSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-variant-list"
@@ -652,6 +954,7 @@ export function RunVariantSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={false}
+        background
       />
     </PanelShell>
   )
@@ -758,6 +1061,8 @@ export function RunModelSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-model-list"
@@ -772,6 +1077,8 @@ export function RunModelSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={!query().trim()}
+        background
+        headerColor={props.theme().muted}
       />
     </PanelShell>
   )

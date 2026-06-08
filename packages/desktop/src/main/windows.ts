@@ -1,11 +1,14 @@
 import windowState from "electron-window-state"
+import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
+import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
+import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
-import { PINCH_ZOOM_ENABLED_KEY } from "./constants"
 import { exportDebugLogs, write as writeLog } from "./logging"
 import { getStore } from "./store"
+import { PINCH_ZOOM_ENABLED_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -15,6 +18,11 @@ const rendererHost = "renderer"
 const clipboardWritePermission = "clipboard-sanitized-write"
 const notificationPermission = "notifications"
 const rendererPermissions = new Set([clipboardWritePermission, notificationPermission])
+const oc2Theme = oc2ThemeJson as DesktopTheme
+const oc2Background = {
+  light: resolveThemeVariant(oc2Theme.light, false)["background-base"],
+  dark: resolveThemeVariant(oc2Theme.dark, true)["background-base"],
+}
 const documentPolicyHeader = "Document-Policy"
 const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 
@@ -46,6 +54,7 @@ export function setRelaunchHandler(handler: () => void) {
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
+  BrowserWindow.getAllWindows().forEach((win) => win.setBackgroundColor(color))
 }
 
 export function getBackgroundColor(): string | undefined {
@@ -63,6 +72,10 @@ function iconPath() {
 
 function tone() {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light"
+}
+
+function defaultBackgroundColor() {
+  return oc2Background[tone()]
 }
 
 function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
@@ -120,7 +133,7 @@ export function createMainWindow() {
     autoHideMenuBar: true,
     title: "OpenCode",
     icon: iconPath(),
-    backgroundColor,
+    backgroundColor: backgroundColor ?? defaultBackgroundColor(),
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
@@ -164,41 +177,6 @@ export function createMainWindow() {
   win.once("ready-to-show", () => {
     win.show()
   })
-
-  return win
-}
-
-export function createLoadingWindow() {
-  const mode = tone()
-  const win = new BrowserWindow({
-    width: 640,
-    height: 480,
-    resizable: false,
-    center: true,
-    show: true,
-    autoHideMenuBar: true,
-    icon: iconPath(),
-    backgroundColor,
-    ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
-    ...(process.platform === "win32"
-      ? {
-          frame: false,
-          titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode }),
-        }
-      : {}),
-    webPreferences: {
-      preload: join(root, "../preload/index.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  })
-
-  allowRendererPermissions(win)
-  wireWindowRecovery(win, "loading")
-
-  loadWindow(win, "loading.html")
 
   return win
 }
