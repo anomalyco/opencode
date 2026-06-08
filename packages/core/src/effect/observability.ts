@@ -39,12 +39,16 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
     }
   })()
 
+  const serviceName = process.env.OTEL_SERVICE_NAME ?? attributes["service.name"] ?? "opencode"
+  const serviceVersion = attributes["service.version"] ?? InstallationVersion
+  const { "service.name": _n, "service.version": _v, "deployment.environment.name": _env, ...remainingAttributes } = attributes
+
   return {
-    serviceName: "opencode",
-    serviceVersion: InstallationVersion,
+    serviceName,
+    serviceVersion,
     attributes: {
-      ...attributes,
-      "deployment.environment.name": InstallationChannel,
+      ...remainingAttributes,
+      "deployment.environment.name": attributes["deployment.environment.name"] ?? InstallationChannel,
       "opencode.client": Flag.OPENCODE_CLIENT,
       "opencode.process_role": processMetadata.processRole,
       "opencode.run_id": processMetadata.runID,
