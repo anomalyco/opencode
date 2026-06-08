@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message } from "@opencode-ai/sdk/v2/client"
-import { context, mergeMessages, prompt } from "./quick-assistant/helpers"
+import { context, isSessionNotFoundError, mergeMessages, prompt } from "./quick-assistant/helpers"
 
 const msg = (id: string, role: "user" | "assistant") =>
   ({
@@ -46,5 +46,39 @@ describe("quick assistant prompt", () => {
         "</current-opencode-session>",
       ].join("\n"),
     )
+  })
+})
+
+describe("quick assistant session error handling", () => {
+  test("recognizes generated SDK throwOnError not-found errors", () => {
+    const err = new Error("Session not found: ses_missing", {
+      cause: {
+        status: 404,
+        body: {
+          name: "NotFoundError",
+          data: { message: "Session not found: ses_missing" },
+        },
+      },
+    })
+
+    expect(isSessionNotFoundError(err)).toBe(true)
+  })
+
+  test("recognizes v2 session not-found errors", () => {
+    expect(
+      isSessionNotFoundError({
+        cause: {
+          body: {
+            name: "SessionNotFoundError",
+            data: { sessionID: "ses_missing" },
+          },
+        },
+      }),
+    ).toBe(true)
+  })
+
+  test("does not treat unrelated errors as missing sessions", () => {
+    expect(isSessionNotFoundError(new Error("network failed"))).toBe(false)
+    expect(isSessionNotFoundError({ name: "ProviderModelNotFoundError" })).toBe(false)
   })
 })

@@ -40,3 +40,23 @@ export function context(dir: string, id: string, session: Session | undefined, c
 export function prompt(text: string, extra: string, on: boolean) {
   return [on ? extra : "", text].filter(Boolean).join("\n\n")
 }
+
+export function isSessionNotFoundError(err: unknown, seen = new Set<unknown>()): boolean {
+  if (!err || typeof err !== "object") return false
+  if (seen.has(err)) return false
+  seen.add(err)
+
+  const obj = err as Record<string, unknown>
+  if (obj.name === "NotFoundError" || obj.name === "SessionNotFoundError") return true
+
+  const data = obj.data
+  if (data && typeof data === "object" && isSessionNotFoundError(data, seen)) return true
+
+  const body = obj.body
+  if (body && typeof body === "object" && isSessionNotFoundError(body, seen)) return true
+
+  const cause = obj.cause
+  if (cause && typeof cause === "object" && isSessionNotFoundError(cause, seen)) return true
+
+  return false
+}

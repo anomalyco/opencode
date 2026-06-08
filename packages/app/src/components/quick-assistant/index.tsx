@@ -19,7 +19,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { working } from "@/pages/session/session-working"
 import { domainFromDirectory, extraAgentCapabilities, type ExtraAgentCapabilities } from "@/pages/layout/extra-agents"
 import { formatServerError } from "@/utils/server-errors"
-import { context, mergeMessages, prompt } from "./helpers"
+import { context, isSessionNotFoundError, mergeMessages, prompt } from "./helpers"
 import { QuickAssistantInput } from "./input"
 import { QuickAssistantMessages } from "./messages"
 
@@ -224,15 +224,6 @@ function patchSession(setStore: SetStoreFunction<State>, sessionID: string, next
   })
 }
 
-function notFound(err: unknown) {
-  if (errorName(err) === "NotFoundError") return true
-  if (!err || typeof err !== "object") return false
-  const data = "data" in err ? (err as { data?: unknown }).data : undefined
-  if (!data || typeof data !== "object") return false
-  const name = "name" in data ? (data as { name?: unknown }).name : undefined
-  return name === "NotFoundError"
-}
-
 function join(root: string, child: string) {
   const slash = /^[A-Za-z]:\\|\\\\/.test(root) || root.includes("\\") ? "\\" : "/"
   return root.replace(/[\\/]+$/, "") + slash + child
@@ -374,7 +365,7 @@ export function QuickAssistant() {
         .get({ sessionID: current })
         .then((result) => result.data)
         .catch((err: unknown) => {
-          if (!notFound(err)) throw err
+          if (!isSessionNotFoundError(err)) throw err
           clearSession()
           return undefined
         })
@@ -478,7 +469,7 @@ export function QuickAssistant() {
         })
       })
       .catch((err: unknown) => {
-        if (notFound(err)) {
+        if (isSessionNotFoundError(err)) {
           clearSession()
           return
         }

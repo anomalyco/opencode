@@ -142,7 +142,7 @@
 
     [data-slot="tabs-list"] {
       height: var(--tabs-bar-height);
-      padding-left: 12px;
+      padding-left: 0;
       padding-right: 0;
       --tabs-review-gap: 0px;
       --tabs-review-fade: 0px;
