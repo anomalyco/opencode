@@ -597,6 +597,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const [composing, setComposing] = createSignal(false)
+  let compositionEndRafId: number | undefined
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const handleBlur = () => {
@@ -606,13 +607,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleCompositionStart = () => {
     setComposing(true)
+    if (compositionEndRafId !== undefined) {
+      cancelAnimationFrame(compositionEndRafId)
+      compositionEndRafId = undefined
+    }
   }
 
   const handleCompositionEnd = () => {
     setComposing(false)
-    requestAnimationFrame(() => {
+    if (compositionEndRafId !== undefined) {
+      cancelAnimationFrame(compositionEndRafId)
+    }
+    compositionEndRafId = requestAnimationFrame(() => {
+      compositionEndRafId = undefined
       if (composing()) return
-      reconcile(prompt.current().filter((part) => part.type !== "image"))
+      const current = prompt.current().filter((part) => part.type !== "image")
+      if (!isPromptEqual(current, parseFromDOM())) {
+        reconcile(current)
+      }
     })
   }
 
@@ -915,7 +927,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return parts
   }
 
-  const handleInput = () => {
+  const handleInput = (e?: Event) => {
+    const inputType = (e as InputEvent | undefined)?.inputType
+    if (composing()) {
+      if (
+        inputType !== "insertReplacementText" &&
+        inputType !== "insertText"
+      ) {
+        return
+      }
+    }
+
     const rawParts = parseFromDOM()
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
