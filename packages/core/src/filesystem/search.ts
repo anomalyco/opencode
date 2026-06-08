@@ -140,17 +140,10 @@ function collectPaths<T>(items: T[], scores: Array<{ total: number }>, toPath: (
     return [{ text, score: scores[index]?.total ?? 0 }]
   })
   rows.sort(
-    (a, b) =>
-      b.score - a.score ||
-      a.text.length - b.text.length ||
-      (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
+    (a, b) => b.score - a.score || a.text.length - b.text.length || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
   )
 
-  return Array.from(
-    new Set(
-      rows.map((item) => item.text),
-    ),
-  )
+  return Array.from(new Set(rows.map((item) => item.text)))
 }
 
 function searchFff(
