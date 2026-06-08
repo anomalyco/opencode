@@ -1229,11 +1229,7 @@ export const JDTLS: Info = {
     if (buildRoot) return buildRoot
 
     // 3. Maven: walk up pom.xml chain verifying <module> relationships
-    const pomFiles = await Filesystem.findUp(
-      "pom.xml",
-      path.dirname(file),
-      ctx.directory,
-    )
+    const pomFiles = await Filesystem.findUp("pom.xml", path.dirname(file), ctx.directory)
     if (pomFiles.length > 0) {
       let root = path.dirname(pomFiles[0])
       for (let i = 1; i < pomFiles.length; i++) {

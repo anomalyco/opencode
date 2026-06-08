@@ -93,7 +93,10 @@ describe("JDTLS.root", () => {
       const workspace = path.join(tmpBase, "nested-independent")
       await mkdirp(workspace)
       // Parent pom WITHOUT <module>tools/sample</module>
-      await Bun.write(path.join(workspace, "pom.xml"), "<project><modules><module>module-a</module></modules></project>")
+      await Bun.write(
+        path.join(workspace, "pom.xml"),
+        "<project><modules><module>module-a</module></modules></project>",
+      )
       // Independent project nested inside
       const projectDir = path.join(workspace, "tools", "sample")
       await mkdirp(projectDir)
@@ -446,16 +449,10 @@ describe("JDTLS.root", () => {
       await mkdirp(mavenSrc)
       await touch(path.join(mavenSrc, "MavenApp.java"))
 
-      const gradleResult = await LSPServer.JDTLS.root(
-        path.join(gradleSrc, "GradleApp.java"),
-        makeCtx(workspace),
-      )
+      const gradleResult = await LSPServer.JDTLS.root(path.join(gradleSrc, "GradleApp.java"), makeCtx(workspace))
       expect(gradleResult).toBe(gradleDir)
 
-      const mavenResult = await LSPServer.JDTLS.root(
-        path.join(mavenSrc, "MavenApp.java"),
-        makeCtx(workspace),
-      )
+      const mavenResult = await LSPServer.JDTLS.root(path.join(mavenSrc, "MavenApp.java"), makeCtx(workspace))
       expect(mavenResult).toBe(mavenDir)
     })
   })
