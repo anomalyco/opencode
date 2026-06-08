@@ -474,6 +474,25 @@ export const ProvidersLoginCommand = effectCmd({
       )
     }
 
+    if (provider === "snowflake-cortex") {
+      const account = yield* promptValue(
+        yield* Prompt.text({
+          message: "Snowflake Account Identifier",
+          placeholder: "xy12345.us-east-1",
+          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+        }),
+      )
+      const pat = yield* promptValue(
+        yield* Prompt.password({
+          message: "Programmatic Access Token (PAT)",
+          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+        }),
+      )
+      yield* Effect.orDie(authSvc.set(provider, { type: "api", key: pat, metadata: { account } }))
+      yield* Prompt.outro("Done")
+      return
+    }
+
     const key = yield* Prompt.password({
       message: "Enter your API key",
       validate: (x) => (x && x.length > 0 ? undefined : "Required"),
@@ -486,11 +505,16 @@ export const ProvidersLoginCommand = effectCmd({
 })
 
 export const ProvidersLogoutCommand = effectCmd({
-  command: "logout",
+  command: "logout [provider]",
   describe: "log out from a configured provider",
+  builder: (yargs) =>
+    yargs.positional("provider", {
+      describe: "provider id or name to log out from",
+      type: "string",
+    }),
   // Removes a global auth credential; no project instance needed.
   instance: false,
-  handler: Effect.fn("Cli.providers.logout")(function* (_args) {
+  handler: Effect.fn("Cli.providers.logout")(function* (args) {
     const authSvc = yield* Auth.Service
     const modelsDev = yield* ModelsDev.Service
 
@@ -502,14 +526,25 @@ export const ProvidersLogoutCommand = effectCmd({
       return
     }
     const database = yield* modelsDev.get()
-    const selected = yield* Prompt.select({
-      message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
-    })
-    yield* Effect.orDie(authSvc.remove(yield* promptValue(selected)))
+    const options = credentials.map(([key, value]) => ({
+      label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
+      value: key,
+    }))
+    const provider = args.provider
+      ? options.find(
+          (option) =>
+            option.value === args.provider ||
+            database[option.value]?.name?.toLowerCase() === args.provider?.toLowerCase(),
+        )?.value
+      : yield* promptValue(
+          yield* Prompt.autocomplete({
+            message: "Select provider",
+            maxItems: 8,
+            options,
+          }),
+        )
+    if (!provider) return yield* fail(`Unknown configured provider "${args.provider}"`)
+    yield* Effect.orDie(authSvc.remove(provider))
     yield* Prompt.outro("Logout successful")
   }),
 })

@@ -8,12 +8,12 @@ import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig, mockTuiRuntime } from "../../fixture/tui-runtime"
 import { Global } from "@opencode-ai/core/global"
-import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
+import { TuiConfig } from "../../../src/config/tui"
 import { Filesystem } from "@/util/filesystem"
 import { PluginLoader } from "../../../src/plugin/loader"
 
-const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
-const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
+const { allThemes, addTheme } = await import("@opencode-ai/tui/context/theme")
+const { TuiPluginRuntime } = await import("../../../src/plugin/tui/runtime")
 
 type Row = Record<string, unknown>
 
