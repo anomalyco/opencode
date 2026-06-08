@@ -367,10 +367,10 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         hidden: true,
         run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
-          ctx.event.preventDefault()
-          ctx.event.stopPropagation()
           const content = await clipboard.read?.()
           if (content?.mime.startsWith("image/")) {
+            ctx.event.preventDefault()
+            ctx.event.stopPropagation()
             await pasteAttachment({
               filename: "clipboard",
               mime: content.mime,
@@ -379,7 +379,10 @@ export function Prompt(props: PromptProps) {
             return
           }
           if (content?.mime === "text/plain") {
+            ctx.event.preventDefault()
+            ctx.event.stopPropagation()
             await pasteInputText(content.data)
+            return
           }
         },
       },
