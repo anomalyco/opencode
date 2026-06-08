@@ -392,6 +392,21 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
         }
       }
 
+      // Check for empty base64 PDF data
+      if (part.type === "file" && part.mediaType === "application/pdf") {
+        const url = "url" in part ? String(part.url) : ""
+        if (url.startsWith("data:")) {
+          const match = url.match(/^data:([^;]+);base64,(.*)$/)
+          if (match && (!match[2] || match[2].length === 0)) {
+            const name = part.filename ? `"${part.filename}"` : "PDF"
+            return {
+              type: "text" as const,
+              text: `ERROR: ${name} file is empty or corrupted. Please provide a valid PDF file.`,
+            }
+          }
+        }
+      }
+
       const mime = part.type === "image" ? String(part.image).split(";")[0].replace("data:", "") : part.mediaType
       const filename = part.type === "file" ? part.filename : undefined
       const modality = mimeToModality(mime)

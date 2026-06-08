@@ -975,6 +975,25 @@ export const layer = Layer.effect(
                 ]
               }
 
+              const readExit = yield* fsys.readFile(filepath).pipe(Effect.exit)
+              if (Exit.isFailure(readExit)) {
+                const error = Cause.squash(readExit.cause)
+                log.error("failed to read file attachment", { error, filepath })
+                const message = error instanceof Error ? error.message : String(error)
+                yield* events.publish(Session.Event.Error, {
+                  sessionID: input.sessionID,
+                  error: new NamedError.Unknown({ message }).toObject(),
+                })
+                return [
+                  {
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `Failed to read file ${filepath}: ${message}`,
+                  },
+                ]
+              }
               return [
                 {
                   messageID: info.id,
@@ -988,9 +1007,7 @@ export const layer = Layer.effect(
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url:
-                    `data:${mime};base64,` +
-                    Buffer.from(yield* fsys.readFile(filepath).pipe(Effect.catch(Effect.die))).toString("base64"),
+                  url: `data:${mime};base64,${Buffer.from(readExit.value).toString("base64")}`,
                   mime,
                   filename: part.filename!,
                   source: part.source,

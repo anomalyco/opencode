@@ -310,8 +310,17 @@ export const ReadTool = Tool.define<
       const isImage = SUPPORTED_IMAGE_MIMES.has(mime)
 
       if (isImage || isPdfAttachment(mime)) {
-        const bytes = yield* fs.readFile(filepath)
-        const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
+        const kind = isPdfAttachment(mime) ? "PDF" : "image"
+        const bytes = yield* fs.readFile(filepath).pipe(
+          Effect.catch((error) =>
+            Effect.fail(
+              new Error(
+                `Cannot read ${kind} file: ${filepath} (${error instanceof Error ? error.message : String(error)})`,
+              ),
+            ),
+          ),
+        )
+        const msg = `${kind === "PDF" ? "PDF" : "Image"} read successfully`
         return {
           title,
           output: msg,
