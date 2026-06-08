@@ -175,12 +175,33 @@ function markCodeLinks(root: HTMLDivElement) {
   }
 }
 
+function markFileLinks(root: HTMLDivElement) {
+  const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
+  for (const code of codeNodes) {
+    const text = code.textContent ?? ""
+    if (code.parentElement instanceof HTMLAnchorElement) continue
+
+    const raw = text.trim().replace(/[),.;!?]+$/, "")
+    if (!raw.includes(".")) continue
+    if (/^https?:\/\//i.test(raw)) continue
+    const path = raw.replace(/([:#]\d+).*$/, "")
+    if (/[<>:"|?*]/.test(path)) continue
+
+    const link = document.createElement("a")
+    link.setAttribute("data-file-path", path)
+    link.classList.add("file-link")
+    code.parentNode?.replaceChild(link, code)
+    link.appendChild(code)
+  }
+}
+
 function decorate(root: HTMLDivElement, labels: CopyLabels) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
   markCodeLinks(root)
+  markFileLinks(root)
 }
 
 function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
@@ -227,6 +248,20 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
+function setupFileClick(root: HTMLDivElement, onFileClick: (path: string) => void) {
+  const handler = (event: MouseEvent) => {
+    const target = event.target
+    if (!(target instanceof Element)) return
+    const link = target.closest("[data-file-path]")
+    if (!(link instanceof HTMLAnchorElement)) return
+    event.preventDefault()
+    const path = link.getAttribute("data-file-path")
+    if (path) onFileClick(path)
+  }
+  root.addEventListener("click", handler)
+  return () => root.removeEventListener("click", handler)
+}
+
 function touch(key: string, value: Entry) {
   cache.delete(key)
   cache.set(key, value)
@@ -243,11 +278,12 @@ export function Markdown(
     text: string
     cacheKey?: string
     streaming?: boolean
+    onFileClick?: (path: string) => void
     class?: string
     classList?: Record<string, boolean>
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList", "onFileClick"])
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -288,6 +324,7 @@ export function Markdown(
   )
 
   let copyCleanup: (() => void) | undefined
+let fileClickCleanup: (() => void) | undefined
 
   createEffect(() => {
     const container = root()
@@ -325,6 +362,9 @@ export function Markdown(
       },
     })
 
+    if (local.onFileClick && !fileClickCleanup)
+      fileClickCleanup = setupFileClick(container, local.onFileClick)
+
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
         copy: i18n.t("ui.message.copy"),
@@ -334,6 +374,7 @@ export function Markdown(
 
   onCleanup(() => {
     if (copyCleanup) copyCleanup()
+    if (fileClickCleanup) fileClickCleanup()
   })
 
   return (

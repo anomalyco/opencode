@@ -282,6 +282,7 @@ export function MessageTimeline(props: {
   userMessages: UserMessage[]
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
+  onFileClick?: (path: string) => void
 }) {
   let touchGesture: number | undefined
 
@@ -1064,6 +1065,7 @@ export function MessageTimeline(props: {
                 onToolOpenChange={(open) => setToolOpen(part().id, open)}
                 deferToolContent={false}
                 virtualizeDiff={false}
+                onFileClick={props.onFileClick}
               />
             )}
           </Show>

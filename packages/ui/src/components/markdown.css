@@ -55,6 +55,10 @@
     text-underline-offset: 2px;
   }
 
+  a.file-link {
+    cursor: pointer;
+  }
+
   /* Lists */
   ul,
   ol {

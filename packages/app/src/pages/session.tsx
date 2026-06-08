@@ -1814,6 +1814,13 @@ export default function Page() {
                       setRevealMessage={(fn) => {
                         revealMessage = fn
                       }}
+                      onFileClick={(path) => {
+                        const tab = file.tab(path)
+                        tabs().open(tab)
+                        tabs().setActive(tab)
+                        file.load(path)
+                        openReviewPanel()
+                      }}
                     />
                   </Show>
                 </Match>
