@@ -4,6 +4,9 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import {
   AttentionSoundName,
+  ExternalSyncIntervalDefault,
+  ExternalSyncIntervalMax,
+  ExternalSyncIntervalMin,
   Info,
   LeaderTimeoutDefault,
   PluginSpec,
@@ -32,12 +35,20 @@ test("validates config constraints", () => {
       scroll_speed: 0.001,
       diff_style: "stacked",
       plugin: ["example-plugin"],
+      external_sync_interval_ms: 500,
     }),
-  ).toMatchObject({ leader_timeout: 250, attention: { volume: 1 }, diff_style: "stacked" })
+  ).toMatchObject({
+    leader_timeout: 250,
+    attention: { volume: 1 },
+    diff_style: "stacked",
+    external_sync_interval_ms: 500,
+  })
   expect(() => decodeInfo({ leader_timeout: 0 })).toThrow()
   expect(() => decodeInfo({ attention: { volume: 1.1 } })).toThrow()
   expect(() => decodeInfo({ prompt: { max_width: 0 } })).toThrow()
   expect(() => decodeInfo({ scroll_speed: 0 })).toThrow()
+  expect(() => decodeInfo({ external_sync_interval_ms: -1 })).toThrow()
+  expect(() => decodeInfo({ external_sync_interval_ms: ExternalSyncIntervalMax + 1 })).toThrow()
   expect(decodeInfo({ attention: { sounds: { unknown: "sound.wav" } } })).toEqual({ attention: { sounds: {} } })
 })
 
@@ -54,8 +65,16 @@ test("resolves host-neutral defaults", () => {
   })
   expect(config.leader_timeout).toBe(LeaderTimeoutDefault)
   expect(config.mouse).toBe(true)
+  expect(config.external_sync_interval_ms).toBe(ExternalSyncIntervalDefault)
   expect(config.keybinds.has("terminal.suspend")).toBe(true)
   expect(config.keybinds.has("session.list")).toBe(true)
+})
+
+test("external_sync_interval_ms accepts 0 to disable the polling effect", () => {
+  expect(ExternalSyncIntervalMin).toBe(0)
+  expect(decodeInfo({ external_sync_interval_ms: 0 })).toMatchObject({ external_sync_interval_ms: 0 })
+  const config = resolve({ external_sync_interval_ms: 0 }, { terminalSuspend: true })
+  expect(config.external_sync_interval_ms).toBe(0)
 })
 
 test("resolves overrides without mutating input", () => {

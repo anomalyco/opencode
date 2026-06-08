@@ -316,6 +316,29 @@ export function Session() {
     })
   })
 
+  // Re-sync the active session while it is being driven by an external
+  // writer (another opencode client, a remote agent, `opencode serve`
+  // running the session elsewhere). The live SSE stream can miss those
+  // updates, so this poll is a bounded safety net.
+  //
+  // Bounded by:
+  //   - the configured interval (default 2000ms; 0 disables)
+  //   - the session being in a non-idle status (`working` / `compacting`)
+  //   - a `createEffect`-scoped `onCleanup` that clears the interval when
+  //     the route changes, the session goes idle, or the component unmounts
+  createEffect(() => {
+    const sessionID = route.sessionID
+    if (!sessionID) return
+    const interval = tuiConfig.external_sync_interval_ms
+    if (interval <= 0) return
+    const status = sync.session.status(sessionID)
+    if (status !== "working" && status !== "compacting") return
+    const handle = setInterval(() => {
+      void sync.session.sync(sessionID, { force: true })
+    }, interval)
+    onCleanup(() => clearInterval(handle))
+  })
+
   let lastSwitch: string | undefined = undefined
   event.on("message.part.updated", (evt) => {
     const part = evt.properties.part

@@ -570,8 +570,16 @@ export const {
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
-        async sync(sessionID: string) {
-          if (fullSyncedSessions.has(sessionID)) return
+        async sync(sessionID: string, options?: { force?: boolean }) {
+          // Bypass the once-only cache when callers explicitly request a
+          // re-fetch — used by the external-writer polling effect in
+          // routes/session/index.tsx so updates produced by other clients /
+          // remote runners / `opencode serve` land in this TUI even if
+          // their SSE events miss this stream.
+          if (!options?.force && fullSyncedSessions.has(sessionID)) return
+          // Always de-dupe concurrent in-flight fetches, force or not —
+          // a polling effect racing the initial hydration would otherwise
+          // issue a second fetch for no benefit.
           const syncing = syncingSessions.get(sessionID)
           if (syncing) return syncing
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }

@@ -35,11 +35,19 @@ export function createEventSource() {
 
 export type FetchHandler = (url: URL) => Response | Promise<Response> | undefined
 
+const SESSION_DETAIL = /^\/session\/[^/]+(\/[^/]+)?$/
+
 export function createFetch(override?: FetchHandler) {
   const session = [] as URL[]
+  // Per-session-detail fetches (session.get, messages, todo, diff) hit
+  // /session/{id} and a few subpaths. Track them in their own array so
+  // tests can assert how many re-syncs happened without parsing the
+  // generic `session` (list) array.
+  const sessionDetail = [] as URL[]
   const fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     if (url.pathname === "/session") session.push(url)
+    if (SESSION_DETAIL.test(url.pathname)) sessionDetail.push(url)
     const overridden = await override?.(url)
     if (overridden) return overridden
 
@@ -63,7 +71,31 @@ export function createFetch(override?: FetchHandler) {
     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
     if (url.pathname === "/session") return json([])
     if (url.pathname === "/vcs") return json({ branch: "main" })
+    // Per-session detail endpoints: session.get, messages, todo, diff.
+    // Return a minimal valid payload so callers that go on to render
+    // the result don't crash, and tests can assert on sessionDetail
+    // counts without standing up a full server.
+    if (SESSION_DETAIL.test(url.pathname)) {
+      // v1 messages endpoint is `/session/{id}/message` (singular).
+      // The TUI's sync.session.sync reads `messages.data` as an array of
+      // `{ info, parts }` envelopes, so return that shape (empty list).
+      if (url.pathname.endsWith("/message")) return json([])
+      if (url.pathname.endsWith("/messages")) return json([])
+      if (url.pathname.endsWith("/todo")) return json([])
+      if (url.pathname.endsWith("/diff")) return json([])
+      // Bare /session/{id} — session.get
+      return json({
+        id: url.pathname.split("/").pop()!,
+        slug: "",
+        title: "",
+        version: "",
+        directory,
+        parentID: null,
+        time: { created: Date.now(), updated: Date.now() },
+        share: { url: "" },
+      })
+    }
     throw new Error(`unexpected request: ${url.pathname}`)
   }) as typeof globalThis.fetch
-  return { fetch, session }
+  return { fetch, session, sessionDetail }
 }

@@ -23,6 +23,18 @@ export const LeaderTimeout = Schema.Int.check(Schema.isGreaterThan(0)).annotate(
   description: "Leader key timeout in milliseconds",
 })
 
+// 0 disables the external-writer polling effect in the session route.
+export const ExternalSyncIntervalDefault = 2000
+export const ExternalSyncIntervalMin = 0
+export const ExternalSyncIntervalMax = 60_000
+export const ExternalSyncInterval = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(ExternalSyncIntervalMin),
+  Schema.isLessThanOrEqualTo(ExternalSyncIntervalMax),
+).annotate({
+  description:
+    "How often in milliseconds to re-sync the active session while it is being driven by an external writer (another client, a remote runner, or `opencode serve`). Set to 0 to disable.",
+})
+
 export const ScrollSpeed = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0.001))
 export const ScrollAcceleration = Schema.Struct({
   enabled: Schema.Boolean.annotate({ description: "Enable scroll acceleration" }),
@@ -63,6 +75,10 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  external_sync_interval_ms: Schema.optional(ExternalSyncInterval).annotate({
+    description:
+      "External-writer polling interval in milliseconds. Re-syncs the active session while it is `working` or `compacting` so updates produced by other clients or `opencode serve` land in this TUI. Set to 0 to disable.",
+  }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -78,6 +94,7 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   mouse: boolean
+  external_sync_interval_ms: number
 }
 
 export const ResolveOptions = Schema.Struct({
@@ -113,6 +130,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    external_sync_interval_ms: input.external_sync_interval_ms ?? ExternalSyncIntervalDefault,
   }
 }
 
