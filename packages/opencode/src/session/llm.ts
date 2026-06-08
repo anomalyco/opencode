@@ -6,7 +6,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
-import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
+import { simulateStreamingMiddleware, streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
@@ -273,6 +273,12 @@ const live: Layer.Layer<
         "llm.provider": input.model.providerID,
         "llm.model": input.model.id,
       })
+      // Opt out of streaming per-model or per-provider with `options.streaming: false`.
+      // Some backends corrupt or reject streamed responses (e.g. vLLM's gemma tool-call
+      // parser duplicates characters in streamed tool args); simulateStreamingMiddleware
+      // makes the model call doGenerate (stream:false on the wire) and re-emits a
+      // simulated stream, so the rest of the pipeline is unchanged. Model-level wins.
+      const disableStreaming = (input.model.options?.["streaming"] ?? item.options?.["streaming"]) === false
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
@@ -339,6 +345,7 @@ const live: Layer.Layer<
                   return args.params
                 },
               },
+              ...(disableStreaming ? [simulateStreamingMiddleware()] : []),
             ],
           }),
           experimental_telemetry: {

@@ -2000,4 +2000,73 @@ describe("session.llm.stream", () => {
       }),
     },
   )
+
+  it.instance(
+    "disables streaming when options.streaming is false",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        // Respond with a non-streaming chat completion. The provider can only parse
+        // this if it issued a doGenerate (stream:false) request — a streamed request
+        // would expect SSE and fail — so a clean drain proves streaming was disabled.
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(
+            JSON.stringify({
+              id: "chatcmpl-nostream",
+              object: "chat.completion",
+              model: fixture.model.id,
+              choices: [{ index: 0, message: { role: "assistant", content: "Hello" }, finish_reason: "stop" }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-no-stream")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-no-stream"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        expect(capture.url.pathname.endsWith("/chat/completions")).toBe(true)
+        expect(capture.body.stream).not.toBe(true)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [vivgridFixture.providerID],
+        provider: {
+          [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1`, streaming: false },
+          },
+        },
+      }),
+    },
+  )
 })
