@@ -47,6 +47,7 @@ import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { checksum } from "@opencode-ai/core/util/encode"
+import { Locale } from "opencode/util/locale"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { Spinner } from "./spinner"
@@ -1073,12 +1074,10 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     const match = data.store.provider?.all?.get(providerID)
     return match?.models?.[modelID]?.name ?? modelID
   })
-  const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
-
   const stamp = createMemo(() => {
     const created = props.message.time?.created
     if (typeof created !== "number") return ""
-    return timefmt().format(created)
+    return Locale.todayTimeOrDateTime(created, i18n.locale())
   })
 
   const metaHead = createMemo(() => {
@@ -1503,12 +1502,18 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     })
   })
 
+  const timeStamp = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    return Locale.todayTimeOrDateTime((props.message as AssistantMessage).time.created, i18n.locale())
+  })
+
   const meta = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const agent = (props.message as AssistantMessage).agent
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
       model(),
+      timeStamp(),
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
     ]
