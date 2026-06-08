@@ -228,16 +228,18 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               state.ctrl = undefined
             }
 
-            const duration = Locale.duration(Math.max(0, Date.now() - start))
-            emit(
-              {
-                type: "turn.duration",
-                duration,
-              },
-              {
-                duration,
-              },
-            )
+            if (sent.mode !== "shell") {
+              const duration = Locale.duration(Math.max(0, Date.now() - start))
+              emit(
+                {
+                  type: "turn.duration",
+                  duration,
+                },
+                {
+                  duration,
+                },
+              )
+            }
             state.active = undefined
           }
         }

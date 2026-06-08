@@ -74,8 +74,33 @@ test("returns syntax styles and indexed splash colors", async () => {
     expectIndexed(theme.splash.right)
     expectIndexed(theme.splash.leftShadow)
     expectIndexed(theme.splash.rightShadow)
+    expectIndexed(theme.block.highlight)
+    expectIndexed(theme.block.warning)
     expectRgba(theme.footer.highlight)
+    expectRgba(theme.footer.statusAccent)
     expectRgba(theme.footer.surface)
+    expect(expectRgba(theme.footer.statusAccent).toInts()).not.toEqual(expectRgba(theme.footer.status).toInts())
+  } finally {
+    theme.block.syntax?.destroy()
+    theme.block.subtleSyntax?.destroy()
+  }
+})
+
+test("keeps footer surfaces exact while scrollback stays palette matched", async () => {
+  const colors = terminalColors({
+    defaultBackground: "#0f172a",
+    defaultForeground: "#e2e8f0",
+  })
+  const theme = await resolveRunTheme(renderer({ themeMode: "dark", colors }))
+  const exact = resolveTheme(generateSystem(colors, "dark"), "dark")
+
+  try {
+    expect(expectRgba(theme.footer.selected).toInts()).toEqual(expectRgba(exact.backgroundElement).toInts())
+    expect(expectRgba(theme.footer.border).toInts()).toEqual(expectRgba(exact.border).toInts())
+    expect(expectRgba(theme.footer.pane).toInts()).toEqual(expectRgba(exact.backgroundMenu).toInts())
+    expect(expectRgba(theme.footer.selected).intent).toBe("rgb")
+    expectIndexed(theme.block.highlight)
+    expectIndexed(theme.block.warning)
   } finally {
     theme.block.syntax?.destroy()
     theme.block.subtleSyntax?.destroy()
