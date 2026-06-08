@@ -330,6 +330,7 @@ export class Subscription {
         ...pendingToolCall({
           toolCallId: part.callID,
           toolName: part.tool,
+          state: part.state,
         }),
       },
     })
