@@ -1,17 +1,19 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMError, Usage } from "../../src"
-import { LLMClient } from "../../src/route"
+import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
+import { Auth, LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
+import { ProviderShared } from "../../src/protocols/shared"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import { sseEvents, sseRaw } from "../lib/sse"
 
-const model = Gemini.model({
-  id: "gemini-2.5-flash",
-  baseURL: "https://generativelanguage.test/v1beta/",
-  headers: { "x-goog-api-key": "test" },
-})
+const model = Gemini.route
+  .with({
+    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+    auth: Auth.header("x-goog-api-key", "test"),
+  })
+  .model({ id: "gemini-2.5-flash" })
 
 const request = LLM.request({
   id: "req_1",
@@ -34,6 +36,22 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("lowers chronological system updates to wrapped user text in order", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "user", parts: [{ text: "Before." }, { text: "<system-update>\nUpdate.\n</system-update>" }] },
+        { role: "model", parts: [{ text: "After." }] },
+      ])
+    }),
+  )
+
   it.effect("prepares multimodal user input and tool history", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
@@ -49,12 +67,12 @@ describe("Gemini route", () => {
           ],
           toolChoice: { type: "tool", name: "lookup" },
           messages: [
-            LLM.user([
+            Message.user([
               { type: "text", text: "What is in this image?" },
               { type: "media", mediaType: "image/png", data: "AAECAw==" },
             ]),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
         }),
       )
@@ -89,6 +107,110 @@ describe("Gemini route", () => {
         ],
         toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["lookup"] } },
       })
+    }),
+  )
+
+  it.effect("continues image tool results as inline vision input without base64 text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: { path: "pixel.png" } })]),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "pixel.png" },
+                ],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "model", parts: [{ functionCall: { name: "read", args: { path: "pixel.png" } } }] },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                name: "read",
+                response: { name: "read", content: "Image read successfully" },
+              },
+            },
+            { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
+          ],
+        },
+      ])
+      expect(JSON.stringify(prepared.body.contents)).not.toContain('"content":"AAECAw=="')
+    }),
+  )
+
+  it.effect("strips matching data URLs to raw base64 inlineData", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({ type: "media", mediaType: "image/png", data: "data:image/png;base64,AAEC" }),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [{ type: "media", mediaType: "image/jpeg", data: "data:image/jpeg;base64,/9j/" }],
+              },
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.contents).toEqual([
+        { role: "user", parts: [{ inlineData: { mimeType: "image/png", data: "AAEC" } }] },
+        {
+          role: "user",
+          parts: [
+            { functionResponse: { name: "read", response: { name: "read", content: "" } } },
+            { inlineData: { mimeType: "image/jpeg", data: "/9j/" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  for (const [name, media] of [
+    ["mismatched data URL MIME", { mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" }],
+    ["malformed base64", { mediaType: "image/png", data: "%%%=" }],
+    ["unsupported SVG", { mediaType: "image/svg+xml", data: "PHN2Zz4=" }],
+  ] as const)
+    it.effect(`rejects ${name}`, () =>
+      Effect.gen(function* () {
+        const error = yield* LLMClient.prepare(
+          LLM.request({ model, messages: [Message.user({ type: "media", ...media })] }),
+        ).pipe(Effect.flip)
+        expect(error.message).toMatch(/does not support|does not match|valid base64/)
+      }),
+    )
+
+  it.effect("rejects oversized image input", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({
+              type: "media",
+              mediaType: "image/png",
+              data: "A".repeat(ProviderShared.MAX_MEDIA_ENCODED_BYTES + 4),
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("encoded limit")
     }),
   )
 
@@ -204,30 +326,103 @@ describe("Gemini route", () => {
         reasoningTokens: 1,
         totalTokens: 7,
       })
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 3,
+        nonCachedInputTokens: 4,
+        cacheReadInputTokens: 1,
+        reasoningTokens: 1,
+        totalTokens: 7,
+        providerMetadata: {
+          google: {
+            promptTokenCount: 5,
+            candidatesTokenCount: 2,
+            totalTokenCount: 7,
+            thoughtsTokenCount: 1,
+            cachedContentTokenCount: 1,
+          },
+        },
+      })
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "reasoning-start", id: "reasoning-0" },
         { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
+        { type: "text-start", id: "text-0" },
         { type: "text-delta", id: "text-0", text: "Hello" },
         { type: "text-delta", id: "text-0", text: "!" },
+        { type: "reasoning-end", id: "reasoning-0" },
+        { type: "text-end", id: "text-0" },
+        { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "stop",
-          usage: new Usage({
-            inputTokens: 5,
-            outputTokens: 3,
-            nonCachedInputTokens: 4,
-            cacheReadInputTokens: 1,
-            reasoningTokens: 1,
-            totalTokens: 7,
-            providerMetadata: {
-              google: {
-                promptTokenCount: 5,
-                candidatesTokenCount: 2,
-                totalTokenCount: 7,
-                thoughtsTokenCount: 1,
-                cachedContentTokenCount: 1,
-              },
+          usage,
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves thoughtSignature for reasoning and tool-call continuation", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                { text: "thinking", thought: true },
+                { text: "", thought: true, thoughtSignature: "thought_sig" },
+                { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+              ],
             },
-          }),
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+      const reasoning = response.events.find((event) => event.type === "reasoning-start")
+      const reasoningEnd = response.events.find((event) => event.type === "reasoning-end")
+      const toolCall = response.events.find((event) => event.type === "tool-call")
+
+      expect(reasoning).toEqual({
+        type: "reasoning-start",
+        id: "reasoning-0",
+        providerMetadata: undefined,
+      })
+      expect(reasoningEnd).toEqual({
+        type: "reasoning-end",
+        id: "reasoning-0",
+        providerMetadata: { google: { thoughtSignature: "thought_sig" } },
+      })
+      expect(toolCall).toMatchObject({ providerMetadata: { google: { thoughtSignature: "tool_sig" } } })
+
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "thinking", providerMetadata: reasoningEnd?.providerMetadata },
+              ToolCallPart.make({
+                id: "tool_0",
+                name: "lookup",
+                input: { query: "weather" },
+                providerMetadata: toolCall?.providerMetadata,
+              }),
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            { text: "thinking", thought: true, thoughtSignature: "thought_sig" },
+            { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+          ],
         },
       ])
     }),
@@ -252,22 +447,41 @@ describe("Gemini route", () => {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 1,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: undefined,
+        reasoningTokens: undefined,
+        totalTokens: 6,
+        providerMetadata: { google: { promptTokenCount: 5, candidatesTokenCount: 1 } },
+      })
 
       expect(response.toolCalls).toEqual([
-        { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
+        {
+          type: "tool-call",
+          id: "tool_0",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
       ])
       expect(response.events).toEqual([
-        { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
+        { type: "step-start", index: 0 },
         {
-          type: "request-finish",
+          type: "tool-call",
+          id: "tool_0",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "finish",
           reason: "tool-calls",
-          usage: new Usage({
-            inputTokens: 5,
-            outputTokens: 1,
-            nonCachedInputTokens: 5,
-            totalTokens: 6,
-            providerMetadata: { google: { promptTokenCount: 5, candidatesTokenCount: 1 } },
-          }),
+          usage,
         },
       ])
     }),
@@ -299,7 +513,7 @@ describe("Gemini route", () => {
         { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
       ])
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "tool-calls" })
     }),
   )
 
@@ -318,8 +532,10 @@ describe("Gemini route", () => {
         ),
       )
 
-      expect(length.events).toEqual([{ type: "request-finish", reason: "length" }])
-      expect(filtered.events).toEqual([{ type: "request-finish", reason: "content-filter" }])
+      expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(length.events.at(-1)).toMatchObject({ type: "finish", reason: "length" })
+      expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "content-filter" })
     }),
   )
 
@@ -353,7 +569,7 @@ describe("Gemini route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 

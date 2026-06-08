@@ -40,6 +40,7 @@ import {
   questionTabs,
   questionTotal,
 } from "./question.shared"
+import { footerWidthPolicy } from "./footer.width"
 import type { RunFooterTheme } from "./theme"
 import type { QuestionReject, QuestionReply } from "./types"
 
@@ -58,7 +59,7 @@ export function RunQuestionBody(props: {
   const other = createMemo(() => questionOther(props.request, state()))
   const picked = createMemo(() => questionPicked(state()))
   const disabled = createMemo(() => state().submitting)
-  const narrow = createMemo(() => dims().width < 80)
+  const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
   const verb = createMemo(() => {
     if (confirm()) {
       return "submit"
@@ -177,10 +178,6 @@ export function RunQuestionBody(props: {
         return
       }
 
-      if (event.name === "return" && !event.shift && !event.ctrl && !event.meta) {
-        saveCustom()
-        event.preventDefault()
-      }
       return
     }
 
@@ -416,7 +413,7 @@ export function RunQuestionBody(props: {
                               </text>
                             </box>
                             <Show when={!info()?.multiple}>
-                              <text fg={props.theme.success}>{hit() ? "✓" : ""}</text>
+                              <text fg={props.theme.success}>{hit() ? " ✓" : ""}</text>
                             </Show>
                           </box>
                           <box paddingLeft={3}>
@@ -466,7 +463,7 @@ export function RunQuestionBody(props: {
                           </text>
                         </box>
                         <Show when={!info()?.multiple}>
-                          <text fg={props.theme.success}>{picked() ? "✓" : ""}</text>
+                          <text fg={props.theme.success}>{picked() ? " ✓" : ""}</text>
                         </Show>
                       </box>
                       <Show
@@ -496,6 +493,7 @@ export function RunQuestionBody(props: {
                             focusedBackgroundColor={props.theme.surface}
                             cursorColor={props.theme.text}
                             focused={!disabled()}
+                            onSubmit={saveCustom}
                             onContentChange={() => {
                               if (!area || area.isDestroyed || disabled()) {
                                 return

@@ -1,51 +1,26 @@
-import { Effect, Ref, Schema, Scope } from "effect"
-import type * as CassetteService from "./cassette"
-import type { CassetteNotFoundError } from "./cassette"
-import { SecretFindingSchema } from "./redaction"
-import type { CassetteMetadata, Interaction } from "./schema"
-
-export class UnsafeCassetteError extends Schema.TaggedErrorClass<UnsafeCassetteError>()("UnsafeCassetteError", {
-  cassetteName: Schema.String,
-  findings: Schema.Array(SecretFindingSchema),
-}) {
-  override get message() {
-    return `Refusing to write cassette "${this.cassetteName}" because it contains possible secrets: ${this.findings
-      .map((finding) => `${finding.path} (${finding.reason})`)
-      .join(", ")}`
-  }
-}
-
-export type ResolvedMode = "record" | "replay" | "passthrough"
+import { Effect, Scope, SynchronizedRef } from "effect"
+import type * as CassetteService from "./cassette.js"
+import type { CassetteNotFoundError } from "./cassette.js"
+import type { Interaction } from "./schema.js"
 
 const isCI = () => {
   const value = process.env.CI
   return value !== undefined && value !== "" && value !== "false" && value !== "0"
 }
 
-export const resolveAutoMode = (cassette: CassetteService.Interface, name: string): Effect.Effect<ResolvedMode> =>
+export const resolveAutoMode = (
+  cassette: CassetteService.Interface,
+  name: string,
+): Effect.Effect<"record" | "replay" | "passthrough"> =>
   Effect.gen(function* () {
     if (isCI()) return "replay"
     return (yield* cassette.exists(name)) ? "replay" : "record"
   })
 
-export const appendOrFail = (
-  cassette: CassetteService.Interface,
-  name: string,
-  interaction: Interaction,
-  metadata: CassetteMetadata | undefined,
-): Effect.Effect<void, UnsafeCassetteError> =>
-  cassette
-    .append(name, interaction, metadata)
-    .pipe(
-      Effect.flatMap(({ findings }) =>
-        findings.length === 0 ? Effect.void : Effect.fail(new UnsafeCassetteError({ cassetteName: name, findings })),
-      ),
-    )
-
 export interface ReplayState<T> {
-  readonly load: Effect.Effect<ReadonlyArray<T>, CassetteNotFoundError>
-  readonly cursor: Effect.Effect<number>
-  readonly advance: Effect.Effect<void>
+  readonly claim: <E>(
+    validate: (interaction: T | undefined, index: number, interactions: ReadonlyArray<T>) => Effect.Effect<void, E>,
+  ) => Effect.Effect<{ readonly interaction: T; readonly index: number }, CassetteNotFoundError | E>
 }
 
 export const makeReplayState = <T>(
@@ -55,19 +30,33 @@ export const makeReplayState = <T>(
 ): Effect.Effect<ReplayState<T>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const load = yield* Effect.cached(cassette.read(name).pipe(Effect.map(project)))
-    const position = yield* Ref.make(0)
+    const position = yield* SynchronizedRef.make(0)
 
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
-        const used = yield* Ref.get(position)
-        if (used === 0) return
+        const used = yield* SynchronizedRef.get(position)
+        if (used === 0) return yield* Effect.void
         const interactions = yield* load.pipe(Effect.orDie)
         if (used < interactions.length)
-          yield* Effect.die(
+          return yield* Effect.die(
             new Error(`Unused recorded interactions in ${name}: used ${used} of ${interactions.length}`),
           )
+        return yield* Effect.void
       }),
     )
 
-    return { load, cursor: Ref.get(position), advance: Ref.update(position, (n) => n + 1) }
+    return {
+      claim: (validate) =>
+        Effect.flatMap(load, (interactions) =>
+          SynchronizedRef.modifyEffect(position, (index) =>
+            Effect.gen(function* () {
+              const interaction = interactions[index]
+              yield* validate(interaction, index, interactions)
+              if (interaction === undefined)
+                return yield* Effect.die("Replay validation accepted a missing interaction")
+              return [{ interaction, index }, index + 1] as const
+            }),
+          ),
+        ),
+    }
   })

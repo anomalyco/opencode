@@ -2,8 +2,8 @@ import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
-import { showToast } from "@opencode-ai/ui/toast"
-import { useGlobalSync } from "@/context/global-sync"
+import { showToast } from "@/utils/toast"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
@@ -27,7 +27,7 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const params = useParams()
   const sdk = useSDK()
   const sync = useSync()
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const language = useLanguage()
   const permission = usePermission()
 
@@ -50,21 +50,14 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const todos = createMemo((): Todo[] => {
     const id = params.id
     if (!id) return []
-    return globalSync.data.session_todo[id] ?? []
+    return serverSync.data.session_todo[id] ?? []
   })
 
   const done = createMemo(
     () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
   )
 
-  const status = createMemo(() => {
-    const id = params.id
-    if (!id) return idle
-    return sync.data.session_status[id] ?? idle
-  })
-
-  const busy = createMemo(() => status().type !== "idle")
-  const live = createMemo(() => busy() || blocked())
+  const live = createMemo(() => sync.data.session_working(params.id ?? "") || blocked())
 
   const [store, setStore] = createStore({
     responding: undefined as string | undefined,
@@ -118,7 +111,7 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const clear = () => {
     const id = params.id
     if (!id) return
-    globalSync.todo.set(id, [])
+    serverSync.todo.set(id, [])
     sync.set("todo", id, [])
   }
 

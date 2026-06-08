@@ -2,24 +2,31 @@ import { describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
-import { readFileSync, readdirSync } from "fs"
+import { existsSync, readFileSync, readdirSync } from "fs"
 import path from "path"
 
 const target = "20260507164347_add_workspace_time"
 
 function migrations() {
-  return readdirSync(path.join(import.meta.dirname, "../../migration"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+  return readdirSync(path.join(import.meta.dirname, "../../../core/migration"), { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        existsSync(path.join(import.meta.dirname, "../../../core/migration", entry.name, "migration.sql")),
+    )
     .map((entry) => ({
       name: entry.name,
       timestamp: Number(entry.name.split("_")[0]),
-      sql: readFileSync(path.join(import.meta.dirname, "../../migration", entry.name, "migration.sql"), "utf-8"),
+      sql: readFileSync(
+        path.join(import.meta.dirname, "../../../core/migration", entry.name, "migration.sql"),
+        "utf-8",
+      ),
     }))
     .sort((a, b) => a.timestamp - b.timestamp)
 }
 
 describe("workspace time migration", () => {
-  test("migrates existing workspace rows", () => {
+  test("discards existing workspace rows during the beta reset", () => {
     const sqlite = new Database(":memory:")
     const db = drizzle({ client: sqlite })
     const entries = migrations()
@@ -38,6 +45,6 @@ describe("workspace time migration", () => {
     )
 
     expect(() => migrate(db, entries.slice(index))).not.toThrow()
-    expect(sqlite.query("SELECT time_used FROM workspace WHERE id = ?").get("workspace_1")).toEqual({ time_used: 0 })
+    expect(sqlite.query("SELECT time_used FROM workspace WHERE id = ?").get("workspace_1")).toBeNull()
   })
 })

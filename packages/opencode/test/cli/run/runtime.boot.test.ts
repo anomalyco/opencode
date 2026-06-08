@@ -1,14 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import type { KeyEvent, Renderable } from "@opentui/core"
-import type { Binding } from "@opentui/keymap"
-import { createBindingLookup } from "@opentui/keymap/extras"
 import { OpencodeClient, type Provider } from "@opencode-ai/sdk/v2"
-import { TuiConfig, type Resolved } from "@/cli/cmd/tui/config/tui"
-import { formatBindings } from "@/cli/cmd/run/keymap.shared"
-import { TuiKeybind } from "@/cli/cmd/tui/config/keybind"
-import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo } from "@/cli/cmd/run/runtime.boot"
-
-type RunBinding = Binding<Renderable, KeyEvent>
+import type { Resolved } from "@opencode-ai/tui/config"
+import { TuiConfig } from "@/config/tui"
+import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "@/cli/cmd/run/runtime.boot"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 function model(id: string, providerID: string, context: number, variants?: Record<string, Record<string, never>>) {
   return {
@@ -61,45 +56,37 @@ function model(id: string, providerID: string, context: number, variants?: Recor
   }
 }
 
-function bindings(...keys: string[]) {
-  return keys.map((key) => ({ key }))
-}
-
 function config(input?: {
   leader?: string
   leaderTimeout?: number
   diff_style?: "auto" | "stacked"
   bindings?: Partial<{
-    commandList: RunBinding[]
-    variantCycle: RunBinding[]
-    interrupt: RunBinding[]
-    historyPrevious: RunBinding[]
-    historyNext: RunBinding[]
-    inputClear: RunBinding[]
-    inputSubmit: RunBinding[]
-    inputNewline: RunBinding[]
+    commandList: string[]
+    variantCycle: string[]
+    interrupt: string[]
+    historyPrevious: string[]
+    historyNext: string[]
+    inputClear: string[]
+    inputSubmit: string[]
+    inputNewline: string[]
   }>
 }): Resolved {
   const bind = input?.bindings
-  const keybinds = TuiKeybind.Keybinds.parse({
-    ...(input?.leader && { leader: input.leader }),
-    ...(bind?.commandList && { command_list: bind.commandList }),
-    ...(bind?.variantCycle && { variant_cycle: bind.variantCycle }),
-    ...(bind?.interrupt && { session_interrupt: bind.interrupt }),
-    ...(bind?.historyPrevious && { history_previous: bind.historyPrevious }),
-    ...(bind?.historyNext && { history_next: bind.historyNext }),
-    ...(bind?.inputClear && { input_clear: bind.inputClear }),
-    ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
-    ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
-  })
-  return {
+  return createTuiResolvedConfig({
     diff_style: input?.diff_style,
-    keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
-      commandMap: TuiKeybind.CommandMap,
-      bindingDefaults: TuiKeybind.bindingDefaults(),
-    }),
-    leader_timeout: input?.leaderTimeout ?? 2000,
-  }
+    leader_timeout: input?.leaderTimeout,
+    keybinds: {
+      ...(input?.leader && { leader: input.leader }),
+      ...(bind?.commandList && { command_list: bind.commandList }),
+      ...(bind?.variantCycle && { variant_cycle: bind.variantCycle }),
+      ...(bind?.interrupt && { session_interrupt: bind.interrupt }),
+      ...(bind?.historyPrevious && { history_previous: bind.historyPrevious }),
+      ...(bind?.historyNext && { history_next: bind.historyNext }),
+      ...(bind?.inputClear && { input_clear: bind.inputClear }),
+      ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
+      ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
+    },
+  })
 }
 
 describe("run runtime boot", () => {
@@ -112,47 +99,56 @@ describe("run runtime boot", () => {
       config({
         leader: "ctrl+g",
         bindings: {
-          commandList: bindings("ctrl+p"),
-          variantCycle: bindings("ctrl+t", "alt+t"),
-          interrupt: bindings("ctrl+c"),
-          historyPrevious: bindings("k"),
-          historyNext: bindings("j"),
-          inputClear: bindings("ctrl+l"),
-          inputSubmit: bindings("ctrl+s"),
-          inputNewline: bindings("alt+return"),
+          commandList: ["ctrl+p"],
+          variantCycle: ["ctrl+t", "alt+t"],
+          interrupt: ["ctrl+c"],
+          historyPrevious: ["k"],
+          historyNext: ["j"],
+          inputClear: ["ctrl+l"],
+          inputSubmit: ["ctrl+s"],
+          inputNewline: ["alt+return"],
         },
       }),
     )
 
-    const result = await resolveFooterKeybinds()
+    const result = await resolveRunTuiConfig()
 
-    expect(result.leader).toBe("ctrl+g")
-    expect(result.leaderTimeout).toBe(2000)
-    expect(formatBindings(result.commandList, result.leader)).toBe("ctrl+p")
-    expect(formatBindings(result.variantCycle, result.leader)).toBe("ctrl+t, alt+t")
-    expect(formatBindings(result.interrupt, result.leader)).toBe("ctrl+c")
-    expect(formatBindings(result.historyPrevious, result.leader)).toBe("k")
-    expect(formatBindings(result.historyNext, result.leader)).toBe("j")
-    expect(formatBindings(result.inputClear, result.leader)).toBe("ctrl+l")
-    expect(formatBindings(result.inputSubmit, result.leader)).toBe("ctrl+s")
-    expect(formatBindings(result.inputNewline, result.leader)).toBe("alt+return")
+    expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+g")
+    expect(result.leader_timeout).toBe(2000)
+    expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
+    expect(result.keybinds.get("variant.cycle").map((item) => item.key)).toEqual(["ctrl+t", "alt+t"])
+    expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("ctrl+c")
+    expect(result.keybinds.get("prompt.history.previous")?.[0]?.key).toBe("k")
+    expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("j")
+    expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+l")
+    expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("ctrl+s")
+    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("alt+return")
   })
 
-  test("falls back to default keybinds when config load fails", async () => {
+  test("falls back to default tui keymap config when config load fails", async () => {
     spyOn(TuiConfig, "get").mockRejectedValue(new Error("boom"))
 
-    const result = await resolveFooterKeybinds()
+    const result = await resolveRunTuiConfig()
 
-    expect(result.leader).toBe("ctrl+x")
-    expect(result.leaderTimeout).toBe(2000)
-    expect(formatBindings(result.commandList, result.leader)).toBe("ctrl+p")
-    expect(formatBindings(result.variantCycle, result.leader)).toBe("ctrl+t")
-    expect(formatBindings(result.interrupt, result.leader)).toBe("esc")
-    expect(formatBindings(result.historyPrevious, result.leader)).toBe("up")
-    expect(formatBindings(result.historyNext, result.leader)).toBe("down")
-    expect(formatBindings(result.inputClear, result.leader)).toBe("ctrl+c")
-    expect(formatBindings(result.inputSubmit, result.leader)).toBe("return")
-    expect(formatBindings(result.inputNewline, result.leader)).toBe("shift+return, ctrl+return, alt+return, ctrl+j")
+    expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+x")
+    expect(result.leader_timeout).toBe(2000)
+    expect(result.diff_style).toBe("auto")
+    expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
+    expect(result.keybinds.get("variant.cycle")?.[0]?.key).toBe("ctrl+t")
+    expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("escape")
+    expect(result.keybinds.get("prompt.history.previous")?.[0]?.key).toBe("up")
+    expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("down")
+    expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+c")
+    expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("return")
+    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,ctrl+return,alt+return,ctrl+j")
+  })
+
+  test("preserves disabled leader from resolved tui config", async () => {
+    spyOn(TuiConfig, "get").mockResolvedValue(config({ leader: "none" }))
+
+    const result = await resolveRunTuiConfig()
+
+    expect(result.keybinds.get("leader")).toEqual([])
   })
 
   test("reads diff style and falls back to auto", async () => {

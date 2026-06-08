@@ -1,15 +1,12 @@
-import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
-import type { InstanceContext } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance-context"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context, Schema } from "effect"
-import z from "zod"
-import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
+import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 
@@ -18,15 +15,15 @@ type State = {
 }
 
 export const Event = {
-  Executed: BusEvent.define(
-    "command.executed",
-    Schema.Struct({
+  Executed: EventV2.define({
+    type: "command.executed",
+    schema: {
       name: Schema.String,
       sessionID: SessionID,
       arguments: Schema.String,
       messageID: MessageID,
-    }),
-  ),
+    },
+  }),
 }
 
 export const Info = Schema.Struct({
@@ -36,14 +33,11 @@ export const Info = Schema.Struct({
   model: Schema.optional(Schema.String),
   source: Schema.optional(Schema.Literals(["command", "mcp", "skill"])),
   // Some command templates are lazy promises from MCP prompt resolution.
-  template: Schema.Unknown.annotate({ [ZodOverride]: z.promise(z.string()).or(z.string()) }),
+  template: Schema.Unknown,
   subtask: Schema.optional(Schema.Boolean),
   hints: Schema.Array(Schema.String),
-})
-  .annotate({ identifier: "Command" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Command" })
 
-// for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
 export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & { template: Promise<string> | string }
 
 export function hints(template: string) {

@@ -1,6 +1,6 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { RGBA, type CliRenderer } from "@opentui/core"
-import type { HostPluginApi } from "../../src/cli/cmd/tui/plugin/slots"
+import type { HostPluginApi } from "@opencode-ai/tui/plugin/slots"
 import { createTuiResolvedConfig } from "./tui-runtime"
 
 type Count = {
@@ -10,6 +10,10 @@ type Count = {
   route_drop: number
   command_add: number
   command_drop: number
+}
+
+type AttentionOpts = Partial<Omit<HostPluginApi["attention"], "soundboard">> & {
+  soundboard?: Partial<HostPluginApi["attention"]["soundboard"]>
 }
 
 function themeCurrent(): HostPluginApi["theme"]["current"] {
@@ -83,6 +87,9 @@ function themeCurrent(): HostPluginApi["theme"]["current"] {
 type Opts = {
   client?: HostPluginApi["client"] | (() => HostPluginApi["client"])
   renderer?: HostPluginApi["renderer"]
+  attention?: AttentionOpts
+  event?: HostPluginApi["event"]
+  mode?: HostPluginApi["mode"]
   count?: Count
   keymap?: HostPluginApi["keymap"]
   tuiConfig?: Partial<HostPluginApi["tuiConfig"]>
@@ -183,6 +190,17 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return opts.app?.version ?? "0.0.0-test"
       },
     },
+    attention: {
+      async notify(input) {
+        return opts.attention?.notify?.(input) ?? { ok: false, notification: false, sound: false }
+      },
+      soundboard: {
+        registerPack: (pack) => opts.attention?.soundboard?.registerPack?.(pack) ?? (() => {}),
+        activate: (id, options) => opts.attention?.soundboard?.activate?.(id, options) ?? false,
+        current: () => opts.attention?.soundboard?.current?.() ?? "opencode.default",
+        list: () => opts.attention?.soundboard?.list?.() ?? [],
+      },
+    },
     keys: {
       formatSequence: () => "",
       formatBindings: () => undefined,
@@ -190,7 +208,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     get client() {
       return client()
     },
-    event: {
+    event: opts.event ?? {
       on: () => {
         if (count) count.event_add += 1
         return () => {
@@ -220,6 +238,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
     },
     keymap,
+    mode: opts.mode ?? {
+      current: () => "base",
+      push: () => () => {},
+    },
     route: {
       register: () => {
         if (count) count.route_add += 1
@@ -292,6 +314,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
       session: {
         count: opts.state?.session?.count ?? (() => 0),
+        get: opts.state?.session?.get ?? (() => undefined),
         diff: opts.state?.session?.diff ?? (() => []),
         todo: opts.state?.session?.todo ?? (() => []),
         messages: opts.state?.session?.messages ?? (() => []),

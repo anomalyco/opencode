@@ -4,31 +4,9 @@ import {
   isExitCommand,
   isNewCommand,
   movePromptHistory,
-  printableBinding,
-  promptCycle,
-  promptHit,
-  promptInfo,
-  promptKeys,
   pushPromptHistory,
 } from "@/cli/cmd/run/prompt.shared"
 import type { RunPrompt } from "@/cli/cmd/run/types"
-
-function bindings(...keys: string[]) {
-  return keys.map((key) => ({ key }))
-}
-
-const keybinds = {
-  leader: "ctrl+x",
-  leaderTimeout: 2000,
-  commandList: bindings("ctrl+p"),
-  variantCycle: bindings("ctrl+t", "<leader>t"),
-  interrupt: bindings("escape"),
-  historyPrevious: bindings("up"),
-  historyNext: bindings("down"),
-  inputClear: bindings("ctrl+c"),
-  inputSubmit: bindings("return"),
-  inputNewline: bindings("shift+return,ctrl+return,alt+return,ctrl+j"),
-}
 
 function prompt(text: string, parts: RunPrompt["parts"] = []): RunPrompt {
   return { text, parts }
@@ -85,37 +63,28 @@ describe("run prompt shared", () => {
     expect(draft.state.index).toBeNull()
   })
 
-  test("handles direct and leader-based variant cycling", () => {
-    const keys = promptKeys(keybinds)
+  test("uses display-width cursors for history restoration", () => {
+    const base = createPromptHistory([prompt("one"), prompt("中文")])
 
-    expect(promptHit(keys.clear, promptInfo({ name: "c", ctrl: true }))).toBe(true)
+    const latest = movePromptHistory(base, -1, "草稿", 0)
+    expect(latest.apply).toBe(true)
+    expect(latest.text).toBe("中文")
+    expect(latest.cursor).toBe(0)
 
-    expect(promptCycle(false, promptInfo({ name: "x", ctrl: true }), keys.leaders, keys.cycles)).toEqual({
-      arm: true,
-      clear: false,
-      cycle: false,
-      consume: true,
-    })
+    const older = movePromptHistory(latest.state, -1, "中文", 0)
+    expect(older.apply).toBe(true)
+    expect(older.text).toBe("one")
+    expect(older.cursor).toBe(0)
 
-    expect(promptCycle(true, promptInfo({ name: "t" }), keys.leaders, keys.cycles)).toEqual({
-      arm: false,
-      clear: true,
-      cycle: true,
-      consume: true,
-    })
+    const newer = movePromptHistory(older.state, 1, "one", Bun.stringWidth("one"))
+    expect(newer.apply).toBe(true)
+    expect(newer.text).toBe("中文")
+    expect(newer.cursor).toBe(Bun.stringWidth("中文"))
 
-    expect(promptCycle(false, promptInfo({ name: "t", ctrl: true }), keys.leaders, keys.cycles)).toEqual({
-      arm: false,
-      clear: false,
-      cycle: true,
-      consume: true,
-    })
-  })
-
-  test("prints bindings with leader substitution and esc normalization", () => {
-    expect(printableBinding(keybinds.variantCycle.slice(1), "ctrl+x")).toBe("ctrl+x t")
-    expect(printableBinding(keybinds.interrupt, "ctrl+x")).toBe("esc")
-    expect(printableBinding([], "ctrl+x")).toBe("")
+    const draft = movePromptHistory(newer.state, 1, "中文", Bun.stringWidth("中文"))
+    expect(draft.apply).toBe(true)
+    expect(draft.text).toBe("草稿")
+    expect(draft.cursor).toBe(Bun.stringWidth("草稿"))
   })
 
   test("recognizes exit commands", () => {

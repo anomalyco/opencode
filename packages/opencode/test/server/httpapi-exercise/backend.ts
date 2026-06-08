@@ -2,7 +2,7 @@ import { ConfigProvider, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { parse } from "./assertions"
 import { runtime, type Runtime } from "./runtime"
-import type { ActiveScenario, Backend, BackendApp, CallResult, CaptureMode, SeededContext } from "./types"
+import type { ActiveScenario, BackendApp, CallResult, CaptureMode, SeededContext } from "./types"
 
 type CallOptions = {
   auth?: {
@@ -11,27 +11,18 @@ type CallOptions = {
   }
 }
 
-export function call(
-  backend: Backend,
-  scenario: ActiveScenario,
-  ctx: SeededContext<unknown>,
-  options: CallOptions = {},
-) {
+export function call(scenario: ActiveScenario, ctx: SeededContext<unknown>, options: CallOptions = {}) {
   return Effect.promise(async () =>
-    capture(await app(await runtime(), backend, options).request(toRequest(scenario, ctx)), scenario.capture),
+    capture(await app(await runtime(), options).request(toRequest(scenario, ctx)), scenario.capture),
   )
 }
 
-export function callAuthProbe(
-  backend: Backend,
-  scenario: ActiveScenario,
-  credentials: "missing" | "valid" = "missing",
-) {
+export function callAuthProbe(scenario: ActiveScenario, credentials: "missing" | "valid" = "missing") {
   return Effect.promise(async () => {
     const controller = new AbortController()
     return Promise.race([
       Promise.resolve(
-        app(await runtime(), backend, { auth: { password: "secret" } }).request(
+        app(await runtime(), { auth: { password: "secret" } }).request(
           toAuthProbeRequest(scenario, credentials, controller.signal),
         ),
       ).then((response) => capture(response, scenario.capture)),
@@ -49,29 +40,38 @@ export function callAuthProbe(
   })
 }
 
-const appCache: Partial<Record<string, BackendApp>> = {}
+type CachedApp = BackendApp & { readonly dispose: () => Promise<void> }
 
-function app(modules: Runtime, backend: Backend, options: CallOptions) {
+const appCache: Partial<Record<string, CachedApp>> = {}
+
+export async function disposeApps() {
+  const apps = Object.values(appCache)
+  for (const key of Object.keys(appCache)) delete appCache[key]
+  await Promise.all(apps.flatMap((app) => (app === undefined ? [] : [app.dispose()])))
+}
+
+function app(modules: Runtime, options: CallOptions) {
   const username = options.auth?.username
   const password = options.auth?.password
-  const cacheKey = `${backend}:${username ?? ""}:${password ?? ""}`
+  const cacheKey = `${username ?? ""}:${password ?? ""}`
   if (appCache[cacheKey]) return appCache[cacheKey]
 
-  const handler = HttpRouter.toWebHandler(
-    modules.ExperimentalHttpApiServer.routes.pipe(
+  const web = HttpRouter.toWebHandler(
+    modules.HttpApiApp.routes.pipe(
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({ OPENCODE_SERVER_PASSWORD: password, OPENCODE_SERVER_USERNAME: username }),
         ),
       ),
     ),
-    { disableLogger: true },
-  ).handler
+    { disableLogger: true, memoMap: modules.memoMap },
+  )
   return (appCache[cacheKey] = {
+    dispose: web.dispose,
     request(input: string | URL | Request, init?: RequestInit) {
-      return handler(
+      return web.handler(
         input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init),
-        modules.ExperimentalHttpApiServer.context,
+        modules.HttpApiApp.context,
       )
     },
   })

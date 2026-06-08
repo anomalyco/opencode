@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect"
-import { REDACTED, secretFindings } from "./redaction"
-import type { HttpInteraction, RequestSnapshot } from "./schema"
+import { REDACTED, secretFindings } from "./redaction.js"
+import type { HttpInteraction, RequestMatcher, RequestSnapshot } from "./types.js"
 
 const JsonValue = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownOption(JsonValue)
@@ -20,7 +20,7 @@ export const canonicalizeJson = (value: unknown): unknown => {
   return value
 }
 
-export type RequestMatcher = (incoming: RequestSnapshot, recorded: RequestSnapshot) => boolean
+export type { RequestMatcher } from "./types.js"
 
 export const canonicalSnapshot = (snapshot: RequestSnapshot): string =>
   JSON.stringify({
@@ -36,11 +36,11 @@ export const canonicalSnapshot = (snapshot: RequestSnapshot): string =>
 export const defaultMatcher: RequestMatcher = (incoming, recorded) =>
   canonicalSnapshot(incoming) === canonicalSnapshot(recorded)
 
-const safeText = (value: unknown) => {
+export const safeText = (value: unknown) => {
   if (value === undefined) return "undefined"
   if (secretFindings(value).length > 0) return JSON.stringify(REDACTED)
   const text = JSON.stringify(value)
-  if (!text) return String(value)
+  if (!text) return typeof value
   return text.length > 300 ? `${text.slice(0, 300)}...` : text
 }
 
@@ -90,24 +90,6 @@ export const requestDiff = (expected: RequestSnapshot, received: RequestSnapshot
         : [`  expected ${safeText(expected.body)}, received ${safeText(received.body)}`]
   if (body.length > 0) lines.push("body:", ...body)
   return lines
-}
-
-export const mismatchDetail = (interactions: ReadonlyArray<HttpInteraction>, incoming: RequestSnapshot): string => {
-  if (interactions.length === 0) return "cassette has no recorded HTTP interactions"
-  const ranked = interactions
-    .map((interaction, index) => ({ index, lines: requestDiff(interaction.request, incoming) }))
-    .toSorted((a, b) => a.lines.length - b.lines.length || a.index - b.index)
-  const best = ranked[0]
-  return ["no recorded interaction matched", `closest interaction: #${best.index + 1}`, ...best.lines].join("\n")
-}
-
-export const selectMatch = (
-  interactions: ReadonlyArray<HttpInteraction>,
-  incoming: RequestSnapshot,
-  match: RequestMatcher,
-): { readonly interaction: HttpInteraction | undefined; readonly detail: string } => {
-  const interaction = interactions.find((candidate) => match(incoming, candidate.request))
-  return { interaction, detail: interaction ? "" : mismatchDetail(interactions, incoming) }
 }
 
 export const selectSequential = (

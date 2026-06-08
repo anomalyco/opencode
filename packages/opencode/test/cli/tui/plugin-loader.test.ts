@@ -3,17 +3,122 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { createTestKeymap } from "@opentui/keymap/testing"
+import type { TuiAttentionSoundPack } from "@opencode-ai/plugin/tui"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
-import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+import { createTuiResolvedConfig, mockTuiRuntime } from "../../fixture/tui-runtime"
 import { Global } from "@opencode-ai/core/global"
-import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
+import { TuiConfig } from "../../../src/config/tui"
 import { Filesystem } from "@/util/filesystem"
+import { PluginLoader } from "../../../src/plugin/loader"
 
-const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
-const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
+const { allThemes, addTheme } = await import("@opencode-ai/tui/context/theme")
+const { TuiPluginRuntime } = await import("../../../src/plugin/tui/runtime")
 
 type Row = Record<string, unknown>
+
+test("does not retry permanent file plugin load errors", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "binary-plugin")
+      await Bun.write(file, new Uint8Array([0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0x00, 0x00, 0x01]))
+      return { spec: pathToFileURL(file).href }
+    },
+  })
+
+  let waited = false
+  const calls: Array<["start" | "error", boolean, string?]> = []
+  const plugins = await PluginLoader.loadExternal({
+    items: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+    kind: "tui",
+    wait: async () => {
+      waited = true
+    },
+    report: {
+      start(_candidate, retry) {
+        calls.push(["start", retry])
+      },
+      error(_candidate, retry, stage) {
+        calls.push(["error", retry, stage])
+      },
+    },
+  })
+
+  expect(plugins).toEqual([])
+  expect(waited).toBe(false)
+  expect(calls).toEqual([
+    ["start", false],
+    ["error", false, "load"],
+  ])
+})
+
+test("does not retry file plugin load errors caused by missing modules", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "missing-dependency-plugin.ts")
+      const dep = path.join(dir, "dep.ts")
+      await Bun.write(
+        file,
+        `import value from "./dep"
+export default { id: "demo.retry.load", tui: async () => {}, value }
+`,
+      )
+      return { spec: pathToFileURL(file).href, dep }
+    },
+  })
+
+  let waited = false
+  const calls: Array<["start" | "error", boolean, string?]> = []
+  const plugins = await PluginLoader.loadExternal({
+    items: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+    kind: "tui",
+    wait: async () => {
+      waited = true
+      await Bun.write(tmp.extra.dep, `export default "ready"\n`)
+    },
+    finish: async (loaded, _origin, retry) => ({
+      retry,
+      value: (loaded.mod.default as { value: string }).value,
+    }),
+    report: {
+      start(_candidate, retry) {
+        calls.push(["start", retry])
+      },
+      error(_candidate, retry, stage) {
+        calls.push(["error", retry, stage])
+      },
+    },
+  })
+
+  expect(waited).toBe(false)
+  expect(calls).toEqual([
+    ["start", false],
+    ["error", false, "load"],
+  ])
+  expect(plugins).toEqual([])
+})
+
+test("does not retry top-level plugin errors that look like resolver messages", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "throwing-plugin.ts")
+      await Bun.write(file, `throw new Error("Cannot find package intentional")\n`)
+      return { spec: pathToFileURL(file).href }
+    },
+  })
+
+  let waited = false
+  const plugins = await PluginLoader.loadExternal({
+    items: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+    kind: "tui",
+    wait: async () => {
+      waited = true
+    },
+  })
+
+  expect(plugins).toEqual([])
+  expect(waited).toBe(false)
+})
 
 type Data = {
   local: Row
@@ -558,6 +663,71 @@ test("continues loading when a plugin is missing config metadata", async () => {
   }
 })
 
+test("does not wait on permanent tui plugin startup failures", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const binary = path.join(dir, "binary-plugin")
+      const invalidShape = path.join(dir, "invalid-shape-plugin.ts")
+      const missingID = path.join(dir, "missing-id-plugin.ts")
+      const good = path.join(dir, "good-plugin.ts")
+      const marker = path.join(dir, "good-called.txt")
+
+      await Bun.write(binary, new Uint8Array([0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0x00, 0x00, 0x01]))
+      await Bun.write(invalidShape, `export default { id: "demo.invalid.shape" }\n`)
+      await Bun.write(missingID, `export default { tui: async () => {} }\n`)
+      await Bun.write(
+        good,
+        `export default {
+  id: "demo.good.after-bad",
+  tui: async () => {
+    await Bun.write(${JSON.stringify(marker)}, "called")
+  },
+}
+`,
+      )
+
+      return {
+        binarySpec: pathToFileURL(binary).href,
+        invalidShapeSpec: pathToFileURL(invalidShape).href,
+        missingIDSpec: pathToFileURL(missingID).href,
+        goodSpec: pathToFileURL(good).href,
+        marker,
+      }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi(),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.binarySpec, tmp.extra.invalidShapeSpec, tmp.extra.missingIDSpec, tmp.extra.goodSpec],
+        plugin_origins: [
+          { spec: tmp.extra.binarySpec, scope: "local", source: path.join(tmp.path, "tui.json") },
+          { spec: tmp.extra.invalidShapeSpec, scope: "local", source: path.join(tmp.path, "tui.json") },
+          { spec: tmp.extra.missingIDSpec, scope: "local", source: path.join(tmp.path, "tui.json") },
+          { spec: tmp.extra.goodSpec, scope: "local", source: path.join(tmp.path, "tui.json") },
+        ],
+      }),
+    })
+
+    expect(wait).toHaveBeenCalledTimes(0)
+    await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("called")
+    expect(TuiPluginRuntime.list().find((item) => item.id === "demo.good.after-bad")?.active).toBe(true)
+    expect(TuiPluginRuntime.list().some((item) => item.spec === tmp.extra.binarySpec)).toBe(false)
+    expect(TuiPluginRuntime.list().some((item) => item.spec === tmp.extra.invalidShapeSpec)).toBe(false)
+    expect(TuiPluginRuntime.list().some((item) => item.spec === tmp.extra.missingIDSpec)).toBe(false)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
+
 test("initializes external tui plugins in config order", async () => {
   const globalJson = path.join(Global.Path.config, "tui.json")
   const globalJsonc = path.join(Global.Path.config, "tui.jsonc")
@@ -644,6 +814,36 @@ export default {
     } else {
       await Bun.write(globalJsonc, backupJsonc)
     }
+  }
+})
+
+test("does not bootstrap server plugins while initializing tui plugins", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const marker = path.join(dir, "server-plugin-called.txt")
+      const plugin = path.join(dir, "server-plugin.ts")
+      await Bun.write(
+        plugin,
+        [
+          "export default async () => {",
+          `  await Bun.write(${JSON.stringify(marker)}, "called")`,
+          "  return {}",
+          "}",
+          "",
+        ].join("\n"),
+      )
+      await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [pathToFileURL(plugin).href] }))
+      return { marker }
+    },
+  })
+
+  const mock = mockTuiRuntime(tmp.path, [])
+  try {
+    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config: mock.config })
+    await expect(fs.stat(tmp.extra.marker)).rejects.toThrow()
+  } finally {
+    await TuiPluginRuntime.dispose()
+    mock.restore()
   }
 })
 
@@ -819,6 +1019,85 @@ test("plugin keymap proxy preserves real keymap receiver", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     harness.cleanup()
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
+test("auto-disposes plugin attention sound packs and resolves sound paths", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "attention-soundpack-plugin.ts")
+      const spec = pathToFileURL(file).href
+      const absolute = path.join(dir, "sounds", "default.mp3")
+      const url = pathToFileURL(path.join(dir, "sounds", "error.mp3")).href
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.attention.soundpack",
+  tui: async (api) => {
+    api.attention.soundboard.registerPack({
+      id: "demo.pack",
+      sounds: {
+        default: ${JSON.stringify(absolute)},
+        question: "sounds/question.mp3",
+        done: "  sounds/done.mp3  ",
+        subagent_done: "sounds/subagent-done.mp3",
+        error: ${JSON.stringify(url)},
+        nope: "sounds/nope.mp3",
+        permission: "",
+      },
+    })
+  },
+}
+`,
+      )
+
+      return { spec }
+    },
+  })
+
+  const packs: TuiAttentionSoundPack[] = []
+  let dropped = 0
+  const attention = {
+    soundboard: {
+      registerPack(pack: TuiAttentionSoundPack) {
+        packs.push(pack)
+        return () => {
+          dropped += 1
+        }
+      },
+    },
+  }
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ attention }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+
+    expect(packs).toEqual([
+      {
+        id: "demo.pack",
+        sounds: {
+          default: path.join(tmp.path, "sounds", "default.mp3"),
+          question: path.join(tmp.path, "sounds", "question.mp3"),
+          done: path.join(tmp.path, "sounds", "done.mp3"),
+          subagent_done: path.join(tmp.path, "sounds", "subagent-done.mp3"),
+          error: path.join(tmp.path, "sounds", "error.mp3"),
+        },
+      },
+    ])
+    expect(dropped).toBe(0)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(dropped).toBe(1)
     cwd.mockRestore()
     wait.mockRestore()
   }

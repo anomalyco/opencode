@@ -1,5 +1,13 @@
 import { Option, Schema, SchemaGetter } from "effect"
-import { zod, ZodOverride } from "./effect-zod"
+import { Hash } from "./util/hash"
+
+export type ExternalID = {
+  readonly namespace: string
+  readonly key: string
+}
+
+export const externalID = (prefix: string, input: ExternalID) =>
+  `${prefix}_${Hash.sha256(JSON.stringify([input.namespace, input.key]))}`
 
 /**
  * Integer greater than zero.
@@ -12,6 +20,18 @@ export const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
 export const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
 /**
+ * Relative file path (e.g., `src/components/Button.tsx`).
+ */
+export const RelativePath = Schema.String.pipe(Schema.brand("RelativePath"))
+export type RelativePath = Schema.Schema.Type<typeof RelativePath>
+
+/**
+ * Absolute file path (e.g., `/home/user/projects/myapp/src/main.ts`).
+ */
+export const AbsolutePath = Schema.String.pipe(Schema.brand("AbsolutePath"))
+export type AbsolutePath = Schema.Schema.Type<typeof AbsolutePath>
+
+/**
  * Optional public JSON field that can hold explicit `undefined` on the type
  * side but encodes it as an omitted key, matching legacy `JSON.stringify`.
  */
@@ -21,7 +41,6 @@ export const optionalOmitUndefined = <S extends Schema.Top>(schema: S) =>
       decode: SchemaGetter.passthrough({ strict: false }),
       encode: SchemaGetter.transformOptional(Option.filter((value) => value !== undefined)),
     }),
-    Schema.annotate({ [ZodOverride]: zod(schema).optional() }),
   )
 
 /**
