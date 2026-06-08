@@ -509,6 +509,32 @@ export const layer = Layer.effect(
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       if (!client.getServerCapabilities()?.tools) return
+
+      client.onclose = () => {
+        if (s.clients[name] !== client) return
+
+        log.warn("MCP transport closed unexpectedly", { server: name })
+        s.status[name] = { status: "failed", error: "Transport closed unexpectedly" }
+        delete s.defs[name]
+
+        bridge
+          .promise(
+            Effect.gen(function* () {
+              const mcpConfig = yield* getMcpConfig(name)
+              if (!mcpConfig) {
+                log.error("MCP config not found, cannot reconnect", { name })
+                return
+              }
+              yield* createAndStore(name, mcpConfig)
+              yield* events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore)
+              log.info("MCP reconnected after transport close", { server: name })
+            }),
+          )
+          .catch((error) => {
+            log.error("MCP reconnect failed after transport close", { server: name, error: String(error) })
+          })
+      }
+
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
         log.info("tools list changed notification received", { server: name })
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
@@ -563,9 +589,12 @@ export const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
+            const clientsToClose = Object.entries(s.clients)
+            s.clients = {}
+            s.defs = {}
             yield* Effect.forEach(
-              Object.values(s.clients),
-              (client) =>
+              clientsToClose,
+              ([, client]) =>
                 Effect.gen(function* () {
                   const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
                   if (typeof pid === "number") {
@@ -591,6 +620,7 @@ export const layer = Layer.effect(
     function closeClient(s: State, name: string) {
       const client = s.clients[name]
       delete s.defs[name]
+      delete s.clients[name]
       if (!client) return Effect.void
       return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
     }
@@ -665,7 +695,6 @@ export const layer = Layer.effect(
       yield* requireMcpConfig(name)
       const s = yield* InstanceState.get(state)
       yield* closeClient(s, name)
-      delete s.clients[name]
       s.status[name] = { status: "disabled" }
     })
 

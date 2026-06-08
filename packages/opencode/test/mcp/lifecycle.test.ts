@@ -123,6 +123,7 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class MockClient {
     _state!: MockClientState
     transport: any
+    onclose?: () => void
 
     constructor(_opts: any) {
       clientCreateCount++
@@ -975,4 +976,106 @@ it.instance(
       }),
     ),
   { config: { mcp: {} } },
+)
+
+// ========================================================================
+// Test: onclose triggers automatic reconnect (#17099)
+// ========================================================================
+
+it.instance(
+  "onclose triggers automatic reconnect when transport closes unexpectedly",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "reconnect-server"
+        const firstState = getOrCreateClientState("reconnect-server")
+        firstState.tools = [
+          { name: "tool_v1", description: "first", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        yield* mcp.add("reconnect-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const toolsBefore = yield* mcp.tools()
+        expect(Object.keys(toolsBefore).some((k) => k.includes("tool_v1"))).toBe(true)
+        expect((yield* mcp.status())["reconnect-server"]?.status).toBe("connected")
+
+        const clientsBefore = yield* mcp.clients()
+        const client = clientsBefore["reconnect-server"]
+        expect(client).toBeDefined()
+
+        clientStates.delete("reconnect-server")
+        const secondState = getOrCreateClientState("reconnect-server")
+        secondState.tools = [
+          { name: "tool_v2", description: "reconnected", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        // Trigger onclose (simulating unexpected transport close)
+        lastCreatedClientName = "reconnect-server"
+        client.onclose?.()
+
+        // Give the async reconnect a moment to complete
+        yield* Effect.sleep("100 millis")
+
+        const statusAfter = yield* mcp.status()
+        expect(statusAfter["reconnect-server"]?.status).toBe("connected")
+
+        const toolsAfter = yield* mcp.tools()
+        expect(Object.keys(toolsAfter).some((k) => k.includes("tool_v2"))).toBe(true)
+        expect(Object.keys(toolsAfter).some((k) => k.includes("tool_v1"))).toBe(false)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+// ========================================================================
+// Test: onclose does NOT reconnect on intentional disconnect
+// ========================================================================
+
+it.instance(
+  "onclose does not trigger reconnect on intentional disconnect()",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "intentional-disc"
+        const serverState = getOrCreateClientState("intentional-disc")
+        serverState.tools = [
+          { name: "my_tool", description: "a tool", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        yield* mcp.add("intentional-disc", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect((yield* mcp.status())["intentional-disc"]?.status).toBe("connected")
+
+        // Intentional disconnect should NOT trigger reconnect
+        yield* mcp.disconnect("intentional-disc")
+
+        const statusAfter = yield* mcp.status()
+        expect(statusAfter["intentional-disc"]?.status).toBe("disabled")
+
+        // Wait to confirm no reconnect fires
+        yield* Effect.sleep("100 millis")
+
+        const statusFinal = yield* mcp.status()
+        expect(statusFinal["intentional-disc"]?.status).toBe("disabled")
+
+        const tools = yield* mcp.tools()
+        expect(Object.keys(tools).some((k) => k.includes("my_tool"))).toBe(false)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "intentional-disc": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
 )
