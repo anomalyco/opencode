@@ -32,7 +32,7 @@ function parseBody(body: string) {
 
 function eventResponse() {
   return Effect.gen(function* () {
-    yield* Effect.logInfo("global event connected", { service: "server" })
+    yield* Effect.logInfo("global event connected")
     const events = Stream.callback<GlobalBusEvent>((queue) => {
       const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
       return Effect.acquireRelease(
@@ -51,7 +51,7 @@ function eventResponse() {
         Stream.map(eventData),
         Stream.pipeThroughChannel(Sse.encode()),
         Stream.encodeText,
-        Stream.ensuring(Effect.logInfo("global event disconnected", { service: "server" })),
+        Stream.ensuring(Effect.logInfo("global event disconnected")),
       ),
       {
         contentType: "text/event-stream",

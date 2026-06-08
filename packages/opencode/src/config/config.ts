@@ -225,7 +225,7 @@ export const layer = Layer.effect(
     })
 
     const loadFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
-      yield* Effect.logInfo("loading", { service: "config", path: filepath })
+      yield* Effect.logInfo("loading", { path: filepath })
       const text = yield* readConfigFile(filepath)
       if (!text) return {} as Info
       return yield* loadConfig(text, { path: filepath }, env)
@@ -269,7 +269,7 @@ export const layer = Layer.effect(
     const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
       loadGlobal().pipe(
         Effect.tapError((error) =>
-          Effect.logError("failed to load global config, using defaults", { service: "config", error: String(error) }),
+          Effect.logError("failed to load global config, using defaults", { error: String(error) }),
         ),
         Effect.orElseSucceed((): Info => ({})),
       ),
@@ -345,7 +345,7 @@ export const layer = Layer.effect(
             const url = key.replace(/\/+$/, "")
             authEnv[value.key] = value.token
             const wellknownURL = `${url}/.well-known/opencode`
-            yield* Effect.logDebug("fetching remote config", { service: "config", url: wellknownURL })
+            yield* Effect.logDebug("fetching remote config", { url: wellknownURL })
             const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, ConfigV1.WellKnown)
             const remote = yield* Effect.promise(() =>
               substituteWellKnownRemoteConfig({
@@ -357,7 +357,7 @@ export const layer = Layer.effect(
             )
             const fetchedConfig = remote
               ? yield* Effect.gen(function* () {
-                  yield* Effect.logDebug("fetching remote config", { service: "config", url: remote.url })
+                  yield* Effect.logDebug("fetching remote config", { url: remote.url })
                   const data = yield* fetchRemoteJson(remote.url, remote.headers, Schema.Json)
                   if (isRecord(data) && isRecord(data.config)) return data.config
                   if (isRecord(data)) return data
@@ -378,7 +378,7 @@ export const layer = Layer.effect(
               authEnv,
             )
             yield* merge(source, next, "global")
-            yield* Effect.logDebug("loaded remote config from well-known", { service: "config", url })
+            yield* Effect.logDebug("loaded remote config from well-known", { url })
           }
         }
 
@@ -387,7 +387,7 @@ export const layer = Layer.effect(
 
         if (Flag.OPENCODE_CONFIG) {
           yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
-          yield* Effect.logDebug("loaded custom config", { service: "config", path: Flag.OPENCODE_CONFIG })
+          yield* Effect.logDebug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
@@ -403,7 +403,7 @@ export const layer = Layer.effect(
         const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
 
         if (Flag.OPENCODE_CONFIG_DIR) {
-          yield* Effect.logDebug("loading config from OPENCODE_CONFIG_DIR", { service: "config", path: Flag.OPENCODE_CONFIG_DIR })
+          yield* Effect.logDebug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
         }
 
         const deps: Fiber.Fiber<void>[] = []
@@ -412,7 +412,7 @@ export const layer = Layer.effect(
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
-              yield* Effect.logDebug(`loading config from ${source}`, { service: "config" })
+              yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))
               result.agent ??= {}
               result.mode ??= {}
@@ -435,7 +435,7 @@ export const layer = Layer.effect(
               Effect.exit,
               Effect.tap((exit) =>
                 Exit.isFailure(exit)
-                  ? Effect.logWarning("background dependency install failed", { service: "config", dir, error: String(exit.cause) })
+                  ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
                   : Effect.void,
               ),
               Effect.asVoid,
@@ -459,7 +459,7 @@ export const layer = Layer.effect(
             source,
           })
           yield* merge(source, next, "local")
-          yield* Effect.logDebug("loaded custom config from OPENCODE_CONFIG_CONTENT", { service: "config" })
+          yield* Effect.logDebug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
 
         const activeAccount = Option.getOrUndefined(
@@ -493,8 +493,9 @@ export const layer = Layer.effect(
           }).pipe(
             Effect.withSpan("Config.loadActiveOrgConfig"),
             Effect.catch((err) =>
-              Effect.logDebug("failed to fetch remote account config", { service: "config",
-                  error: err instanceof Error ? err.message : String(err), }),
+              Effect.logDebug("failed to fetch remote account config", {
+                error: err instanceof Error ? err.message : String(err),
+              }),
             ),
           )
         }
@@ -532,7 +533,7 @@ export const layer = Layer.effect(
           try {
             result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
           } catch (err) {
-            yield* Effect.logWarning("OPENCODE_PERMISSION contains invalid JSON, skipping", { service: "config", err })
+            yield* Effect.logWarning("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
           }
         }
 
@@ -553,7 +554,7 @@ export const layer = Layer.effect(
           try {
             result.username = os.userInfo().username || "user"
           } catch (err) {
-            yield* Effect.logWarning("failed to read system username, using fallback", { service: "config", err })
+            yield* Effect.logWarning("failed to read system username, using fallback", { err })
             result.username = "user"
           }
         }

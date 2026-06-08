@@ -163,7 +163,7 @@ function setupMdns(opts: ListenOptions, port: number, scope: Scope.Scope) {
       return unpublish
     }
     if (opts.mdns) {
-      yield* Effect.logWarning("mDNS enabled but hostname is loopback; skipping mDNS publish", { service: "server" })
+      yield* Effect.logWarning("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }
     return Effect.void
   })

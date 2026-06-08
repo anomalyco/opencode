@@ -40,19 +40,21 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         data: { ...event.data },
       }))
       const source = payload[0].aggregateID
-      yield* Effect.logInfo("sync replay requested", { service: "server.sync",
-          sessionID: source,
-          events: payload.length,
-          first: payload[0]?.seq,
-          last: payload.at(-1)?.seq,
-          directory: ctx.payload.directory, })
+      yield* Effect.logInfo("sync replay requested", {
+        sessionID: source,
+        events: payload.length,
+        first: payload[0]?.seq,
+        last: payload.at(-1)?.seq,
+        directory: ctx.payload.directory,
+      })
       const ownerID = yield* InstanceState.workspaceID
       yield* events.replayAll(payload, { ownerID, strictOwner: true })
-      yield* Effect.logInfo("sync replay complete", { service: "server.sync",
-          sessionID: source,
-          events: payload.length,
-          first: payload[0]?.seq,
-          last: payload.at(-1)?.seq, })
+      yield* Effect.logInfo("sync replay complete", {
+        sessionID: source,
+        events: payload.length,
+        first: payload[0]?.seq,
+        last: payload.at(-1)?.seq,
+      })
       return { sessionID: source }
     })
 
@@ -62,7 +64,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
 
       yield* session.setWorkspace({ sessionID: ctx.payload.sessionID, workspaceID })
 
-      yield* Effect.logInfo("sync session stolen", { service: "server.sync", sessionID: ctx.payload.sessionID, workspaceID })
+      yield* Effect.logInfo("sync session stolen", { sessionID: ctx.payload.sessionID, workspaceID })
 
       return { sessionID: ctx.payload.sessionID }
     })

@@ -68,14 +68,17 @@ export const layer = Layer.effect(
     const backend = getBackend()
     const location = yield* Location.Service
     if (!backend) {
-      yield* Effect.logError("watcher backend not supported", { service: "file.watcher", directory: location.directory, platform: process.platform })
+      yield* Effect.logError("watcher backend not supported", {
+        directory: location.directory,
+        platform: process.platform,
+      })
       return Service.of({})
     }
 
     const w = watcher()
     if (!w) return Service.of({})
 
-    yield* Effect.logInfo("watcher backend", { service: "file.watcher", directory: location.directory, platform: process.platform, backend })
+    yield* Effect.logInfo("watcher backend", { directory: location.directory, platform: process.platform, backend })
     const events = yield* EventV2.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
@@ -101,7 +104,7 @@ export const layer = Layer.effect(
         Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
         Effect.catchCause((cause) => {
           pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
-          return Effect.logError("failed to subscribe", { service: "file.watcher", directory, cause: Cause.pretty(cause) })
+          return Effect.logError("failed to subscribe", { directory, cause: Cause.pretty(cause) })
         }),
       )
     }
@@ -129,7 +132,9 @@ export const layer = Layer.effect(
     return Service.of({})
   }).pipe(
     Effect.catchCause((cause) => {
-      return Effect.logError("failed to init watcher service", { service: "file.watcher", cause: Cause.pretty(cause) }).pipe(Effect.as(Service.of({})))
+      return Effect.logError("failed to init watcher service", { cause: Cause.pretty(cause) }).pipe(
+        Effect.as(Service.of({})),
+      )
     }),
   ),
 )

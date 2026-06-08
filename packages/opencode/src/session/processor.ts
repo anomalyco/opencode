@@ -914,11 +914,12 @@ export const layer = Layer.effect(
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
-        yield* Effect.logError("process", { service: "session.processor",
-            "session.id": input.sessionID,
-            messageID: input.assistantMessage.id,
-            error: errorMessage(e),
-            stack: e instanceof Error ? e.stack : undefined, })
+        yield* Effect.logError("process", {
+          "session.id": input.sessionID,
+          messageID: input.assistantMessage.id,
+          error: errorMessage(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        })
         const error = parse(e)
         yield* flushV2Fragments()
         if (SessionV1.ContextOverflowError.isInstance(error)) {
@@ -956,9 +957,10 @@ export const layer = Layer.effect(
       })
 
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
-        yield* Effect.logInfo("process", { service: "session.processor",
-            "session.id": input.sessionID,
-            messageID: input.assistantMessage.id, })
+        yield* Effect.logInfo("process", {
+          "session.id": input.sessionID,
+          messageID: input.assistantMessage.id,
+        })
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 

@@ -136,7 +136,7 @@ export const layer = Layer.effect(
     })
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
-      yield* Effect.logInfo("cancel", { service: "session.prompt", "session.id": sessionID })
+      yield* Effect.logInfo("cancel", { "session.id": sessionID })
       yield* state.cancel(sessionID)
     })
 
@@ -277,11 +277,7 @@ export const layer = Layer.effect(
       const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logError("failed to generate title", { service: "session.prompt", error: Cause.squash(cause) }),
-          ),
-        )
+        .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
     })
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
@@ -383,10 +379,11 @@ export const layer = Layer.effect(
           Effect.catchCause((cause) => {
             const defect = Cause.squash(cause)
             error = defect instanceof Error ? defect : new Error(String(defect))
-            return Effect.logError("subtask execution failed", { service: "session.prompt",
-                error,
-                agent: task.agent,
-                description: task.description, })
+            return Effect.logError("subtask execution failed", {
+              error,
+              agent: task.agent,
+              description: task.description,
+            })
           }),
           Effect.onInterrupt(() =>
             Effect.gen(function* () {
@@ -762,7 +759,7 @@ export const layer = Layer.effect(
         if (part.type === "file") {
           if (part.source?.type === "resource") {
             const { clientName, uri } = part.source
-            yield* Effect.logInfo("mcp resource", { service: "session.prompt", clientName, uri, mime: part.mime })
+            yield* Effect.logInfo("mcp resource", { clientName, uri, mime: part.mime })
             const pieces: Draft<SessionV1.Part>[] = [
               {
                 messageID: info.id,
@@ -800,7 +797,7 @@ export const layer = Layer.effect(
               pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
             } else {
               const error = Cause.squash(exit.cause)
-              yield* Effect.logError("failed to read MCP resource", { service: "session.prompt", error, clientName, uri })
+              yield* Effect.logError("failed to read MCP resource", { error, clientName, uri })
               const message = error instanceof Error ? error.message : String(error)
               pieces.push({
                 messageID: info.id,
@@ -836,7 +833,7 @@ export const layer = Layer.effect(
               }
               break
             case "file:": {
-              yield* Effect.logInfo("file", { service: "session.prompt", mime: part.mime })
+              yield* Effect.logInfo("file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
 
@@ -919,7 +916,7 @@ export const layer = Layer.effect(
                   }
                 } else {
                   const error = Cause.squash(exit.cause)
-                  yield* Effect.logError("failed to read file", { service: "session.prompt", error, filepath })
+                  yield* Effect.logError("failed to read file", { error, filepath })
                   const message = error instanceof Error ? error.message : String(error)
                   yield* events.publish(Session.Event.Error, {
                     sessionID: input.sessionID,
@@ -941,7 +938,7 @@ export const layer = Layer.effect(
                 const exit = yield* execRead(args).pipe(Effect.exit)
                 if (Exit.isFailure(exit)) {
                   const error = Cause.squash(exit.cause)
-                  yield* Effect.logError("failed to read directory", { service: "session.prompt", error, filepath })
+                  yield* Effect.logError("failed to read directory", { error, filepath })
                   const message = error instanceof Error ? error.message : String(error)
                   yield* events.publish(Session.Event.Error, {
                     sessionID: input.sessionID,
@@ -1066,24 +1063,26 @@ export const layer = Layer.effect(
 
       const parsed = decodeMessageInfo(info, { errors: "all", propertyOrder: "original" })
       if (Exit.isFailure(parsed)) {
-        yield* Effect.logError("invalid user message before save", { service: "session.prompt",
-            sessionID: input.sessionID,
-            messageID: info.id,
-            agent: info.agent,
-            model: info.model,
-            cause: Cause.pretty(parsed.cause), })
+        yield* Effect.logError("invalid user message before save", {
+          sessionID: input.sessionID,
+          messageID: info.id,
+          agent: info.agent,
+          model: info.model,
+          cause: Cause.pretty(parsed.cause),
+        })
       }
       for (const [index, part] of parts.entries()) {
         const p = decodeMessagePart(part, { errors: "all", propertyOrder: "original" })
         if (Exit.isSuccess(p)) continue
-        yield* Effect.logError("invalid user part before save", { service: "session.prompt",
-            sessionID: input.sessionID,
-            messageID: info.id,
-            partID: part.id,
-            partType: part.type,
-            index,
-            cause: Cause.pretty(p.cause),
-            part, })
+        yield* Effect.logError("invalid user part before save", {
+          sessionID: input.sessionID,
+          messageID: info.id,
+          partID: part.id,
+          partType: part.type,
+          index,
+          cause: Cause.pretty(p.cause),
+          part,
+        })
       }
 
       yield* sessions.updateMessage(info)
@@ -1222,7 +1221,7 @@ export const layer = Layer.effect(
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
-          yield* Effect.logInfo("loop", { service: "session.prompt", "session.id": sessionID, step })
+          yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
             Effect.provideService(Database.Service, database),
@@ -1253,13 +1252,14 @@ export const layer = Layer.effect(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
             )
             if (orphan) {
-              yield* Effect.logWarning("loop exit with orphaned interrupted tool", { service: "session.prompt",
-                  "session.id": sessionID,
-                  messageID: lastAssistant.id,
-                  tool: orphan.tool,
-                  callID: orphan.callID, })
+              yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+                "session.id": sessionID,
+                messageID: lastAssistant.id,
+                tool: orphan.tool,
+                callID: orphan.callID,
+              })
             }
-            yield* Effect.logInfo("exiting loop", { service: "session.prompt", "session.id": sessionID })
+            yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
             break
           }
 
@@ -1484,10 +1484,11 @@ export const layer = Layer.effect(
     })
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-      yield* Effect.logInfo("command", { service: "session.prompt",
-          "session.id": input.sessionID,
-          command: input.command,
-          agent: input.agent, })
+      yield* Effect.logInfo("command", {
+        "session.id": input.sessionID,
+        command: input.command,
+        agent: input.agent,
+      })
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)

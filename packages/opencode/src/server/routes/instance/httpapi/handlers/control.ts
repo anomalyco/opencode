@@ -34,9 +34,7 @@ export const controlHandlers = HttpApiBuilder.group(RootHttpApi, "control", (han
             : ctx.payload.level === "warn"
               ? Effect.logWarning
               : Effect.logError
-      yield* write(ctx.payload.message).pipe(
-        Effect.annotateLogs({ service: ctx.payload.service, ...ctx.payload.extra }),
-      )
+      yield* write(ctx.payload.message).pipe(Effect.annotateLogs(ctx.payload.extra ?? {}))
       return true
     })
 

@@ -81,13 +81,14 @@ const live: Layer.Layer<
     const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
-      yield* Effect.logInfo("stream", { service: "llm",
-          providerID: input.model.providerID,
-          modelID: input.model.id,
-          "session.id": input.sessionID,
-          small: (input.small ?? false).toString(),
-          agent: input.agent.name,
-          mode: input.agent.mode, })
+      yield* Effect.logInfo("stream", {
+        providerID: input.model.providerID,
+        modelID: input.model.id,
+        "session.id": input.sessionID,
+        small: (input.small ?? false).toString(),
+        agent: input.agent.name,
+        mode: input.agent.mode,
+      })
 
       const [language, cfg, item, info] = yield* Effect.all(
         [
@@ -238,31 +239,38 @@ const live: Layer.Layer<
           abort: input.abort,
         })
         if (native.type === "supported") {
-          yield* Effect.logInfo("llm runtime selected", { "llm.runtime": "native",
-              "llm.provider": input.model.providerID,
-              "llm.model": input.model.id, })
+          yield* Effect.logInfo("llm runtime selected", {
+            "llm.runtime": "native",
+            "llm.provider": input.model.providerID,
+            "llm.model": input.model.id,
+          })
           return {
             type: "native" as const,
             stream: native.stream,
           }
         }
-        yield* Effect.logInfo("llm runtime selected", { "llm.runtime": "ai-sdk",
-            "llm.provider": input.model.providerID,
-            "llm.model": input.model.id,
-            "llm.native_unsupported_reason": native.reason, })
-        yield* Effect.logInfo("native runtime unavailable; falling back to ai-sdk", { service: "llm",
-            providerID: input.model.providerID,
-            modelID: input.model.id,
-            "session.id": input.sessionID,
-            small: (input.small ?? false).toString(),
-            agent: input.agent.name,
-            mode: input.agent.mode,
-            reason: native.reason, })
+        yield* Effect.logInfo("llm runtime selected", {
+          "llm.runtime": "ai-sdk",
+          "llm.provider": input.model.providerID,
+          "llm.model": input.model.id,
+          "llm.native_unsupported_reason": native.reason,
+        })
+        yield* Effect.logInfo("native runtime unavailable; falling back to ai-sdk", {
+          providerID: input.model.providerID,
+          modelID: input.model.id,
+          "session.id": input.sessionID,
+          small: (input.small ?? false).toString(),
+          agent: input.agent.name,
+          mode: input.agent.mode,
+          reason: native.reason,
+        })
       }
 
-      yield* Effect.logInfo("llm runtime selected", { "llm.runtime": "ai-sdk",
-          "llm.provider": input.model.providerID,
-          "llm.model": input.model.id, })
+      yield* Effect.logInfo("llm runtime selected", {
+        "llm.runtime": "ai-sdk",
+        "llm.provider": input.model.providerID,
+        "llm.model": input.model.id,
+      })
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {

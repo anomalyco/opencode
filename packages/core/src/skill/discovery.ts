@@ -85,9 +85,7 @@ export const layer = Layer.effect(
         http.execute,
         Effect.flatMap((response) => response.arrayBuffer),
         Effect.flatMap((body) => fs.writeWithDirs(destination, new Uint8Array(body))),
-        Effect.catch((error) =>
-          Effect.logError("failed to download skill file", { service: "skill-discovery", url, error }),
-        ),
+        Effect.catch((error) => Effect.logError("failed to download skill file", { url, error })),
       )
     })
 
@@ -101,7 +99,7 @@ export const layer = Layer.effect(
           http.execute,
           Effect.flatMap(HttpClientResponse.schemaBodyJson(Index)),
           Effect.catch((error) =>
-            Effect.logError("failed to fetch skill index", { service: "skill-discovery", url: index, error }).pipe(Effect.as(undefined)),
+            Effect.logError("failed to fetch skill index", { url: index, error }).pipe(Effect.as(undefined)),
           ),
         )
         if (!data) return []

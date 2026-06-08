@@ -37,5 +37,5 @@ export const schemaErrorLayer = HttpApiMiddleware.layerSchemaErrorTransform(Sche
           { status: 400 },
         ),
       )
-  return Effect.logWarning("schema rejection", { service: "server", kind: error.kind, reason }).pipe(Effect.andThen(response))
+  return Effect.logWarning("schema rejection", { kind: error.kind, reason }).pipe(Effect.andThen(response))
 })
