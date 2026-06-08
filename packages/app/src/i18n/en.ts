@@ -336,8 +336,7 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "password",
   "dialog.server.edit.title": "Edit server",
   "dialog.server.default.title": "Default server",
-  "dialog.server.default.description":
-    "Connect to this server on app launch instead of starting a local server. Requires restart.",
+  "dialog.server.default.description": "Connect to this server on app launch. Requires restart.",
   "dialog.server.default.none": "No server selected",
   "dialog.server.default.set": "Set current server as default",
   "dialog.server.default.clear": "Clear",

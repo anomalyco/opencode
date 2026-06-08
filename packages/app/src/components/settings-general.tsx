@@ -432,6 +432,18 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.localSidecarStartup.title")}
+          description={language.t("settings.general.row.localSidecarStartup.description")}
+        >
+          <div data-action="settings-local-sidecar-startup">
+            <Switch
+              checked={settings.general.localSidecarStartup()}
+              onChange={(checked) => settings.general.setLocalSidecarStartup(checked)}
+            />
+          </div>
+        </SettingsRow>
       </SettingsList>
     </div>
   )

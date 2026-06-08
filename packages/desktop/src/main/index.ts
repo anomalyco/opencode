@@ -295,19 +295,21 @@ const main = Effect.gen(function* () {
       wslServers
         .getState()
         .servers.some((item) => item.config.id === defaultWslServer && item.runtime.kind === "ready")
-    const canUseDefaultWithoutLocal =
-      !localSidecarStartup ||
-      (storedDefaultServer && storedDefaultServer !== "sidecar" && (!defaultWslServer || process.platform === "win32"))
 
-    if (canUseDefaultWithoutLocal) {
+    if (!localSidecarStartup) {
       yield* Effect.promise(() => initializeWslServers(defaultWslServer))
-      if (!localSidecarStartup || !defaultWslServer || defaultWslReady()) {
+      if (!defaultWslServer || defaultWslReady()) {
         logger.log("local sidecar skipped", { defaultServer: storedDefaultServer, localSidecarStartup })
         yield* Deferred.succeed(serverReady, null)
         return
       }
 
-      logger.warn("default wsl server unavailable; starting local sidecar", { defaultServer: storedDefaultServer })
+      logger.warn("default wsl server unavailable; continuing without local sidecar", {
+        defaultServer: storedDefaultServer,
+        localSidecarStartup,
+      })
+      yield* Deferred.succeed(serverReady, null)
+      return
     }
 
     const port = yield* Effect.gen(function* () {

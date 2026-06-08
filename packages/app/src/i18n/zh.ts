@@ -343,7 +343,7 @@ export const dict = {
   "dialog.server.add.password": "密码（可选）",
   "dialog.server.edit.title": "编辑服务器",
   "dialog.server.default.title": "默认服务器",
-  "dialog.server.default.description": "应用启动时连接此服务器，而不是启动本地服务器。需要重启。",
+  "dialog.server.default.description": "应用启动时连接此服务器。需要重启。",
   "dialog.server.default.none": "未选择服务器",
   "dialog.server.default.set": "将当前服务器设为默认",
   "dialog.server.default.clear": "清除",
