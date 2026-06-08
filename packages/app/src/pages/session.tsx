@@ -266,7 +266,6 @@ export default function Page() {
   const lastUserMessage = timeline.lastUserMessage
   const messages = timeline.messages
   const messagesReady = timeline.ready
-  const sessionSync = timeline.resource
   const userMessages = timeline.userMessages
   const visibleUserMessages = timeline.visibleUserMessages
 
@@ -304,7 +303,6 @@ export default function Page() {
   const [store, setStore] = createStore({
     ...sessionViewState(),
     newSessionWorktree: "main",
-    deferRender: false,
   })
 
   const [followup, setFollowup] = persisted(
@@ -321,18 +319,6 @@ export default function Page() {
       edit: {},
     }),
   )
-
-  createComputed((prev) => {
-    const key = sessionKey()
-    if (key !== prev) {
-      setStore("deferRender", true)
-      const owner = sessionOwnership.capture()
-      requestAnimationFrame(() => {
-        setTimeout(() => owner.run(() => setStore("deferRender", false)), 0)
-      })
-    }
-    return key
-  })
 
   let reviewFrame: number | undefined
   let todoFrame: number | undefined
@@ -881,30 +867,28 @@ export default function Page() {
     loadingClass: string
     emptyClass: string
   }) => (
-    <Show when={!store.deferRender}>
-      <SessionReviewTab
-        title={changesTitle()}
-        empty={reviewEmpty(input)}
-        diffs={reviewDiffs}
-        view={view}
-        diffStyle={input.diffStyle}
-        onDiffStyleChange={input.onDiffStyleChange}
-        onScrollRef={(el) => setTree("reviewScroll", el)}
-        focusedFile={tree.activeDiff}
-        onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-        onLineCommentUpdate={updateCommentInContext}
-        onLineCommentDelete={removeCommentFromContext}
-        lineCommentActions={reviewCommentActions()}
-        commentMentions={{
-          items: file.searchFilesAndDirectories,
-        }}
-        comments={comments.all()}
-        focusedComment={comments.focus()}
-        onFocusedCommentChange={comments.setFocus}
-        onViewFile={openReviewFile}
-        classes={input.classes}
-      />
-    </Show>
+    <SessionReviewTab
+      title={changesTitle()}
+      empty={reviewEmpty(input)}
+      diffs={reviewDiffs}
+      view={view}
+      diffStyle={input.diffStyle}
+      onDiffStyleChange={input.onDiffStyleChange}
+      onScrollRef={(el) => setTree("reviewScroll", el)}
+      focusedFile={tree.activeDiff}
+      onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+      onLineCommentUpdate={updateCommentInContext}
+      onLineCommentDelete={removeCommentFromContext}
+      lineCommentActions={reviewCommentActions()}
+      commentMentions={{
+        items: file.searchFilesAndDirectories,
+      }}
+      comments={comments.all()}
+      focusedComment={comments.focus()}
+      onFocusedCommentChange={comments.setFocus}
+      onViewFile={openReviewFile}
+      classes={input.classes}
+    />
   )
 
   const reviewPanel = () => (
@@ -1585,7 +1569,7 @@ export default function Page() {
       sessionKey,
       sessionID: () => params.id,
       prompt,
-      ready: () => !store.deferRender && messagesReady(),
+      ready: () => messagesReady(),
       centered,
       todo: {
         collapsed: () => view().todoCollapsed.get(),
@@ -1697,7 +1681,6 @@ export default function Page() {
 
   return (
     <div class="relative size-full overflow-hidden flex flex-col">
-      {sessionSync() ?? ""}
       <SessionHeader />
       <div
         class="flex-1 min-h-0 flex flex-col md:flex-row"
