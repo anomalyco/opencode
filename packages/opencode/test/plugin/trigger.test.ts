@@ -18,6 +18,7 @@ import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
@@ -75,7 +76,7 @@ const triggerSystemTransform = Effect.fn("PluginTriggerTest.triggerSystemTransfo
     {
       model: {
         providerID: ProviderV2.ID.anthropic,
-        modelID: ProviderV2.ModelID.make("claude-sonnet-4-6"),
+        modelID: ModelV2.ID.make("claude-sonnet-4-6"),
       },
     },
     out,

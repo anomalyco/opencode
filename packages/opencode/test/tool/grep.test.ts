@@ -1,4 +1,4 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -11,7 +11,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
@@ -34,7 +34,7 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
     FSUtil.defaultLayer,
-    Ripgrep.defaultLayer,
+    Search.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
     Git.defaultLayer,
@@ -187,7 +187,7 @@ describe("tool.grep", () => {
           [path.join(alias, "*")]: "allow",
         },
       })
-      const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
       const next: Tool.Context = {
         ...ctx,
         ask: (req) =>
@@ -235,7 +235,7 @@ describe("tool.grep", () => {
         yield* appfs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
         yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
 
-        const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
         const next: Tool.Context = {
           ...ctx,
           ask: (req) =>
