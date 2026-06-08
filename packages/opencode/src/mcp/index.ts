@@ -858,7 +858,11 @@ export const layer = Layer.effect(
           Effect.tapError(() => Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)),
         )
 
-        const listed = client ? yield* defs(mcpName, client, mcpConfig.timeout) : undefined
+        const listed = client
+          ? client.getServerCapabilities()?.tools
+            ? yield* defs(mcpName, client, mcpConfig.timeout)
+            : []
+          : undefined
         if (!client || !listed) {
           yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
           return { status: "failed", error: "Failed to get tools" } as Status
