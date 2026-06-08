@@ -1,10 +1,10 @@
+import { Layer } from "effect"
 import { OtlpLogger } from "effect/unstable/observability"
 import { Flag } from "../flag/flag"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
 import { runID } from "./shared"
 
 const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
-export const enabled = !!endpoint
 
 const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
   ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
@@ -47,11 +47,13 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
   }
 }
 
-export function logger() {
-  return OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })
+export function loggers() {
+  if (!endpoint) return []
+  return [OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })]
 }
 
 export async function tracingLayer() {
+  if (!endpoint) return Layer.empty
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
   const SdkBase = await import("@opentelemetry/sdk-trace-base")
