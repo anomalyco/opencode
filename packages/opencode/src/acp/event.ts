@@ -12,6 +12,7 @@ import { Effect } from "effect"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"
 import { partsToContentChunks, type ReplayPart } from "./content"
+import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
 import {
   duplicateRunningToolUpdate,
   errorToolUpdate,
@@ -20,6 +21,7 @@ import {
   shellOutputSnapshot,
   completedToolUpdate,
 } from "./tool"
+import { flushPendingWrites } from "./review-staging"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
@@ -233,6 +235,7 @@ export class Subscription {
   }
 
   private async handleToolPart(sessionId: string, part: ToolPart, cwd: string) {
+    ReviewOverlay.setActiveSession(sessionId)
     await this.toolStart(sessionId, part, cwd)
 
     switch (part.state.status) {
@@ -258,6 +261,11 @@ export class Subscription {
             }),
           },
         })
+        // These tools may have staged edits in the overlay. Send them to the
+        // client now so they show up in the native review UI as the tool finishes.
+        if (part.tool === "edit" || part.tool === "write" || part.tool === "apply_patch") {
+          await flushPendingWrites(this.input.connection, sessionId)
+        }
         return
 
       case "error":
