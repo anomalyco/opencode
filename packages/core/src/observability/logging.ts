@@ -9,7 +9,7 @@ function formatter(id: string = runID) {
     return [
       ["timestamp", output.timestamp],
       ["level", output.level],
-      ["run_id", id],
+      ["run", id],
       ["fiber", output.fiberId],
       ...messages.flatMap((value) => (plain(value) ? flatten(value) : [["message", value] as const])),
       ...(output.cause === undefined ? [] : [["cause", output.cause] as const]),

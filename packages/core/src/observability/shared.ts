@@ -1,1 +1,1 @@
-export const runID = crypto.randomUUID()
+export const runID = crypto.randomUUID().slice(0, 8)

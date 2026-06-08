@@ -41,7 +41,7 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
       ...resourceAttributes(),
       "deployment.environment.name": InstallationChannel,
       "opencode.client": Flag.OPENCODE_CLIENT,
-      "opencode.run_id": runID,
+      "opencode.run": runID,
       "service.instance.id": runID,
     },
   }

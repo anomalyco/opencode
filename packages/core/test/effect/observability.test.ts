@@ -48,10 +48,11 @@ describe("resource", () => {
       "service.namespace": "anomalyco",
     })
     expect(resource().attributes["service.instance.id"]).not.toBe("override")
+    expect(resource().attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
   })
 })
 
-test("file logger appends concurrent runs with a run_id on every line", async () => {
+test("file logger appends concurrent runs with a run on every line", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-test-"))
   await using _ = {
     async [Symbol.asyncDispose]() {
@@ -72,8 +73,8 @@ test("file logger appends concurrent runs with a run_id on every line", async ()
 
   const lines = (await Bun.file(file).text()).trim().split("\n")
   expect(lines).toHaveLength(100)
-  expect(lines.filter((line) => line.includes("run_id=run-a"))).toHaveLength(50)
-  expect(lines.filter((line) => line.includes("run_id=run-b"))).toHaveLength(50)
+  expect(lines.filter((line) => line.includes("run=run-a"))).toHaveLength(50)
+  expect(lines.filter((line) => line.includes("run=run-b"))).toHaveLength(50)
   expect(lines.every((line) => line.startsWith("timestamp=") && line.includes(" level=INFO "))).toBe(true)
   expect(lines.every((line) => !line.startsWith("{"))).toBe(true)
 })
