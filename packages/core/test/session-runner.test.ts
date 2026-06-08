@@ -3200,6 +3200,145 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("honours agent.steps as the loop cap (regression for #30865)", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) =>
+        editor.update(AgentV2.ID.make("build"), (build) => {
+          build.steps = 3
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Loop forever" }), resume: false })
+
+      requests.length = 0
+      authorizations.length = 0
+      executions.length = 0
+      streamGate = undefined
+      streamStarted = undefined
+      responses = Array.from({ length: 3 }, (_, index) => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: `call-capped-${index}`, name: "echo", input: { text: `${index}` } }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ])
+
+      const failure = yield* session.resume(sessionID).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({ _tag: "SessionRunner.StepLimitExceededError", sessionID, limit: 3 })
+      expect(requests).toHaveLength(3)
+      expect(executions).toHaveLength(3)
+    }),
+  )
+
+  it.effect("falls back to the 25-step default when agent.steps is unset", () =>
+    Effect.gen(function* () {
+      yield* setup
+      // No agent.steps override — should use the V2 default of 25.
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Loop forever" }), resume: false })
+
+      requests.length = 0
+      authorizations.length = 0
+      executions.length = 0
+      streamGate = undefined
+      streamStarted = undefined
+      responses = Array.from({ length: 25 }, (_, index) => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: `call-default-${index}`, name: "echo", input: { text: `${index}` } }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ])
+
+      const failure = yield* session.resume(sessionID).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({ _tag: "SessionRunner.StepLimitExceededError", sessionID, limit: 25 })
+      expect(requests).toHaveLength(25)
+    }),
+  )
+
+  it.effect("injects the max-steps prompt on the final configured turn (regression for #30866)", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) =>
+        editor.update(AgentV2.ID.make("build"), (build) => {
+          build.steps = 2
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Go" }), resume: false })
+
+      requests.length = 0
+      streamGate = undefined
+      streamStarted = undefined
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-first", name: "echo", input: { text: "first" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        // The 2nd (final) turn — model stops after seeing the max-steps signal.
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      // The final request's messages end with the synthetic max-steps assistant message.
+      const lastMessages = requests.at(-1)!.messages
+      const lastMessage = lastMessages.at(-1)
+      expect(lastMessage?.role).toBe("assistant")
+      expect(JSON.stringify(lastMessage?.content)).toContain("CRITICAL - MAXIMUM STEPS REACHED")
+    }),
+  )
+
+  it.effect("does NOT inject the max-steps prompt on non-final turns (regression for #30866)", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agent = yield* AgentV2.Service
+      yield* agent.update((editor) =>
+        editor.update(AgentV2.ID.make("build"), (build) => {
+          build.steps = 5
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Go" }), resume: false })
+
+      requests.length = 0
+      streamGate = undefined
+      streamStarted = undefined
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-only", name: "echo", input: { text: "only" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests.length).toBeGreaterThanOrEqual(2)
+      // Neither the first request nor any non-final one should carry the signal.
+      for (const request of requests.slice(0, -1)) {
+        const serialized = JSON.stringify(request.messages)
+        expect(serialized).not.toContain("CRITICAL - MAXIMUM STEPS REACHED")
+      }
+    }),
+  )
+
   it.effect("does not restart a capped tool loop for a coalesced stale wake", () =>
     Effect.gen(function* () {
       yield* setup

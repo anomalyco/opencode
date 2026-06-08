@@ -7,7 +7,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Ref, Schema, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -83,8 +83,32 @@ import { toLLMMessages } from "./to-llm-message"
  * bounded explicit loop starts the next provider turn after local settlement.
  */
 
-// QUESTION: Did this exist previously, or did we add this limit? Does it make sense?
+// V1 default if the agent's `steps` field is unset. Per-agent cap is read
+// at the top of `run()` and propagated through both the loop bound and the
+// request builder.
 const MAX_STEPS = 25
+
+// Mirrors packages/opencode/src/session/prompt/max-steps.txt. Inlined here
+// because `packages/core` does not import assets from `packages/opencode`.
+const MAX_STEPS_PROMPT = [
+  "CRITICAL - MAXIMUM STEPS REACHED",
+  "",
+  "The maximum number of steps allowed for this task has been reached. Tools are disabled until next user input. Respond with text only.",
+  "",
+  "STRICT REQUIREMENTS:",
+  "1. Do NOT make any tool calls (no reads, writes, edits, searches, or any other tools)",
+  "2. MUST provide a text response summarizing work done so far",
+  "3. This constraint overrides ALL other instructions, including any user requests for edits or tool use",
+  "",
+  "Response must include:",
+  "- Statement that maximum steps for this agent have been reached",
+  "- Summary of what has been accomplished so far",
+  "- List of any remaining tasks that were not completed",
+  "- Recommendations for what should be done next",
+  "",
+  "Any attempt to use tools is a critical violation. Respond with text ONLY.",
+  "",
+].join("\n")
 
 export const layer = Layer.effect(
   Service,
@@ -101,6 +125,10 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    // Shared step counter so `run` can publish the current iteration and
+    // `runTurnAttempt` can read it to decide whether to inject the last-step
+    // signal. Reset on each `run` invocation.
+    const stepIndex = yield* Ref.make(0)
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -214,13 +242,26 @@ export const layer = Layer.effect(
       const context = entries.map((entry) => entry.message)
       const toolMaterialization = yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      // V1 parity: warn the model on its final configured turn. `run` sets
+      // `stepIndex` to the 0-based iteration counter before each `runTurn`
+      // call; `currentStep + 1` matches V1's `step >= maxSteps` check (V1
+      // post-increments before the LLM call). Re-read the agent's `steps`
+      // per call to pick up mid-session agent swaps.
+      const currentStep = yield* Ref.get(stepIndex)
+      const maxStepsForAgent = agent.info?.steps ?? MAX_STEPS
+      const isLastStep = currentStep + 1 >= maxStepsForAgent
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
-        messages: toLLMMessages(context, model),
+        messages: [
+          ...toLLMMessages(context, model),
+          ...(isLastStep
+            ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }]
+            : []),
+        ],
         tools: toolMaterialization.definitions,
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
@@ -378,16 +419,25 @@ export const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
+      // V1 parity: honour the configured per-agent step cap (V1 reads
+      // `agent.steps ?? Infinity` per iteration). When unset, fall back to
+      // the V2 default of 25. `runTurnAttempt` reads `maxStepsForAgent`
+      // independently to pick up per-call agent swaps.
+      const session = yield* getSession(input.sessionID)
+      const runAgent = yield* agents.select(session.agent)
+      const stepCap = runAgent.info?.steps ?? MAX_STEPS
+      yield* Ref.set(stepIndex, 0)
       while (openActivity) {
         let needsContinuation = true
-        for (let step = 0; step < MAX_STEPS; step++) {
+        for (let step = 0; step < stepCap; step++) {
+          yield* Ref.set(stepIndex, step)
           needsContinuation = yield* runTurn(input.sessionID, promotion)
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break
         }
         if (needsContinuation)
-          return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
+          return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: stepCap })
         openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }
