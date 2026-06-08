@@ -2,9 +2,11 @@ import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { batch, type Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
+import { useServer } from "@/context/server"
+import { useTabs } from "@/context/tabs"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -213,6 +215,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const layout = useLayout()
   const language = useLanguage()
   const params = useParams()
+  const [search] = useSearchParams<{ draftId?: string }>()
+  const server = useServer()
+  const tabs = useTabs()
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk.scope, sessionID)
 
   const errorMessage = (err: unknown) => {
@@ -381,7 +386,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        const draftID = search.draftId
+        if (draftID)
+          tabs.promoteDraft(draftID, {
+            server: server.key,
+            dirBase64: base64Encode(sessionDirectory),
+            sessionId: session.id,
+          })
+        else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
       }
     }
     if (!session) {

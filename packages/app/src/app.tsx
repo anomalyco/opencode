@@ -9,7 +9,7 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
+import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
@@ -43,9 +43,10 @@ import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
-import { TabsProvider } from "@/context/tabs"
+import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
+import { SDKProvider, useSDK } from "@/context/sdk"
 import { WslServersProvider } from "@/wsl/context"
-import DirectoryLayout from "@/pages/directory-layout"
+import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
@@ -54,13 +55,68 @@ const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
 
 const SessionRoute = Object.assign(
-  () => (
-    <SessionProviders>
-      <Session />
-    </SessionProviders>
-  ),
+  () => {
+    const settings = useSettings()
+    const params = useParams()
+    const [search] = useSearchParams<{ draftId?: string; prompt?: string }>()
+    const sdk = useSDK()
+    const server = useServer()
+    const tabs = useTabs()
+
+    // When the new layout is enabled, the legacy new-session route (/:dir/session with no id)
+    // is replaced by a draft at /new-session?draftId=…
+    createEffect(() => {
+      if (!settings.general.newLayoutDesigns()) return
+      if (params.id || search.draftId) return
+      if (!tabs.ready() || !sdk.directory) return
+      tabs.newDraft({ server: server.key, directory: sdk.directory }, search.prompt)
+    })
+
+    return (
+      <SessionProviders>
+        <Session />
+      </SessionProviders>
+    )
+  },
   { preload: Session.preload },
 )
+
+function DraftRoute() {
+  const [search] = useSearchParams<{ draftId?: string }>()
+  const tabs = useTabs()
+  return (
+    <Show when={tabs.ready()}>
+      <Show when={search.draftId} keyed fallback={<Navigate href="/" />}>
+        {(draftID) => <ResolvedDraftRoute draftID={draftID} />}
+      </Show>
+    </Show>
+  )
+}
+
+function ResolvedDraftRoute(props: { draftID: string }) {
+  const server = useServer()
+  const tabs = useTabs()
+  const draft = createMemo(() =>
+    tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === props.draftID),
+  )
+
+  createEffect(() => {
+    const current = draft()
+    if (current && current.server !== server.key) server.setActive(current.server)
+  })
+
+  return (
+    <Show when={draft()} keyed fallback={<Navigate href="/" />}>
+      {(current) => (
+        <SDKProvider directory={current.directory}>
+          <DirectoryDataProvider directory={current.directory} draftID={props.draftID}>
+            <SessionRoute />
+          </DirectoryDataProvider>
+        </SDKProvider>
+      )}
+    </Show>
+  )
+}
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
@@ -335,6 +391,7 @@ export function AppInterface(props: {
             )}
           >
             <Route path="/" component={HomeRoute} />
+            <Route path="/new-session" component={DraftRoute} />
             <Route path="/:dir" component={DirectoryLayout}>
               <Route path="/" component={() => <Navigate href="session" />} />
               <Route path="/session/:id?" component={SessionRoute} />
