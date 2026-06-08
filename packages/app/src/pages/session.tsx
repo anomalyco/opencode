@@ -941,7 +941,7 @@ export default function Page() {
     }
   }
 
-  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes" && !env.disableChangeFiles())
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -1919,7 +1919,7 @@ export default function Page() {
     <div data-component="codle-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
-        <Show when={!isDesktop() && !!params.id}>
+        <Show when={!isDesktop() && !!params.id && !env.disableChangeFiles()}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
               <Tabs.Trigger

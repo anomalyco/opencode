@@ -168,12 +168,17 @@ export function SessionSidePanel(props: {
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
 
-  const fileTreeTab = () => layout.fileTree.tab()
+  const fileTreeTab = () => (env.disableChangeFiles() ? "all" : layout.fileTree.tab())
 
   const setFileTreeTabValue = (value: string) => {
     if (value !== "changes" && value !== "all") return
+    if (value === "changes" && env.disableChangeFiles()) return
     layout.fileTree.setTab(value)
   }
+
+  createEffect(() => {
+    if (env.disableChangeFiles() && layout.fileTree.tab() === "changes") layout.fileTree.setTab("all")
+  })
 
   const showAllFiles = () => {
     if (fileTreeTab() !== "changes") return
@@ -428,10 +433,12 @@ export function SessionSidePanel(props: {
                 data-scope="filetree"
               >
                 <Tabs.List>
-                  <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
-                    {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
-                  </Tabs.Trigger>
+                  <Show when={!env.disableChangeFiles()}>
+                    <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
+                      <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
+                      {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
+                    </Tabs.Trigger>
+                  </Show>
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                     {language.t("session.files.all")}
                   </Tabs.Trigger>

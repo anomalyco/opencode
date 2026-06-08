@@ -19,6 +19,7 @@ export function createClientEnv() {
   const disablePromptPermissions = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === STRING_TRUE
   const disablePromptTriggers = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === STRING_TRUE
   const disableWysiwygOnly = import.meta.env.VITE_DISABLE_WYSIWYG_ONLY === STRING_TRUE
+  const disableChangeFiles = import.meta.env.VITE_DISABLE_CHANGE_FILES === STRING_TRUE
   const [devMode] = useStorageSignal(key, false, {
     storage: "local", 
     parse: (value) => value === STRING_TRUE,
@@ -32,6 +33,7 @@ export function createClientEnv() {
     disablePromptPermissions: () => disablePromptPermissions && !devMode(),
     disablePromptTriggers: () => disablePromptTriggers && !devMode(),
     disableWysiwygOnly: () => disableWysiwygOnly && !devMode(),
+    disableChangeFiles: () => disableChangeFiles && !devMode(),
     submitFailureCloseSec,
   }
 }
