@@ -261,10 +261,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             basePath: dir,
             frecencyDbPath: path.join(root, `${id}.frecency.mdb`),
             historyDbPath: path.join(root, `${id}.history.mdb`),
-            // fff uses a bit different log version, also with spans so keep
-            // them in the same folder for debuggability
-            logFilePath: path.join(Global.Path.log, "fff.log"),
-            logLevel: Log.getLevel().toLowerCase() as Lowercase<Log.Level>,
             aiMode: true,
             // only the first toolcall picker can accumulate resources to index
             // home directory, if the user specifically opened opencode at the
