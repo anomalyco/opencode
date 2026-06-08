@@ -25,6 +25,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { first } from "@opencode-ai/ui/utils/first"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { Session, type Message } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
@@ -638,6 +639,12 @@ export default function Layout(props: ParentProps) {
     return result
   })
 
+  const currentSession = createMemo(() => {
+    const id = params.id
+    if (!id) return
+    return currentSessions().find((s) => s.id === id)
+  })
+
   type PrefetchQueue = {
     inflight: Set<string>
     pending: string[]
@@ -885,6 +892,14 @@ export default function Layout(props: ParentProps) {
     }
 
     warm(sessions, index)
+  })
+  createEffect(() => {
+    const project = currentProject()
+    const session = currentSession()
+    const projectName = project ? displayName(project) : getFilename(currentDir() ?? "")
+    const letter = first(projectName).toUpperCase()
+    const title = session?.title
+    document.title = title ? `${letter}|${title} - ${projectName}` : `${letter}|${projectName}`
   })
 
   function navigateSessionByOffset(offset: number) {

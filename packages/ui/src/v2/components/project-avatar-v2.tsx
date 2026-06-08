@@ -1,16 +1,6 @@
+import { first } from "../../utils/first"
 import { type ComponentProps, splitProps, Show } from "solid-js"
 import "./project-avatar-v2.css"
-
-const segmenter =
-  typeof Intl !== "undefined" && "Segmenter" in Intl
-    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
-    : undefined
-
-function first(value: string) {
-  if (!value) return ""
-  if (!segmenter) return Array.from(value)[0] ?? ""
-  return segmenter.segment(value)[Symbol.iterator]().next().value?.segment ?? Array.from(value)[0] ?? ""
-}
 
 export const PROJECT_AVATAR_VARIANTS = [
   "orange",

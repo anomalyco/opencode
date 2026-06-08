@@ -232,6 +232,9 @@ function HomeDesign() {
   })
 
   createEffect(() => {
+    document.title = "OpenCode"
+  })
+  createEffect(() => {
     const pending = pendingHomeNavigation
     if (!pending || pending.server !== server.key) return
     pendingHomeNavigation = undefined
