@@ -150,7 +150,7 @@ jobs:
 
           gh release create "$TAG" \
             --title "Acompany SecureCode ${TAG}" \
-            --notes "Acompany SecureCode CLI release." \
+            --generate-notes \
             --repo "$GITHUB_REPOSITORY"
 
       # Disabled per #290 — public distribution paused while we revisit the
