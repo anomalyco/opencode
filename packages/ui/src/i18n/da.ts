@@ -66,6 +66,8 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "Tænker - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Overvejer næste skridt",
+  "ui.sessionTurn.status.reasoning": "Ræsonnering",
+  "ui.sessionTurn.status.reasoningSummary": "Ræsonnerings Oversigt",
 
   "ui.messagePart.questions.dismissed": "Spørgsmål afvist",
   "ui.messagePart.compaction": "Session komprimeret",
