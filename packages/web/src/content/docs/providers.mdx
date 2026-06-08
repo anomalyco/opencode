@@ -1796,6 +1796,55 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### LLMTR
+
+[LLMTR](https://llmtr.com) is an OpenAI-compatible AI gateway hosted in Turkey. A single API key gives access to its first-party Turkish-hosted models as well as passthrough models from OpenAI, Anthropic, Google, and others.
+
+1. Head over to the [LLMTR dashboard](https://llmtr.com), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for LLMTR.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your LLMTR API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+   The first-party `llmtr/*` models are preloaded. To use any other model from the [LLMTR catalog](https://llmtr.com/models) — including passthrough models that support tool calling — add its id to your opencode config.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmtr": {
+         "models": {
+           "anthropic/claude-opus-4.8": {
+             "name": "Claude Opus 4.8"
+           },
+           "openai/gpt-5.5": {
+             "name": "GPT-5.5"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
