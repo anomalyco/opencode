@@ -9,6 +9,8 @@ import { PermissionV2 } from "../permission"
 import { PluginV2 } from "../plugin"
 
 const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
+const BUILD_SYSTEM =
+  "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
@@ -21,7 +23,6 @@ Guidelines:
 - Use Glob for broad file pattern matching
 - Use Grep for searching file contents with regex
 - Use Read when you know the specific file path you need to read
-- Use Bash for file operations like copying, moving, or listing directory contents
 - Adapt your search approach based on the thoroughness level specified by the caller
 - Return file paths as absolute paths in your final response
 - For clear communication, avoid using emojis
@@ -122,8 +123,9 @@ export const Plugin = PluginV2.define({
     ]
 
     yield* agent.update((editor) => {
-      editor.update(AgentV2.ID.make("build"), (item) => {
+      editor.update(AgentV2.defaultID, (item) => {
         item.description = "The default agent. Executes tools based on configured permissions."
+        item.system ??= BUILD_SYSTEM
         item.mode = "primary"
         item.permissions.push(
           ...PermissionV2.merge(defaults, [
@@ -171,8 +173,6 @@ export const Plugin = PluginV2.define({
               { action: "*", resource: "*", effect: "deny" },
               { action: "grep", resource: "*", effect: "allow" },
               { action: "glob", resource: "*", effect: "allow" },
-              { action: "list", resource: "*", effect: "allow" },
-              { action: "bash", resource: "*", effect: "allow" },
               { action: "webfetch", resource: "*", effect: "allow" },
               { action: "websearch", resource: "*", effect: "allow" },
               { action: "read", resource: "*", effect: "allow" },

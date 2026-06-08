@@ -211,7 +211,7 @@ Provider, model, variant, and provisional agent `options` are authored as partia
 
 Keep provider `env` as an authored list of recognized credential environment variable names. Built-in catalog providers already carry this metadata for automatic environment-backed availability, and configured providers may need to declare the same source. For a configured provider this is additive metadata, not a requirement that one of the variables exists: the provider may instead be usable through configured options, a stored account, or an endpoint that needs no credential.
 
-Within configured models, rename legacy upstream model identifier `id` to `api_id` rather than exposing camelCase runtime `apiID`. Model `limit` is an authored patch, so an override may change only `context`, `input`, or `output`. Model `cost` accepts one simple pricing object or an array of tiered pricing entries; omitted cache prices default to zero.
+Within configured models, nest the legacy upstream model identifier `id` under `api.id` with the rest of the model API override. Model `limit` is an authored patch, so an override may change only `context`, `input`, or `output`. Model `cost` accepts one simple pricing object or an array of tiered pricing entries; omitted cache prices default to zero.
 
 Do not port legacy provider model `reasoning`, `temperature`, or `interleaved` flags as first-class config fields; provider/request behavior belongs in structured `options` or model variants. Do not port `release_date`, `status`, `experimental`, `whitelist`, or `blacklist` in this v2 surface.
 
@@ -223,7 +223,7 @@ Do not port legacy provider model `reasoning`, `temperature`, or `interleaved` f
       "options": { "headers": { "Authorization": "Bearer {env:API_KEY}" } },
       "models": {
         "chat": {
-          "api_id": "upstream-chat-model",
+          "api": { "id": "upstream-chat-model" },
           "limit": { "output": 32768 },
           "cost": { "input": 1.25, "output": 10 },
           "variants": [{ "id": "high", "aisdk": { "request": { "reasoningEffort": "high" } } }],
@@ -238,13 +238,13 @@ Do not port legacy provider model `reasoning`, `temperature`, or `interleaved` f
 
 Agent behavior and tool-access policy. Review together because agent configuration can contain permissions and model choices.
 
-| Field           | Current Purpose                                     | Status   | Notes                                                                                                                          |
-| --------------- | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `default_agent` | Choose default primary agent                        | remove   | Do not retain a separate top-level selector; default choice should be designed with the v2 agent configuration model.          |
-| `mode`          | Legacy agent configuration alias                    | remove   | Do not port deprecated alias; configure agents through the v2 agent surface only.                                              |
-| `agent`         | Configure primary, subagent, and specialized agents | redesign | Rename to plural `agents`; retain a named map of built-in overrides and custom agent definitions.                              |
-| `permission`    | Tool permission rules                               | redesign | Rename to plural `permissions`; replace legacy map shorthand with an ordered array of `{ permission, pattern, action }` rules. |
-| `tools`         | Legacy tool enable/disable map                      | remove   | Do not port boolean enable/disable alias; express tool access through permissions.                                             |
+| Field           | Current Purpose                                     | Status   | Notes                                                                                                                       |
+| --------------- | --------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `default_agent` | Choose default primary agent                        | remove   | Do not retain a separate top-level selector; default choice should be designed with the v2 agent configuration model.       |
+| `mode`          | Legacy agent configuration alias                    | remove   | Do not port deprecated alias; configure agents through the v2 agent surface only.                                           |
+| `agent`         | Configure primary, subagent, and specialized agents | redesign | Rename to plural `agents`; retain a named map of built-in overrides and custom agent definitions.                           |
+| `permission`    | Tool permission rules                               | redesign | Rename to plural `permissions`; replace legacy map shorthand with an ordered array of `{ action, resource, effect }` rules. |
+| `tools`         | Legacy tool enable/disable map                      | remove   | Do not port boolean enable/disable alias; express tool access through permissions.                                          |
 
 Do not port `default_agent` ahead of the v2 agent design. The legacy runtime uses it to choose a visible, non-subagent fallback instead of `build`, but exposing that selection as an isolated top-level field would pre-commit v2 to the legacy agent model before agents and their policy surface are defined together.
 
@@ -281,7 +281,7 @@ Retain `description`, `hidden`, and `steps`; they define an agent's discoverabil
       "color": "warning",
       "steps": 12,
       "disabled": false,
-      "permissions": [{ "permission": "edit", "pattern": "*", "action": "deny" }],
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
     },
   },
 }
@@ -289,13 +289,13 @@ Retain `description`, `hidden`, and `steps`; they define an agent's discoverabil
 
 Do not port `tools`, either as a top-level setting or as an agent-entry alias. The legacy loader already converts tool booleans into permission rules, including collapsing write-adjacent tool names into `edit`; v2 should avoid carrying that lossy compatibility input forward.
 
-Rename legacy `permission` to `permissions` and expose the normalized ordered ruleset already modeled by `PermissionV2.Ruleset`. Rules retain the interactive `"ask"` action in addition to `"allow"` and `"deny"`; this is distinct from `experimental.policies`, whose provider enforcement currently needs only allow/deny decisions. The same `permissions` ruleset shape should be used inside future `agents` entries.
+Rename legacy `permission` to `permissions` and expose the normalized ordered ruleset already modeled by `PermissionV2.Ruleset`. Rules retain the interactive `"ask"` effect in addition to `"allow"` and `"deny"`; this is distinct from `experimental.policies`, whose provider enforcement currently needs only allow/deny decisions. The same `permissions` ruleset shape should be used inside future `agents` entries.
 
 ```jsonc
 {
   "permissions": [
-    { "permission": "bash", "pattern": "*", "action": "ask" },
-    { "permission": "bash", "pattern": "git status", "action": "allow" },
+    { "action": "bash", "resource": "*", "effect": "ask" },
+    { "action": "bash", "resource": "git status", "effect": "allow" },
   ],
 }
 ```
@@ -348,7 +348,7 @@ Behavior affecting long-running conversations and context management.
 | ------------ | ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
 | `compaction` | Automatic compaction, pruning, and context reserve settings | redesign | Group retained verbatim history under `keep` and rename context headroom to `buffer`. |
 
-Retain the compaction capability but redesign the less clear limits. `keep.turns` is the maximum number of recent user turns to preserve verbatim after compaction, and `keep.tokens` is the token budget for those retained turns. `buffer` is the token headroom reserved so automatic compaction triggers before the input window is exhausted.
+Retain the compaction capability but redesign the less clear limits. `keep.tokens` is the token budget for recent history serialized into the textual compaction checkpoint. `buffer` is the token headroom reserved so automatic compaction triggers before the input window is exhausted.
 
 ```jsonc
 {
@@ -356,7 +356,6 @@ Retain the compaction capability but redesign the less clear limits. `keep.turns
     "auto": true,
     "prune": true,
     "keep": {
-      "turns": 2,
       "tokens": 2000,
     },
     "buffer": 10000,

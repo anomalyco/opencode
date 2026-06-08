@@ -2,16 +2,21 @@ import * as InstanceState from "@/effect/instance-state"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Log } from "@opencode-ai/core/util/log"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Effect, Layer } from "effect"
 import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 
+const log = Log.create({ service: "server.file" })
+
 export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handlers) =>
   Effect.gen(function* () {
     const ripgrep = yield* Ripgrep.Service
+    const search = yield* Search.Service
     const locations = yield* LocationServiceMap
 
     const filesystem = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
@@ -29,15 +34,44 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
       query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
     }) {
-      return (yield* filesystem(
+      const directory = (yield* InstanceState.context).directory
+      const limit = ctx.query.limit ?? 10
+      const kind = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : "all")
+      const started = performance.now()
+      // Prefer fff (frecency + fuzzy ranking) and trust its ordering. Fall back
+      // to the ripgrep-backed FileSystem.find when fff is unavailable.
+      const fff = yield* search.file({ cwd: directory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
+      if (fff !== undefined) {
+        log.info("find file", {
+          engine: "fff",
+          query: ctx.query.query,
+          kind,
+          directory,
+          limit,
+          results: fff.length,
+          duration: Math.round(performance.now() - started),
+        })
+        return fff
+      }
+      const fallback = (yield* filesystem(
         FileSystem.Service.use((fs) =>
           fs.find({
             query: ctx.query.query,
-            limit: ctx.query.limit ?? 10,
+            limit,
             type: ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined),
           }),
         ),
       )).map((item) => item.path)
+      log.info("find file", {
+        engine: "ripgrep",
+        query: ctx.query.query,
+        kind,
+        directory,
+        limit,
+        results: fallback.length,
+        duration: Math.round(performance.now() - started),
+      })
+      return fallback
     })
 
     const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
@@ -91,4 +125,4 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       .handle("content", content)
       .handle("status", status)
   }),
-).pipe(Layer.provide(LocationServiceMap.layer))
+).pipe(Layer.provide(LocationServiceMap.layer), Layer.provide(Search.defaultLayer))

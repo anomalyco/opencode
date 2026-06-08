@@ -49,6 +49,17 @@ const withRipgrepConfig = <A, E, R>(value: string, effect: Effect.Effect<A, E, R
   )
 
 describe("file.ripgrep", () => {
+  it.live("exposes a cached managed executable filepath", () =>
+    Effect.gen(function* () {
+      const ripgrep = yield* Ripgrep.Service
+      const first = yield* ripgrep.filepath
+      const second = yield* ripgrep.filepath
+
+      expect(first).toBe(second)
+      expect((yield* Effect.promise(() => fs.stat(first))).isFile()).toBe(true)
+    }),
+  )
+
   it.live("defaults to include hidden", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdir((dir) =>
