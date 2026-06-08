@@ -110,6 +110,24 @@ And to use it I can add `use the mcp_everything tool` to my prompts.
 use the mcp_everything tool to add the number 3 and 4
 ```
 
+You can also add [`Vestige`](https://github.com/samvallad33/vestige) for local persistent memory across OpenCode sessions.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "vestige": {
+      "type": "local",
+      "command": ["npx", "-y", "-p", "vestige-mcp-server@latest", "vestige-mcp"],
+      "enabled": true,
+      "timeout": 60000
+    }
+  }
+}
+```
+
+Vestige stores memory locally and exposes tools for saving, searching, and reusing project decisions, preferences, architecture context, and previous fixes.
+
 ---
 
 #### Options
