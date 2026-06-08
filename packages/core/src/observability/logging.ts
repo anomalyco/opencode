@@ -1,9 +1,7 @@
-import { NodeFileSystem } from "@effect/platform-node"
-import { Effect, Layer, Logger, References, type LogLevel } from "effect"
+import { Logger, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
-
-const runID = crypto.randomUUID()
+import { runID } from "./shared"
 
 function formatter(id: string = runID) {
   return Logger.map(Logger.formatLogFmt, (output) =>
@@ -17,7 +15,7 @@ export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id
 
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
 
-function minimumLogLevel() {
+export function minimumLogLevel() {
   const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
   const levels = {
     DEBUG: "Debug",
@@ -31,21 +29,5 @@ function minimumLogLevel() {
 export function loggers() {
   return process.env.OPENCODE_PRINT_LOGS === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
 }
-
-export function levelLayer() {
-  return Layer.succeed(References.MinimumLogLevel, minimumLogLevel())
-}
-
-export const layer = Layer.unwrap(
-  Effect.sync(() =>
-    Logger.layer(loggers(), { mergeWithExisting: false }).pipe(
-      Layer.provide(NodeFileSystem.layer),
-      Layer.orDie,
-      Layer.merge(levelLayer()),
-    ),
-  ),
-)
-
-export const id = runID
 
 export * as Logging from "./logging"

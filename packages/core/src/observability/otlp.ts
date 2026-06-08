@@ -1,9 +1,7 @@
-import { Effect, Layer, Logger } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
-import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
+import { OtlpLogger } from "effect/unstable/observability"
 import { Flag } from "../flag/flag"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
-import { Logging } from "./logging"
+import { runID } from "./shared"
 
 const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
 export const enabled = !!endpoint
@@ -43,24 +41,17 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
       ...resourceAttributes(),
       "deployment.environment.name": InstallationChannel,
       "opencode.client": Flag.OPENCODE_CLIENT,
-      "opencode.run_id": Logging.id,
-      "service.instance.id": Logging.id,
+      "opencode.run_id": runID,
+      "service.instance.id": runID,
     },
   }
 }
 
-function loggingLayer() {
-  return Logger.layer(
-    [OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })],
-    { mergeWithExisting: true },
-  ).pipe(
-    Layer.provide(OtlpSerialization.layerJson),
-    Layer.provide(FetchHttpClient.layer),
-    Layer.orDie,
-  )
+export function logger() {
+  return OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })
 }
 
-async function tracingLayer() {
+export async function tracingLayer() {
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
   const SdkBase = await import("@opentelemetry/sdk-trace-base")
@@ -82,12 +73,5 @@ async function tracingLayer() {
     ),
   }))
 }
-
-export const layer = Layer.unwrap(
-  Effect.gen(function* () {
-    const tracing = yield* Effect.promise(tracingLayer)
-    return Layer.merge(tracing, loggingLayer())
-  }),
-)
 
 export * as Otlp from "./otlp"
