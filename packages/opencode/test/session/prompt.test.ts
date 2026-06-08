@@ -824,6 +824,33 @@ it.instance("subtask child inherits parent session external_directory allow", ()
   }),
 )
 
+noLLMServer.instance("prompt tools replace previous prompt tool rules", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt tools" })
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      tools: { bash: false },
+      parts: [{ type: "text", text: "first" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      tools: { read: true },
+      parts: [{ type: "text", text: "second" }],
+    })
+
+    const reloaded = yield* sessions.get(session.id)
+    expect(reloaded.permission).toEqual([{ permission: "read", pattern: "*", action: "allow" }])
+    expect(Permission.evaluate("bash", "anything", reloaded.permission ?? []).action).toBe("ask")
+  }),
+)
+
 it.instance(
   "running subtask preserves metadata after tool-call transition",
   () =>

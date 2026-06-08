@@ -1198,11 +1198,8 @@ export const layer = Layer.effect(
         permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
       }
       if (permissions.length > 0) {
-        // Merge so per-call tool rules don't clobber inherited session rules
-        // (e.g. external_directory allows from the parent session).
-        const merged = Permission.merge(session.permission ?? [], permissions)
-        session.permission = merged
-        yield* sessions.setPermission({ sessionID: session.id, permission: merged })
+        session.permission = permissions
+        yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
       if (input.noReply === true) return message
