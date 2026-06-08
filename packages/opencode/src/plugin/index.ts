@@ -237,9 +237,11 @@ export const layer = Layer.effect(
         for (const hook of hooks) {
           yield* Effect.tryPromise({
             try: () => Promise.resolve((hook as any).config?.(cfg)),
-            catch: (err) => {
-            },
-          }).pipe(Effect.ignore)
+            catch: errorMessage,
+          }).pipe(
+            Effect.tapError((error) => Effect.logError("plugin config hook failed", { error })),
+            Effect.ignore,
+          )
         }
 
         const unsubscribe = yield* events.listen((event) => {
