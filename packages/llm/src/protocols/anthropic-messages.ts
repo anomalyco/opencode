@@ -10,11 +10,9 @@ import {
   type CacheHint,
   type FinishReason,
   type LLMRequest,
-  type MediaPart,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultContentPart,
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
@@ -41,17 +39,6 @@ const AnthropicTextBlock = Schema.Struct({
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 type AnthropicTextBlock = Schema.Schema.Type<typeof AnthropicTextBlock>
-
-const AnthropicImageBlock = Schema.Struct({
-  type: Schema.tag("image"),
-  source: Schema.Struct({
-    type: Schema.tag("base64"),
-    media_type: Schema.String,
-    data: Schema.String,
-  }),
-  cache_control: Schema.optional(AnthropicCacheControl),
-})
-type AnthropicImageBlock = Schema.Schema.Type<typeof AnthropicImageBlock>
 
 const AnthropicThinkingBlock = Schema.Struct({
   type: Schema.tag("thinking"),
@@ -98,24 +85,15 @@ const AnthropicServerToolResultBlock = Schema.Struct({
 })
 type AnthropicServerToolResultBlock = Schema.Schema.Type<typeof AnthropicServerToolResultBlock>
 
-// Anthropic accepts either a plain string or an ordered array of text/image
-// blocks inside `tool_result.content`. The array form is required when a tool
-// returns image bytes (screenshot, image search, etc.) so they can be passed
-// to the model as proper image inputs instead of being JSON-stringified into
-// the prompt — which silently inflates context by megabytes and can push the
-// conversation over the model's token limit.
-const AnthropicToolResultContent = Schema.Union([AnthropicTextBlock, AnthropicImageBlock])
-
 const AnthropicToolResultBlock = Schema.Struct({
   type: Schema.tag("tool_result"),
   tool_use_id: Schema.String,
-  content: Schema.Union([Schema.String, Schema.Array(AnthropicToolResultContent)]),
+  content: Schema.String,
   is_error: Schema.optional(Schema.Boolean),
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
-const AnthropicUserBlock = Schema.Union([AnthropicTextBlock, AnthropicImageBlock, AnthropicToolResultBlock])
-type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
+const AnthropicUserBlock = Schema.Union([AnthropicTextBlock, AnthropicToolResultBlock])
 const AnthropicAssistantBlock = Schema.Union([
   AnthropicTextBlock,
   AnthropicThinkingBlock,
@@ -208,13 +186,7 @@ const AnthropicEvent = Schema.Struct({
   content_block: Schema.optional(AnthropicStreamBlock),
   delta: Schema.optional(AnthropicStreamDelta),
   usage: Schema.optional(AnthropicUsage),
-  // `type` and `message` are both required per Anthropic's spec, but
-  // OpenAI-compatible proxies and gateway translations occasionally drop one
-  // or the other; mark them optional so a partial payload still parses and
-  // the parser can fall back to whichever field is populated.
-  error: Schema.optional(
-    Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
-  ),
+  error: Schema.optional(Schema.Struct({ type: Schema.String, message: Schema.String })),
 })
 type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 
@@ -396,7 +368,6 @@ const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUp
     })),
   }
 })
-
 const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   request: LLMRequest,
   breakpoints: Cache.Breakpoints,
@@ -421,17 +392,11 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
     }
 
     if (message.role === "user") {
-      const content: AnthropicUserBlock[] = []
+      const content: AnthropicTextBlock[] = []
       for (const part of message.content) {
-        if (part.type === "text") {
-          content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
-          continue
-        }
-        if (part.type === "media") {
-          content.push(yield* lowerImage(part))
-          continue
-        }
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
+        if (!ProviderShared.supportsContent(part, ["text"]))
+          return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text"])
+        content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
       }
       messages.push({ role: "user", content })
       continue
@@ -475,7 +440,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       content.push({
         type: "tool_result",
         tool_use_id: part.id,
-        content: yield* lowerToolResultContent(part),
+        content: ProviderShared.toolResultText(part),
         is_error: part.result.type === "error" ? true : undefined,
         cache_control: cacheControl(breakpoints, part.cache),
       })

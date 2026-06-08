@@ -15,6 +15,7 @@ import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
+import { FALLBACK_NOTICE_ID, FALLBACK_RESUME_ID, FALLBACK_USING_ID } from "./fallback"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
@@ -771,14 +772,21 @@ export const layer = Layer.effect(
                 })
               }
             }
-            ctx.currentText = {
-              id: PartID.ascending(),
-              messageID: ctx.assistantMessage.id,
-              sessionID: ctx.assistantMessage.sessionID,
-              type: "text",
-              text: "",
-              time: { start: Date.now() },
-              metadata: value.providerMetadata,
+            {
+              const fallbackId = value.id === FALLBACK_USING_ID ? "using" as const
+                : value.id === FALLBACK_NOTICE_ID ? "switch" as const
+                : value.id === FALLBACK_RESUME_ID ? "resume" as const
+                : undefined
+              ctx.currentText = {
+                id: PartID.ascending(),
+                messageID: ctx.assistantMessage.id,
+                sessionID: ctx.assistantMessage.sessionID,
+                type: "text",
+                text: "",
+                time: { start: Date.now() },
+                metadata: value.providerMetadata,
+                ...(fallbackId ? { ignored: true as const, synthetic: true as const, fallbackNotice: fallbackId } : {}),
+              }
             }
             ctx.currentTextID = value.id
             yield* session.updatePart(ctx.currentText)

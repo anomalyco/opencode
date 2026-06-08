@@ -962,6 +962,20 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     }
   })
 
+  event.on("llm.fallback.triggered", (evt) => {
+    toast.show({
+      message: `Falling back to ${evt.properties.modelID} (${evt.properties.reason})`,
+      variant: "warning",
+    })
+  })
+
+  event.on("llm.fallback.used", (evt) => {
+    toast.show({
+      message: `Switched to ${evt.properties.modelID}`,
+      variant: "info",
+    })
+  })
+
   event.on("session.error", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     const error = evt.properties.error

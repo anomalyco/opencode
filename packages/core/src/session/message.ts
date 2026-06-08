@@ -127,6 +127,9 @@ export class AssistantText extends Schema.Class<AssistantText>("Session.Message.
   type: Schema.Literal("text"),
   id: Schema.String,
   text: Schema.String,
+  ignored: Schema.optional(Schema.Boolean),
+  synthetic: Schema.optional(Schema.Boolean),
+  fallbackNotice: Schema.optional(Schema.Union([Schema.Literal("using"), Schema.Literal("switch"), Schema.Literal("resume")])),
 }) {}
 
 export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Session.Message.Assistant.Reasoning")({

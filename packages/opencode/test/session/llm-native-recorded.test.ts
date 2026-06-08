@@ -10,6 +10,7 @@ import { Effect, Layer, Option, Schema, Stream } from "effect"
 import path from "node:path"
 import z from "zod"
 import { Auth } from "@/auth"
+import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
@@ -298,6 +299,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     provider,
     LLM.layer.pipe(
       Layer.provide(auth),
+      Layer.provide(Bus.layer),
       Layer.provide(Config.defaultLayer),
       Layer.provide(provider),
       Layer.provide(Plugin.defaultLayer),

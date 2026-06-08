@@ -1,0 +1,60 @@
+#!/bin/bash
+set -e
+
+FORCE=false
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -f|--force) FORCE=true; shift ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+if [ "$FORCE" = true ]; then
+  GRAVITY=y
+else
+  echo -n "GRAVITY: y/N? "
+  read GRAVITY
+fi
+if [ "$FORCE" = true ]; then
+  DEVBOX3=y
+else
+  echo -n "DEVBOX3: y/N? "
+  read DEVBOX3
+fi
+if [ "$FORCE" = true ]; then
+  VERITY=y
+else
+  echo -n "VERITY: y/N? "
+  read VERITY
+fi
+
+echo
+echo "##########################"
+echo "#        GRAVITY         #"
+echo "##########################"
+echo
+if [ "$GRAVITY" = "y" ]; then
+  ./update
+fi
+
+echo
+echo "##########################"
+echo "#        DEVBOX3         #"
+echo "##########################"
+echo
+if [ "$DEVBOX3" = "y" ]; then
+  SCRIPT_PATH=/home/jeko/github/j3k0/opencode/update
+  scp ./update "devbox3:$SCRIPT_PATH"
+  ssh -t devbox3 "bash -ic '$SCRIPT_PATH'"
+fi
+
+echo
+echo "##########################"
+echo "#        VERITY          #"
+echo "##########################"
+echo
+if [ "$VERITY" = "y" ]; then
+  SCRIPT_PATH=/opt/projects/tools/opencode/update
+  scp ./update "verity-ts:$SCRIPT_PATH"
+  ssh -t verity-ts "bash -ic '$SCRIPT_PATH'"
+fi
