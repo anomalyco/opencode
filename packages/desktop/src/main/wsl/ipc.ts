@@ -2,8 +2,14 @@ import { app, ipcMain } from "electron"
 import type { IpcMainInvokeEvent } from "electron"
 import type { WslServersController } from "./servers"
 import { requireWslIpcString } from "./policy"
+import type { WslServersState } from "../../preload/types"
 
 export function registerWslIpcHandlers(controller: WslServersController) {
+  if (process.platform !== "win32") {
+    registerUnavailableWslIpcHandlers()
+    return
+  }
+
   const subscriptions = new Map<number, () => void>()
   const unsubscribe = (id: number) => {
     const off = subscriptions.get(id)
@@ -61,4 +67,41 @@ export function registerWslIpcHandlers(controller: WslServersController) {
   ipcMain.handle("wsl-servers-start", (_event: IpcMainInvokeEvent, id: string) =>
     controller.startServer(requireWslIpcString("server id", id)),
   )
+}
+
+function registerUnavailableWslIpcHandlers() {
+  const unavailable = () => {
+    throw new Error("WSL is only available on Windows")
+  }
+  const state = (): WslServersState => ({
+    runtime: {
+      available: false,
+      version: null,
+      error: "WSL is only available on Windows",
+    },
+    installed: [],
+    online: [],
+    distroProbes: {},
+    opencodeChecks: {},
+    pendingRestart: false,
+    servers: [],
+    job: null,
+  })
+
+  ipcMain.handle("wsl-servers-subscribe", (event) => {
+    event.sender.send("wsl-servers-event", { type: "state", state: state() })
+  })
+  ipcMain.handle("wsl-servers-unsubscribe", () => undefined)
+  ipcMain.handle("wsl-servers-get-state", () => state())
+  ipcMain.handle("wsl-servers-probe-runtime", unavailable)
+  ipcMain.handle("wsl-servers-refresh-distros", unavailable)
+  ipcMain.handle("wsl-servers-install-wsl", unavailable)
+  ipcMain.handle("wsl-servers-install-distro", unavailable)
+  ipcMain.handle("wsl-servers-probe-distro", unavailable)
+  ipcMain.handle("wsl-servers-probe-opencode", unavailable)
+  ipcMain.handle("wsl-servers-install-opencode", unavailable)
+  ipcMain.handle("wsl-servers-open-terminal", unavailable)
+  ipcMain.handle("wsl-servers-add", unavailable)
+  ipcMain.handle("wsl-servers-remove", unavailable)
+  ipcMain.handle("wsl-servers-start", unavailable)
 }
