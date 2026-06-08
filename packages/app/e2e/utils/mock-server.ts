@@ -17,6 +17,7 @@ export interface MockServerConfig {
   todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
+  vcsDiff?: unknown[]
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -55,6 +56,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
     if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
     if (emptyObject.has(path)) return json(route, {})
+    if (path === "/vcs/diff") return json(route, config.vcsDiff ?? [])
     if (emptyList.has(path)) return json(route, [])
     if (path in staticRoutes) return json(route, staticRoutes[path])
 

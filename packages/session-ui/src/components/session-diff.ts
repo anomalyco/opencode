@@ -16,6 +16,12 @@ type SnapshotDiff = SnapshotFileDiff & { file: string }
 type ReviewDiff = SnapshotDiff | VcsFileDiff | LegacyDiff
 export type DiffSource = Pick<LegacyDiff, "file" | "patch" | "before" | "after">
 
+export type PreparedDiff = {
+  fileDiff: FileDiffMetadata
+  deletions: string
+  additions: string
+}
+
 export type ViewDiff = {
   file: string
   additions: number
@@ -23,9 +29,6 @@ export type ViewDiff = {
   status?: "added" | "deleted" | "modified"
   fileDiff: FileDiffMetadata
 }
-
-const diffCacheLimit = 16
-const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
   if (typeof diff.patch === "string") return fileDiffFromPatch(diff.file, diff.patch)
@@ -37,12 +40,22 @@ export function resolveFileDiff(diff: DiffSource) {
 }
 
 export function normalize(diff: ReviewDiff): ViewDiff {
+  const prepared = prepareDiff(diff)
   return {
     file: diff.file,
     additions: diff.additions,
     deletions: diff.deletions,
     status: diff.status,
-    fileDiff: resolveFileDiff(diff),
+    fileDiff: prepared.fileDiff,
+  }
+}
+
+export function prepareDiff(diff: DiffSource): PreparedDiff {
+  const fileDiff = resolveFileDiff(diff)
+  return {
+    fileDiff,
+    deletions: fileDiff.deletionLines.join(""),
+    additions: fileDiff.additionLines.join(""),
   }
 }
 
@@ -52,22 +65,11 @@ export function text(diff: ViewDiff, side: "deletions" | "additions") {
 }
 
 function fileDiffFromPatch(file: string, patch: string) {
-  const key = `${file}\0${patch}`
-  const hit = patchFileDiffCache.get(key)
-  if (hit) {
-    patchFileDiffCache.delete(key)
-    patchFileDiffCache.set(key, hit)
-    return hit
-  }
-
   const contents = completePatchContents(patch)
   const input = contents ? undefined : patchInput(file, patch)
-  const value = contents
+  return contents
     ? fileDiffFromContent(file, contents.before, contents.after)
     : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
-  patchFileDiffCache.set(key, value)
-  while (patchFileDiffCache.size > diffCacheLimit) patchFileDiffCache.delete(patchFileDiffCache.keys().next().value!)
-  return value
 }
 
 function completePatchContents(patch: string) {

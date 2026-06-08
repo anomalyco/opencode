@@ -35,6 +35,7 @@
   "exports": {
     "./package.json": "./package.json",
     "./*": "./src/components/*.tsx",
+    "./diff/*": "./src/diff/*.ts",
     "./i18n/*": "./src/i18n/*.ts",
     "./hooks": "./src/hooks/index.ts",
     "./context": "./src/context/index.ts",

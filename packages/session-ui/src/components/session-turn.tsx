@@ -10,7 +10,7 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 
 import { Binary } from "@opencode-ai/core/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
-import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
+import { createMemo, For, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
@@ -24,7 +24,21 @@ import { SessionRetry } from "./session-retry"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { normalize } from "./session-diff"
+import { createPreparedDiff } from "@opencode-ai/ui/diff/resource"
+
+function SessionTurnDiffView(props: { diff: SnapshotFileDiff & { file: string } }) {
+  const fileComponent = useFileComponent()
+  const [prepared] = createPreparedDiff(() => props.diff)
+  return (
+    <Show when={prepared()}>
+      {(value) => (
+        <div data-slot="session-turn-diff-view" data-scrollable>
+          <Dynamic component={fileComponent} mode="diff" fileDiff={value().fileDiff} />
+        </div>
+      )}
+    </Show>
+  )
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -170,7 +184,6 @@ export function SessionTurn(
 ) {
   const data = useData()
   const i18n = useI18n()
-  const fileComponent = useFileComponent()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
@@ -459,27 +472,7 @@ export function SessionTurn(
                     >
                       <For each={visible()}>
                         {(diff) => {
-                          const view = normalize(diff)
                           const active = createMemo(() => expanded().includes(diff.file))
-                          const [shown, setShown] = createSignal(false)
-
-                          createEffect(
-                            on(
-                              active,
-                              (value) => {
-                                if (!value) {
-                                  setShown(false)
-                                  return
-                                }
-
-                                requestAnimationFrame(() => {
-                                  if (!active()) return
-                                  setShown(true)
-                                })
-                              },
-                              { defer: true },
-                            ),
-                          )
 
                           return (
                             <Accordion.Item value={diff.file}>
@@ -506,10 +499,8 @@ export function SessionTurn(
                                 </Accordion.Trigger>
                               </StickyAccordionHeader>
                               <Accordion.Content>
-                                <Show when={shown()}>
-                                  <div data-slot="session-turn-diff-view" data-scrollable>
-                                    <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
-                                  </div>
+                                <Show when={active()}>
+                                  <SessionTurnDiffView diff={diff} />
                                 </Show>
                               </Accordion.Content>
                             </Accordion.Item>

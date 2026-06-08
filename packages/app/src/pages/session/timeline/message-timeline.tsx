@@ -50,7 +50,7 @@ import type {
 import { showToast } from "@/utils/toast"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
-import { normalize } from "@opencode-ai/session-ui/session-diff"
+import { createPreparedDiff } from "@opencode-ai/ui/diff/resource"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -220,11 +220,13 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
 
 function TimelineDiffView(props: { diff: SummaryDiff }) {
   const fileComponent = useFileComponent()
-  const view = normalize(props.diff)
+  const [prepared] = createPreparedDiff(() => props.diff)
 
   return (
     <div data-slot="session-turn-diff-view" data-scrollable>
-      <Dynamic component={fileComponent} mode="diff" virtualize={false} fileDiff={view.fileDiff} />
+      <Show when={prepared()}>
+        {(value) => <Dynamic component={fileComponent} mode="diff" virtualize={false} fileDiff={value().fileDiff} />}
+      </Show>
     </div>
   )
 }

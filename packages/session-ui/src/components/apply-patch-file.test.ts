@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { patchFiles } from "./apply-patch-file"
-import { text } from "./session-diff"
 
 describe("apply patch file", () => {
-  test("parses patch metadata from the server", () => {
+  test("adapts patch metadata without preparing the diff", () => {
     const file = patchFiles([
       {
         filePath: "/tmp/a.ts",
@@ -17,10 +16,13 @@ describe("apply patch file", () => {
     ])[0]
 
     expect(file).toBeDefined()
-    expect(file?.view.fileDiff.name).toBe("a.ts")
-    expect(file?.view.fileDiff.isPartial).toBe(false)
-    expect(text(file!.view, "deletions")).toBe("one\ntwo\n")
-    expect(text(file!.view, "additions")).toBe("one\nthree\n")
+    expect(file?.source).toEqual({
+      file: "a.ts",
+      patch:
+        "Index: a.ts\n===================================================================\n--- a.ts\t\n+++ a.ts\t\n@@ -1,2 +1,2 @@\n one\n-two\n+three\n",
+      before: undefined,
+      after: undefined,
+    })
   })
 
   test("keeps legacy before and after payloads working", () => {
@@ -37,7 +39,6 @@ describe("apply patch file", () => {
     ])[0]
 
     expect(file).toBeDefined()
-    expect(text(file!.view, "deletions")).toBe("one\n")
-    expect(text(file!.view, "additions")).toBe("two\n")
+    expect(file?.source).toEqual({ file: "a.ts", patch: undefined, before: "one\n", after: "two\n" })
   })
 })
