@@ -1,7 +1,7 @@
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useSDK } from "./sdk"
@@ -21,6 +21,8 @@ import {
   touchFileContent,
 } from "./file/content-cache"
 import { createFileViewCache } from "./file/view-cache"
+import { useServerSDK } from "./server-sdk"
+import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
 import { createFileTreeStore } from "./file/tree-store"
 import { invalidateFromWatcher } from "./file/watcher"
 import {
@@ -56,12 +58,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const sdk = useSDK()
     useSync()
     const params = useParams()
+    const serverSDK = useServerSDK()
     const language = useLanguage()
     const layout = useLayout()
 
     const scope = createMemo(() => sdk.directory)
     const path = createPathHelpers(scope)
-    const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+    const tabs = layout.tabs(() =>
+      SessionStateKey.from(serverSDK.scope, SessionRouteKey.fromRoute(params.dir, params.id)),
+    )
 
     const inflight = new Map<string, Promise<void>>()
     const [store, setStore] = createStore<{
@@ -107,7 +112,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     })
 
-    const viewCache = createFileViewCache()
+    const viewCache = createFileViewCache(serverSDK.scope)
     const view = createMemo(() => viewCache.load(scope(), params.id))
 
     const ensure = (file: string) => {

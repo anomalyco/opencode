@@ -25,7 +25,6 @@ import {
   onCleanup,
   type ParentProps,
   Show,
-  Suspense,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
@@ -33,6 +32,7 @@ import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider } from "@/context/server-sdk"
 import { ServerSyncProvider } from "@/context/server-sync"
+import { GlobalProvider } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
@@ -43,11 +43,12 @@ import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
+import { TabsProvider } from "@/context/tabs"
+import { WslServersProvider } from "@/wsl/context"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import { ServersProvider } from "./context/servers"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -69,9 +70,7 @@ function UiI18nBridge(props: ParentProps) {
 declare global {
   interface Window {
     __OPENCODE__?: {
-      updaterEnabled?: boolean
       deepLinks?: string[]
-      wsl?: boolean
     }
     api?: {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
@@ -171,11 +170,13 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
               }}
             >
               <QueryProvider>
-                <DialogProvider>
-                  <MarkedProvider>
-                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProvider>
-                </DialogProvider>
+                <WslServersProvider>
+                  <DialogProvider>
+                    <MarkedProvider>
+                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                    </MarkedProvider>
+                  </DialogProvider>
+                </WslServersProvider>
               </QueryProvider>
             </ErrorBoundary>
           </UiI18nBridge>
@@ -211,26 +212,21 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
           Effect.runPromise,
         ),
   )
+  const checking = createMemo(
+    () => checkMode() === "blocking" && ["unresolved", "pending"].includes(startupHealthCheck.state),
+  )
 
   return (
-    <Suspense
+    <Show
+      when={!checking()}
       fallback={
         <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
           <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       }
     >
-      {/*<Show
-        when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
-        fallback={
-          <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
-            <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-          </div>
-        }
-      >*/}
-      {checkMode() === "blocking" ? startupHealthCheck() : startupHealthCheck.latest}
       <Show
-        when={startupHealthCheck()}
+        when={startupHealthCheck.latest}
         fallback={
           <ConnectionError
             onRetry={() => {
@@ -246,8 +242,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
       >
         {props.children}
       </Show>
-      {/*</Show>*/}
-    </Suspense>
+    </Show>
   )
 }
 
@@ -310,34 +305,43 @@ function ServerKey(props: ParentProps) {
 export function AppInterface(props: {
   children?: JSX.Element
   defaultServer: ServerConnection.Key
+  canonicalLocalServer?: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
   disableHealthCheck?: boolean
 }) {
   return (
-    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
-      <ServersProvider>
+    <ServerProvider
+      defaultServer={props.defaultServer}
+      canonicalLocalServer={props.canonicalLocalServer}
+      servers={props.servers}
+    >
+      <GlobalProvider>
         <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-          <ServerKey>
-            <QueryProvider>
-              <ServerSDKProvider>
-                <ServerSyncProvider>
-                  <Dynamic
-                    component={props.router ?? Router}
-                    root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-                  >
-                    <Route path="/" component={HomeRoute} />
-                    <Route path="/:dir" component={DirectoryLayout}>
-                      <Route path="/" component={() => <Navigate href="session" />} />
-                      <Route path="/session/:id?" component={SessionRoute} />
-                    </Route>
-                  </Dynamic>
-                </ServerSyncProvider>
-              </ServerSDKProvider>
-            </QueryProvider>
-          </ServerKey>
+          <Dynamic
+            component={props.router ?? Router}
+            root={(routerProps) => (
+              <TabsProvider>
+                <ServerKey>
+                  <QueryProvider>
+                    <ServerSDKProvider>
+                      <ServerSyncProvider>
+                        <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>
+                      </ServerSyncProvider>
+                    </ServerSDKProvider>
+                  </QueryProvider>
+                </ServerKey>
+              </TabsProvider>
+            )}
+          >
+            <Route path="/" component={HomeRoute} />
+            <Route path="/:dir" component={DirectoryLayout}>
+              <Route path="/" component={() => <Navigate href="session" />} />
+              <Route path="/session/:id?" component={SessionRoute} />
+            </Route>
+          </Dynamic>
         </ConnectionGate>
-      </ServersProvider>
+      </GlobalProvider>
     </ServerProvider>
   )
 }

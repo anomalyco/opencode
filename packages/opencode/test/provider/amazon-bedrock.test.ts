@@ -6,9 +6,11 @@ import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
 import { Provider } from "@/provider/provider"
-import { ProviderID } from "../../src/provider/schema"
+
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer))
 
@@ -31,6 +33,15 @@ afterEach(async () => {
 })
 
 const list = Provider.use.list()
+
+const mantleModelConfig = {
+  provider: { npm: "@ai-sdk/amazon-bedrock/mantle" },
+  limit: { context: 272_000, output: 32_000 },
+  modalities: {
+    input: ["text", "image", "pdf"] as Array<"text" | "image" | "pdf">,
+    output: ["text"] as Array<"text">,
+  },
+}
 
 const withAuthJson = (contents: string) =>
   Effect.acquireRelease(
@@ -62,8 +73,8 @@ it.instance(
       yield* set("AWS_REGION", "us-east-1")
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("eu-west-1")
     }),
   { config: { provider: { "amazon-bedrock": { options: { region: "eu-west-1" } } } } },
 )
@@ -73,8 +84,8 @@ it.instance("Bedrock: falls back to AWS_REGION env var when no config region", (
     yield* set("AWS_REGION", "eu-west-1")
     yield* set("AWS_PROFILE", "default")
     const providers = yield* list
-    expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-    expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
+    expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+    expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("eu-west-1")
   }),
 )
 
@@ -87,10 +98,80 @@ it.instance(
       yield* set("AWS_ACCESS_KEY_ID", "")
       yield* set("AWS_BEARER_TOKEN_BEDROCK", "")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("eu-west-1")
     }),
   { config: { provider: { "amazon-bedrock": { options: { region: "eu-west-1" } } } } },
+)
+
+it.instance(
+  "Bedrock Mantle: GPT-5.5 uses Responses API and OpenAI base path",
+  () =>
+    Effect.gen(function* () {
+      yield* set("AWS_REGION", "")
+      yield* set("AWS_PROFILE", "")
+      yield* set("AWS_ACCESS_KEY_ID", "")
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "")
+      const model = yield* Provider.use.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.5"))
+      const language = yield* Provider.use.getLanguage(model)
+      expect((language as { provider: string }).provider).toBe("bedrock-mantle.responses")
+      expect((language as { modelId: string }).modelId).toBe("openai.gpt-5.5")
+      expect(
+        (language as unknown as { config: { url: (input: { path: string; modelId: string }) => string } }).config.url({
+          path: "/responses",
+          modelId: "openai.gpt-5.5",
+        }),
+      ).toBe("https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses")
+    }),
+  {
+    config: {
+      provider: {
+        "amazon-bedrock": {
+          options: { region: "us-east-2", apiKey: "test-bearer-token" },
+          models: {
+            "openai.gpt-5.5": {
+              ...mantleModelConfig,
+              provider: {
+                npm: "@ai-sdk/amazon-bedrock/mantle",
+                api: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "Bedrock Mantle: GPT OSS safeguard uses Chat Completions and Mantle base path",
+  () =>
+    Effect.gen(function* () {
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
+      const model = yield* Provider.use.getModel(
+        ProviderV2.ID.amazonBedrock,
+        ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
+      )
+      const language = yield* Provider.use.getLanguage(model)
+      expect((language as { provider: string }).provider).toBe("bedrock-mantle.chat")
+      expect((language as { modelId: string }).modelId).toBe("openai.gpt-oss-safeguard-120b")
+      expect(
+        (language as unknown as { config: { url: (input: { path: string; modelId: string }) => string } }).config.url({
+          path: "/chat/completions",
+          modelId: "openai.gpt-oss-safeguard-120b",
+        }),
+      ).toBe("https://bedrock-mantle.us-east-1.api.aws/v1/chat/completions")
+    }),
+  {
+    config: {
+      provider: {
+        "amazon-bedrock": {
+          options: { region: "us-east-1" },
+          models: { "openai.gpt-oss-safeguard-120b": mantleModelConfig },
+        },
+      },
+    },
+  },
 )
 
 it.instance(
@@ -100,8 +181,8 @@ it.instance(
       yield* set("AWS_PROFILE", "default")
       yield* set("AWS_ACCESS_KEY_ID", "test-key-id")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("us-east-1")
     }),
   {
     config: {
@@ -116,8 +197,8 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.endpoint).toBe(
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.endpoint).toBe(
         "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com",
       )
     }),
@@ -141,8 +222,8 @@ it.instance(
       yield* set("AWS_PROFILE", "")
       yield* set("AWS_ACCESS_KEY_ID", "")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("us-east-1")
     }),
   { config: { provider: { "amazon-bedrock": { options: { region: "us-east-1" } } } } },
 )
@@ -157,8 +238,8 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].models["us.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].models["us.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     }),
   {
     config: {
@@ -178,8 +259,10 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].models["global.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(
+        providers[ProviderV2.ID.amazonBedrock].models["global.anthropic.claude-opus-4-5-20251101-v1:0"],
+      ).toBeDefined()
     }),
   {
     config: {
@@ -199,8 +282,8 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].models["eu.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].models["eu.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     }),
   {
     config: {
@@ -220,8 +303,8 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].models["anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].models["anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     }),
   {
     config: {

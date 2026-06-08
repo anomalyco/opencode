@@ -1,4 +1,5 @@
 import { cmd } from "./cmd"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { effectCmd } from "../effect-cmd"
 import { Cause } from "effect"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
@@ -10,14 +11,15 @@ import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
-import { ConfigMCP } from "../../config/mcp"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
-import { Bus } from "../../bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Effect } from "effect"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
@@ -42,9 +44,9 @@ function getAuthStatusText(status: MCP.AuthStatus): string {
   }
 }
 
-type McpEntry = NonNullable<Config.Info["mcp"]>[string]
+type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
 
-type McpConfigured = ConfigMCP.Info
+type McpConfigured = ConfigMCPV1.Info
 function isMcpConfigured(config: McpEntry): config is McpConfigured {
   return typeof config === "object" && config !== null && "type" in config
 }
@@ -54,11 +56,11 @@ function isMcpRemote(config: McpEntry): config is McpRemote {
   return isMcpConfigured(config) && config.type === "remote"
 }
 
-function configuredServers(config: Config.Info) {
+function configuredServers(config: ConfigV1.Info) {
   return Object.entries(config.mcp ?? {}).filter((entry): entry is [string, McpConfigured] => isMcpConfigured(entry[1]))
 }
 
-function oauthServers(config: Config.Info) {
+function oauthServers(config: ConfigV1.Info) {
   return configuredServers(config).filter(
     (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && entry[1].oauth !== false,
   )
@@ -256,13 +258,17 @@ export const McpAuthCommand = effectCmd({
     spinner.start("Starting OAuth flow...")
 
     // Subscribe to browser open failure events to show URL for manual opening
-    const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
-      if (evt.properties.mcpName === serverName) {
+    const events = yield* EventV2Bridge.Service
+    const unsubscribe = yield* events.listen((event) => {
+      if (event.type !== MCP.BrowserOpenFailed.type) return Effect.void
+      const data = event.data as EventV2.Data<typeof MCP.BrowserOpenFailed>
+      if (data.mcpName === serverName) {
         spinner.stop("Could not open browser automatically")
         prompts.log.warn("Please open this URL in your browser to authenticate:")
-        prompts.log.info(evt.properties.url)
+        prompts.log.info(data.url)
         spinner.start("Waiting for authorization...")
       }
+      return Effect.void
     })
 
     yield* MCP.Service.use((mcp) => mcp.authenticate(serverName)).pipe(
@@ -300,7 +306,7 @@ export const McpAuthCommand = effectCmd({
           prompts.log.error(error instanceof Error ? error.message : String(error))
         }),
       ),
-      Effect.ensuring(Effect.sync(() => unsubscribe())),
+      Effect.ensuring(unsubscribe),
     )
 
     prompts.outro("Done")
@@ -413,7 +419,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
   return candidates[0]
 }
 
-async function addMcpToConfig(name: string, mcpConfig: ConfigMCP.Info, configPath: string) {
+async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
   let text = "{}"
   if (await Filesystem.exists(configPath)) {
     text = await Filesystem.readText(configPath)
@@ -431,13 +437,79 @@ async function addMcpToConfig(name: string, mcpConfig: ConfigMCP.Info, configPat
 }
 
 export const McpAddCommand = effectCmd({
-  command: "add",
+  command: "add [name]",
   describe: "add an MCP server",
-  handler: Effect.fn("Cli.mcp.add")(function* () {
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        describe: "name of the MCP server",
+        type: "string",
+      })
+      .option("url", {
+        describe: "URL for a remote MCP server",
+        type: "string",
+      })
+      .option("env", {
+        describe: "environment variable for a local MCP server (KEY=VALUE)",
+        type: "string",
+        array: true,
+      })
+      .option("header", {
+        describe: "HTTP header for a remote MCP server (KEY=VALUE)",
+        type: "string",
+        array: true,
+      }),
+  handler: Effect.fn("Cli.mcp.add")(function* (args) {
     const maybeCtx = yield* InstanceRef
     if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
     const ctx = maybeCtx
     yield* Effect.promise(async () => {
+      const command = args["--"] ?? []
+      if (!args.name && (args.url || args.env?.length || args.header?.length || command.length)) {
+        throw new Error("A server name is required for non-interactive MCP configuration")
+      }
+      if (args.name) {
+        if (!!args.url === !!command.length) {
+          throw new Error("Provide either --url <url> or a command after --")
+        }
+        if (args.url && !URL.canParse(args.url)) {
+          throw new Error(`Invalid URL: ${args.url}`)
+        }
+        if (args.url && args.env?.length) {
+          throw new Error("--env is only valid for local MCP servers")
+        }
+        if (command.length && args.header?.length) {
+          throw new Error("--header is only valid for remote MCP servers")
+        }
+
+        const entries = (values: string[], kind: string) =>
+          Object.fromEntries(
+            values.map((entry) => {
+              const index = entry.indexOf("=")
+              if (index < 1) throw new Error(`Invalid ${kind}: ${entry}. Expected KEY=VALUE`)
+              return [entry.slice(0, index), entry.slice(index + 1)]
+            }),
+          )
+        const environment = entries(args.env ?? [], "environment variable")
+        const headers = entries(args.header ?? [], "HTTP header")
+        const mcpConfig: ConfigMCPV1.Info = args.url
+          ? {
+              type: "remote",
+              url: args.url,
+              ...(Object.keys(headers).length ? { headers } : {}),
+            }
+          : {
+              type: "local",
+              command,
+              ...(Object.keys(environment).length ? { environment } : {}),
+            }
+
+        const configPath = await resolveConfigPath(Global.Path.config, true)
+        await addMcpToConfig(args.name, mcpConfig, configPath)
+        prompts.log.success(`MCP server "${args.name}" added to ${configPath}`)
+        return
+      }
+
       UI.empty()
       prompts.intro("Add MCP server")
 
@@ -502,7 +574,7 @@ export const McpAddCommand = effectCmd({
         })
         if (prompts.isCancel(command)) throw new UI.CancelledError()
 
-        const mcpConfig: ConfigMCP.Info = {
+        const mcpConfig: ConfigMCPV1.Info = {
           type: "local",
           command: command.split(" "),
         }
@@ -532,7 +604,7 @@ export const McpAddCommand = effectCmd({
         })
         if (prompts.isCancel(useOAuth)) throw new UI.CancelledError()
 
-        let mcpConfig: ConfigMCP.Info
+        let mcpConfig: ConfigMCPV1.Info
 
         if (useOAuth) {
           const hasClientId = await prompts.confirm({

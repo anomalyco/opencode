@@ -24,12 +24,10 @@ describe("RuntimeFlags", () => {
           fromConfig({
             OPENCODE_PURE: "true",
             OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
-            OPENCODE_DISABLE_CHANNEL_DB: "true",
             OPENCODE_AUTO_SHARE: "true",
             OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
             OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
             OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
-            OPENCODE_SKIP_MIGRATIONS: "true",
             OPENCODE_EXPERIMENTAL: "true",
             OPENCODE_ENABLE_EXA: "true",
             OPENCODE_ENABLE_PARALLEL: "true",
@@ -43,17 +41,15 @@ describe("RuntimeFlags", () => {
       expect(flags.pure).toBe(true)
       expect(flags.autoShare).toBe(true)
       expect(flags.disableDefaultPlugins).toBe(true)
-      expect(flags.disableChannelDb).toBe(true)
       expect(flags.disableEmbeddedWebUi).toBe(true)
       expect(flags.disableExternalSkills).toBe(true)
       expect(flags.disableLspDownload).toBe(true)
-      expect(flags.skipMigrations).toBe(true)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.enableExa).toBe(true)
       expect(flags.enableParallel).toBe(true)
       expect(flags.enableExperimentalModels).toBe(true)
       expect(flags.enableQuestionTool).toBe(true)
-      expect(flags.experimentalScout).toBe(true)
+      expect(flags.experimentalReferences).toBe(true)
       expect(flags.experimentalBackgroundSubagents).toBe(true)
       expect(flags.experimentalLspTy).toBe(false)
       expect(flags.experimentalLspTool).toBe(true)
@@ -111,11 +107,9 @@ describe("RuntimeFlags", () => {
       expect(flags.pure).toBe(false)
       expect(flags.autoShare).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(true)
-      expect(flags.disableChannelDb).toBe(false)
       expect(flags.disableEmbeddedWebUi).toBe(false)
       expect(flags.disableExternalSkills).toBe(false)
       expect(flags.disableLspDownload).toBe(false)
-      expect(flags.skipMigrations).toBe(false)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
@@ -165,22 +159,6 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_LSP_DOWNLOAD: "true" })))
 
       expect(flags.disableLspDownload).toBe(true)
-    }),
-  )
-
-  it.effect("skipMigrations defaults to false", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
-
-      expect(flags.skipMigrations).toBe(false)
-    }),
-  )
-
-  it.effect("skipMigrations reads OPENCODE_SKIP_MIGRATIONS", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_SKIP_MIGRATIONS: "true" })))
-
-      expect(flags.skipMigrations).toBe(true)
     }),
   )
 
@@ -344,7 +322,6 @@ describe("RuntimeFlags", () => {
               OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
               OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
               OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
-              OPENCODE_SKIP_MIGRATIONS: "true",
               OPENCODE_EXPERIMENTAL: "true",
               OPENCODE_ENABLE_EXA: "true",
               OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1234",
@@ -356,11 +333,9 @@ describe("RuntimeFlags", () => {
 
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(false)
-      expect(flags.disableChannelDb).toBe(false)
       expect(flags.disableEmbeddedWebUi).toBe(false)
       expect(flags.disableExternalSkills).toBe(false)
       expect(flags.disableLspDownload).toBe(false)
-      expect(flags.skipMigrations).toBe(false)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
