@@ -133,10 +133,7 @@ function item(hit: Fff.Hit): Item {
   }
 }
 
-function collectPaths<T>(
-  items: T[],
-  toPath: (item: T) => string,
-): string[] {
+function collectPaths<T>(items: T[], toPath: (item: T) => string): string[] {
   return Array.from(
     new Set(
       items.flatMap((item): string[] => {

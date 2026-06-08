@@ -367,40 +367,39 @@ export function createPromptState(input: PromptInput): PromptState {
 
       const next = extractLineRange(value)
       const list = await input.findFiles(next.base)
-      return list
-        .map((item): Auto => {
-          const url = pathToFileURL(path.resolve(input.directory, item))
-          let filename = item
-          if (next.line && !item.endsWith("/")) {
-            filename = `${item}#${next.line.start}${next.line.end ? `-${next.line.end}` : ""}`
-            url.searchParams.set("start", String(next.line.start))
-            if (next.line.end !== undefined) {
-              url.searchParams.set("end", String(next.line.end))
-            }
+      return list.map((item): Auto => {
+        const url = pathToFileURL(path.resolve(input.directory, item))
+        let filename = item
+        if (next.line && !item.endsWith("/")) {
+          filename = `${item}#${next.line.start}${next.line.end ? `-${next.line.end}` : ""}`
+          url.searchParams.set("start", String(next.line.start))
+          if (next.line.end !== undefined) {
+            url.searchParams.set("end", String(next.line.end))
           }
+        }
 
-          return {
-            kind: "mention",
-            display: Locale.truncateMiddle("@" + filename, width()),
-            value: filename,
-            directory: item.endsWith("/"),
-            part: {
+        return {
+          kind: "mention",
+          display: Locale.truncateMiddle("@" + filename, width()),
+          value: filename,
+          directory: item.endsWith("/"),
+          part: {
+            type: "file",
+            mime: item.endsWith("/") ? "application/x-directory" : "text/plain",
+            filename,
+            url: url.href,
+            source: {
               type: "file",
-              mime: item.endsWith("/") ? "application/x-directory" : "text/plain",
-              filename,
-              url: url.href,
-              source: {
-                type: "file",
-                path: item,
-                text: {
-                  start: 0,
-                  end: 0,
-                  value: "",
-                },
+              path: item,
+              text: {
+                start: 0,
+                end: 0,
+                value: "",
               },
             },
-          }
-        })
+          },
+        }
+      })
     },
     { initialValue: [] as Auto[] },
   )
@@ -462,13 +461,9 @@ export function createPromptState(input: PromptInput): PromptState {
     const next = removeLineRange(query())
     if (mode() === "mention") {
       return [
-        ...fuzzysort
-          .go(next, agents(), { keys: ["value", "display", "description"] })
-          .map((item) => item.obj),
+        ...fuzzysort.go(next, agents(), { keys: ["value", "display", "description"] }).map((item) => item.obj),
         ...files(),
-        ...fuzzysort
-          .go(next, resources(), { keys: ["value", "display", "description"] })
-          .map((item) => item.obj),
+        ...fuzzysort.go(next, resources(), { keys: ["value", "display", "description"] }).map((item) => item.obj),
       ]
     }
 
