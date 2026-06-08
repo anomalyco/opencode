@@ -2,9 +2,6 @@ import path from "path"
 import { writeHeapSnapshot } from "node:v8"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "heap" })
 const MINUTE = 60_000
 const LIMIT = 2 * 1024 * 1024 * 1024
 
@@ -32,20 +29,9 @@ export function start() {
       Global.Path.log,
       `heap-${process.pid}-${new Date().toISOString().replace(/[:.]/g, "")}.heapsnapshot`,
     )
-    log.warn("heap usage exceeded limit", {
-      rss: stat.rss,
-      heap: stat.heapUsed,
-      file,
-    })
-
     await Promise.resolve()
       .then(() => writeHeapSnapshot(file))
-      .catch((err) => {
-        log.error("failed to write heap snapshot", {
-          error: err instanceof Error ? err.message : String(err),
-          file,
-        })
-      })
+      .catch(() => {})
 
     lock = false
   }

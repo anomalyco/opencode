@@ -4,7 +4,6 @@ import { type rpc } from "../tui/worker"
 import path from "path"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
-import * as Log from "@opencode-ai/core/util/log"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
@@ -140,43 +139,18 @@ export const TuiThreadCommand = cmd({
       const worker = new Worker(file, {
         env,
       })
-      worker.onerror = (e) => {
-        Log.Default.error("thread error", {
-          message: e.message,
-          filename: e.filename,
-          lineno: e.lineno,
-          colno: e.colno,
-          error: e.error,
-        })
-      }
-
       const client = Rpc.client<typeof rpc>(worker)
-      const error = (e: unknown) => {
-        Log.Default.error("process error", { error: errorMessage(e) })
-      }
       const reload = () => {
-        client.call("reload", undefined).catch((err) => {
-          Log.Default.warn("worker reload failed", {
-            error: errorMessage(err),
-          })
-        })
+        client.call("reload", undefined).catch(() => {})
       }
-      process.on("uncaughtException", error)
-      process.on("unhandledRejection", error)
       process.on("SIGUSR2", reload)
 
       let stopped = false
       const stop = async () => {
         if (stopped) return
         stopped = true
-        process.off("uncaughtException", error)
-        process.off("unhandledRejection", error)
         process.off("SIGUSR2", reload)
-        await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
-          Log.Default.warn("worker shutdown failed", {
-            error: errorMessage(error),
-          })
-        })
+        await withTimeout(client.call("shutdown", undefined), 5000).catch(() => {})
         worker.terminate()
       }
 
@@ -255,9 +229,7 @@ export const TuiThreadCommand = cmd({
     } finally {
       try {
         unguard?.()
-      } catch (error) {
-        Log.Default.warn("failed to restore terminal guard", { error: errorMessage(error) })
-      }
+      } catch {}
     }
   },
 })

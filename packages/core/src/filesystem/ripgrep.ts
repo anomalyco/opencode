@@ -10,11 +10,9 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { CrossSpawnSpawner } from "../cross-spawn-spawner"
 import { Global } from "../global"
 import { NonNegativeInt } from "../schema"
-import * as Log from "../util/log"
 import { sanitizedProcessEnv } from "../util/opencode-process"
 import { which } from "../util/which"
 
-const log = Log.create({ service: "ripgrep" })
 const VERSION = "15.1.0"
 const PLATFORM = {
   "arm64-darwin": { platform: "aarch64-apple-darwin", extension: "tar.gz" },
@@ -307,7 +305,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | ChildProcessSpa
           const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
           const archive = path.join(Global.Path.bin, filename)
 
-          log.info("downloading ripgrep", { url })
+          yield* Effect.logInfo("downloading ripgrep", { url })
           yield* fs.ensureDir(Global.Path.bin).pipe(Effect.orDie)
 
           const bytes = yield* HttpClientRequest.get(url).pipe(
@@ -323,7 +321,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | ChildProcessSpa
           yield* extract(archive, config, target)
           yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
           return target
-        }),
+        }).pipe(Effect.annotateLogs("service", "ripgrep")),
       )
 
       const check = Effect.fnUntraced(function* (cwd: string) {
@@ -379,46 +377,50 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | ChildProcessSpa
           }),
         )
 
-      const search: Interface["search"] = Effect.fn("Ripgrep.search")(function* (input: SearchInput) {
-        yield* check(input.cwd)
+      const search: Interface["search"] = Effect.fn("Ripgrep.search")(
+        function* (input: SearchInput) {
+          yield* check(input.cwd)
 
-        const program = Effect.scoped(
-          Effect.gen(function* () {
-            const handle = yield* spawner.spawn(yield* command(input.cwd, searchArgs(input)))
+          const program = Effect.scoped(
+            Effect.gen(function* () {
+              const handle = yield* spawner.spawn(yield* command(input.cwd, searchArgs(input)))
 
-            const [items, stderr, code] = yield* Effect.all(
-              [
-                Stream.decodeText(handle.stdout).pipe(
-                  Stream.splitLines,
-                  Stream.filter((line) => line.length > 0),
-                  Stream.mapEffect(parse),
-                  Stream.filter((item): item is Match => item.type === "match"),
-                  Stream.map((item) => row(item.data)),
-                  Stream.runCollect,
-                  Effect.map((chunk) => [...chunk]),
-                ),
-                Stream.mkString(Stream.decodeText(handle.stderr)),
-                handle.exitCode,
-              ],
-              { concurrency: "unbounded" },
-            )
+              const [items, stderr, code] = yield* Effect.all(
+                [
+                  Stream.decodeText(handle.stdout).pipe(
+                    Stream.splitLines,
+                    Stream.filter((line) => line.length > 0),
+                    Stream.mapEffect(parse),
+                    Stream.filter((item): item is Match => item.type === "match"),
+                    Stream.map((item) => row(item.data)),
+                    Stream.runCollect,
+                    Effect.map((chunk) => [...chunk]),
+                  ),
+                  Stream.mkString(Stream.decodeText(handle.stderr)),
+                  handle.exitCode,
+                ],
+                { concurrency: "unbounded" },
+              )
 
-            if (code !== 0 && code !== 1 && code !== 2) {
-              return yield* Effect.fail(error(stderr, code))
-            }
+              if (code !== 0 && code !== 1 && code !== 2) {
+                return yield* Effect.fail(error(stderr, code))
+              }
 
-            return {
-              items: code === 1 ? [] : items,
-              partial: code === 2,
-            }
-          }),
-        )
+              return {
+                items: code === 1 ? [] : items,
+                partial: code === 2,
+              }
+            }),
+          )
 
-        return yield* raceAbort(program, input.signal)
-      })
+          return yield* raceAbort(program, input.signal)
+        },
+        Effect.annotateLogs("service", "ripgrep"),
+      )
 
-      const tree: Interface["tree"] = Effect.fn("Ripgrep.tree")(function* (input: TreeInput) {
-        log.info("tree", input)
+      const tree: Interface["tree"] = Effect.fn("Ripgrep.tree")(
+        function* (input: TreeInput) {
+          yield* Effect.logInfo("tree", input)
         const list = Array.from(yield* files({ cwd: input.cwd, signal: input.signal }).pipe(Stream.runCollect))
 
         interface Node {
@@ -469,8 +471,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | ChildProcessSpa
         }
 
         if (total > used) lines.push(`[${total - used} truncated]`)
-        return lines.join("\n")
-      })
+          return lines.join("\n")
+        },
+        Effect.annotateLogs("service", "ripgrep"),
+      )
 
       return Service.of({ filepath, files, tree, search })
     }),

@@ -1,14 +1,18 @@
-import { Effect, Layer, Logger } from "effect"
+import { Effect, Layer, Logger, References, type LogLevel } from "effect"
+import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
-import * as EffectLogger from "./logger"
+import path from "path"
 import { Flag } from "../flag/flag"
+import { Global } from "../global"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
-import { ensureProcessMetadata } from "../util/opencode-process"
+import { ensureProcessMetadata, ensureRunID } from "../util/opencode-process"
 
 const base = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
 export const enabled = !!base
 const processID = crypto.randomUUID()
+const printLogs = "OPENCODE_PRINT_LOGS"
+const logLevel = "OPENCODE_LOG_LEVEL"
 
 const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
   ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
@@ -53,10 +57,42 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
   }
 }
 
+function formatter(runID = ensureRunID()) {
+  return Logger.map(Logger.formatLogFmt, (output) =>
+    output.replace(/ level=([^ ]+)/, (_, level: string) => ` level=${level.toUpperCase()} run_id=${runID}`),
+  )
+}
+
+export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), runID = ensureRunID()) {
+  return Logger.toFile(formatter(runID), file, { flag: "a", batchWindow: 0 })
+}
+
+const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
+
+function minimumLogLevel() {
+  const value = process.env[logLevel]?.toUpperCase()
+  const levels = {
+    DEBUG: "Debug",
+    INFO: "Info",
+    WARN: "Warn",
+    ERROR: "Error",
+  } as const satisfies Record<string, LogLevel.LogLevel>
+  return value && value in levels ? levels[value as keyof typeof levels] : levels.INFO
+}
+
+function local() {
+  const logger = Logger.layer(
+    process.env[printLogs] === "1" ? [fileLogger(), stderrLogger] : [fileLogger()],
+    { mergeWithExisting: false },
+  ).pipe(Layer.provide(NodeFileSystem.layer), Layer.orDie)
+  return Layer.merge(logger, Layer.succeed(References.MinimumLogLevel, minimumLogLevel()))
+}
+
 function logs() {
   return Logger.layer(
     [
-      EffectLogger.logger,
+      fileLogger(),
+      ...(process.env[printLogs] === "1" ? [stderrLogger] : []),
       OtlpLogger.make({
         url: `${base}/v1/logs`,
         resource: resource(),
@@ -64,7 +100,13 @@ function logs() {
       }),
     ],
     { mergeWithExisting: false },
-  ).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer))
+  ).pipe(
+    Layer.provide(OtlpSerialization.layerJson),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(NodeFileSystem.layer),
+    Layer.orDie,
+    Layer.merge(Layer.succeed(References.MinimumLogLevel, minimumLogLevel())),
+  )
 }
 
 const traces = async () => {
@@ -95,13 +137,17 @@ const traces = async () => {
   }))
 }
 
-export const layer = !base
-  ? EffectLogger.layer
-  : Layer.unwrap(
-      Effect.gen(function* () {
-        const trace = yield* Effect.promise(traces)
-        return Layer.mergeAll(trace, logs())
-      }),
-    )
+export const layer = Layer.unwrap(
+  Effect.sync(() =>
+    !base
+      ? local()
+      : Layer.unwrap(
+          Effect.gen(function* () {
+            const trace = yield* Effect.promise(traces)
+            return Layer.mergeAll(trace, logs())
+          }),
+        ),
+  ),
+)
 
 export const Observability = { enabled, layer }

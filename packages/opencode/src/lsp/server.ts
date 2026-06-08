@@ -2,7 +2,6 @@ import type { ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
 import { text } from "node:stream/consumers"
 import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
@@ -15,7 +14,6 @@ import { spawn } from "./launch"
 import { Npm } from "@opencode-ai/core/npm"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 
-const log = Log.create({ service: "lsp.server" })
 const pathExists = async (p: string) =>
   fs
     .stat(p)
@@ -80,7 +78,6 @@ export const Deno: Info = {
   async spawn(root) {
     const deno = which("deno")
     if (!deno) {
-      log.info("deno not found, please install deno first")
       return
     }
     return {
@@ -100,7 +97,6 @@ export const Typescript: Info = {
   extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
   async spawn(root, ctx) {
     const tsserver = Module.resolve("typescript/lib/tsserver.js", ctx.directory)
-    log.info("typescript server", { tsserver })
     if (!tsserver) return
     const bin = await Npm.which("typescript-language-server")
     if (!bin) return
@@ -157,11 +153,9 @@ export const ESLint: Info = {
   async spawn(root, ctx, flags) {
     const eslint = Module.resolve("eslint", ctx.directory)
     if (!eslint) return
-    log.info("spawning eslint server")
     const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
     if (!(await Filesystem.exists(serverPath))) {
       if (flags.disableLspDownload) return
-      log.info("downloading and building VS Code ESLint server")
       const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
       if (!response.ok) return
 
@@ -171,7 +165,6 @@ export const ESLint: Info = {
       const ok = await Archive.extractZip(zipPath, Global.Path.bin)
         .then(() => true)
         .catch((error) => {
-          log.error("Failed to extract vscode-eslint archive", { error })
           return false
         })
       if (!ok) return
@@ -182,7 +175,6 @@ export const ESLint: Info = {
 
       const stats = await fs.stat(finalPath).catch(() => undefined)
       if (stats) {
-        log.info("removing old eslint installation", { path: finalPath })
         await fs.rm(finalPath, { force: true, recursive: true })
       }
       await fs.rename(extractedPath, finalPath)
@@ -191,7 +183,6 @@ export const ESLint: Info = {
       await Process.run([npmCmd, "install"], { cwd: finalPath })
       await Process.run([npmCmd, "run", "compile"], { cwd: finalPath })
 
-      log.info("installed VS Code ESLint server", { serverPath })
     }
 
     const proc = spawn("node", [serverPath, "--stdio"], {
@@ -275,7 +266,6 @@ export const Oxlint: Info = {
       }
     }
 
-    log.info("oxlint not found, please install oxlint")
     return
   },
 }
@@ -356,7 +346,6 @@ export const Gopls: Info = {
       if (!which("go")) return
       if (flags.disableLspDownload) return
 
-      log.info("installing gopls")
       const proc = Process.spawn(["go", "install", "golang.org/x/tools/gopls@latest"], {
         env: { ...process.env, GOBIN: Global.Path.bin },
         stdout: "pipe",
@@ -365,13 +354,9 @@ export const Gopls: Info = {
       })
       const exit = await proc.exited
       if (exit !== 0) {
-        log.error("Failed to install gopls")
         return
       }
       bin = path.join(Global.Path.bin, "gopls" + (process.platform === "win32" ? ".exe" : ""))
-      log.info(`installed gopls`, {
-        bin,
-      })
     }
     return {
       process: spawn(bin!, {
@@ -391,11 +376,9 @@ export const Rubocop: Info = {
       const ruby = which("ruby")
       const gem = which("gem")
       if (!ruby || !gem) {
-        log.info("Ruby not found, please install Ruby first")
         return
       }
       if (flags.disableLspDownload) return
-      log.info("installing rubocop")
       const proc = Process.spawn(["gem", "install", "rubocop", "--bindir", Global.Path.bin], {
         stdout: "pipe",
         stderr: "pipe",
@@ -403,13 +386,9 @@ export const Rubocop: Info = {
       })
       const exit = await proc.exited
       if (exit !== 0) {
-        log.error("Failed to install rubocop")
         return
       }
       bin = path.join(Global.Path.bin, "rubocop" + (process.platform === "win32" ? ".exe" : ""))
-      log.info(`installed rubocop`, {
-        bin,
-      })
     }
     return {
       process: spawn(bin!, ["--lsp"], {
@@ -466,7 +445,6 @@ export const Ty: Info = {
     }
 
     if (!binary) {
-      log.error("ty not found, please install ty first")
       return
     }
 
@@ -543,12 +521,10 @@ export const ElixirLS: Info = {
       if (!(await Filesystem.exists(binary))) {
         const elixir = which("elixir")
         if (!elixir) {
-          log.error("elixir is required to run elixir-ls")
           return
         }
 
         if (flags.disableLspDownload) return
-        log.info("downloading elixir-ls from GitHub releases")
 
         const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
         if (!response.ok) return
@@ -558,7 +534,6 @@ export const ElixirLS: Info = {
         const ok = await Archive.extractZip(zipPath, Global.Path.bin)
           .then(() => true)
           .catch((error) => {
-            log.error("Failed to extract elixir-ls archive", { error })
             return false
           })
         if (!ok) return
@@ -574,9 +549,6 @@ export const ElixirLS: Info = {
         await Process.run(["mix", "compile"], { cwd, env })
         await Process.run(["mix", "elixir_ls.release2", "-o", "release"], { cwd, env })
 
-        log.info(`installed elixir-ls`, {
-          path: elixirLsPath,
-        })
       }
     }
 
@@ -598,16 +570,13 @@ export const Zls: Info = {
     if (!bin) {
       const zig = which("zig")
       if (!zig) {
-        log.error("Zig is required to use zls. Please install Zig first.")
         return
       }
 
       if (flags.disableLspDownload) return
-      log.info("downloading zls from GitHub releases")
 
       const releaseResponse = await fetch("https://api.github.com/repos/zigtools/zls/releases/latest")
       if (!releaseResponse.ok) {
-        log.error("Failed to fetch zls release info")
         return
       }
 
@@ -644,20 +613,17 @@ export const Zls: Info = {
       ]
 
       if (!supportedCombos.includes(assetName)) {
-        log.error(`Platform ${platform} and architecture ${arch} is not supported by zls`)
         return
       }
 
       const asset = release.assets?.find((a) => a.name === assetName)
       if (!asset?.browser_download_url) {
-        log.error(`Could not find asset ${assetName} in latest zls release`)
         return
       }
 
       const downloadUrl = asset.browser_download_url
       const downloadResponse = await fetch(downloadUrl)
       if (!downloadResponse.ok) {
-        log.error("Failed to download zls")
         return
       }
 
@@ -668,7 +634,6 @@ export const Zls: Info = {
         const ok = await Archive.extractZip(tempPath, Global.Path.bin)
           .then(() => true)
           .catch((error) => {
-            log.error("Failed to extract zls archive", { error })
             return false
           })
         if (!ok) return
@@ -681,7 +646,6 @@ export const Zls: Info = {
       bin = path.join(Global.Path.bin, "zls" + (platform === "win32" ? ".exe" : ""))
 
       if (!(await Filesystem.exists(bin))) {
-        log.error("Failed to extract zls binary")
         return
       }
 
@@ -689,7 +653,6 @@ export const Zls: Info = {
         await fs.chmod(bin, 0o755).catch(() => {})
       }
 
-      log.info(`installed zls`, { bin })
     }
 
     return {
@@ -726,11 +689,9 @@ export const Razor: Info = {
 
     const razor = await findVscodeRazorExtension()
     if (!razor) {
-      log.info("VS Code C# extension with Razor support not found, skipping Razor LSP")
       return
     }
 
-    log.info("using VS Code Razor extension for roslyn-language-server", { extension: razor.extension })
     return {
       process: spawn(
         bin,
@@ -767,12 +728,10 @@ async function getRoslynLanguageServer(disableLspDownload: boolean) {
 
 async function installRoslynLanguageServer(disableLspDownload: boolean) {
   if (!which("dotnet")) {
-    log.error(".NET SDK is required to install roslyn-language-server")
     return
   }
 
   if (disableLspDownload) return
-  log.info("installing roslyn-language-server via dotnet tool")
   const proc = Process.spawn(["dotnet", "tool", "install", "--global", "roslyn-language-server", "--prerelease"], {
     stdout: "pipe",
     stderr: "pipe",
@@ -780,23 +739,19 @@ async function installRoslynLanguageServer(disableLspDownload: boolean) {
   })
   const exit = await proc.exited
   if (exit !== 0) {
-    log.error("Failed to install roslyn-language-server")
     return
   }
 
   const resolved = which("roslyn-language-server")
   if (resolved) {
-    log.info(`installed roslyn-language-server`, { bin: resolved })
     return resolved
   }
 
   const global = await roslynLanguageServerGlobalPath()
   if (global) {
-    log.info(`installed roslyn-language-server`, { bin: global })
     return global
   }
 
-  log.error("Installed roslyn-language-server but could not resolve executable")
 }
 
 async function roslynLanguageServerGlobalPath() {
@@ -853,12 +808,10 @@ export const FSharp: Info = {
     let bin = which("fsautocomplete")
     if (!bin) {
       if (!which("dotnet")) {
-        log.error(".NET SDK is required to install fsautocomplete")
         return
       }
 
       if (flags.disableLspDownload) return
-      log.info("installing fsautocomplete via dotnet tool")
       const proc = Process.spawn(["dotnet", "tool", "install", "fsautocomplete", "--tool-path", Global.Path.bin], {
         stdout: "pipe",
         stderr: "pipe",
@@ -866,12 +819,10 @@ export const FSharp: Info = {
       })
       const exit = await proc.exited
       if (exit !== 0) {
-        log.error("Failed to install fsautocomplete")
         return
       }
 
       bin = path.join(Global.Path.bin, "fsautocomplete" + (process.platform === "win32" ? ".exe" : ""))
-      log.info(`installed fsautocomplete`, { bin })
     }
 
     return {
@@ -951,7 +902,6 @@ export const RustAnalyzer: Info = {
   async spawn(root) {
     const bin = which("rust-analyzer")
     if (!bin) {
-      log.info("rust-analyzer not found in path, please install it")
       return
     }
     return {
@@ -1002,11 +952,9 @@ export const Clangd: Info = {
     }
 
     if (flags.disableLspDownload) return
-    log.info("downloading clangd from GitHub releases")
 
     const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
     if (!releaseResponse.ok) {
-      log.error("Failed to fetch clangd release info")
       return
     }
 
@@ -1017,7 +965,6 @@ export const Clangd: Info = {
 
     const tag = release.tag_name
     if (!tag) {
-      log.error("clangd release did not include a tag name")
       return
     }
     const platform = process.platform
@@ -1028,7 +975,6 @@ export const Clangd: Info = {
     }
     const token = tokens[platform]
     if (!token) {
-      log.error(`Platform ${platform} is not supported by clangd auto-download`)
       return
     }
 
@@ -1045,21 +991,18 @@ export const Clangd: Info = {
       assets.find((item) => valid(item) && item.name?.endsWith(".tar.xz")) ??
       assets.find((item) => valid(item))
     if (!asset?.name || !asset.browser_download_url) {
-      log.error("clangd could not match release asset", { tag, platform })
       return
     }
 
     const name = asset.name
     const downloadResponse = await fetch(asset.browser_download_url)
     if (!downloadResponse.ok) {
-      log.error("Failed to download clangd")
       return
     }
 
     const archive = path.join(Global.Path.bin, name)
     const buf = await downloadResponse.arrayBuffer()
     if (buf.byteLength === 0) {
-      log.error("Failed to write clangd archive")
       return
     }
     await Filesystem.write(archive, Buffer.from(buf))
@@ -1067,7 +1010,6 @@ export const Clangd: Info = {
     const zip = name.endsWith(".zip")
     const tar = name.endsWith(".tar.xz")
     if (!zip && !tar) {
-      log.error("clangd encountered unsupported asset", { asset: name })
       return
     }
 
@@ -1075,7 +1017,6 @@ export const Clangd: Info = {
       const ok = await Archive.extractZip(archive, Global.Path.bin)
         .then(() => true)
         .catch((error) => {
-          log.error("Failed to extract clangd archive", { error })
           return false
         })
       if (!ok) return
@@ -1087,7 +1028,6 @@ export const Clangd: Info = {
 
     const bin = path.join(Global.Path.bin, "clangd_" + tag, "bin", "clangd" + ext)
     if (!(await Filesystem.exists(bin))) {
-      log.error("Failed to extract clangd binary")
       return
     }
 
@@ -1098,7 +1038,6 @@ export const Clangd: Info = {
     await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
     await fs.symlink(bin, path.join(Global.Path.bin, "clangd")).catch(() => {})
 
-    log.info(`installed clangd`, { bin })
 
     return {
       process: spawn(bin, args, {
@@ -1142,7 +1081,6 @@ export const Astro: Info = {
   async spawn(root, ctx, flags) {
     const tsserver = Module.resolve("typescript/lib/tsserver.js", ctx.directory)
     if (!tsserver) {
-      log.info("typescript not found, required for Astro language server")
       return
     }
     const tsdk = path.dirname(tsserver)
@@ -1203,7 +1141,6 @@ export const JDTLS: Info = {
   async spawn(root, _ctx, flags) {
     const java = which("java")
     if (!java) {
-      log.error("Java 21 or newer is required to run the JDTLS. Please install it first.")
       return
     }
     const javaMajorVersion = await run(["java", "-version"]).then((result) => {
@@ -1211,7 +1148,6 @@ export const JDTLS: Info = {
       return !m ? undefined : parseInt(m[1])
     })
     if (javaMajorVersion == null || javaMajorVersion < 21) {
-      log.error("JDTLS requires at least Java 21.")
       return
     }
     const distPath = path.join(Global.Path.bin, "jdtls")
@@ -1219,29 +1155,23 @@ export const JDTLS: Info = {
     const installed = await pathExists(launcherDir)
     if (!installed) {
       if (flags.disableLspDownload) return
-      log.info("Downloading JDTLS LSP server.")
       await fs.mkdir(distPath, { recursive: true })
       const releaseURL =
         "https://www.eclipse.org/downloads/download.php?file=/jdtls/snapshots/jdt-language-server-latest.tar.gz"
       const archiveName = "release.tar.gz"
 
-      log.info("Downloading JDTLS archive", { url: releaseURL, dest: distPath })
       const download = await fetch(releaseURL)
       if (!download.ok || !download.body) {
-        log.error("Failed to download JDTLS", { status: download.status, statusText: download.statusText })
         return
       }
       await Filesystem.writeStream(path.join(distPath, archiveName), download.body)
 
-      log.info("Extracting JDTLS archive")
       const tarResult = await run(["tar", "-xzf", archiveName], { cwd: distPath })
       if (tarResult.code !== 0) {
-        log.error("Failed to extract JDTLS", { exitCode: tarResult.code, stderr: tarResult.stderr.toString() })
         return
       }
 
       await fs.rm(path.join(distPath, archiveName), { force: true })
-      log.info("JDTLS download and extraction completed")
     }
     const jarFileName =
       (await fs.readdir(launcherDir).catch(() => []))
@@ -1249,7 +1179,6 @@ export const JDTLS: Info = {
         ?.trim() ?? ""
     const launcherJar = path.join(launcherDir, jarFileName)
     if (!(await pathExists(launcherJar))) {
-      log.error(`Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`)
       return
     }
     const configFile = path.join(
@@ -1317,11 +1246,9 @@ export const KotlinLS: Info = {
     const installed = await Filesystem.exists(launcherScript)
     if (!installed) {
       if (flags.disableLspDownload) return
-      log.info("Downloading Kotlin Language Server from GitHub.")
 
       const releaseResponse = await fetch("https://api.github.com/repos/Kotlin/kotlin-lsp/releases/latest")
       if (!releaseResponse.ok) {
-        log.error("Failed to fetch kotlin-lsp release info")
         return
       }
 
@@ -1329,7 +1256,6 @@ export const KotlinLS: Info = {
       const version = release.name?.replace(/^v/, "")
 
       if (!version) {
-        log.error("Could not determine Kotlin LSP version from release")
         return
       }
 
@@ -1350,7 +1276,6 @@ export const KotlinLS: Info = {
       const combo = `${kotlinPlatform}-${kotlinArch}`
 
       if (!supportedCombos.includes(combo)) {
-        log.error(`Platform ${platform}/${arch} is not supported by Kotlin LSP`)
         return
       }
 
@@ -1361,17 +1286,12 @@ export const KotlinLS: Info = {
       const archivePath = path.join(distPath, "kotlin-ls.zip")
       const download = await fetch(releaseURL)
       if (!download.ok || !download.body) {
-        log.error("Failed to download Kotlin Language Server", {
-          status: download.status,
-          statusText: download.statusText,
-        })
         return
       }
       await Filesystem.writeStream(archivePath, download.body)
       const ok = await Archive.extractZip(archivePath, distPath)
         .then(() => true)
         .catch((error) => {
-          log.error("Failed to extract Kotlin LS archive", { error })
           return false
         })
       if (!ok) return
@@ -1379,10 +1299,8 @@ export const KotlinLS: Info = {
       if (process.platform !== "win32") {
         await fs.chmod(launcherScript, 0o755).catch(() => {})
       }
-      log.info("Installed Kotlin Language Server", { path: launcherScript })
     }
     if (!(await Filesystem.exists(launcherScript))) {
-      log.error(`Failed to locate the Kotlin LS launcher script in the installed directory: ${distPath}.`)
       return
     }
     return {
@@ -1436,11 +1354,9 @@ export const LuaLS: Info = {
 
     if (!bin) {
       if (flags.disableLspDownload) return
-      log.info("downloading lua-language-server from GitHub releases")
 
       const releaseResponse = await fetch("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest")
       if (!releaseResponse.ok) {
-        log.error("Failed to fetch lua-language-server release info")
         return
       }
 
@@ -1475,20 +1391,17 @@ export const LuaLS: Info = {
 
       const assetSuffix = `${lualsPlatform}-${lualsArch}.${ext}`
       if (!supportedCombos.includes(assetSuffix)) {
-        log.error(`Platform ${platform} and architecture ${arch} is not supported by lua-language-server`)
         return
       }
 
       const asset = release.assets.find((a: any) => a.name === assetName)
       if (!asset) {
-        log.error(`Could not find asset ${assetName} in latest lua-language-server release`)
         return
       }
 
       const downloadUrl = asset.browser_download_url
       const downloadResponse = await fetch(downloadUrl)
       if (!downloadResponse.ok) {
-        log.error("Failed to download lua-language-server")
         return
       }
 
@@ -1512,7 +1425,6 @@ export const LuaLS: Info = {
         const ok = await Archive.extractZip(tempPath, installDir)
           .then(() => true)
           .catch((error) => {
-            log.error("Failed to extract lua-language-server archive", { error })
             return false
           })
         if (!ok) return
@@ -1520,7 +1432,6 @@ export const LuaLS: Info = {
         const ok = await run(["tar", "-xzf", tempPath, "-C", installDir])
           .then((result) => result.code === 0)
           .catch((error: unknown) => {
-            log.error("Failed to extract lua-language-server archive", { error })
             return false
           })
         if (!ok) return
@@ -1532,7 +1443,6 @@ export const LuaLS: Info = {
       bin = path.join(installDir, "bin", "lua-language-server" + (platform === "win32" ? ".exe" : ""))
 
       if (!(await Filesystem.exists(bin))) {
-        log.error("Failed to extract lua-language-server binary")
         return
       }
 
@@ -1541,15 +1451,11 @@ export const LuaLS: Info = {
           .chmod(bin, 0o755)
           .then(() => true)
           .catch((error: unknown) => {
-            log.error("Failed to set executable permission for lua-language-server binary", {
-              error,
-            })
             return false
           })
         if (!ok) return
       }
 
-      log.info(`installed lua-language-server`, { bin })
     }
 
     return {
@@ -1598,7 +1504,6 @@ export const Prisma: Info = {
   async spawn(root) {
     const prisma = which("prisma")
     if (!prisma) {
-      log.info("prisma not found, please install prisma")
       return
     }
     return {
@@ -1616,7 +1521,6 @@ export const Dart: Info = {
   async spawn(root) {
     const dart = which("dart")
     if (!dart) {
-      log.info("dart not found, please install dart first")
       return
     }
     return {
@@ -1634,7 +1538,6 @@ export const Ocaml: Info = {
   async spawn(root) {
     const bin = which("ocamllsp")
     if (!bin) {
-      log.info("ocamllsp not found, please install ocaml-lsp-server")
       return
     }
     return {
@@ -1679,11 +1582,9 @@ export const TerraformLS: Info = {
 
     if (!bin) {
       if (flags.disableLspDownload) return
-      log.info("downloading terraform-ls from HashiCorp releases")
 
       const releaseResponse = await fetch("https://api.releases.hashicorp.com/v1/releases/terraform-ls/latest")
       if (!releaseResponse.ok) {
-        log.error("Failed to fetch terraform-ls release info")
         return
       }
 
@@ -1701,13 +1602,11 @@ export const TerraformLS: Info = {
       const builds = release.builds ?? []
       const build = builds.find((b) => b.arch === tfArch && b.os === tfPlatform)
       if (!build?.url) {
-        log.error(`Could not find build for ${tfPlatform}/${tfArch} terraform-ls release version ${release.version}`)
         return
       }
 
       const downloadResponse = await fetch(build.url)
       if (!downloadResponse.ok) {
-        log.error("Failed to download terraform-ls")
         return
       }
 
@@ -1717,7 +1616,6 @@ export const TerraformLS: Info = {
       const ok = await Archive.extractZip(tempPath, Global.Path.bin)
         .then(() => true)
         .catch((error) => {
-          log.error("Failed to extract terraform-ls archive", { error })
           return false
         })
       if (!ok) return
@@ -1726,7 +1624,6 @@ export const TerraformLS: Info = {
       bin = path.join(Global.Path.bin, "terraform-ls" + (platform === "win32" ? ".exe" : ""))
 
       if (!(await Filesystem.exists(bin))) {
-        log.error("Failed to extract terraform-ls binary")
         return
       }
 
@@ -1734,7 +1631,6 @@ export const TerraformLS: Info = {
         await fs.chmod(bin, 0o755).catch(() => {})
       }
 
-      log.info(`installed terraform-ls`, { bin })
     }
 
     return {
@@ -1760,11 +1656,9 @@ export const TexLab: Info = {
 
     if (!bin) {
       if (flags.disableLspDownload) return
-      log.info("downloading texlab from GitHub releases")
 
       const response = await fetch("https://api.github.com/repos/latex-lsp/texlab/releases/latest")
       if (!response.ok) {
-        log.error("Failed to fetch texlab release info")
         return
       }
 
@@ -1774,7 +1668,6 @@ export const TexLab: Info = {
       }
       const version = release.tag_name?.replace("v", "")
       if (!version) {
-        log.error("texlab release did not include a version tag")
         return
       }
 
@@ -1789,13 +1682,11 @@ export const TexLab: Info = {
       const assets = release.assets ?? []
       const asset = assets.find((a) => a.name === assetName)
       if (!asset?.browser_download_url) {
-        log.error(`Could not find asset ${assetName} in texlab release`)
         return
       }
 
       const downloadResponse = await fetch(asset.browser_download_url)
       if (!downloadResponse.ok) {
-        log.error("Failed to download texlab")
         return
       }
 
@@ -1806,7 +1697,6 @@ export const TexLab: Info = {
         const ok = await Archive.extractZip(tempPath, Global.Path.bin)
           .then(() => true)
           .catch((error) => {
-            log.error("Failed to extract texlab archive", { error })
             return false
           })
         if (!ok) return
@@ -1820,7 +1710,6 @@ export const TexLab: Info = {
       bin = path.join(Global.Path.bin, "texlab" + (platform === "win32" ? ".exe" : ""))
 
       if (!(await Filesystem.exists(bin))) {
-        log.error("Failed to extract texlab binary")
         return
       }
 
@@ -1828,7 +1717,6 @@ export const TexLab: Info = {
         await fs.chmod(bin, 0o755).catch(() => {})
       }
 
-      log.info("installed texlab", { bin })
     }
 
     return {
@@ -1872,7 +1760,6 @@ export const Gleam: Info = {
   async spawn(root) {
     const gleam = which("gleam")
     if (!gleam) {
-      log.info("gleam not found, please install gleam first")
       return
     }
     return {
@@ -1893,7 +1780,6 @@ export const Clojure: Info = {
       bin = which("clojure-lsp.exe")
     }
     if (!bin) {
-      log.info("clojure-lsp not found, please install clojure-lsp first")
       return
     }
     return {
@@ -1921,7 +1807,6 @@ export const Nixd: Info = {
   async spawn(root) {
     const nixd = which("nixd")
     if (!nixd) {
-      log.info("nixd not found, please install nixd first")
       return
     }
     return {
@@ -1944,11 +1829,9 @@ export const Tinymist: Info = {
 
     if (!bin) {
       if (flags.disableLspDownload) return
-      log.info("downloading tinymist from GitHub releases")
 
       const response = await fetch("https://api.github.com/repos/Myriad-Dreamin/tinymist/releases/latest")
       if (!response.ok) {
-        log.error("Failed to fetch tinymist release info")
         return
       }
 
@@ -1980,13 +1863,11 @@ export const Tinymist: Info = {
       const assets = release.assets ?? []
       const asset = assets.find((a) => a.name === assetName)
       if (!asset?.browser_download_url) {
-        log.error(`Could not find asset ${assetName} in tinymist release`)
         return
       }
 
       const downloadResponse = await fetch(asset.browser_download_url)
       if (!downloadResponse.ok) {
-        log.error("Failed to download tinymist")
         return
       }
 
@@ -1997,7 +1878,6 @@ export const Tinymist: Info = {
         const ok = await Archive.extractZip(tempPath, Global.Path.bin)
           .then(() => true)
           .catch((error) => {
-            log.error("Failed to extract tinymist archive", { error })
             return false
           })
         if (!ok) return
@@ -2010,7 +1890,6 @@ export const Tinymist: Info = {
       bin = path.join(Global.Path.bin, "tinymist" + (platform === "win32" ? ".exe" : ""))
 
       if (!(await Filesystem.exists(bin))) {
-        log.error("Failed to extract tinymist binary")
         return
       }
 
@@ -2018,7 +1897,6 @@ export const Tinymist: Info = {
         await fs.chmod(bin, 0o755).catch(() => {})
       }
 
-      log.info("installed tinymist", { bin })
     }
 
     return {
@@ -2034,7 +1912,6 @@ export const HLS: Info = {
   async spawn(root) {
     const bin = which("haskell-language-server-wrapper")
     if (!bin) {
-      log.info("haskell-language-server-wrapper not found, please install haskell-language-server")
       return
     }
     return {
@@ -2052,7 +1929,6 @@ export const JuliaLS: Info = {
   async spawn(root) {
     const julia = which("julia")
     if (!julia) {
-      log.info("julia not found, please install julia first (https://julialang.org/downloads/)")
       return
     }
     return {

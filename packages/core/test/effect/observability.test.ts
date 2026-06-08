@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { resource } from "@opencode-ai/core/effect/observability"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Effect, Layer, Logger } from "effect"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { fileLogger, resource } from "@opencode-ai/core/effect/observability"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
 const opencodeClient = process.env.OPENCODE_CLIENT
@@ -43,4 +48,35 @@ describe("resource", () => {
     })
     expect(resource().attributes["service.instance.id"]).not.toBe("override")
   })
+})
+
+test("file logger appends concurrent runs with a run_id on every line", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-test-"))
+  await using _ = {
+    async [Symbol.asyncDispose]() {
+      await fs.rm(dir, { recursive: true, force: true })
+    },
+  }
+  const file = path.join(dir, "opencode.log")
+  const write = (runID: string) =>
+    Effect.forEach(
+      Array.from({ length: 50 }, (_, index) => index),
+      (index) => Effect.logInfo(`entry-${index}`),
+    ).pipe(
+      Effect.provide(
+        Logger.layer([fileLogger(file, runID)]).pipe(Layer.provide(NodeFileSystem.layer), Layer.orDie),
+      ),
+      Effect.scoped,
+    )
+
+  await Effect.runPromise(Effect.all([write("run-a"), write("run-b")], { concurrency: "unbounded" }))
+
+  const lines = (await Bun.file(file).text())
+    .trim()
+    .split("\n")
+  expect(lines).toHaveLength(100)
+  expect(lines.filter((line) => line.includes("run_id=run-a"))).toHaveLength(50)
+  expect(lines.filter((line) => line.includes("run_id=run-b"))).toHaveLength(50)
+  expect(lines.every((line) => line.startsWith("timestamp=") && line.includes(" level=INFO "))).toBe(true)
+  expect(lines.every((line) => !line.startsWith("{"))).toBe(true)
 })

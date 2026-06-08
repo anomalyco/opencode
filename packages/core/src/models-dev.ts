@@ -228,7 +228,7 @@ export const layer = Layer.effect(
         }),
       ).pipe(
         Effect.tapCause((cause) =>
-          Effect.logError("Failed to fetch models.dev").pipe(Effect.annotateLogs("cause", cause)),
+          Effect.logError("Failed to fetch models.dev", { cause: cause }),
         ),
         Effect.ignore,
       )
