@@ -35,6 +35,7 @@ import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Question } from "@/question"
+import { Reference } from "@/reference/reference"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
 import { LLM } from "@/session/llm"
@@ -60,13 +61,13 @@ import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { V2Api } from "@opencode-ai/server/api"
+import { Api } from "@opencode-ai/server/api"
 import { PublicApi } from "./public"
 import {
   authorizationLayer,
   authorizationRouterMiddleware,
   ptyConnectAuthorizationLayer,
-  v2AuthorizationLayer,
+  serverAuthorizationLayer,
 } from "./middleware/authorization"
 import { EventApi } from "./groups/event"
 import { PtyConnectApi } from "./groups/pty"
@@ -85,10 +86,11 @@ import { projectCopyHandlers } from "./handlers/project-copy"
 import { providerHandlers } from "./handlers/provider"
 import { ptyConnectHandlers, ptyHandlers } from "./handlers/pty"
 import { questionHandlers } from "./handlers/question"
+import { referenceHandlers } from "./handlers/reference"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
-import { v2Handlers } from "@opencode-ai/server/handlers"
+import { handlers } from "@opencode-ai/server/handlers"
 import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer } from "./middleware/instance-context"
@@ -121,7 +123,7 @@ const cors = (corsOptions?: CorsOptions) =>
 const authOnlyRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const httpApiAuthLayer = authorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const ptyConnectHttpApiAuthLayer = ptyConnectAuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
-const v2HttpApiAuthLayer = v2AuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
+const serverHttpApiAuthLayer = serverAuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const workspaceRoutingLive = workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers]),
@@ -147,6 +149,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     projectCopyHandlers,
     ptyHandlers,
     questionHandlers,
+    referenceHandlers,
     permissionHandlers,
     providerHandlers,
     sessionHandlers,
@@ -159,9 +162,9 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
 const instanceRoutes = instanceApiRoutes.pipe(
   Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, schemaErrorLayer]),
 )
-const v2Routes = HttpApiBuilder.layer(V2Api).pipe(
-  Layer.provide(v2Handlers),
-  Layer.provide([v2HttpApiAuthLayer, v2SchemaErrorLayer]),
+const serverRoutes = HttpApiBuilder.layer(Api).pipe(
+  Layer.provide(handlers),
+  Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),
 )
 
 // `OpenApi.fromApi` is non-trivial; defer until /doc is actually hit so
@@ -201,7 +204,7 @@ export function createRoutes(
     eventApiRoutes,
     ptyConnectApiRoutes,
     instanceRoutes,
-    v2Routes,
+    serverRoutes,
     docRoute,
     uiRoute,
   ).pipe(
@@ -234,6 +237,7 @@ export function createRoutes(
       Provider.defaultLayer,
       PtyTicket.defaultLayer,
       Question.defaultLayer,
+      Reference.defaultLayer,
       Ripgrep.defaultLayer,
       RuntimeFlags.defaultLayer,
       Session.defaultLayer,

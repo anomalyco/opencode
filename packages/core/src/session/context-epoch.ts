@@ -2,11 +2,12 @@ export * as SessionContextEpoch from "./context-epoch"
 
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
+import { AgentV2 } from "../agent"
 import type { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { Location } from "../location"
-import { SystemContext } from "../system-context"
-import { SystemContextRegistry } from "../system-context-registry"
+import { SystemContext } from "../system-context/index"
+import { ContextSnapshotDecodeError } from "./error"
 import { SessionEvent } from "./event"
 import { SessionInput } from "./input"
 import { SessionMessageID } from "./message-id"
@@ -17,6 +18,11 @@ type DatabaseService = Database.Interface["db"]
 
 class RevisionMismatch extends Error {}
 class LocationMismatch extends Error {}
+export class AgentMismatch extends Error {}
+export class AgentReplacementBlocked extends Schema.TaggedErrorClass<AgentReplacementBlocked>()(
+  "SessionContextEpoch.AgentReplacementBlocked",
+  { sessionID: SessionSchema.ID, previous: AgentV2.ID, current: AgentV2.ID },
+) {}
 
 const retryRevisionMismatch = <A, E>(attempt: () => Effect.Effect<A, E>): Effect.Effect<A, E> =>
   attempt().pipe(
@@ -30,15 +36,17 @@ const retryRevisionMismatch = <A, E>(attempt: () => Effect.Effect<A, E>): Effect
 interface Prepared {
   readonly baseline: string
   readonly baselineSeq: number
+  readonly revision: number
 }
 
 export function initialize(
   db: DatabaseService,
-  context: SystemContextRegistry.Interface,
+  context: Effect.Effect<SystemContext.SystemContext>,
   sessionID: SessionSchema.ID,
   location: Location.Ref,
+  agent: AgentV2.ID,
 ): Effect.Effect<Prepared | undefined, SystemContext.InitializationBlocked> {
-  return retryRevisionMismatch(() => initializeOnce(db, context, sessionID, location)).pipe(
+  return retryRevisionMismatch(() => initializeOnce(db, context, sessionID, location, agent)).pipe(
     Effect.withSpan("SessionContextEpoch.initialize"),
   )
 }
@@ -46,11 +54,12 @@ export function initialize(
 export function prepare(
   db: DatabaseService,
   events: EventV2.Interface,
-  context: SystemContextRegistry.Interface,
+  context: Effect.Effect<SystemContext.SystemContext>,
   sessionID: SessionSchema.ID,
   location: Location.Ref,
-): Effect.Effect<Prepared, SystemContext.InitializationBlocked> {
-  return retryRevisionMismatch(() => prepareOnce(db, events, context, sessionID, location)).pipe(
+  agent: AgentV2.ID,
+): Effect.Effect<Prepared, SystemContext.InitializationBlocked | ContextSnapshotDecodeError | AgentReplacementBlocked> {
+  return retryRevisionMismatch(() => prepareOnce(db, events, context, sessionID, location, agent)).pipe(
     Effect.withSpan("SessionContextEpoch.prepare"),
   )
 }
@@ -58,28 +67,38 @@ export function prepare(
 const prepareOnce = Effect.fnUntraced(function* (
   db: DatabaseService,
   events: EventV2.Interface,
-  context: SystemContextRegistry.Interface,
+  context: Effect.Effect<SystemContext.SystemContext>,
   sessionID: SessionSchema.ID,
   location: Location.Ref,
+  agent: AgentV2.ID,
 ) {
-  const [value, stored] = yield* Effect.all([context.load(), find(db, sessionID)], { concurrency: "unbounded" })
+  const [value, stored] = yield* Effect.all([context, find(db, sessionID)], { concurrency: "unbounded" })
   if (!stored) {
     const generation = yield* SystemContext.initialize(value)
-    const baselineSeq = yield* insert(db, sessionID, location, generation)
-    return { baseline: generation.baseline, baselineSeq }
+    const baselineSeq = yield* insert(db, sessionID, location, agent, generation)
+    return { baseline: generation.baseline, baselineSeq, revision: 0 }
   }
 
-  const snapshot = yield* Schema.decodeUnknownEffect(SystemContext.Snapshot)(stored.snapshot).pipe(Effect.orDie)
+  const snapshot = yield* Schema.decodeUnknownEffect(SystemContext.Snapshot)(stored.snapshot).pipe(
+    Effect.mapError((error) => new ContextSnapshotDecodeError({ sessionID, details: String(error) })),
+  )
+  const replacingAgent = stored.agent !== agent
   const result =
-    stored.replacement_seq === null
+    stored.replacement_seq === null && !replacingAgent
       ? yield* SystemContext.reconcile(value, snapshot)
       : yield* SystemContext.replace(value, snapshot)
-  if (result._tag === "Unchanged" || result._tag === "ReplacementBlocked")
-    return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
+  if (result._tag === "ReplacementBlocked" && replacingAgent) {
+    yield* fence(db, sessionID, agent, stored.revision)
+    return yield* new AgentReplacementBlocked({ sessionID, previous: stored.agent, current: agent })
+  }
+  if (result._tag === "Unchanged" || result._tag === "ReplacementBlocked") {
+    yield* fence(db, sessionID, agent, stored.revision)
+    return { baseline: stored.baseline, baselineSeq: stored.baseline_seq, revision: stored.revision }
+  }
   if (result._tag === "ReplacementReady") {
     const replacementSeq = stored.replacement_seq ?? (yield* SessionInput.latestSeq(db, sessionID))
-    yield* replace(db, sessionID, stored.revision, replacementSeq, result.generation)
-    return { baseline: result.generation.baseline, baselineSeq: replacementSeq }
+    yield* replace(db, sessionID, agent, stored.revision, replacementSeq, result.generation)
+    return { baseline: result.generation.baseline, baselineSeq: replacementSeq, revision: stored.revision + 1 }
   }
 
   yield* events.publish(
@@ -87,19 +106,20 @@ const prepareOnce = Effect.fnUntraced(function* (
     { sessionID, messageID: SessionMessageID.ID.create(), timestamp: yield* DateTime.now, text: result.text },
     { commit: () => advance(db, sessionID, stored.revision, result.snapshot).pipe(Effect.orDie) },
   )
-  return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
+  return { baseline: stored.baseline, baselineSeq: stored.baseline_seq, revision: stored.revision + 1 }
 })
 
 const initializeOnce = Effect.fnUntraced(function* (
   db: DatabaseService,
-  context: SystemContextRegistry.Interface,
+  context: Effect.Effect<SystemContext.SystemContext>,
   sessionID: SessionSchema.ID,
   location: Location.Ref,
+  agent: AgentV2.ID,
 ) {
   if (yield* exists(db, sessionID)) return
-  const generation = yield* context.load().pipe(Effect.flatMap(SystemContext.initialize))
-  const baselineSeq = yield* insert(db, sessionID, location, generation)
-  return { baseline: generation.baseline, baselineSeq }
+  const generation = yield* context.pipe(Effect.flatMap(SystemContext.initialize))
+  const baselineSeq = yield* insert(db, sessionID, location, agent, generation)
+  return { baseline: generation.baseline, baselineSeq, revision: 0 }
 })
 
 const exists = Effect.fn("SessionContextEpoch.exists")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
@@ -120,6 +140,20 @@ const find = Effect.fn("SessionContextEpoch.find")(function* (db: DatabaseServic
     .where(eq(SessionContextEpochTable.session_id, sessionID))
     .get()
     .pipe(Effect.orDie)
+})
+
+const requireAgentSelection = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  agent: AgentV2.ID,
+) {
+  const selected = yield* db
+    .select({ agent: SessionTable.agent })
+    .from(SessionTable)
+    .where(eq(SessionTable.id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  if (!selected || (selected.agent !== null && selected.agent !== agent)) return yield* Effect.die(new AgentMismatch())
 })
 
 export const requestReplacement = Effect.fn("SessionContextEpoch.requestReplacement")(function* (
@@ -156,6 +190,7 @@ const insert = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   location: Location.Ref,
+  agent: AgentV2.ID,
   generation: SystemContext.Generation,
 ) {
   return yield* db
@@ -163,7 +198,7 @@ const insert = Effect.fnUntraced(function* (
       () =>
         Effect.gen(function* () {
           const placed = yield* db
-            .select({ sessionID: SessionTable.id })
+            .select({ agent: SessionTable.agent })
             .from(SessionTable)
             .where(
               and(
@@ -177,12 +212,14 @@ const insert = Effect.fnUntraced(function* (
             .get()
             .pipe(Effect.orDie)
           if (!placed) return yield* Effect.die(new LocationMismatch())
+          if (placed.agent !== null && placed.agent !== agent) return yield* Effect.die(new AgentMismatch())
           const baselineSeq = yield* SessionInput.latestSeq(db, sessionID)
           yield* db
             .insert(SessionContextEpochTable)
             .values({
               session_id: sessionID,
               baseline: generation.baseline,
+              agent,
               snapshot: generation.snapshot,
               baseline_seq: baselineSeq,
               revision: 0,
@@ -204,26 +241,83 @@ const insert = Effect.fnUntraced(function* (
 const replace = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
+  agent: AgentV2.ID,
   expectedRevision: number,
   baselineSeq: number,
   generation: SystemContext.Generation,
 ) {
-  const updated = yield* db
-    .update(SessionContextEpochTable)
-    .set({
-      baseline: generation.baseline,
-      snapshot: generation.snapshot,
-      baseline_seq: baselineSeq,
-      replacement_seq: null,
-      revision: expectedRevision + 1,
-    })
-    .where(
-      and(eq(SessionContextEpochTable.session_id, sessionID), eq(SessionContextEpochTable.revision, expectedRevision)),
+  yield* db
+    .transaction(
+      () =>
+        Effect.gen(function* () {
+          yield* requireAgentSelection(db, sessionID, agent)
+          const updated = yield* db
+            .update(SessionContextEpochTable)
+            .set({
+              baseline: generation.baseline,
+              agent,
+              snapshot: generation.snapshot,
+              baseline_seq: baselineSeq,
+              replacement_seq: null,
+              revision: expectedRevision + 1,
+            })
+            .where(
+              and(
+                eq(SessionContextEpochTable.session_id, sessionID),
+                eq(SessionContextEpochTable.revision, expectedRevision),
+              ),
+            )
+            .returning({ revision: SessionContextEpochTable.revision })
+            .get()
+            .pipe(Effect.orDie)
+          if (!updated) return yield* Effect.die(new RevisionMismatch())
+        }),
+      { behavior: "immediate" },
     )
-    .returning({ revision: SessionContextEpochTable.revision })
+    .pipe(Effect.orDie)
+})
+
+const fence = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  agent: AgentV2.ID,
+  expectedRevision: number,
+) {
+  const current = yield* db
+    .select({ selected: SessionTable.agent, revision: SessionContextEpochTable.revision })
+    .from(SessionContextEpochTable)
+    .innerJoin(SessionTable, eq(SessionTable.id, SessionContextEpochTable.session_id))
+    .where(eq(SessionContextEpochTable.session_id, sessionID))
     .get()
     .pipe(Effect.orDie)
-  if (!updated) return yield* Effect.die(new RevisionMismatch())
+  if (!current || (current.selected !== null && current.selected !== agent))
+    return yield* Effect.die(new AgentMismatch())
+  if (current.revision !== expectedRevision) return yield* Effect.die(new RevisionMismatch())
+})
+
+export const current = Effect.fn("SessionContextEpoch.current")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  agent: AgentV2.ID,
+  revision: number,
+) {
+  const value = yield* db
+    .select({
+      agent: SessionContextEpochTable.agent,
+      selected: SessionTable.agent,
+      revision: SessionContextEpochTable.revision,
+    })
+    .from(SessionContextEpochTable)
+    .innerJoin(SessionTable, eq(SessionTable.id, SessionContextEpochTable.session_id))
+    .where(eq(SessionContextEpochTable.session_id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  return (
+    value !== undefined &&
+    value.agent === agent &&
+    (value.selected === null || value.selected === agent) &&
+    value.revision === revision
+  )
 })
 
 const advance = Effect.fnUntraced(function* (

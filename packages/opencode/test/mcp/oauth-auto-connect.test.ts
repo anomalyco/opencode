@@ -21,6 +21,8 @@ const transportCalls: Array<{
 // auth flow (which calls provider.state()) or a simple UnauthorizedError.
 let simulateAuthFlow = true
 let connectSucceedsImmediately = false
+let serverCapabilities: { tools?: object; resources?: object } = { tools: {} }
+let listToolsCalls = 0
 
 // Mock the transport constructors to simulate OAuth auto-auth on 401
 void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
@@ -91,8 +93,17 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
     setNotificationHandler() {}
 
+    getServerCapabilities() {
+      return serverCapabilities
+    }
+
     async listTools() {
+      listToolsCalls++
       return { tools: [{ name: "test_tool", inputSchema: { type: "object", properties: {} } }] }
+    }
+
+    async listResources() {
+      return { resources: [{ name: "docs", uri: "docs://readme" }] }
     }
 
     async close() {}
@@ -108,6 +119,8 @@ beforeEach(() => {
   transportCalls.length = 0
   simulateAuthFlow = true
   connectSucceedsImmediately = false
+  serverCapabilities = { tools: {} }
+  listToolsCalls = 0
 })
 
 // Import modules after mocking
@@ -233,4 +246,29 @@ mcpTest.instance(
       }),
     ),
   { config: config("test-oauth-connect") },
+)
+
+mcpTest.instance(
+  "authenticate() connects a resource-only server without listing tools",
+  () =>
+    MCP.Service.use((mcp) =>
+      Effect.gen(function* () {
+        const added = yield* mcp.add("test-oauth-resources", {
+          type: "remote",
+          url: "https://example.com/mcp",
+        })
+        const before = added.status as Record<string, { status: string }>
+        expect(before["test-oauth-resources"]?.status).toBe("needs_auth")
+
+        simulateAuthFlow = false
+        connectSucceedsImmediately = true
+        serverCapabilities = { resources: {} }
+
+        const result = yield* mcp.authenticate("test-oauth-resources")
+        expect(result.status).toBe("connected")
+        expect(listToolsCalls).toBe(0)
+        expect(Object.keys(yield* mcp.resources())).toEqual(["test-oauth-resources:docs"])
+      }),
+    ),
+  { config: config("test-oauth-resources") },
 )
