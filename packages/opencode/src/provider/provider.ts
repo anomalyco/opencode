@@ -1692,26 +1692,6 @@ export const layer = Layer.effect(
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
 
-          // Strip openai itemId metadata following what codex does
-          if (
-            (model.api.npm === "@ai-sdk/openai" ||
-              model.api.npm === "@ai-sdk/azure" ||
-              model.api.npm === "@ai-sdk/amazon-bedrock/mantle") &&
-            opts.body &&
-            opts.method === "POST"
-          ) {
-            const body = JSON.parse(opts.body as string)
-            const keepIds = body.store === true
-            if (!keepIds && Array.isArray(body.input)) {
-              for (const item of body.input) {
-                if ("id" in item) {
-                  delete item.id
-                }
-              }
-              opts.body = JSON.stringify(body)
-            }
-          }
-
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682

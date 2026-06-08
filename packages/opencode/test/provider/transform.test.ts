@@ -1805,7 +1805,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     headers: {},
   } as any
 
-  test("preserves itemId and reasoningEncryptedContent when store=false", () => {
+  test("strips OpenAI itemId and preserves reasoningEncryptedContent when store=false", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1836,11 +1836,12 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
 
     expect(result).toHaveLength(1)
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("rs_123")
-    expect(result[0].content[1].providerOptions?.openai?.itemId).toBe("msg_456")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 
-  test("preserves itemId and reasoningEncryptedContent when store=false even when not openai", () => {
+  test("uses the SDK package namespace rather than provider ID", () => {
     const zenModel = {
       ...openaiModel,
       providerID: "zen",
@@ -1875,11 +1876,12 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, zenModel, { store: false }) as any[]
 
     expect(result).toHaveLength(1)
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("rs_123")
-    expect(result[0].content[1].providerOptions?.openai?.itemId).toBe("msg_456")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 
-  test("preserves other openai options including itemId", () => {
+  test("preserves other OpenAI options", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1900,8 +1902,75 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
 
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
     expect(result[0].content[0].providerOptions?.openai?.otherOption).toBe("value")
+  })
+
+  test("strips Azure itemId from the Azure namespace", () => {
+    const azureModel = {
+      ...openaiModel,
+      providerID: "azure",
+      api: {
+        id: "gpt-5",
+        url: "https://example.openai.azure.com",
+        npm: "@ai-sdk/azure",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              azure: { itemId: "msg_123", otherOption: "value" },
+              openai: { itemId: "msg_openai" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, azureModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.azure?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.azure?.otherOption).toBe("value")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_openai")
+  })
+
+  test("strips Bedrock Mantle itemId from the OpenAI namespace", () => {
+    const mantleModel = {
+      ...openaiModel,
+      providerID: "amazon-bedrock",
+      api: {
+        id: "openai.gpt-5.5",
+        url: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+        npm: "@ai-sdk/amazon-bedrock/mantle",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        providerOptions: { openai: { itemId: "msg_root", otherOption: "root-value" } },
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking...",
+            providerOptions: {
+              openai: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mantleModel, { store: false }) as any[]
+
+    expect(result[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].providerOptions?.openai?.otherOption).toBe("root-value")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
   })
 
   test("preserves metadata for openai package when store is true", () => {
