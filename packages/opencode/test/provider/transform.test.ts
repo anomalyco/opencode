@@ -198,13 +198,13 @@ describe("ProviderTransform.options - minimax m3 thinking", () => {
     ).toEqual({ type: "adaptive" })
   })
 
-  test("does not set anthropic thinking controls for the openai-compatible SDK", () => {
+  test("explicitly enables adaptive thinking with the openai-compatible SDK", () => {
     expect(
       ProviderTransform.options({
         model: createModel("@ai-sdk/openai-compatible"),
         sessionID: "test-session-123",
       }).thinking,
-    ).toBeUndefined()
+    ).toEqual({ type: "adaptive" })
   })
 })
 
@@ -2498,11 +2498,11 @@ describe("ProviderTransform.variants", () => {
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({
       none: { thinking: { type: "disabled" } },
-      high: { thinking: { type: "adaptive" } },
+      thinking: { thinking: { type: "adaptive" } },
     })
   })
 
-  test("minimax m3 using openai-compatible returns no thinking toggles", () => {
+  test("minimax m3 using openai-compatible returns thinking toggles", () => {
     const model = createMockModel({
       id: "minimax/minimax-m3",
       providerID: "minimax",
@@ -2512,7 +2512,10 @@ describe("ProviderTransform.variants", () => {
         npm: "@ai-sdk/openai-compatible",
       },
     })
-    expect(ProviderTransform.variants(model)).toEqual({})
+    expect(ProviderTransform.variants(model)).toEqual({
+      none: { thinking: { type: "disabled" } },
+      thinking: { thinking: { type: "adaptive" } },
+    })
   })
 
   test("glm returns empty object", () => {

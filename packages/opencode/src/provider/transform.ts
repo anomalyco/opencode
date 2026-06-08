@@ -641,10 +641,13 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
-  if (model.api.id.toLowerCase().includes("minimax-m3") && model.api.npm === "@ai-sdk/anthropic") {
+  if (
+    model.api.id.toLowerCase().includes("minimax-m3") &&
+    ["@ai-sdk/anthropic", "@ai-sdk/openai-compatible"].includes(model.api.npm)
+  ) {
     return {
       none: { thinking: { type: "disabled" } },
-      high: { thinking: { type: "adaptive" } },
+      thinking: { thinking: { type: "adaptive" } },
     }
   }
   const adaptiveOpus = anthropicOpus47OrLater(model.api.id)
@@ -1083,9 +1086,11 @@ export function options(input: {
   }
 
   const modelId = input.model.api.id.toLowerCase()
-  // MiniMax's Anthropic interface defaults thinking off, so keep normal requests
-  // consistent with its thinking-on Chat Completions interface.
-  if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
+  // Set MiniMax thinking explicitly instead of relying on its interface-specific defaults.
+  if (
+    modelId.includes("minimax-m3") &&
+    ["@ai-sdk/anthropic", "@ai-sdk/openai-compatible"].includes(input.model.api.npm)
+  ) {
     result["thinking"] = { type: "adaptive" }
   }
 
