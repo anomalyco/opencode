@@ -6,11 +6,10 @@ import path from "path"
 import { Flag } from "../flag/flag"
 import { Global } from "../global"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
-import { ensureProcessMetadata, ensureRunID } from "../util/opencode-process"
 
 const base = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
 export const enabled = !!base
-const processID = crypto.randomUUID()
+const runID = crypto.randomUUID()
 const printLogs = "OPENCODE_PRINT_LOGS"
 const logLevel = "OPENCODE_LOG_LEVEL"
 
@@ -26,7 +25,6 @@ const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
   : undefined
 
 export function resource(): { serviceName: string; serviceVersion: string; attributes: Record<string, string> } {
-  const processMetadata = ensureProcessMetadata("main")
   const attributes: Record<string, string> = (() => {
     const value = process.env.OTEL_RESOURCE_ATTRIBUTES
     if (!value) return {}
@@ -50,21 +48,20 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
       ...attributes,
       "deployment.environment.name": InstallationChannel,
       "opencode.client": Flag.OPENCODE_CLIENT,
-      "opencode.process_role": processMetadata.processRole,
-      "opencode.run_id": processMetadata.runID,
-      "service.instance.id": processID,
+      "opencode.run_id": runID,
+      "service.instance.id": runID,
     },
   }
 }
 
-function formatter(runID = ensureRunID()) {
+function formatter(id: string = runID) {
   return Logger.map(Logger.formatLogFmt, (output) =>
-    output.replace(/ level=([^ ]+)/, (_, level: string) => ` level=${level.toUpperCase()} run_id=${runID}`),
+    output.replace(/ level=([^ ]+)/, (_, level: string) => ` level=${level.toUpperCase()} run_id=${id}`),
   )
 }
 
-export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), runID = ensureRunID()) {
-  return Logger.toFile(formatter(runID), file, { flag: "a", batchWindow: 0 })
+export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
+  return Logger.toFile(formatter(id), file, { flag: "a", batchWindow: 0 })
 }
 
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))

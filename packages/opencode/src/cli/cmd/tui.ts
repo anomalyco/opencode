@@ -11,12 +11,6 @@ import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "@opencode-ai/tui/context/sdk"
 import { writeHeapSnapshot } from "v8"
-import {
-  OPENCODE_PROCESS_ROLE,
-  OPENCODE_RUN_ID,
-  ensureRunID,
-  sanitizedProcessEnv,
-} from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
 
@@ -131,14 +125,8 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
-      const env = sanitizedProcessEnv({
-        [OPENCODE_PROCESS_ROLE]: "worker",
-        [OPENCODE_RUN_ID]: ensureRunID(),
-      })
 
-      const worker = new Worker(file, {
-        env,
-      })
+      const worker = new Worker(file)
       const client = Rpc.client<typeof rpc>(worker)
       const reload = () => {
         client.call("reload", undefined).catch(() => {})

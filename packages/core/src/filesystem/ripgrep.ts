@@ -10,7 +10,6 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { CrossSpawnSpawner } from "../cross-spawn-spawner"
 import { Global } from "../global"
 import { NonNegativeInt } from "../schema"
-import { sanitizedProcessEnv } from "../util/opencode-process"
 import { which } from "../util/which"
 
 const VERSION = "15.1.0"
@@ -144,7 +143,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ri
 export const use = serviceUse(Service)
 
 function env() {
-  const env = sanitizedProcessEnv()
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
   delete env.RIPGREP_CONFIG_PATH
   return env
 }
