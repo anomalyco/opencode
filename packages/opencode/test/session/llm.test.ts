@@ -2056,7 +2056,8 @@ describe("session.llm.stream", () => {
 
         const capture = yield* Effect.promise(() => request)
         expect(capture.url.pathname.endsWith("/chat/completions")).toBe(true)
-        expect(capture.body.stream).not.toBe(true)
+        // doGenerate omits `stream` entirely; assert it is never sent as a truthy value.
+        expect(capture.body.stream ?? false).toBe(false)
       }),
     {
       config: () => ({
