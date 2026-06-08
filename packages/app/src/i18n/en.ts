@@ -836,6 +836,9 @@ export const dict = {
   "settings.general.row.showStatus.description": "Show the server status button in the desktop title bar",
   "settings.general.row.showCustomAgents.title": "Custom agents",
   "settings.general.row.showCustomAgents.description": "Show the agent picker in the v2 desktop composer",
+  "settings.general.row.localSidecarStartup.title": "Start local server",
+  "settings.general.row.localSidecarStartup.description":
+    "Start the built-in local server when Desktop launches. Disable this to use only remote or WSL servers. Requires restart.",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",

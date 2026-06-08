@@ -34,6 +34,10 @@ describe("desktop renderer initialization", () => {
     expect(initializationData(Object.assign(() => sidecar, { error: undefined }))).toBe(sidecar)
   })
 
+  test("allows startup without a local sidecar", () => {
+    expect(initializationData(Object.assign(() => null, { error: undefined }))).toBeNull()
+  })
+
   test("does not discard falsy initialization errors", () => {
     let caught: unknown
     try {

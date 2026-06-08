@@ -291,7 +291,7 @@ render(() => {
 
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
-  // Fetch sidecar credentials (available immediately, before health check)
+  // Fetch local sidecar credentials when startup chose to run one.
   const [sidecar] = createResource(() => window.api.awaitInitialization())
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
@@ -331,11 +331,30 @@ render(() => {
       </div>
     )
 
+    const localServer = createMemo(() => initializationData(sidecar))
+    const defaultHttpServer = createMemo(() => {
+      const key = defaultServer.latest
+      if (!key || key === "sidecar" || key.startsWith("wsl:") || key.startsWith("ssh:")) return
+      return {
+        type: "http" as const,
+        http: {
+          url: key,
+        },
+      }
+    })
+    const effectiveDefaultServer = createMemo(() =>
+      availableStartupServer(defaultServer.latest, wslServers.data, { localAvailable: !!localServer() }),
+    )
     const ready = createMemo(
-      () => !defaultServer.loading && !sidecar.loading && !windowCount.loading && !locale.loading,
+      () =>
+        !defaultServer.loading &&
+        !sidecar.loading &&
+        !windowCount.loading &&
+        !locale.loading &&
+        !!effectiveDefaultServer(),
     )
     const servers = createMemo(() => {
-      const data = initializationData(sidecar)
+      const data = localServer()
       const list: ServerConnection.Any[] = []
       if (data) {
         list.push({
@@ -349,18 +368,17 @@ render(() => {
           },
         })
       }
+      const defaultHttp = defaultHttpServer()
+      if (defaultHttp) list.push(defaultHttp)
       list.push(...readyWslConnections(wslServers.data))
       return list
     })
-    const effectiveDefaultServer = createMemo(() =>
-      ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
-    )
 
     return (
       <Show when={ready()} fallback={splash}>
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
-            <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
+            <AppInterface defaultServer={ServerConnection.Key.make(key)} servers={servers()} router={MemoryRouter}>
               <Inner />
             </AppInterface>
           )}

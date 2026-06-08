@@ -277,10 +277,15 @@ export function createWslServersController(
       return () => listeners.delete(listener)
     },
 
-    async initialize() {
+    async initialize(options?: { waitFor?: string }) {
       refreshFromStore()
       void refreshOpencodeChecks()
-      for (const id of wslServerIdsToStartOnInitialize(state.servers.map((item) => item.config))) void startServer(id)
+      const starts = wslServerIdsToStartOnInitialize(state.servers.map((item) => item.config)).map((id) => ({
+        id,
+        start: startServer(id),
+      }))
+      starts.filter((item) => item.id !== options?.waitFor).forEach((item) => void item.start)
+      await starts.find((item) => item.id === options?.waitFor)?.start
     },
 
     async probeRuntime() {

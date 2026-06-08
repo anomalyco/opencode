@@ -19,7 +19,7 @@ export type ServerReadyData = {
   url: string
   username: string | null
   password: string | null
-}
+} | null
 
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {

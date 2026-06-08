@@ -36,8 +36,17 @@ describe("WSL desktop connections", () => {
 
   test("does not block desktop startup on a configured WSL default", () => {
     const key = "wsl:Debian"
-    expect(availableStartupServer(key, undefined)).toBe("sidecar")
-    expect(availableStartupServer(key, state("starting"))).toBe("sidecar")
-    expect(availableStartupServer(key, state("ready"))).toBe(key)
+    expect(availableStartupServer(key, undefined, { localAvailable: true })).toBe("sidecar")
+    expect(availableStartupServer(key, state("starting"), { localAvailable: true })).toBe("sidecar")
+    expect(availableStartupServer(key, state("ready"), { localAvailable: true })).toBe(key)
+  })
+
+  test("keeps a startup key available in client-mode startup", () => {
+    expect(availableStartupServer(null, undefined, { localAvailable: false })).toBe("sidecar")
+    expect(availableStartupServer("https://server.example.test", undefined, { localAvailable: false })).toBe(
+      "https://server.example.test",
+    )
+    expect(availableStartupServer("wsl:Debian", state("starting"), { localAvailable: false })).toBe("sidecar")
+    expect(availableStartupServer("wsl:Debian", state("ready"), { localAvailable: false })).toBe("wsl:Debian")
   })
 })

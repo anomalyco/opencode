@@ -21,6 +21,7 @@ import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import {
   getDefaultServerUrl,
+  getLocalSidecarStartupEnabled,
   preferAppEnv,
   setDefaultServerUrl,
   spawnLocalServer,
@@ -248,7 +249,7 @@ const main = Effect.gen(function* () {
       function* () {
         logger.log("awaiting server ready")
         const res = yield* Deferred.await(serverReady)
-        logger.log("server ready", { url: res.url })
+        logger.log("server ready", res ? { url: res.url } : { localServer: false })
         return res
       },
       (e) => Effect.runPromise(e),
@@ -280,34 +281,62 @@ const main = Effect.gen(function* () {
     ),
   )
 
-  const port = yield* Effect.gen(function* () {
-    const fromEnv = process.env.OPENCODE_PORT
-    if (fromEnv) {
-      const parsed = Number.parseInt(fromEnv, 10)
-      if (!Number.isNaN(parsed)) return parsed
+  const loadingTask = yield* Effect.gen(function* () {
+    const storedDefaultServer = getDefaultServerUrl()
+    const defaultWslServer = storedDefaultServer?.startsWith("wsl:") ? storedDefaultServer : undefined
+    const localSidecarStartup = getLocalSidecarStartupEnabled()
+    const initializeWslServers = (waitFor?: string) => {
+      if (process.platform !== "win32") return Promise.resolve()
+      return wslServers
+        .initialize(waitFor ? { waitFor } : undefined)
+        .catch((error) => logger.error("wsl server initialization failed", error))
     }
+    const defaultWslReady = () =>
+      wslServers
+        .getState()
+        .servers.some((item) => item.config.id === defaultWslServer && item.runtime.kind === "ready")
+    const canUseDefaultWithoutLocal =
+      !localSidecarStartup ||
+      (storedDefaultServer && storedDefaultServer !== "sidecar" && (!defaultWslServer || process.platform === "win32"))
 
-    const res = yield* Deferred.make<number, unknown>()
-    const server = createServer()
-    server.on("error", (e) => Deferred.failSync(res, () => e))
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address()
-      if (typeof address !== "object" || !address) {
-        server.close()
-        Deferred.failSync(res, () => new Error("Failed to get port"))
+    if (canUseDefaultWithoutLocal) {
+      yield* Effect.promise(() => initializeWslServers(defaultWslServer))
+      if (!localSidecarStartup || !defaultWslServer || defaultWslReady()) {
+        logger.log("local sidecar skipped", { defaultServer: storedDefaultServer, localSidecarStartup })
+        yield* Deferred.succeed(serverReady, null)
         return
       }
-      const port = address.port
-      server.close(() => Effect.runSync(Deferred.succeed(res, port)))
+
+      logger.warn("default wsl server unavailable; starting local sidecar", { defaultServer: storedDefaultServer })
+    }
+
+    const port = yield* Effect.gen(function* () {
+      const fromEnv = process.env.OPENCODE_PORT
+      if (fromEnv) {
+        const parsed = Number.parseInt(fromEnv, 10)
+        if (!Number.isNaN(parsed)) return parsed
+      }
+
+      const res = yield* Deferred.make<number, unknown>()
+      const server = createServer()
+      server.on("error", (e) => Deferred.failSync(res, () => e))
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address()
+        if (typeof address !== "object" || !address) {
+          server.close()
+          Deferred.failSync(res, () => new Error("Failed to get port"))
+          return
+        }
+        const port = address.port
+        server.close(() => Effect.runSync(Deferred.succeed(res, port)))
+      })
+
+      return yield* Deferred.await(res)
     })
+    const hostname = "127.0.0.1"
+    const url = `http://${hostname}:${port}`
+    const password = randomUUID()
 
-    return yield* Deferred.await(res)
-  })
-  const hostname = "127.0.0.1"
-  const url = `http://${hostname}:${port}`
-  const password = randomUUID()
-
-  const loadingTask = yield* Effect.gen(function* () {
     logger.log("sidecar connection started", { url })
 
     ensureLoopbackNoProxy()
@@ -329,9 +358,7 @@ const main = Effect.gen(function* () {
       password,
     })
 
-    if (process.platform === "win32") {
-      void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
-    }
+    void initializeWslServers()
 
     yield* Effect.promise(() => health.wait).pipe(
       Effect.timeout("30 seconds"),

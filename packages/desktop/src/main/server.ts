@@ -2,6 +2,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
+import { Option, Schema } from "effect"
 import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
@@ -19,6 +20,16 @@ export type SidecarListener = { stop: () => Promise<void> }
 const SIDECAR_SERVICE_NAME = "opencode server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
 const SIDECAR_STOP_TIMEOUT = 6_000
+const LocalSidecarStartupSettings = Schema.Struct({
+  general: Schema.optional(
+    Schema.Struct({
+      localSidecarStartup: Schema.optional(Schema.Boolean),
+    }),
+  ),
+})
+const decodeLocalSidecarStartupSettings = Schema.decodeUnknownOption(
+  Schema.Union([Schema.fromJsonString(LocalSidecarStartupSettings), LocalSidecarStartupSettings]),
+)
 
 type SpawnLocalServerOptions = {
   userDataPath: string
@@ -39,6 +50,11 @@ export function setDefaultServerUrl(url: string | null) {
   }
 
   getStore().delete(DEFAULT_SERVER_URL_KEY)
+}
+
+export function getLocalSidecarStartupEnabled(): boolean {
+  const settings = Option.getOrUndefined(decodeLocalSidecarStartupSettings(getStore().get("settings.v3")))
+  return settings?.general?.localSidecarStartup ?? true
 }
 
 export function preferAppEnv(userDataPath: string) {
