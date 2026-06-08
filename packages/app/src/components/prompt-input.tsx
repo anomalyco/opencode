@@ -658,6 +658,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     key: atKey,
     filterKeys: ["display"],
+    skipFilter: (item) => item.type === "file" && !item.recent,
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
       if (item.recent) return "recent"
