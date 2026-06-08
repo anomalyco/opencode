@@ -18,7 +18,6 @@ import { MessageID } from "@/session/schema"
 import { createRunDemo } from "./demo"
 import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
-import { recordRunSpanError, setRunSpanAttributes, withRunSpan } from "./otel"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
 import type { LocalReplayAnchor, LocalReplayRow, RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
@@ -180,14 +179,6 @@ async function resolveExitTitle(
 // Files only attach on the first prompt turn -- after that, includeFiles
 // flips to false so subsequent turns don't re-send attachments.
 async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDeps = {}): Promise<void> {
-  return withRunSpan(
-    "RunInteractive.session",
-    {
-      "opencode.mode": input.resolveSession ? "local" : "attach",
-      "opencode.initial_input": !!input.initialInput,
-      "opencode.demo": input.demo,
-    },
-    async (span) => {
       const start = performance.now()
       const log = trace()
       const tuiConfigTask = resolveRunTuiConfig()
@@ -217,15 +208,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         sessionTitle: ctx.sessionTitle,
         agent: ctx.agent,
       }
-      setRunSpanAttributes(span, {
-        "opencode.directory": ctx.directory,
-        "opencode.resume": ctx.resume === true,
-        "opencode.agent.name": state.agent,
-        "opencode.model.provider": state.model?.providerID,
-        "opencode.model.id": state.model?.modelID,
-        "opencode.model.variant": state.activeVariant,
-        "session.id": state.sessionID || undefined,
-      })
       const ensureSession = () => {
         if (!input.resolveSession || state.sessionID) {
           return Promise.resolve()
@@ -239,10 +221,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
           state.sessionID = next.sessionID
           state.sessionTitle = next.sessionTitle ?? state.sessionTitle
           state.agent = next.agent
-          setRunSpanAttributes(span, {
-            "opencode.agent.name": state.agent,
-            "session.id": state.sessionID,
-          })
         })
         return state.session
       }
@@ -297,9 +275,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
 
           state.activeVariant = cycleVariant(state.activeVariant, state.variants)
           saveVariant(state.model, state.activeVariant)
-          setRunSpanAttributes(span, {
-            "opencode.model.variant": state.activeVariant,
-          })
           return {
             status: state.activeVariant ? `variant ${state.activeVariant}` : "variant default",
             modelLabel: formatModelLabel(state.model, state.activeVariant, state.providers),
@@ -333,11 +308,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             return
           }
 
-          setRunSpanAttributes(span, {
-            "opencode.model.provider": model.providerID,
-            "opencode.model.id": model.modelID,
-            "opencode.model.variant": state.activeVariant,
-          })
           return {
             modelLabel: formatModelLabel(model, state.activeVariant, state.providers),
             status: `model ${model.modelID}`,
@@ -360,9 +330,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
 
           state.activeVariant = variant
           saveVariant(state.model, state.activeVariant)
-          setRunSpanAttributes(span, {
-            "opencode.model.variant": state.activeVariant,
-          })
           return {
             status: state.activeVariant ? `variant ${state.activeVariant}` : "variant default",
             modelLabel: formatModelLabel(state.model, state.activeVariant, state.providers),
@@ -468,9 +435,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         const next = resolveVariant(ctx.variant, session.variant, savedVariant, state.variants)
         if (next !== state.activeVariant) {
           state.activeVariant = next
-          setRunSpanAttributes(span, {
-            "opencode.model.variant": state.activeVariant,
-          })
         }
 
         if (footer.isClosed) {
@@ -624,13 +588,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
                         limits: () => state.limits,
                       })
                     : undefined
-                  setRunSpanAttributes(span, {
-                    "opencode.agent.name": state.agent,
-                    "opencode.model.provider": state.model?.providerID,
-                    "opencode.model.id": state.model?.modelID,
-                    "opencode.model.variant": state.activeVariant,
-                    "session.id": state.sessionID,
-                  })
                   log?.write("session.new", {
                     sessionID: state.sessionID,
                   })
@@ -688,29 +645,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             await state.switching?.catch(() => {})
 
             let outputAnchor: LocalReplayAnchor | undefined
-            return withRunSpan(
-              "RunInteractive.turn",
-              {
-                "opencode.agent.name": state.agent,
-                "opencode.model.provider": state.model?.providerID,
-                "opencode.model.id": state.model?.modelID,
-                "opencode.model.variant": state.activeVariant,
-                "opencode.prompt.chars": prompt.text.length,
-                "opencode.prompt.parts": prompt.parts.length,
-                "opencode.prompt.include_files": includeFiles,
-                "opencode.prompt.file_parts": includeFiles ? input.files.length : 0,
-                "session.id": state.sessionID || undefined,
-              },
-              async (span) => {
                 try {
                   const next = await ensureStream()
-                  setRunSpanAttributes(span, {
-                    "opencode.agent.name": state.agent,
-                    "opencode.model.provider": state.model?.providerID,
-                    "opencode.model.id": state.model?.modelID,
-                    "opencode.model.variant": state.activeVariant,
-                    "session.id": state.sessionID || undefined,
-                  })
                   await next.handle.runPromptTurn({
                     agent: state.agent,
                     model: state.model,
@@ -734,7 +670,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
                     return
                   }
 
-                  recordRunSpanError(span, error)
                   const text =
                     (await state.stream?.then((item) => item.mod).catch(() => undefined))?.formatUnknownError(error) ??
                     (error instanceof Error ? error.message : String(error))
@@ -748,8 +683,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
                   rememberLocal(commit, outputAnchor)
                   footer.append(commit)
                 }
-              },
-            )
           },
         })
       }
@@ -795,21 +728,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
           history: state.history,
         })
       }
-    },
-  )
 }
 
 // Local in-process mode. Creates an SDK client backed by a direct fetch to
 // the in-process server, so no external HTTP server is needed.
 export async function runInteractiveLocalMode(input: RunLocalInput): Promise<void> {
-  return withRunSpan(
-    "RunInteractive.localMode",
-    {
-      "opencode.directory": input.directory,
-      "opencode.initial_input": !!input.initialInput,
-      "opencode.demo": input.demo,
-    },
-    async () => {
       const sdk = createOpencodeClient({
         baseUrl: "http://opencode.internal",
         fetch: input.fetch,
@@ -858,8 +781,6 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
           }
         },
       })
-    },
-  )
 }
 
 // Attach mode. Uses the caller-provided SDK client directly.
@@ -867,15 +788,7 @@ export async function runInteractiveMode(
   input: RunInput & { createSession?: CreateSession },
   deps?: RunRuntimeDeps,
 ): Promise<void> {
-  return withRunSpan(
-    "RunInteractive.attachMode",
-    {
-      "opencode.directory": input.directory,
-      "opencode.initial_input": !!input.initialInput,
-      "session.id": input.sessionID,
-    },
-    async () =>
-      runInteractiveRuntime(
+  return runInteractiveRuntime(
         {
           files: input.files,
           initialInput: input.initialInput,
@@ -897,6 +810,5 @@ export async function runInteractiveMode(
           createSession: createSessionResolver(input.createSession),
         },
         deps,
-      ),
   )
 }

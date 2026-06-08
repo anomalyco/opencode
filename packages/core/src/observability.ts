@@ -7,7 +7,7 @@ import { OtlpSerialization } from "effect/unstable/observability"
 import { Logging } from "./observability/logging"
 import { Otlp } from "./observability/otlp"
 
-export const enabled = Otlp.enabled
+const enabled = Otlp.enabled
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
