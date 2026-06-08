@@ -51,6 +51,7 @@ export interface Tool<Parameters extends ToolSchema<any>, Success extends ToolSc
   readonly success: Success
   readonly execute?: ToolExecute<Parameters, Success>
   readonly toModelOutput?: ToolToModelOutput<Parameters, Success>
+  readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
   /** @internal */
   readonly _decode: (input: unknown) => Effect.Effect<Schema.Schema.Type<Parameters>, Schema.SchemaError>
   /** @internal */
@@ -86,6 +87,7 @@ type TypedToolConfig = {
   readonly success: ToolSchema<any>
   readonly execute?: ToolExecute<ToolSchema<any>, ToolSchema<any>>
   readonly toModelOutput?: ToolToModelOutput<ToolSchema<any>, ToolSchema<any>>
+  readonly toStructuredOutput?: (output: unknown) => unknown
 }
 
 type DynamicToolConfig = {
@@ -94,6 +96,7 @@ type DynamicToolConfig = {
   readonly outputSchema?: JsonSchema.JsonSchema
   readonly execute?: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<ToolContent>
+  readonly toStructuredOutput?: (output: unknown) => unknown
 }
 
 /**
@@ -133,6 +136,7 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
   readonly success: Success
   readonly execute: ToolExecute<Parameters, Success>
   readonly toModelOutput?: ToolToModelOutput<Parameters, Success>
+  readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
 }): ExecutableTool<Parameters, Success>
 export function make<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
   readonly description: string
@@ -140,6 +144,7 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
   readonly success: Success
   readonly execute?: undefined
   readonly toModelOutput?: ToolToModelOutput<Parameters, Success>
+  readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
 }): Tool<Parameters, Success>
 export function make(config: {
   readonly description: string
@@ -147,6 +152,7 @@ export function make(config: {
   readonly outputSchema?: JsonSchema.JsonSchema
   readonly execute: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<ToolContent>
+  readonly toStructuredOutput?: (output: unknown) => unknown
 }): AnyExecutableTool
 export function make(config: {
   readonly description: string
@@ -154,6 +160,7 @@ export function make(config: {
   readonly outputSchema?: JsonSchema.JsonSchema
   readonly execute?: undefined
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<ToolContent>
+  readonly toStructuredOutput?: (output: unknown) => unknown
 }): AnyTool
 export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
   if ("jsonSchema" in config) {
@@ -163,10 +170,12 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
       success: Schema.Unknown as ToolSchema<unknown>,
       execute: config.execute,
       toModelOutput: config.toModelOutput,
+      toStructuredOutput: config.toStructuredOutput,
       _decode: Effect.succeed,
       _encode: Effect.succeed,
-      _project: (parameters, callID, output) => project(config.toModelOutput, parameters, callID, output),
-      _legacyResult: config.toModelOutput === undefined,
+      _project: (parameters, callID, output) =>
+        project(config.toModelOutput, config.toStructuredOutput, parameters, callID, output),
+      _legacyResult: config.toModelOutput === undefined && config.toStructuredOutput === undefined,
       _definition: new ToolDefinition({
         name: "",
         description: config.description,
@@ -181,9 +190,11 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
     success: config.success,
     execute: config.execute,
     toModelOutput: config.toModelOutput,
+    toStructuredOutput: config.toStructuredOutput,
     _decode: Schema.decodeUnknownEffect(config.parameters),
     _encode: Schema.encodeEffect(config.success),
-    _project: (parameters, callID, output) => project(config.toModelOutput, parameters, callID, output),
+    _project: (parameters, callID, output) =>
+      project(config.toModelOutput, config.toStructuredOutput, parameters, callID, output),
     _legacyResult: false,
     _definition: new ToolDefinition({
       name: "",
@@ -226,12 +237,13 @@ const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
 
 const project = (
   toModelOutput: ((input: ToolModelOutputInput<any, any>) => ReadonlyArray<ToolContent>) | undefined,
+  toStructuredOutput: ((output: unknown) => unknown) | undefined,
   parameters: unknown,
   callID: ToolCallPart["id"],
   output: unknown,
 ): ToolOutputType =>
   ToolOutput.make(
-    output,
+    toStructuredOutput?.(output) ?? output,
     toModelOutput?.({ callID, parameters, output }) ??
       (typeof output === "string" ? [toolText({ type: "text", text: output })] : []),
   )
