@@ -1695,7 +1695,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
       const base = [
-        ...promptFromDocMarkdown(text, prompt.current(), doc.docID()),
+        ...promptFromDocMarkdown(text, prompt.current(), doc.docID(), doc.actorID()),
         ...(next?.assets.map((asset) => ({
           type: "image" as const,
           id: asset.id,
@@ -1708,7 +1708,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const sessionID = await handleSubmit(undefined, {
         prompt: base,
         prepare: async (id) => [
-          ...promptFromDocMarkdown(text, prompt.current(), await doc.refresh(id)),
+          ...promptFromDocMarkdown(text, prompt.current(), await doc.refresh(id), doc.actorID()),
           ...base.filter((part) => part.type === "image"),
         ],
       })

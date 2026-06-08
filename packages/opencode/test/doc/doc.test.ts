@@ -7,9 +7,11 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { Doc } from "../../src/doc"
 import * as Room from "../../src/doc/room"
 import { Database } from "../../src/storage/db"
-import { DocSubmitTable } from "../../src/doc/doc.sql"
+import { DocSubmitTable, DocSubmitActorTable } from "../../src/doc/doc.sql"
+import { MessageTable, PartTable } from "../../src/session/session.sql"
+import * as CycleRecorder from "../../src/doc/cycle-recorder"
 import { eq } from "drizzle-orm"
-import { AssetID, DocID } from "../../src/doc/schema"
+import { AssetID, CycleID, DocID } from "../../src/doc/schema"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { tmpdir } from "../fixture/fixture"
@@ -853,6 +855,535 @@ describe("doc", () => {
         expect(state.status).toBe("pending")
         expect(state.actors.map((actor) => actor.actorID).sort()).toEqual([alice.actorID, bob.actorID].sort())
         stop()
+      },
+    })
+  })
+
+  function assistantInfo(input: {
+    sessionID: string
+    id: string
+    parentID: string
+    cost: number
+    tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
+    created: number
+    completed?: number
+    finish?: string
+    error?: { name: string; data: { message: string } }
+  }) {
+    return {
+      id: input.id,
+      sessionID: input.sessionID,
+      role: "assistant" as const,
+      parentID: input.parentID,
+      providerID: "anthropic",
+      modelID: "claude-sonnet-4-6",
+      cost: input.cost,
+      tokens: { total: input.tokens.input + input.tokens.output, ...input.tokens },
+      time: { created: input.created, completed: input.completed },
+      finish: input.finish,
+      error: input.error,
+    }
+  }
+  type AInfo = ReturnType<typeof assistantInfo>
+
+  // Persist a user message (+ text/file parts) and one or more assistant-step messages,
+  // writing each assistant's full info into its MessageTable row so the recorder can
+  // aggregate tokens/cost/response from the DB exactly like the real projector does.
+  function seedTurn(input: {
+    userText: string
+    userTime: number
+    userActorID?: string // stamped onto the user text part metadata (solo doc send)
+    userDocID?: string // doc the prompt was authored in (text part metadata)
+    userFile?: { mime: string; url: string; filename?: string } // an attachment on the prompt
+    steps: { info: AInfo; text: string }[] // assistant steps of the turn (all share parentID)
+  }) {
+    const first = input.steps[0]!.info
+    const sessionID = first.sessionID
+    const userID = first.parentID
+    Database.use((db) => {
+      db.insert(MessageTable)
+        .values({
+          id: userID as never,
+          session_id: sessionID as never,
+          time_created: input.userTime,
+          data: { role: "user", time: { created: input.userTime } } as never,
+        })
+        .run()
+      db.insert(PartTable)
+        .values({
+          id: `${userID}_p0` as never,
+          message_id: userID as never,
+          session_id: sessionID as never,
+          time_created: input.userTime,
+          data: {
+            type: "text",
+            text: input.userText,
+            ...(input.userActorID || input.userDocID
+              ? { metadata: { source: "doc", actorID: input.userActorID, docID: input.userDocID } }
+              : {}),
+          } as never,
+        })
+        .run()
+      if (input.userFile) {
+        db.insert(PartTable)
+          .values({
+            id: `${userID}_pf` as never,
+            message_id: userID as never,
+            session_id: sessionID as never,
+            time_created: input.userTime,
+            data: { type: "file", ...input.userFile } as never,
+          })
+          .run()
+      }
+      for (const step of input.steps) {
+        const { id, sessionID: _sid, ...data } = step.info
+        db.insert(MessageTable)
+          .values({
+            id: step.info.id as never,
+            session_id: sessionID as never,
+            time_created: step.info.time.created ?? input.userTime + 1,
+            data: data as never,
+          })
+          .run()
+        db.insert(PartTable)
+          .values({
+            id: `${step.info.id}_p0` as never,
+            message_id: step.info.id as never,
+            session_id: sessionID as never,
+            time_created: step.info.time.created ?? input.userTime + 1,
+            data: { type: "text", text: step.text } as never,
+          })
+          .run()
+      }
+    })
+  }
+
+  test("records a prompt cycle when an assistant turn finishes (any prompt path)", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_1",
+          parentID: "msg_user_1",
+          cost: 0.0123,
+          tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1200,
+          completed: 2000,
+          finish: "stop",
+        })
+        seedTurn({ userText: "hello there", userTime: 1000, steps: [{ info, text: "hello back" }] })
+        // This is exactly what the message-updated projector calls for a finished turn.
+        Database.use((db) => CycleRecorder.record(db, info as never))
+
+        const cycle = Doc.cycleList({ sessionID: session.id })[0]
+        expect(cycle).toBeDefined()
+        expect(cycle!.inputs).toHaveLength(1)
+        expect(cycle!.inputs[0].docID).toBeNull() // no prompt doc seeded for this session
+        expect(cycle!.inputs[0].prompt).toBe("hello there")
+        expect(cycle!.inputs[0].userMessageID).toBe("msg_user_1")
+        expect(cycle!.inputs[0].seq).toBe(0)
+        expect(cycle!.inputs[0].actorIDs).toBeNull() // no actor metadata seeded
+        expect(cycle!.inputs[0].consentMs).toBeNull()
+        expect(cycle!.response).toBe("hello back")
+        expect(cycle!.assistantMessageID).toBe("msg_assistant_1")
+        expect(cycle!.tokensInput).toBe(10)
+        expect(cycle!.tokensOutput).toBe(20)
+        expect(cycle!.costTotal).toBeCloseTo(0.0123)
+        expect(cycle!.ttftMs).toBe(200) // output_start(1200) - prompt_start(1000)
+        expect(cycle!.aborted).toBe(false)
+        expect(cycle!.status).toBe("completed")
+
+        // Single-cycle fetch returns the same record; unknown id returns null.
+        expect(Doc.cycleGet({ cycleID: cycle!.id })).toEqual(cycle!)
+        expect(Doc.cycleGet({ cycleID: CycleID.zod.parse("cyc_unknown") })).toBeNull()
+      },
+    })
+  })
+
+  test("fills docID from the session's prompt doc even without consent", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        // Opening the prompt doc links session -> doc (no submit / no consent involved).
+        const { docID } = Doc.prompt(session.id)
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_d",
+          parentID: "msg_user_d",
+          cost: 0.01,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1000,
+          completed: 1500,
+          finish: "stop",
+        })
+        seedTurn({ userText: "hi", userTime: 1000, steps: [{ info, text: "yo" }] })
+        Database.use((db) => CycleRecorder.record(db, info as never))
+
+        const cycle = Doc.cycleList({ sessionID: session.id })[0]
+        expect(cycle?.inputs[0].docID).toBe(docID)
+        // docID filter matches via the input's doc.
+        expect(Doc.cycleList({ docID }).map((c) => c.id)).toContain(cycle!.id)
+        expect(cycle?.inputs[0].actorIDs).toBeNull() // still no consent actor
+        expect(cycle?.inputs[0].consentMs).toBeNull()
+      },
+    })
+  })
+
+  test("docID comes from the prompt's authored doc (metadata), not the rotated session doc", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        // Session's current prompt doc (may have rotated away from the authored one).
+        const { docID: rotatedDocID } = Doc.prompt(session.id)
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_meta",
+          parentID: "msg_user_meta",
+          cost: 0.01,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1000,
+          completed: 1500,
+          finish: "stop",
+        })
+        seedTurn({
+          userText: "hi",
+          userTime: 1000,
+          userDocID: "doc_authored", // the doc the prompt was actually written in
+          steps: [{ info, text: "yo" }],
+        })
+        Database.use((db) => CycleRecorder.record(db, info as never))
+        const input = Doc.cycleList({ sessionID: session.id })[0].inputs[0]
+        expect(input.docID).toBe("doc_authored" as never) // authored doc, not the session's current
+        expect(input.docID).not.toBe(rotatedDocID)
+      },
+    })
+  })
+
+  test("solo send fills actorIDs with the single sender from message metadata", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const me = Doc.actorUpsert({ sessionID: session.id, name: "Me" })
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_solo",
+          parentID: "msg_user_solo",
+          cost: 0.01,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1000,
+          completed: 1500,
+          finish: "stop",
+        })
+        seedTurn({ userText: "hi", userTime: 1000, userActorID: me.actorID, steps: [{ info, text: "yo" }] })
+        Database.use((db) => CycleRecorder.record(db, info as never))
+        const cycle = Doc.cycleList({ sessionID: session.id })[0]
+        expect(cycle?.inputs[0].actorIDs).toEqual([me.actorID]) // exactly one sender
+        expect(cycle?.inputs[0].initiatorActorID).toBe(me.actorID) // solo: sender is the initiator
+        expect(cycle?.inputs[0].submitID).toBeNull() // no consent submit
+        expect(cycle?.inputs[0].consentMs).toBeNull()
+      },
+    })
+  })
+
+  test("multi-party consent fills actorIDs with all approved actors", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_multi",
+          parentID: "msg_user_multi",
+          cost: 0.5,
+          tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1200,
+          completed: 3000,
+          finish: "stop",
+        })
+        seedTurn({ userText: "team prompt", userTime: 950, steps: [{ info, text: "answer" }] }) // authored before consent
+
+        // Seed a sent submit linked to the user message + its approved actors.
+        Database.use((db) => {
+          db.insert(DocSubmitTable)
+            .values({
+              id: "sub_multi" as never,
+              session_id: session.id as never,
+              doc_id: docID as never,
+              actor_id: alice.actorID as never,
+              status: "sent",
+              prompt: "{}",
+              timeout_ms: 1000,
+              expires_at: 9999999999999,
+              cancelled_by: null,
+              user_message_id: "msg_user_multi" as never,
+              time_created: 900,
+              time_updated: 1000,
+            } as never)
+            .run()
+          for (const a of [alice, bob]) {
+            db.insert(DocSubmitActorTable)
+              .values({
+                submit_id: "sub_multi" as never,
+                actor_id: a.actorID as never,
+                name: "x",
+                status: "approved",
+                time_responded: 1000,
+              } as never)
+              .run()
+          }
+        })
+
+        Database.use((db) => CycleRecorder.record(db, info as never))
+
+        const input = Doc.cycleList({ sessionID: session.id })[0].inputs[0]
+        expect(input.actorIDs?.sort()).toEqual([alice.actorID, bob.actorID].sort()) // both consenters
+        expect(input.initiatorActorID).toBe(alice.actorID) // alice created the submit
+        expect(input.submitID).toBe("sub_multi" as never)
+        expect(input.actorCount).toBe(2)
+        expect(input.consentMs).toBe(100) // 1000 - 900
+        // ttft measured from consent (1000), not from authoring (950): 1200 - 1000 = 200.
+        expect(Doc.cycleList({ sessionID: session.id })[0].ttftMs).toBe(200)
+      },
+    })
+  })
+
+  test("captures prompt assets (attachments) on the input", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_asset",
+          parentID: "msg_user_asset",
+          cost: 0.01,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1000,
+          completed: 1500,
+          finish: "stop",
+        })
+        seedTurn({
+          userText: "look at this",
+          userTime: 1000,
+          userFile: { mime: "image/png", url: "/doc/doc_x/asset/ast_pic1", filename: "pic.png" },
+          steps: [{ info, text: "ok" }],
+        })
+        Database.use((db) => CycleRecorder.record(db, info as never))
+        const input = Doc.cycleList({ sessionID: session.id })[0].inputs[0]
+        expect(input.assets).toEqual([
+          { assetID: "ast_pic1", mime: "image/png", filename: "pic.png", url: "/doc/doc_x/asset/ast_pic1" },
+        ])
+      },
+    })
+  })
+
+  test("assetID is extracted robustly from urls with query strings / trailing slashes", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_assetq",
+          parentID: "msg_user_assetq",
+          cost: 0.01,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1000,
+          completed: 1500,
+          finish: "stop",
+        })
+        seedTurn({
+          userText: "x",
+          userTime: 1000,
+          userFile: { mime: "image/png", url: "/doc/doc_x/asset/ast_q1?sig=abc", filename: "q.png" },
+          steps: [{ info, text: "ok" }],
+        })
+        Database.use((db) => CycleRecorder.record(db, info as never))
+        const input = Doc.cycleList({ sessionID: session.id })[0].inputs[0]
+        expect(input.assets?.[0].assetID).toBe("ast_q1") // query string stripped, not "ast_q1?sig=abc"
+      },
+    })
+  })
+
+  test("inline data: attachments are recorded without the base64 blob", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_data",
+          parentID: "msg_user_data",
+          cost: 0.01,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1000,
+          completed: 1500,
+          finish: "stop",
+        })
+        seedTurn({
+          userText: "describe",
+          userTime: 1000,
+          userFile: { mime: "image/jpeg", url: "data:image/jpeg;base64,/9j/HUGEBLOB", filename: "shot.jpg" },
+          steps: [{ info, text: "ok" }],
+        })
+        Database.use((db) => CycleRecorder.record(db, info as never))
+        const input = Doc.cycleList({ sessionID: session.id })[0].inputs[0]
+        // mime/filename kept; url + assetID omitted so the base64 blob isn't duplicated.
+        expect(input.assets).toEqual([{ mime: "image/jpeg", filename: "shot.jpg" }])
+      },
+    })
+  })
+
+  test("recording is idempotent per assistant message", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_x",
+          parentID: "msg_user_x",
+          cost: 0.01,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1000,
+          completed: 1500,
+          finish: "stop",
+        })
+        seedTurn({ userText: "hi", userTime: 1000, steps: [{ info, text: "yo" }] })
+        // The projector can fire more than once for the same message — must not duplicate.
+        Database.use((db) => CycleRecorder.record(db, info as never))
+        Database.use((db) => CycleRecorder.record(db, info as never))
+
+        const cycles = Doc.cycleList({ sessionID: session.id })
+        expect(cycles).toHaveLength(1)
+        expect(cycles[0].inputs).toHaveLength(1)
+      },
+    })
+  })
+
+  test("marks a cycle aborted when the user stops the reply", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const info = assistantInfo({
+          sessionID: session.id,
+          id: "msg_assistant_2",
+          parentID: "msg_user_2",
+          cost: 0,
+          tokens: { input: 5, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          created: 1000,
+          completed: 1500,
+          error: { name: "MessageAbortedError", data: { message: "stopped" } },
+        })
+        seedTurn({ userText: "go", userTime: 1000, steps: [{ info, text: "partial" }] })
+        Database.use((db) => CycleRecorder.record(db, info as never))
+
+        const cycle = Doc.cycleList({ sessionID: session.id })[0]
+        expect(cycle?.status).toBe("aborted")
+        expect(cycle?.aborted).toBe(true)
+        expect(cycle?.error).toBe("stopped")
+        expect(cycle?.response).toBe("partial")
+      },
+    })
+  })
+
+  test("aggregates a multi-step agent turn into ONE cycle", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        // One user prompt → two assistant messages (e.g. a tool/step then the final answer),
+        // both parented to the same user message — exactly the real multi-step loop.
+        const step1 = assistantInfo({
+          sessionID: session.id,
+          id: "msg_a_step1",
+          parentID: "msg_user_multistep",
+          cost: 0.02,
+          tokens: { input: 100, output: 10, reasoning: 5, cache: { read: 1, write: 0 } },
+          created: 1100,
+          completed: 1200,
+          finish: "tool",
+        })
+        const step2 = assistantInfo({
+          sessionID: session.id,
+          id: "msg_a_step2",
+          parentID: "msg_user_multistep",
+          cost: 0.04,
+          tokens: { input: 200, output: 30, reasoning: 7, cache: { read: 2, write: 0 } },
+          created: 1300,
+          completed: 1500,
+          finish: "stop",
+        })
+        seedTurn({
+          userText: "do the thing",
+          userTime: 1000,
+          steps: [
+            { info: step1, text: "" }, // intermediate step, no text
+            { info: step2, text: "final answer" },
+          ],
+        })
+        // The projector fires per assistant message; both must converge to a single cycle.
+        Database.use((db) => CycleRecorder.record(db, step1 as never))
+        Database.use((db) => CycleRecorder.record(db, step2 as never))
+
+        const cycles = Doc.cycleList({ sessionID: session.id })
+        expect(cycles).toHaveLength(1) // ← the bug: was 2 (one per assistant message)
+        const c = cycles[0]
+        expect(c.inputs).toHaveLength(1)
+        expect(c.inputs[0].prompt).toBe("do the thing")
+        expect(c.response).toBe("final answer") // empty step skipped, joined
+        expect(c.assistantMessageID).toBe("msg_a_step2") // last step
+        expect(c.tokensInput).toBe(300) // 100 + 200 summed
+        expect(c.tokensOutput).toBe(40) // 10 + 30
+        expect(c.tokensReasoning).toBe(12) // 5 + 7
+        expect(c.costTotal).toBeCloseTo(0.06) // 0.02 + 0.04
+        expect(c.timeOutputStart).toBe(1100) // first step
+        expect(c.timeCompleted).toBe(1500) // last step
+        expect(c.ttftMs).toBe(100) // 1100 - 1000
+        expect(c.status).toBe("completed")
       },
     })
   })

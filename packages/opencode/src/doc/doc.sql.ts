@@ -1,8 +1,8 @@
-import { sqliteTable, text, integer, index, uniqueIndex, primaryKey, blob } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, real, index, uniqueIndex, primaryKey, blob } from "drizzle-orm/sqlite-core"
 import { sql } from "drizzle-orm"
 import { SessionTable } from "../session/session.sql"
 import type { SessionID } from "../session/schema"
-import type { DocID, ActorID, AssetID, SubmitID } from "./schema"
+import type { DocID, ActorID, AssetID, SubmitID, CycleID, CycleInputID } from "./schema"
 import { Timestamps } from "../storage/schema.sql"
 
 export const DocTable = sqliteTable("doc", {
@@ -96,6 +96,8 @@ export const DocSubmitTable = sqliteTable(
     timeout_ms: integer().notNull(),
     expires_at: integer().notNull(),
     cancelled_by: text().$type<ActorID>(),
+    // The user message this submit produced once sent — links a cycle back to its submit/actors.
+    user_message_id: text(),
     ...Timestamps,
   },
   (table) => [
@@ -105,6 +107,95 @@ export const DocSubmitTable = sqliteTable(
     uniqueIndex("doc_submit_pending_unique")
       .on(table.session_id, table.doc_id)
       .where(sql`${table.status} = 'pending'`),
+  ],
+)
+
+// One row per AI run: the prompt that starts the run through to the AI's reply (or the user
+// stopping it). Token/cost are the run's single usage total. The feeding prompt lives in
+// prompt_cycle_input as a child row. Today exactly one input is recorded per run; the child
+// table (with `seq`) is shaped to later hold multiple inputs for followup "steer" mode — where
+// one run absorbs several prompts — which is NOT implemented yet.
+export const PromptCycleTable = sqliteTable(
+  "prompt_cycle",
+  {
+    id: text().$type<CycleID>().primaryKey(),
+    session_id: text()
+      .$type<SessionID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    // docID is a per-input property (where the prompt was authored), so it lives on
+    // prompt_cycle_input — not duplicated here.
+
+    // One cycle per user prompt (turn). A turn may produce several assistant messages
+    // (multi-step agent loop); they are all aggregated into this single cycle.
+    user_message_id: text().notNull(),
+
+    time_created: integer().notNull(), // cycle/run started (prompt authored)
+
+    // ── 출력 (output) ──
+    // The LAST assistant message of the turn (the others are folded into the aggregates).
+    assistant_message_id: text().notNull(),
+    response: text(), // full AI response text (steps joined), never summarized
+    model_id: text(),
+    provider_id: text(),
+    time_output_start: integer(),
+    time_completed: integer(), // completion incl. stop
+    ttft_ms: integer(), // time_output_start - first consent
+
+    // ── 토큰/비용 (tokens & cost) — summed across all steps of the turn ──
+    tokens_input: integer(),
+    tokens_output: integer(),
+    tokens_reasoning: integer(),
+    tokens_cache_read: integer(),
+    tokens_cache_write: integer(),
+    cost_total: real(),
+
+    // ── 상태 (status) ──
+    status: text().notNull().default("running"), // running | completed | aborted | error
+    aborted: integer({ mode: "boolean" }).notNull().default(false),
+    error: text(),
+  },
+  (table) => [
+    index("prompt_cycle_session_idx").on(table.session_id),
+    index("prompt_cycle_status_idx").on(table.status),
+    index("prompt_cycle_created_idx").on(table.time_created),
+    // One cycle per user prompt (turn) — idempotent upsert key for the recorder.
+    uniqueIndex("prompt_cycle_user_message_unique").on(table.user_message_id),
+  ],
+)
+
+// A single consented prompt that fed a cycle's run. Ordered by seq within the cycle.
+export const PromptCycleInputTable = sqliteTable(
+  "prompt_cycle_input",
+  {
+    id: text().$type<CycleInputID>().notNull(),
+    cycle_id: text()
+      .$type<CycleID>()
+      .notNull()
+      .references(() => PromptCycleTable.id, { onDelete: "cascade" }),
+    session_id: text().$type<SessionID>().notNull(),
+    doc_id: text().$type<DocID>(), // null for non-doc prompts
+    submit_id: text().$type<SubmitID>(),
+    // Who sent/consented this prompt: [self] for a solo doc send, [a,b,...] for a multi-party
+    // consent, null for non-doc (normal) prompts that carry no actor identity.
+    actor_ids: text({ mode: "json" }).$type<ActorID[]>(),
+    // Who initiated the send: the submit's creator (multi-party), or the lone sender (solo).
+    initiator_actor_id: text().$type<ActorID>(),
+    seq: integer().notNull().default(0), // input order within a run; always 0 today (see steer TODO)
+
+    prompt: text().notNull(), // full prompt text, never summarized
+    assets: text({ mode: "json" }).$type<{ assetID?: string; mime: string; filename?: string; url?: string }[]>(),
+    actor_count: integer().notNull().default(1), // consent participants for this prompt
+    user_message_id: text(),
+
+    time_created: integer().notNull(), // prompt authored / user message created
+    time_consented: integer(), // consent reached = sent to AI (doc mode only)
+    consent_ms: integer(), // time_consented - time_created (doc mode only)
+  },
+  (table) => [
+    primaryKey({ columns: [table.cycle_id, table.id] }),
+    index("prompt_cycle_input_cycle_idx").on(table.cycle_id),
+    index("prompt_cycle_input_session_idx").on(table.session_id),
   ],
 )
 

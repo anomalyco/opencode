@@ -13,8 +13,17 @@ export function promptWithPlain(current: Prompt, text: string): Prompt {
   return [head, ...rest]
 }
 
-export function promptFromDocMarkdown(text: string, context: Prompt, docID?: string): Prompt {
+export function promptFromDocMarkdown(text: string, context: Prompt, docID?: string, actorID?: string): Prompt {
   const rest = context.filter((part) => part.type !== "text")
-  const head: TextPart = { type: "text", content: text, start: 0, end: text.length, format: "markdown", source: "doc", docID }
+  const head: TextPart = {
+    type: "text",
+    content: text,
+    start: 0,
+    end: text.length,
+    format: "markdown",
+    source: "doc",
+    docID,
+    actorID,
+  }
   return [head, ...rest]
 }

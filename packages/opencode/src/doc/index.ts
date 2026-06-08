@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm"
+import { eq, and, desc, inArray } from "drizzle-orm"
 import z from "zod"
 import { ulid } from "ulid"
 import { Bus } from "@/bus"
@@ -17,10 +17,12 @@ import {
   DocSubmitTable,
   DocTable,
   DocUpdateTable,
+  PromptCycleTable,
+  PromptCycleInputTable,
   SessionActorTable,
   SessionPromptDocTable,
 } from "./doc.sql"
-import { ActorID, AssetID, DocID, SubmitID } from "./schema"
+import { ActorID, AssetID, CycleID, CycleInputID, DocID, SubmitID } from "./schema"
 
 export namespace Doc {
   const COLORS = [
@@ -54,6 +56,177 @@ export namespace Doc {
     })
     .meta({ ref: "SessionActor" })
   export type ActorInfo = z.infer<typeof ActorInfo>
+
+  export const CycleAsset = z.object({
+    assetID: z.string().optional(),
+    mime: z.string(),
+    filename: z.string().optional(),
+    url: z.string().optional(), // omitted for inline data: attachments (blob not stored)
+  })
+  export type CycleAsset = z.infer<typeof CycleAsset>
+
+  export const CycleStatus = z.enum(["running", "completed", "aborted", "error"]).meta({ ref: "PromptCycleStatus" })
+  export type CycleStatus = z.infer<typeof CycleStatus>
+
+  // One consented prompt that fed a cycle's run. Prompt text is verbatim, never summarized.
+  export const CycleInput = z
+    .object({
+      id: CycleInputID.zod,
+      docID: DocID.zod.nullable(), // null for non-doc prompts
+      submitID: SubmitID.zod.nullable(),
+      // [self] for a solo doc send, [a,b,...] for multi-party consent, null for normal prompts.
+      actorIDs: z.array(ActorID.zod).nullable(),
+      // Who pressed send: submit creator (multi-party) or the lone sender (solo); null for normal.
+      initiatorActorID: ActorID.zod.nullable(),
+      seq: z.number(),
+      prompt: z.string(),
+      assets: z.array(CycleAsset).nullable(),
+      actorCount: z.number(),
+      userMessageID: z.string().nullable(),
+      timeCreated: z.number(),
+      timeConsented: z.number().nullable(), // doc mode only
+      consentMs: z.number().nullable(), // doc mode only
+    })
+    .meta({ ref: "PromptCycleInput" })
+  export type CycleInput = z.infer<typeof CycleInput>
+
+  // A full AI run: the input prompt(s) through to one reply (or stop). Token/cost are the
+  // run's single total. `inputs` currently always holds exactly one item; it is an array to
+  // later support followup "steer" mode (several prompts in one run) — not implemented yet.
+  // docID lives per-input (inputs[].docID), not on the run.
+  export const Cycle = z
+    .object({
+      id: CycleID.zod,
+      sessionID: SessionID.zod,
+      timeCreated: z.number(),
+      inputs: z.array(CycleInput),
+      // output
+      assistantMessageID: z.string().nullable(),
+      response: z.string().nullable(),
+      modelID: z.string().nullable(),
+      providerID: z.string().nullable(),
+      timeOutputStart: z.number().nullable(),
+      timeCompleted: z.number().nullable(),
+      ttftMs: z.number().nullable(),
+      // tokens & cost
+      tokensInput: z.number().nullable(),
+      tokensOutput: z.number().nullable(),
+      tokensReasoning: z.number().nullable(),
+      tokensCacheRead: z.number().nullable(),
+      tokensCacheWrite: z.number().nullable(),
+      costTotal: z.number().nullable(),
+      // status
+      status: CycleStatus,
+      aborted: z.boolean(),
+      error: z.string().nullable(),
+    })
+    .meta({ ref: "PromptCycle" })
+  export type Cycle = z.infer<typeof Cycle>
+
+  function inputFromRow(row: typeof PromptCycleInputTable.$inferSelect): CycleInput {
+    return {
+      id: row.id,
+      docID: row.doc_id ?? null,
+      submitID: row.submit_id ?? null,
+      actorIDs: (row.actor_ids as ActorID[] | null) ?? null,
+      initiatorActorID: row.initiator_actor_id ?? null,
+      seq: row.seq,
+      prompt: row.prompt,
+      assets: (row.assets as CycleAsset[] | null) ?? null,
+      actorCount: row.actor_count,
+      userMessageID: row.user_message_id ?? null,
+      timeCreated: row.time_created,
+      timeConsented: row.time_consented ?? null,
+      consentMs: row.consent_ms ?? null,
+    }
+  }
+
+  function cycleFromRow(row: typeof PromptCycleTable.$inferSelect, inputs: CycleInput[]): Cycle {
+    return {
+      id: row.id,
+      sessionID: row.session_id,
+      timeCreated: row.time_created,
+      inputs,
+      assistantMessageID: row.assistant_message_id ?? null,
+      response: row.response ?? null,
+      modelID: row.model_id ?? null,
+      providerID: row.provider_id ?? null,
+      timeOutputStart: row.time_output_start ?? null,
+      timeCompleted: row.time_completed ?? null,
+      ttftMs: row.ttft_ms ?? null,
+      tokensInput: row.tokens_input ?? null,
+      tokensOutput: row.tokens_output ?? null,
+      tokensReasoning: row.tokens_reasoning ?? null,
+      tokensCacheRead: row.tokens_cache_read ?? null,
+      tokensCacheWrite: row.tokens_cache_write ?? null,
+      costTotal: row.cost_total ?? null,
+      status: CycleStatus.parse(row.status),
+      aborted: row.aborted,
+      error: row.error ?? null,
+    }
+  }
+
+  export const CycleListInput = z.object({
+    sessionID: SessionID.zod.optional(),
+    docID: DocID.zod.optional(),
+    status: CycleStatus.optional(),
+    limit: z.coerce.number().min(1).max(500).optional(),
+    offset: z.coerce.number().min(0).optional(),
+  })
+
+  // Return whole prompt cycles (with their inputs), newest first. Text is returned verbatim.
+  export const cycleList = fn(CycleListInput, (input) => {
+    return Database.use((db) => {
+      const filters = [
+        input.sessionID ? eq(PromptCycleTable.session_id, input.sessionID) : undefined,
+        // docID is per-input now: match runs that have any input authored in that doc.
+        input.docID
+          ? inArray(
+              PromptCycleTable.id,
+              db
+                .select({ id: PromptCycleInputTable.cycle_id })
+                .from(PromptCycleInputTable)
+                .where(eq(PromptCycleInputTable.doc_id, input.docID)),
+            )
+          : undefined,
+        input.status ? eq(PromptCycleTable.status, input.status) : undefined,
+      ].filter(Boolean)
+      const rows = db
+        .select()
+        .from(PromptCycleTable)
+        .where(filters.length ? and(...filters) : undefined)
+        .orderBy(desc(PromptCycleTable.time_created))
+        .limit(input.limit ?? 100)
+        .offset(input.offset ?? 0)
+        .all()
+      return rows.map((row) => {
+        const inputs = db
+          .select()
+          .from(PromptCycleInputTable)
+          .where(eq(PromptCycleInputTable.cycle_id, row.id))
+          .orderBy(PromptCycleInputTable.seq)
+          .all()
+          .map(inputFromRow)
+        return cycleFromRow(row, inputs)
+      })
+    })
+  })
+
+  // Return a single prompt cycle (with its inputs), or null if not found. Text is verbatim.
+  export const cycleGet = fn(z.object({ cycleID: CycleID.zod }), (input) =>
+    Database.use((db) => {
+      const row = db.select().from(PromptCycleTable).where(eq(PromptCycleTable.id, input.cycleID)).get()
+      if (!row) return null
+      const inputs = db
+        .select()
+        .from(PromptCycleInputTable)
+        .where(eq(PromptCycleInputTable.cycle_id, row.id))
+        .orderBy(PromptCycleInputTable.seq)
+        .all()
+        .map(inputFromRow)
+      return cycleFromRow(row, inputs)
+    }),
+  )
 
   export const PromptDocInfo = z
     .object({
@@ -415,13 +588,25 @@ export namespace Doc {
 
   function send(row: SubmitRow) {
     const body = SubmitPrompt.parse(JSON.parse(row.prompt))
+    // Cycle recording happens centrally in the cycle recorder (subscribes to assistant
+    // message completion), so it covers normal/shell prompts too — not just doc submits.
     SessionPrompt.prompt({
       ...body,
       noReply: true,
       sessionID: row.session_id,
     })
-      .then(() => {
+      .then((message) => {
         rotate(row)
+        // Link the produced user message back to this submit so the recorder can resolve
+        // the consenting actors (doc_submit_actor) when it records the cycle.
+        if (message?.info?.id)
+          Database.use((db) =>
+            db
+              .update(DocSubmitTable)
+              .set({ user_message_id: message.info.id })
+              .where(eq(DocSubmitTable.id, row.id))
+              .run(),
+          )
         if (body.noReply === true) return
         return SessionPrompt.loop({ sessionID: row.session_id })
       })
@@ -563,6 +748,7 @@ export namespace Doc {
           timeout_ms: timeout,
           expires_at: now + timeout,
           cancelled_by: null,
+          user_message_id: null,
           time_created: now,
           time_updated: now,
         }

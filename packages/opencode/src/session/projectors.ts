@@ -5,6 +5,7 @@ import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Log } from "../util/log"
+import * as CycleRecorder from "../doc/cycle-recorder"
 
 const log = Log.create({ service: "session.projector" })
 
@@ -98,6 +99,13 @@ export default [
     } catch (err) {
       if (!foreign(err)) throw err
       log.warn("ignored late message update", { messageID: id, sessionID })
+    }
+
+    // Record a prompt cycle when an assistant turn finishes (covers all prompt paths).
+    try {
+      CycleRecorder.record(db, data.info)
+    } catch (err) {
+      log.warn("cycle record failed", { messageID: id, sessionID, err: String(err) })
     }
   }),
 

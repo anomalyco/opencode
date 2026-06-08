@@ -17,6 +17,8 @@ export namespace Identifier {
     actor: "act",
     asset: "ast",
     submit: "sub",
+    cycle: "cyc",
+    cycleInput: "cin",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {

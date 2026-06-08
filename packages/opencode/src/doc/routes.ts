@@ -4,7 +4,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Doc } from "./index"
-import { AssetID, DocID } from "./schema"
+import { AssetID, CycleID, DocID } from "./schema"
 import { errors } from "../server/error"
 import { lazy } from "../util/lazy"
 import * as Room from "./room"
@@ -37,6 +37,51 @@ async function href(input: string) {
 
 export const DocRoutes = lazy(() =>
   new Hono()
+    .get(
+      "/cycle",
+      describeRoute({
+        summary: "List prompt cycles",
+        description: "Return whole prompt→response cycles, newest first. Prompt/response text is not truncated.",
+        operationId: "doc.cycle.list",
+        responses: {
+          200: {
+            description: "Prompt cycles",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(Doc.Cycle)),
+              },
+            },
+          },
+        },
+      }),
+      validator("query", Doc.CycleListInput),
+      async (c) => c.json(Doc.cycleList(c.req.valid("query"))),
+    )
+    .get(
+      "/cycle/:cycleID",
+      describeRoute({
+        summary: "Get a prompt cycle",
+        description: "Return a single prompt→response cycle with its inputs. Prompt/response text is not truncated.",
+        operationId: "doc.cycle.get",
+        responses: {
+          200: {
+            description: "Prompt cycle",
+            content: {
+              "application/json": {
+                schema: resolver(Doc.Cycle),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ cycleID: CycleID.zod })),
+      async (c) => {
+        const cycle = Doc.cycleGet({ cycleID: c.req.valid("param").cycleID })
+        if (!cycle) throw new HTTPException(404, { message: "Prompt cycle not found" })
+        return c.json(cycle)
+      },
+    )
     .get(
       "/:docID/sync",
       describeRoute({
