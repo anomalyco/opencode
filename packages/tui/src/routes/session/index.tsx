@@ -930,6 +930,7 @@ export function Session() {
               toolDetails: showDetails(),
               assistantMetadata: showAssistantMetadata(),
               providers: sync.data.provider,
+              mode: "web",
             },
           )
           await clipboard.write?.(transcript)
@@ -974,6 +975,7 @@ export function Session() {
               toolDetails: options.toolDetails,
               assistantMetadata: options.assistantMetadata,
               providers: sync.data.provider,
+              mode: "web",
             },
           )
 

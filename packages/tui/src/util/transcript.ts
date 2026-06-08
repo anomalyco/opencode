@@ -7,6 +7,7 @@ export type TranscriptOptions = {
   toolDetails: boolean
   assistantMetadata: boolean
   providers?: Provider[]
+  mode?: "native" | "web"
 }
 
 export type SessionInfo = {
@@ -36,7 +37,9 @@ export function formatTranscript(
   transcript += `---\n\n`
 
   for (const msg of messages) {
-    transcript += formatMessage(msg.info, msg.parts, options, providers)
+    const value = formatMessage(msg.info, msg.parts, options, providers)
+    if (!value.trim()) continue
+    transcript += value
     transcript += `---\n\n`
   }
 
@@ -49,6 +52,9 @@ export function formatMessage(
   options: TranscriptOptions,
   providers?: Provider[] | ReadonlyMap<string, Provider>,
 ): string {
+  const visible = parts.filter((part, index) => isPartVisible(part, msg.role, options, index))
+  if (!visible.length) return ""
+
   let result = ""
 
   if (msg.role === "user") {
@@ -57,7 +63,7 @@ export function formatMessage(
     result += formatAssistantHeader(msg, options.assistantMetadata, providers ?? options.providers)
   }
 
-  for (const part of parts) {
+  for (const part of visible) {
     result += formatPart(part, options)
   }
 
@@ -109,4 +115,39 @@ export function formatPart(part: Part, options: TranscriptOptions): string {
   }
 
   return ""
+}
+
+export function isPartVisible(
+  part: Part,
+  role: UserMessage["role"] | AssistantMessage["role"],
+  options: TranscriptOptions,
+  index: number,
+): boolean {
+  if (part.type === "step-start") return options.mode !== "web" || (role === "assistant" && index === 0)
+  if (part.type === "snapshot") return options.mode !== "web"
+  if (part.type === "patch") return options.mode !== "web"
+  if (part.type === "step-finish") return options.mode !== "web"
+
+  if (part.type === "text") {
+    if (part.synthetic) return false
+    if (part.ignored) return false
+    if (options.mode === "web" && !part.text) return false
+    return true
+  }
+
+  if (part.type === "reasoning") {
+    if (!options.thinking) return false
+    if (options.mode === "web" && !part.text) return false
+    return true
+  }
+
+  if (part.type === "tool") {
+    if (options.mode === "web" && part.state.status === "pending") return false
+    if (options.mode === "web" && part.state.status === "running") return false
+    return true
+  }
+
+  if (part.type === "file") return true
+  if (part.type === "compaction") return true
+  return false
 }

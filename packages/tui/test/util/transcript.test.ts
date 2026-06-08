@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatAssistantHeader, formatMessage, formatPart, formatTranscript } from "../../src/util/transcript"
+import { formatAssistantHeader, formatMessage, formatPart, formatTranscript, isPartVisible } from "../../src/util/transcript"
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 
 const providers: Provider[] = [
@@ -254,6 +254,59 @@ describe("transcript", () => {
     })
   })
 
+  describe("isPartVisible", () => {
+    const options = { thinking: true, toolDetails: true, assistantMetadata: true, mode: "web" as const }
+
+    test("hides web-mode running tool parts", () => {
+      const part: Part = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "tool",
+        callID: "call_1",
+        tool: "bash",
+        state: {
+          status: "running",
+          input: { command: "ls" },
+          time: { start: 1000 },
+        },
+      }
+      expect(isPartVisible(part, "assistant", options, 0)).toBe(false)
+    })
+
+    test("hides web-mode empty text", () => {
+      const part: Part = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "text",
+        text: "",
+      }
+      expect(isPartVisible(part, "assistant", options, 0)).toBe(false)
+    })
+
+    test("keeps first assistant step-start and hides later ones in web mode", () => {
+      const part = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "step-start",
+      } as Part
+      expect(isPartVisible(part, "assistant", options, 0)).toBe(true)
+      expect(isPartVisible(part, "assistant", options, 1)).toBe(false)
+    })
+
+    test("hides snapshot-like internals in web mode", () => {
+      const snapshot = {
+        id: "part_1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "snapshot",
+      } as Part
+      expect(isPartVisible(snapshot, "assistant", options, 0)).toBe(false)
+    })
+  })
+
   describe("formatMessage", () => {
     const options = { thinking: true, toolDetails: true, assistantMetadata: true, providers }
 
@@ -291,6 +344,40 @@ describe("transcript", () => {
       const result = formatMessage(msg, parts, options)
       expect(result).toContain("## Assistant (Build · Claude Sonnet 4 · 5.4s)")
       expect(result).toContain("Hi there")
+    })
+
+    test("returns empty output when no visible parts remain", () => {
+      const msg: AssistantMessage = {
+        id: "msg_123",
+        sessionID: "ses_123",
+        role: "assistant",
+        agent: "build",
+        modelID: "claude-sonnet-4-20250514",
+        providerID: "anthropic",
+        mode: "",
+        parentID: "msg_parent",
+        path: { cwd: "/test", root: "/test" },
+        cost: 0.001,
+        tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1000000, completed: 1005400 },
+      }
+      const parts: Part[] = [
+        {
+          id: "part_1",
+          sessionID: "ses_123",
+          messageID: "msg_123",
+          type: "tool",
+          callID: "call_1",
+          tool: "bash",
+          state: {
+            status: "running",
+            input: { command: "ls" },
+            time: { start: 1000 },
+          },
+        },
+      ]
+      const result = formatMessage(msg, parts, { ...options, mode: "web" })
+      expect(result).toBe("")
     })
   })
 
@@ -416,6 +503,57 @@ describe("transcript", () => {
       expect(result).toContain("## Assistant\n\n")
       expect(result).not.toContain("Build")
       expect(result).not.toContain("claude-sonnet-4-20250514")
+    })
+
+    test("web mode omits separator for hidden-only messages", () => {
+      const session = {
+        id: "ses_abc123",
+        title: "Test Session",
+        time: { created: 1000000000000, updated: 1000000001000 },
+      }
+      const messages = [
+        {
+          info: {
+            id: "msg_1",
+            sessionID: "ses_abc123",
+            role: "assistant" as const,
+            agent: "build",
+            modelID: "claude-sonnet-4-20250514",
+            providerID: "anthropic",
+            mode: "",
+            parentID: "msg_0",
+            path: { cwd: "/test", root: "/test" },
+            cost: 0.001,
+            tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 1000000000100, completed: 1000000000600 },
+          },
+          parts: [
+            {
+              id: "part_1",
+              sessionID: "ses_abc123",
+              messageID: "msg_1",
+              type: "tool" as const,
+              callID: "call_1",
+              tool: "bash",
+              state: {
+                status: "running" as const,
+                input: { command: "ls" },
+                time: { start: 1000 },
+              },
+            },
+          ],
+        },
+      ]
+
+      const result = formatTranscript(session, messages, {
+        thinking: false,
+        toolDetails: false,
+        assistantMetadata: true,
+        mode: "web",
+      })
+
+      expect(result).not.toContain("## Assistant")
+      expect(result).toBe(`# Test Session\n\n**Session ID:** ses_abc123\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n`)
     })
   })
 })
