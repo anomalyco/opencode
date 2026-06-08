@@ -2026,6 +2026,49 @@ The model catalog is provided automatically. A minimal `opencode.json` is all th
 
 ---
 
+### Trillionir AI
+
+[Trillionir AI](https://thetrillioniar.me) is an OpenAI-compatible inference platform
+offering a pool of open-source models behind branded routing aliases. Flat $5/mo
+pricing with no per-token charges.
+
+1. Head over to [thetrillioniar.me](https://thetrillioniar.me), create an account, and generate an API key (format: `sk-tr-xxx`).
+
+2. Run the `/connect` command and search for **Trillionir AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Trillionir AI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _GPT-4o (Gemma 4 31B)_ or the _Auto Router_.
+
+   ```txt
+   /models
+   ```
+
+   Available models:
+
+   | Model ID                   | Backend             |
+   | -------------------------- | ------------------- |
+   | `auto`                     | Smart router        |
+   | `openai/gpt-4o`            | Gemma 4 31B         |
+   | `openai/gpt-5.5`           | Gemma 4 31B         |
+   | `anthropic/claude-sonnet-4` | Devstral 24B       |
+   | `anthropic/claude-opus-4`   | Gemma 4 31B        |
+   | `google/gemini-2.5-pro`    | Gemma 4 31B         |
+   | `google/gemini-2.0-flash`  | RNJ-1 8B            |
+
+---
+
 ### Venice AI
 
 1. Head over to the [Venice AI console](https://venice.ai), create an account, and generate an API key.
