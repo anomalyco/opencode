@@ -97,6 +97,12 @@ export type FooterPatch = Partial<FooterState>
 
 export type RunDiffStyle = "auto" | "stacked"
 
+export type TurnSummary = {
+  agent: string
+  model: string
+  duration: string
+}
+
 export type ScrollbackOptions = {
   diffStyle?: RunDiffStyle
   suppressBackgrounds?: boolean
@@ -175,6 +181,7 @@ export type FooterPromptRoute =
   | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
+  | { type: "skill" }
   | { type: "model" }
   | { type: "variant" }
 
@@ -184,7 +191,7 @@ export type FooterSubagentTab = {
   callID: string
   label: string
   description: string
-  status: "running" | "completed" | "error"
+  status: "running" | "completed" | "cancelled" | "error"
   background?: boolean
   title?: string
   toolCalls?: number
@@ -298,6 +305,7 @@ export type StreamCommit = {
   text: string
   phase: StreamPhase
   source: StreamSource
+  summary?: TurnSummary
   messageID?: string
   partID?: string
   tool?: string
