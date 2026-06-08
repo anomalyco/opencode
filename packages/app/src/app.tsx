@@ -45,6 +45,8 @@ import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import { TabsProvider } from "@/context/tabs"
 import { WslServersProvider } from "@/wsl/context"
+import { SettingsServers } from "@/components/settings-servers"
+import { SettingsServersV2 } from "@/components/settings-v2/servers"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
@@ -302,6 +304,45 @@ function ServerKey(props: ParentProps) {
   )
 }
 
+function NoServerSetup() {
+  const settings = useSettings()
+  return (
+    <div class="h-dvh w-screen bg-background-base">
+      <Show when={settings.general.newLayoutDesigns()} fallback={<SettingsServers />}>
+        <div class="settings-v2 h-full">
+          <SettingsServersV2 />
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function NoServerProviders() {
+  return (
+    <SettingsProvider>
+      <BodyDesignClass />
+      <NoServerSetup />
+    </SettingsProvider>
+  )
+}
+
+function ServerRouteProviders(props: ParentProps<{ appChildren?: JSX.Element }>) {
+  const server = useServer()
+  return (
+    <Show when={server.current} fallback={<NoServerProviders />}>
+      <ServerKey>
+        <QueryProvider>
+          <ServerSDKProvider>
+            <ServerSyncProvider>
+              <RouterRoot appChildren={props.appChildren}>{props.children}</RouterRoot>
+            </ServerSyncProvider>
+          </ServerSDKProvider>
+        </QueryProvider>
+      </ServerKey>
+    </Show>
+  )
+}
+
 export function AppInterface(props: {
   children?: JSX.Element
   defaultServer: ServerConnection.Key
@@ -322,15 +363,7 @@ export function AppInterface(props: {
             component={props.router ?? Router}
             root={(routerProps) => (
               <TabsProvider>
-                <ServerKey>
-                  <QueryProvider>
-                    <ServerSDKProvider>
-                      <ServerSyncProvider>
-                        <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>
-                      </ServerSyncProvider>
-                    </ServerSDKProvider>
-                  </QueryProvider>
-                </ServerKey>
+                <ServerRouteProviders appChildren={props.children}>{routerProps.children}</ServerRouteProviders>
               </TabsProvider>
             )}
           >
