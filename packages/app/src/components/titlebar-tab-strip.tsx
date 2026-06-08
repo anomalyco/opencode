@@ -345,7 +345,7 @@ export function TitlebarTabStrip(props: {
                   class="flex shrink-0 touch-none"
                   classList={{
                     "ml-1.5 border-l border-[var(--v2-background-bg-layer-02)] pl-1.5": !first(),
-                    "pointer-events-none": dragged(),
+                    "pointer-events-none": drag.active,
                   }}
                   onPointerDown={(event) => {
                     if (dragged()) return
