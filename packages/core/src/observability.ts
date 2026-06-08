@@ -8,8 +8,6 @@ import { Logging } from "./observability/logging"
 import { Otlp } from "./observability/otlp"
 
 export const enabled = Otlp.enabled
-export const fileLogger = Logging.fileLogger
-export const resource = Otlp.resource
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
