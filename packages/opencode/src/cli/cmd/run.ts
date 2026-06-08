@@ -632,8 +632,13 @@ export const RunCommand = effectCmd({
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
           let error: string | undefined
+          let activeSteps = 0
+          let pendingIdle = false
+          let idleTimeoutHandle: ReturnType<typeof setTimeout> | undefined
+          let idleTimedOut = false
 
           for await (const event of events.stream) {
+            if (idleTimedOut) break
             if (
               event.type === "message.updated" &&
               event.properties.sessionID === sessionID &&
@@ -673,11 +678,17 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-start") {
+                activeSteps++
                 if (emit("step_start", { part })) continue
               }
 
               if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
+                activeSteps = Math.max(0, activeSteps - 1)
+                if (emit("step_finish", { part })) {
+                  if (pendingIdle && activeSteps <= 0) { clearTimeout(idleTimeoutHandle); break }
+                  continue
+                }
+                if (pendingIdle && activeSteps <= 0) { clearTimeout(idleTimeoutHandle); break }
               }
 
               if (part.type === "text" && part.time?.end) {
@@ -716,8 +727,12 @@ export const RunCommand = effectCmd({
                 err = String(props.error.data.message)
               }
               error = error ? error + EOL + err : err
-              if (emit("error", { error: props.error })) continue
+              if (emit("error", { error: props.error })) {
+                if (pendingIdle) { clearTimeout(idleTimeoutHandle); break }
+                continue
+              }
               UI.error(err)
+              if (pendingIdle) { clearTimeout(idleTimeoutHandle); break }
             }
 
             if (
@@ -725,6 +740,11 @@ export const RunCommand = effectCmd({
               event.properties.sessionID === sessionID &&
               event.properties.status.type === "idle"
             ) {
+              if (activeSteps > 0) {
+                pendingIdle = true
+                idleTimeoutHandle = setTimeout(() => { idleTimedOut = true }, 3_000)
+                continue
+              }
               break
             }
 
@@ -750,6 +770,7 @@ export const RunCommand = effectCmd({
               }
             }
           }
+          clearTimeout(idleTimeoutHandle)
           return error
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
