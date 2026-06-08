@@ -1,5 +1,4 @@
 import type { Metadata } from "next"
-import Script from "next/script"
 import { GoogleTagManager } from "@next/third-parties/google"
 import "./globals.css"
 
@@ -7,10 +6,6 @@ import "./globals.css"
 // "GTM-XXXXXXX")。未設定の dev 環境では <GoogleTagManager> を
 // レンダリングしないので、ローカル動作確認で本番 GTM を汚さない。
 const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID
-
-// Microsoft Clarity プロジェクト ID は CI から NEXT_PUBLIC_CLARITY_ID で差し込む。
-// 未設定の dev 環境ではスクリプトをレンダリングしない。
-const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID
 
 const SITE_URL = "https://securecode.acompany.tech/"
 const SITE_TITLE = "Acompanyセキュアコード — 機密ソースコードを守る AI コーディング"
@@ -73,18 +68,7 @@ export default function RootLayout({
         />
       </head>
       {GTM_ID && <GoogleTagManager gtmId={GTM_ID} />}
-      <body className="min-h-screen antialiased">
-        {children}
-        {CLARITY_ID && (
-          <Script id="clarity-script" strategy="afterInteractive">
-            {`(function(c,l,a,r,i,t,y){
-                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-            })(window, document, "clarity", "script", "${CLARITY_ID}");`}
-          </Script>
-        )}
-      </body>
+      <body className="min-h-screen antialiased">{children}</body>
     </html>
   )
 }

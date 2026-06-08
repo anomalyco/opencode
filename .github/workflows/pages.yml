@@ -45,9 +45,6 @@ jobs:
           # DEMO_WAITLIST_ENDPOINT から差し込む。未設定ならフォームは送信時に
           # エラー表示になる安全側のデフォルト。
           NEXT_PUBLIC_WAITLIST_ENDPOINT: ${{ vars.DEMO_WAITLIST_ENDPOINT }}
-          # Microsoft Clarity プロジェクト ID。repo Variables の DEMO_CLARITY_ID
-          # から差し込む。未設定なら Clarity スクリプトは埋め込まれない。
-          NEXT_PUBLIC_CLARITY_ID: ${{ vars.DEMO_CLARITY_ID }}
         run: bun run build
 
       # out/ をそのまま Pages の DocumentRoot として置く。
