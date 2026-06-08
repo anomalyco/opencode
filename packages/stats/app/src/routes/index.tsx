@@ -956,7 +956,11 @@ function LeaderboardCard(props: {
           </div>
           <div>
             <span>{props.entry.author}</span>
-            <span data-slot="delta" data-negative={props.entry.change < 0 ? "true" : undefined}>
+            <span
+              data-slot="delta"
+              data-new={props.entry.change === null ? "true" : undefined}
+              data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
+            >
               {formatChange(props.entry.change)}
             </span>
           </div>
@@ -978,7 +982,8 @@ function formatBillions(value: number) {
   return `${value}B`
 }
 
-function formatChange(value: number) {
+function formatChange(value: number | null) {
+  if (value === null) return "New"
   if (value > 0) return `+${value}%`
   return `${value}%`
 }

@@ -14,7 +14,7 @@ export type LeaderboardEntry = {
   provider: string
   author: string
   tokens: number
-  change: number
+  change: number | null
   rank: number
 }
 export type TokenCostEntry = { model: string; total: number; input: number; output: number; cached: number }
@@ -96,6 +96,7 @@ const DAY_MS = 86_400_000
 const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
+const LEADERBOARD_CHANGE_MIN_MULTIPLE = 10
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
 type StatMetricRow = Omit<ModelStatMetric, "updatedAt"> & {
@@ -373,7 +374,7 @@ function buildLeaderboard(rows: StatMetricRow[], product: UsageProduct, window: 
       provider: item.provider,
       author: formatProvider(item.provider),
       tokens: Math.round(item.totalTokens / 1_000_000_000),
-      change: percentChange(item.totalTokens, previous.get(modelKey(item.provider, item.model)) ?? 0),
+      change: leaderboardChange(item.totalTokens, previous.get(modelKey(item.provider, item.model)) ?? 0),
       rank: index + 1,
     }))
 }
@@ -862,6 +863,12 @@ function microcentsToDollars(value: number) {
 function percentChange(current: number, previous: number) {
   if (previous <= 0) return current > 0 ? 100 : 0
   return Math.round(((current - previous) / previous) * 100)
+}
+
+function leaderboardChange(current: number, previous: number) {
+  if (current <= 0) return 0
+  if (previous <= 0 || current >= previous * LEADERBOARD_CHANGE_MIN_MULTIPLE) return null
+  return percentChange(current, previous)
 }
 
 function round(value: number, digits: number) {
