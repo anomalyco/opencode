@@ -66,6 +66,7 @@ const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /session roots": QueryBooleanOpenApi,
   "GET /session limit": { type: "number" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+  "GET /vcs/diff context": { type: "integer", minimum: 0 },
   "GET /api/session limit": { type: "number" },
   "GET /api/session start": { type: "number" },
   "GET /api/session roots": QueryBooleanOpenApi,
@@ -109,7 +110,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
       if (operation.requestBody) {
         // The legacy OpenAPI surface never marked request bodies as required.
         // Keep that SDK surface stable while the HttpApi spec is tightened.
-        delete operation.requestBody.required
+        if (!isV2Api) delete operation.requestBody.required
         const body = operation.requestBody.content?.["application/json"]
         if (body?.schema) body.schema = stripOptionalNull(structuredClone(body.schema))
         if (path === "/experimental/workspace" && method === "post") {
@@ -341,7 +342,7 @@ function rewriteRefs(input: unknown, from: string, to: string): void {
 }
 
 function normalizeLegacyErrorResponses(operation: OpenApiOperation) {
-  if (operation.responses?.["400"] && isBuiltInErrorResponse(operation.responses["400"], "BadRequest")) {
+  if (operation.responses?.["400"] && isLegacyBadRequestResponse(operation.responses["400"])) {
     operation.responses["400"] = legacyErrorResponse("Bad request", "BadRequestError")
   }
   if (operation.responses?.["404"] && isBuiltInErrorResponse(operation.responses["404"], "NotFound")) {
@@ -371,7 +372,6 @@ function referencesComponent(input: unknown, name: string): boolean {
 
 function normalizeLegacyOperation(operation: OpenApiOperation, path: string, method: string) {
   if (path === "/experimental/console/switch" && method === "post") delete operation.responses?.["400"]
-  if (path === "/pty/{ptyID}" && method === "put") delete operation.responses?.["404"]
   if ((path !== "/session/{sessionID}/message" && path !== "/session/{sessionID}/command") || method !== "post") return
   const response = operation.responses?.["200"]?.content?.["application/json"]
   if (!response) return
@@ -394,6 +394,10 @@ function isRefResponse(response: OpenApiResponse, name: string) {
 
 function isBuiltInErrorResponse(response: OpenApiResponse, name: "BadRequest" | "NotFound") {
   return response.description === name || isRefResponse(response, `EffectHttpApiError${name}`)
+}
+
+function isLegacyBadRequestResponse(response: OpenApiResponse) {
+  return isBuiltInErrorResponse(response, "BadRequest") || isRefResponse(response, "InvalidRequestError")
 }
 
 function legacyErrorResponse(description: string, name: "BadRequestError" | "NotFoundError"): OpenApiResponse {

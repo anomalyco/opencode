@@ -112,21 +112,21 @@ beforeEach(() => {
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
-const { Bus } = await import("../../src/bus")
+const { EventV2Bridge } = await import("../../src/event-v2-bridge")
 const { Config } = await import("../../src/config/config")
 const { McpAuth } = await import("../../src/mcp/auth")
 const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
-const { AppFileSystem } = await import("@opencode-ai/core/filesystem")
+const { FSUtil } = await import("@opencode-ai/core/fs-util")
 const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
 
 const mcpTest = testEffect(
   Layer.mergeAll(
     MCP.layer.pipe(
       Layer.provide(McpAuth.defaultLayer),
-      Layer.provideMerge(Bus.layer),
+      Layer.provideMerge(EventV2Bridge.defaultLayer),
       Layer.provide(Config.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
-      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(FSUtil.defaultLayer),
     ),
     McpAuth.defaultLayer,
   ),
@@ -175,7 +175,7 @@ mcpTest.instance("state() generates a new state when none is saved", () =>
       auth,
     )
 
-    const entryBefore = yield* McpAuth.Service.use((auth) => auth.get("test-state-gen"))
+    const entryBefore = yield* McpAuth.use.get("test-state-gen")
     expect(entryBefore?.oauthState).toBeUndefined()
 
     // state() should generate and return a new state, not throw
@@ -184,7 +184,7 @@ mcpTest.instance("state() generates a new state when none is saved", () =>
     expect(state.length).toBe(64) // 32 bytes as hex
 
     // The generated state should be persisted
-    const entryAfter = yield* McpAuth.Service.use((auth) => auth.get("test-state-gen"))
+    const entryAfter = yield* McpAuth.use.get("test-state-gen")
     expect(entryAfter?.oauthState).toBe(state)
   }),
 )
@@ -202,7 +202,7 @@ mcpTest.instance("state() returns existing state when one is saved", () =>
 
     // Pre-save a state
     const existingState = "pre-saved-state-value"
-    yield* McpAuth.Service.use((auth) => auth.updateOAuthState("test-state-existing", existingState))
+    yield* McpAuth.use.updateOAuthState("test-state-existing", existingState)
 
     // state() should return the existing state
     const state = yield* Effect.promise(() => provider.state())
