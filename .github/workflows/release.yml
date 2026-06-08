@@ -1,7 +1,10 @@
 name: release
-run-name: "${{ inputs.bump && format('release {0}', inputs.bump) || format('release {0}', github.ref_name) }}"
+run-name: "${{ (github.event_name == 'push' && 'release patch') || (inputs.bump && format('release {0}', inputs.bump)) || format('release {0}', github.ref_name) }}"
 
 on:
+  push:
+    branches:
+      - dev
   workflow_dispatch:
     inputs:
       bump:
@@ -18,7 +21,7 @@ on:
         required: false
         type: string
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump || github.sha }}
 
 permissions:
   id-token: write
@@ -47,14 +50,14 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Install OpenCode
-        if: inputs.bump || inputs.version
+        if: inputs.bump || inputs.version || github.event_name == 'push'
         run: bun i -g opencode-ai
 
       - id: version
         run: ./script/version-tag.ts
         env:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
-          OPENCODE_BUMP: ${{ inputs.bump }}
+          OPENCODE_BUMP: ${{ inputs.bump || (github.event_name == 'push' && 'patch') }}
           OPENCODE_VERSION: ${{ inputs.version }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GH_REPO: ${{ (github.ref_name == 'beta' && 'anomalyco/opencode-beta') || github.repository }}
