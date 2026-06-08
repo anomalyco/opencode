@@ -33,6 +33,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
+import { Log } from "@opencode-ai/core/util/log"
 import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
 
 type GitHubAuthor = {
@@ -148,6 +149,7 @@ type IssueQueryResponse = {
   }
 }
 
+const log = Log.create({ service: "github.handler" })
 const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const COMMENT_MARKER = "<!-- created by opencode -->"
@@ -1652,12 +1654,15 @@ query($owner: String!, $repo: String!, $number: Int!) {
             "</pull_request_resolved_threads>",
           ]
           : []),
-        ...(reviewData.length > 0
-          ? ["<pull_request_review_summaries>", ...reviewData.flat(), "</pull_request_review_summaries>"]
-          : []),
-        "</pull_request>",
-      ].join("\n")
-    }
+          ...(reviewData.length > 0
+            ? ["<pull_request_review_summaries>", ...reviewData.flat(), "</pull_request_review_summaries>"]
+            : []),
+          "</pull_request>",
+        ].join("\n")
+
+        log.debug("FINAL PROMPT:\n" + prompt)
+        return prompt
+      }
 
     async function revokeAppToken() {
       if (!appToken) return
