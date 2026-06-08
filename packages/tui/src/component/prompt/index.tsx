@@ -1103,6 +1103,7 @@ export function Prompt(props: PromptProps) {
         .catch(() => {})
       if (editorParts.length > 0) editor.markSelectionSent()
     }
+    sync.session.prune(sessionID)
     history.append({
       ...store.prompt,
       mode: currentMode,
