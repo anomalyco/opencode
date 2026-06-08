@@ -290,13 +290,20 @@ export const layer = Layer.effect(
 
         const response = yield* http.execute(input.remote({ workspace, target })).pipe(
           Effect.catch((error) =>
-            Effect.sync(() => {
-            }),
+            Effect.logWarning("workspace target request failed", {
+              workspaceID: workspace.id,
+              error: errorData(error),
+            }).pipe(Effect.as(undefined)),
           ),
         )
         if (!response) return input.fallback
         if (response.status < 200 || response.status >= 300) {
           const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
+          yield* Effect.logWarning("workspace target request failed", {
+            workspaceID: workspace.id,
+            status: response.status,
+            body,
+          })
           return input.fallback
         }
 
@@ -304,9 +311,10 @@ export const layer = Layer.effect(
         return yield* body.pipe(
           Effect.map((result) => result as A),
           Effect.catch((error) =>
-            Effect.sync(() => {
-              return input.fallback
-            }),
+            Effect.logWarning("workspace target response decode failed", {
+              workspaceID: workspace.id,
+              error: errorData(error),
+            }).pipe(Effect.as(input.fallback)),
           ),
         )
       })
@@ -385,8 +393,12 @@ export const layer = Layer.effect(
         const stream = yield* connectSSE(target.url, target.headers).pipe(
           Effect.tap(() => syncHistory(space, target.url, target.headers)),
           Effect.catch((err) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               setStatus(space.id, "error")
+              yield* Effect.logWarning("failed to connect to global sync", {
+                workspace: space.name,
+                error: errorData(err),
+              })
               return null
             }),
           ),
@@ -407,9 +419,10 @@ export const layer = Layer.effect(
                 const failed = yield* events.replay(payload.syncEvent, { publish: true, ownerID: space.id }).pipe(
                   Effect.as(false),
                   Effect.catchCause((error) =>
-                    Effect.sync(() => {
-                      return true
-                    }),
+                    Effect.logWarning("failed to replay global event", error).pipe(
+                      Effect.annotateLogs({ workspaceID: space.id }),
+                      Effect.as(true),
+                    ),
                   ),
                 )
                 if (failed) return
@@ -424,6 +437,10 @@ export const layer = Layer.effect(
                   payload: event.payload,
                 })
               } catch (error) {
+                yield* Effect.logWarning("failed to emit global event", {
+                  workspaceID: space.id,
+                  error: errorData(error),
+                })
               }
             }),
           )
@@ -443,8 +460,12 @@ export const layer = Layer.effect(
 
       const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
         Effect.catch((error) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
             setStatus(space.id, "error")
+            yield* Effect.logWarning("workspace target failed", {
+              workspaceID: space.id,
+              error: errorData(error),
+            })
             return null
           }),
         ),
@@ -468,8 +489,12 @@ export const layer = Layer.effect(
         // allow the fiber to fail and automatically get removed
         syncWorkspaceLoop(space).pipe(
           Effect.catch((error) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               setStatus(space.id, "error")
+              yield* Effect.logWarning("workspace listener failed", {
+                workspaceID: space.id,
+                error: errorData(error),
+              })
             }),
           ),
         ),

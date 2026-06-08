@@ -1,9 +1,10 @@
-import { Effect, FileSystem, Formatter, Logger, Option, type LogLevel } from "effect"
+import { Clock, Effect, FileSystem, Formatter, Logger, Option, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
 import { runID } from "./shared"
 
 const maxSize = 20 * 1024 * 1024
+const inactiveTime = 5 * 60 * 1000
 
 function formatter(id: string = runID) {
   return Logger.map(Logger.formatStructured, (output) => {
@@ -48,7 +49,14 @@ export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const info = yield* fs.stat(file).pipe(Effect.option)
-    if (Option.match(info, { onNone: () => false, onSome: (value) => Number(value.size) > maxSize })) {
+    const now = yield* Clock.currentTimeMillis
+    const stale = Option.exists(
+      info,
+      (value) =>
+        value.size > FileSystem.Size(maxSize) &&
+        Option.exists(value.mtime, (modified) => now - modified.getTime() > inactiveTime),
+    )
+    if (stale) {
       yield* fs.truncate(file)
     }
     return yield* Logger.toFile(formatter(id), file, { flag: "a", batchWindow: 0 })
