@@ -368,19 +368,6 @@ export function createPromptState(input: PromptInput): PromptState {
       const next = extractLineRange(value)
       const list = await input.findFiles(next.base)
       return list
-        .sort((a, b) => {
-          const dir = Number(b.endsWith("/")) - Number(a.endsWith("/"))
-          if (dir !== 0) {
-            return dir
-          }
-
-          const depth = a.split("/").length - b.split("/").length
-          if (depth !== 0) {
-            return depth
-          }
-
-          return a.localeCompare(b)
-        })
         .map((item): Auto => {
           const url = pathToFileURL(path.resolve(input.directory, item))
           let filename = item
@@ -472,8 +459,21 @@ export function createPromptState(input: PromptInput): PromptState {
       return mixed
     }
 
+    const next = removeLineRange(query())
+    if (mode() === "mention") {
+      return [
+        ...fuzzysort
+          .go(next, agents(), { keys: ["value", "display", "description"] })
+          .map((item) => item.obj),
+        ...files(),
+        ...fuzzysort
+          .go(next, resources(), { keys: ["value", "display", "description"] })
+          .map((item) => item.obj),
+      ]
+    }
+
     return fuzzysort
-      .go(removeLineRange(query()), mixed, {
+      .go(next, mixed, {
         keys: [(item) => (item.kind === "mention" ? item.value : item.name).trimEnd(), "display", "description"],
       })
       .map((item) => item.obj)

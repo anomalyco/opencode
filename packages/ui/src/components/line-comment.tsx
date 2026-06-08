@@ -240,6 +240,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     },
     key: (item) => item.path,
     filterKeys: ["path"],
+    skipFilter: () => true,
     onSelect: selectMention,
   })
 
