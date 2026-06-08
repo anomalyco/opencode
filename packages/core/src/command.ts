@@ -27,6 +27,7 @@ export type Editor = {
 
 export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
+  readonly update: State.Interface<Data, Editor>["update"]
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
 }
@@ -54,6 +55,7 @@ export const layer = Layer.effect(
     })
 
     return Service.of({
+      update: state.update,
       transform: state.transform,
       get: Effect.fn("CommandV2.get")(function* (name) {
         return state.get().commands.get(name)

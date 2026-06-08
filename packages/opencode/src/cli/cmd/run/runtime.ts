@@ -77,9 +77,19 @@ type RunLocalInput = {
   demo?: RunInput["demo"]
 }
 
+type StreamTransportModule = Pick<
+  Awaited<typeof import("./stream.transport")>,
+  "createSessionTransport" | "formatUnknownError"
+>
+
+export type RunRuntimeDeps = {
+  createRuntimeLifecycle?: typeof createRuntimeLifecycle
+  streamTransport?: Promise<StreamTransportModule>
+}
+
 type StreamState = {
-  mod: Awaited<typeof import("./stream.transport")>
-  handle: Awaited<ReturnType<Awaited<typeof import("./stream.transport")>["createSessionTransport"]>>
+  mod: StreamTransportModule
+  handle: Awaited<ReturnType<StreamTransportModule["createSessionTransport"]>>
 }
 
 type ResolvedSession = {
@@ -143,7 +153,7 @@ function variantsFor(providers: RunProvider[], model: RunInput["model"]) {
   return Object.keys(providers.find((item) => item.id === model.providerID)?.models?.[model.modelID]?.variants ?? {})
 }
 
-const REPLAY_RESIZE_DELAY = 250
+const RESIZE_DELAY = 250
 const LOCAL_REPLAY_ROW_LIMIT = 100
 
 async function resolveExitTitle(
@@ -169,7 +179,7 @@ async function resolveExitTitle(
 //
 // Files only attach on the first prompt turn -- after that, includeFiles
 // flips to false so subsequent turns don't re-send attachments.
-async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
+async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDeps = {}): Promise<void> {
   return withRunSpan(
     "RunInteractive.session",
     {
@@ -237,7 +247,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         return state.session
       }
 
-      const shell = await createRuntimeLifecycle({
+      const shell = await (deps.createRuntimeLifecycle ?? createRuntimeLifecycle)({
         directory: ctx.directory,
         findFiles: (query) =>
           ctx.sdk.find
@@ -479,7 +489,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         })
       })
 
-      const streamTask = import("./stream.transport")
+      const streamTask = deps.streamTransport ?? import("./stream.transport")
       const ensureStream = () => {
         if (state.stream) {
           return state.stream
@@ -506,6 +516,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
             replay: input.replay,
             replayLimit: input.replayLimit,
             limits: () => state.limits,
+            providers: () => state.providers,
             footer,
             trace: log,
           })
@@ -526,35 +537,38 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         return next
       }
 
-      let replayResizeTimer: ReturnType<typeof setTimeout> | undefined
-      const offResize = input.replay
-        ? shell.onResize(() => {
-            if (replayResizeTimer) {
-              clearTimeout(replayResizeTimer)
-            }
+      let resizeTimer: ReturnType<typeof setTimeout> | undefined
+      const offResize = shell.onResize(() => {
+        if (resizeTimer) {
+          clearTimeout(resizeTimer)
+        }
 
-            replayResizeTimer = setTimeout(() => {
-              replayResizeTimer = undefined
-              if (footer.isClosed || !state.stream) {
-                return
-              }
+        resizeTimer = setTimeout(() => {
+          resizeTimer = undefined
+          if (footer.isClosed) {
+            return
+          }
 
-              void state.stream
-                .then((item) =>
-                  item.handle.replayOnResize({
-                    localRows: () => state.localRows,
-                    reset: () =>
-                      shell.resetForReplay({
-                        sessionTitle: state.sessionTitle,
-                        sessionID: state.sessionID,
-                        history: state.history,
-                      }),
+          shell.refreshTheme()
+          if (!input.replay || !state.stream) {
+            return
+          }
+
+          void state.stream
+            .then((item) =>
+              item.handle.replayOnResize({
+                localRows: () => state.localRows,
+                reset: () =>
+                  shell.resetForReplay({
+                    sessionTitle: state.sessionTitle,
+                    sessionID: state.sessionID,
+                    history: state.history,
                   }),
-                )
-                .catch(() => {})
-            }, REPLAY_RESIZE_DELAY)
-          })
-        : () => {}
+              }),
+            )
+            .catch(() => {})
+        }, RESIZE_DELAY)
+      })
 
       const runQueue = async () => {
         let includeFiles = true
@@ -743,6 +757,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
       try {
         const eager = eagerStream(input, ctx)
         if (eager) {
+          if (input.replay && state.shown) {
+            // Replay commits immutable scrollback rows, so wait for provider names
+            // before bootstrapping existing session history.
+            await modelTask
+          }
+
           await ensureStream()
         }
 
@@ -759,8 +779,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         try {
           await runQueue()
         } finally {
-          if (replayResizeTimer) {
-            clearTimeout(replayResizeTimer)
+          if (resizeTimer) {
+            clearTimeout(resizeTimer)
           }
           offResize()
           await state.stream?.then((item) => item.handle.close()).catch(() => {})
@@ -843,7 +863,10 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
 }
 
 // Attach mode. Uses the caller-provided SDK client directly.
-export async function runInteractiveMode(input: RunInput & { createSession?: CreateSession }): Promise<void> {
+export async function runInteractiveMode(
+  input: RunInput & { createSession?: CreateSession },
+  deps?: RunRuntimeDeps,
+): Promise<void> {
   return withRunSpan(
     "RunInteractive.attachMode",
     {
@@ -852,25 +875,28 @@ export async function runInteractiveMode(input: RunInput & { createSession?: Cre
       "session.id": input.sessionID,
     },
     async () =>
-      runInteractiveRuntime({
-        files: input.files,
-        initialInput: input.initialInput,
-        thinking: input.thinking,
-        backgroundSubagents: input.backgroundSubagents,
-        replay: input.replay,
-        replayLimit: input.replayLimit,
-        demo: input.demo,
-        boot: async () => ({
-          sdk: input.sdk,
-          directory: input.directory,
-          sessionID: input.sessionID,
-          sessionTitle: input.sessionTitle,
-          resume: input.resume,
-          agent: input.agent,
-          model: input.model,
-          variant: input.variant,
-        }),
-        createSession: createSessionResolver(input.createSession),
-      }),
+      runInteractiveRuntime(
+        {
+          files: input.files,
+          initialInput: input.initialInput,
+          thinking: input.thinking,
+          backgroundSubagents: input.backgroundSubagents,
+          replay: input.replay,
+          replayLimit: input.replayLimit,
+          demo: input.demo,
+          boot: async () => ({
+            sdk: input.sdk,
+            directory: input.directory,
+            sessionID: input.sessionID,
+            sessionTitle: input.sessionTitle,
+            resume: input.resume,
+            agent: input.agent,
+            model: input.model,
+            variant: input.variant,
+          }),
+          createSession: createSessionResolver(input.createSession),
+        },
+        deps,
+      ),
   )
 }
