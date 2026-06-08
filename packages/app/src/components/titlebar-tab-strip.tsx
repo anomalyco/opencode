@@ -24,7 +24,6 @@ import {
   insertIndexFromVirtualLayout,
   movePlaceholder,
   pointerDistance,
-  STALE_POINTER_MS,
   syncLayoutScroll,
   type TabDragLayout,
 } from "@/components/titlebar-tab-drag"
@@ -74,7 +73,6 @@ export function TitlebarTabStrip(props: {
   let dragLayout: TabDragLayout | undefined
   let dragPointerId: number | undefined
   let autoscrollFrame: number | undefined
-  let lastPointerMoveAt = 0
 
   const tabIds = () => props.tabs.map(tabKey)
 
@@ -107,11 +105,10 @@ export function TitlebarTabStrip(props: {
   function tickAutoscroll() {
     if (!drag.active || !scrollRef) return
 
-    const stale = performance.now() - lastPointerMoveAt > STALE_POINTER_MS
     const strip = scrollRef.getBoundingClientRect()
     const speed = autoscrollSpeed(drag.pointerX, strip.left, strip.right)
 
-    if (speed !== 0 && !stale) {
+    if (speed !== 0) {
       scrollRef.scrollLeft += speed
       syncScroll()
     }
@@ -172,7 +169,6 @@ export function TitlebarTabStrip(props: {
     })
     setPressedId(undefined)
     setStripScrollLeft(scrollRef.scrollLeft)
-    lastPointerMoveAt = performance.now()
     startAutoscroll()
   }
 
@@ -241,7 +237,6 @@ export function TitlebarTabStrip(props: {
     if (!drag.active) return
     if (dragPointerId !== undefined && event.pointerId !== dragPointerId) return
 
-    lastPointerMoveAt = performance.now()
     setDrag("pointerX", event.clientX)
     syncScroll()
   }

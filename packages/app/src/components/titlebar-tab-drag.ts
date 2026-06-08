@@ -9,7 +9,6 @@ export const HYSTERESIS_DEADBAND = 8
 export const AUTOSCROLL_EDGE = 24
 export const AUTOSCROLL_MAX_SPEED = 8
 export const FLOATER_OVERSHOOT_MAX = 8
-export const STALE_POINTER_MS = 100
 
 export function pointerDistance(x1: number, y1: number, x2: number, y2: number) {
   const dx = x2 - x1
