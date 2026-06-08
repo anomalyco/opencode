@@ -59,11 +59,15 @@ function getOrCreateClientState(name?: string): MockClientState {
 }
 
 // Mock transport that succeeds or fails based on connectShouldFail / connectShouldHang
+let lastTransportOpts: any = undefined
+
 class MockStdioTransport {
   stderr: null = null
   pid = 12345
   // oxlint-disable-next-line no-useless-constructor
-  constructor(_opts: any) {}
+  constructor(opts: any) {
+    lastTransportOpts = opts
+  }
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
     if (connectShouldFail) throw new Error(connectError)
@@ -188,6 +192,7 @@ beforeEach(() => {
   connectError = "Mock transport cannot connect"
   clientCreateCount = 0
   transportCloseCount = 0
+  lastTransportOpts = undefined
 })
 
 // Import after mocks
@@ -1078,4 +1083,37 @@ it.instance(
       },
     },
   },
+)
+
+// ========================================================================
+// Test: 'env' field propagates to child process (#30892)
+// ========================================================================
+
+it.instance(
+  "env field in local MCP config is passed to spawned process",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "env-server"
+        const serverState = getOrCreateClientState("env-server")
+        serverState.tools = [
+          { name: "test_tool", description: "A test tool", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        yield* mcp.add("env-server", {
+          type: "local",
+          command: ["npx", "-y", "mcp-searxng"],
+          env: {
+            SEARXNG_URL: "http://localhost:47820",
+            API_KEY: "secret123",
+          },
+        } as any)
+
+        expect((yield* mcp.status())["env-server"]?.status).toBe("connected")
+        expect(lastTransportOpts).toBeDefined()
+        expect(lastTransportOpts.env.SEARXNG_URL).toBe("http://localhost:47820")
+        expect(lastTransportOpts.env.API_KEY).toBe("secret123")
+      }),
+    ),
+  { config: { mcp: {} } },
 )

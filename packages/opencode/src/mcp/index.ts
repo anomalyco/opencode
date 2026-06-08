@@ -435,6 +435,7 @@ export const layer = Layer.effect(
           ...process.env,
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
+          ...mcp.env,
         },
       })
       transport.stderr?.on("data", (chunk: Buffer) => {
