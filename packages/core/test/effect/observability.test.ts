@@ -4,7 +4,7 @@ import { Effect, Layer, Logger } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { fileLogger, resource } from "@opencode-ai/core/effect/observability"
+import { fileLogger, resource } from "@opencode-ai/core/observability"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
 const opencodeClient = process.env.OPENCODE_CLIENT
@@ -63,17 +63,13 @@ test("file logger appends concurrent runs with a run_id on every line", async ()
       Array.from({ length: 50 }, (_, index) => index),
       (index) => Effect.logInfo(`entry-${index}`),
     ).pipe(
-      Effect.provide(
-        Logger.layer([fileLogger(file, runID)]).pipe(Layer.provide(NodeFileSystem.layer), Layer.orDie),
-      ),
+      Effect.provide(Logger.layer([fileLogger(file, runID)]).pipe(Layer.provide(NodeFileSystem.layer), Layer.orDie)),
       Effect.scoped,
     )
 
   await Effect.runPromise(Effect.all([write("run-a"), write("run-b")], { concurrency: "unbounded" }))
 
-  const lines = (await Bun.file(file).text())
-    .trim()
-    .split("\n")
+  const lines = (await Bun.file(file).text()).trim().split("\n")
   expect(lines).toHaveLength(100)
   expect(lines.filter((line) => line.includes("run_id=run-a"))).toHaveLength(50)
   expect(lines.filter((line) => line.includes("run_id=run-b"))).toHaveLength(50)
