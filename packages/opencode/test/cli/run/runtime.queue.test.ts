@@ -206,6 +206,22 @@ describe("run runtime queue", () => {
     await task
   })
 
+  test("shell mode does not emit a turn duration summary", async () => {
+    const ui = footer()
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async () => {
+        ui.api.close()
+      },
+    })
+
+    ui.submit("ls", "shell")
+    await task
+
+    expect(ui.events.some((event) => event.type === "turn.duration")).toBe(false)
+  })
+
   test("preserves whitespace for initial input", async () => {
     const ui = footer()
     const seen: string[] = []
