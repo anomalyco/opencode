@@ -85,7 +85,15 @@ export class Handler {
     // In review mode the overlay already sends edits to the client, so skip the
     // proposed-edit message to avoid showing the same change twice.
     if (permission.permission === "edit" && !isActive()) {
-      await this.writeProposedEdit(session.id, permission.metadata).catch(() => {})
+      await this.writeProposedEdit(session.id, permission.metadata).catch((error: unknown) =>
+        Effect.runPromise(
+          Effect.logError("failed to write proposed edit through ACP", {
+            error,
+            permissionID: permission.id,
+            sessionID: permission.sessionID,
+          }),
+        ),
+      )
     }
 
     await this.reply(permission.id, reply, session.cwd)

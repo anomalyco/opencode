@@ -25,7 +25,7 @@ export const AcpCommand = effectCmd({
     // Opt this ACP session into review mode. It still only activates if the
     // client reports the writeTextFile capability during initialize.
     forceEnableForAcp()
-    log.info("ACP review-at-end enabled")
+    yield* Effect.logInfo("ACP review-at-end enabled")
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)))
 

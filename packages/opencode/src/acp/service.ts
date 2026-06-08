@@ -115,7 +115,7 @@ export function make(input: {
     setClientWriteTextFileSupported(params.clientCapabilities?.fs?.writeTextFile === true)
     syncEnabled()
     if (ReviewOverlay.isEnabled()) {
-      log.info("ACP review-at-end active")
+      yield* Effect.logInfo("ACP review-at-end active")
     }
 
     const response = {
