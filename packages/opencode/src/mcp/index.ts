@@ -472,7 +472,7 @@ export const layer = Layer.effect(
         return { status } satisfies CreateResult
       }
 
-      const listed = yield* defs(key, mcpClient, mcp.timeout)
+      const listed = mcpClient.getServerCapabilities()?.tools ? yield* defs(key, mcpClient, mcp.timeout) : []
       if (!listed) {
         yield* Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore)
         return { status: { status: "failed", error: "Failed to get tools" } } satisfies CreateResult
@@ -508,6 +508,7 @@ export const layer = Layer.effect(
     )
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+      if (!client.getServerCapabilities()?.tools) return
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
         log.info("tools list changed notification received", { server: name })
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
@@ -718,12 +719,21 @@ export const layer = Layer.effect(
 
     const prompts = Effect.fn("MCP.prompts")(function* () {
       const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(s, (c) => c.listPrompts().then((r) => r.prompts), "prompts")
+      return yield* collectFromConnected(
+        s,
+        (c) => (c.getServerCapabilities()?.prompts ? c.listPrompts().then((r) => r.prompts) : Promise.resolve([])),
+        "prompts",
+      )
     })
 
     const resources = Effect.fn("MCP.resources")(function* () {
       const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(s, (c) => c.listResources().then((r) => r.resources), "resources")
+      return yield* collectFromConnected(
+        s,
+        (c) =>
+          c.getServerCapabilities()?.resources ? c.listResources().then((r) => r.resources) : Promise.resolve([]),
+        "resources",
+      )
     })
 
     const withClient = Effect.fnUntraced(function* <A>(

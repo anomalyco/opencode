@@ -91,6 +91,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
     setNotificationHandler() {}
 
+    getServerCapabilities() {
+      return { tools: {} }
+    }
+
     async listTools() {
       return { tools: [{ name: "test_tool", inputSchema: { type: "object", properties: {} } }] }
     }
