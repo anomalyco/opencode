@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
 const directory = "C:/OpenCode/ContextResizeRegression"
 const projectID = "proj_context_resize_regression"
@@ -23,9 +24,9 @@ test.describe("regression: session timeline context group resize", () => {
     await configurePage(page)
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-    await expect(page.getByRole("heading", { name: title })).toBeVisible()
-    await expect(page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first()).toBeVisible()
-    await expect(page.locator(`[data-timeline-part-id="${followingTextID}"]`).first()).toBeVisible()
+    await expectSessionTitle(page, title)
+    await expectAppVisible(page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first())
+    await expectAppVisible(page.locator(`[data-timeline-part-id="${followingTextID}"]`).first())
     await settle(page)
 
     const samples = await sampleExpansion(page)

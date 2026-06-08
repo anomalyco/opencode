@@ -3,6 +3,8 @@ import { createStore, reconcile, type SetStoreFunction, type Store } from "solid
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams } from "@solidjs/router"
 import { Persist, persisted } from "@/utils/persist"
+import { useServerSDK } from "./server-sdk"
+import type { ServerScope } from "@/utils/server-scope"
 import { createScopedCache } from "@/utils/scoped-cache"
 import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
@@ -166,11 +168,11 @@ export function createCommentSessionForTest(comments: Record<string, LineComment
   return createCommentSessionState(store, setStore)
 }
 
-function createCommentSession(dir: string, id: string | undefined) {
+function createCommentSession(scope: ServerScope, dir: string, id: string | undefined) {
   const legacy = `${dir}/comments${id ? "/" + id : ""}.v1`
 
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "comments", [legacy]),
+    Persist.serverScoped(scope, dir, id, "comments", [legacy]),
     createStore<CommentStore>({
       comments: {},
     }),
@@ -200,11 +202,16 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const params = useParams()
+    const serverSDK = useServerSDK()
     const cache = createScopedCache(
       (key) => {
         const decoded = decodeSessionKey(key)
         return createRoot((dispose) => ({
-          value: createCommentSession(decoded.dir, decoded.id === WORKSPACE_KEY ? undefined : decoded.id),
+          value: createCommentSession(
+            serverSDK.scope,
+            decoded.dir,
+            decoded.id === WORKSPACE_KEY ? undefined : decoded.id,
+          ),
           dispose,
         }))
       },

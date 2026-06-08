@@ -7,8 +7,8 @@ import { ServerAuth } from "../../src/server/auth"
 import {
   Authorization,
   authorizationLayer,
-  V2Authorization,
-  v2AuthorizationLayer,
+  ServerAuthorization,
+  serverAuthorizationLayer,
 } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { testEffect } from "../lib/effect"
 
@@ -26,14 +26,14 @@ const Api = HttpApi.make("test-authorization").add(
     .middleware(Authorization),
 )
 
-const V2Api = HttpApi.make("test-v2-authorization").add(
+const ServerApi = HttpApi.make("test-server-authorization").add(
   HttpApiGroup.make("test.v2")
     .add(
       HttpApiEndpoint.get("probe", "/api/probe", {
         success: Schema.String,
       }),
     )
-    .middleware(V2Authorization),
+    .middleware(ServerAuthorization),
 )
 
 const handlers = HttpApiBuilder.group(Api, "test", (handlers) =>
@@ -42,7 +42,7 @@ const handlers = HttpApiBuilder.group(Api, "test", (handlers) =>
     .handle("missing", () => Effect.fail(new HttpApiError.NotFound({}))),
 )
 
-const v2Handlers = HttpApiBuilder.group(V2Api, "test.v2", (handlers) =>
+const serverHandlers = HttpApiBuilder.group(ServerApi, "test.v2", (handlers) =>
   handlers.handle("probe", () => Effect.succeed("ok")),
 )
 
@@ -52,7 +52,7 @@ const apiLayer = HttpRouter.serve(
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
 const v2ApiLayer = HttpRouter.serve(
-  HttpApiBuilder.layer(V2Api).pipe(Layer.provide(v2Handlers), Layer.provide(v2AuthorizationLayer)),
+  HttpApiBuilder.layer(ServerApi).pipe(Layer.provide(serverHandlers), Layer.provide(serverAuthorizationLayer)),
   { disableListenLog: true, disableLogger: true },
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
