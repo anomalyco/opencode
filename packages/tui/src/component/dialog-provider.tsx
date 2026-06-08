@@ -145,6 +145,33 @@ export function createDialogProviderOptions() {
           async onSelect() {
             if (consoleManaged) return
 
+            if (connected && onboarded()) {
+              const choice = await new Promise<"reconnect" | "disconnect" | null>((resolve) => {
+                dialog.replace(
+                  () => (
+                    <DialogSelect
+                      title={provider.title}
+                      options={[
+                        { title: "Connect with different credentials", value: "reconnect" },
+                        { title: "Disconnect", value: "disconnect" },
+                      ]}
+                      onSelect={(opt) => resolve(opt.value)}
+                    />
+                  ),
+                  () => resolve(null),
+                )
+              })
+              if (choice === null) return
+              if (choice === "disconnect") {
+                await sdk.client.auth.remove({ providerID })
+                await sdk.client.instance.dispose()
+                await sync.bootstrap()
+                toast.show({ variant: "info", message: `Disconnected from ${provider.title}` })
+                dialog.replace(() => <DialogProvider />)
+                return
+              }
+            }
+
             const methods = sync.data.provider_auth[providerID] ?? [
               {
                 type: "api",
