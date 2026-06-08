@@ -347,10 +347,13 @@ export function Session() {
     const title = Locale.truncate(session()?.title ?? "", 50)
     const pad = (text: string) => text.padEnd(10, " ")
     const weak = (text: string) => UI.Style.TEXT_DIM + pad(text) + UI.Style.TEXT_NORMAL
-    const lines = UI.logo("  ").split(/\r?\n/)
+    const logo = UI.logo("  ").split(/\r?\n/)
     return exit.message.set(
       [
-        ...lines,
+        `${logo[0] ?? ""}`,
+        `${logo[1] ?? ""}`,
+        `${logo[2] ?? ""}`,
+        `${logo[3] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
         `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
@@ -1253,7 +1256,10 @@ export function Session() {
                   <PermissionPrompt request={permissions()[0]} />
                 </Show>
                 <Show when={permissions().length === 0 && questions().length > 0}>
-                  <QuestionPrompt request={questions()[0]} />
+                  <QuestionPrompt
+                    request={questions()[0]}
+                    directory={sync.session.get(questions()[0].sessionID)?.directory}
+                  />
                 </Show>
                 <Show when={session()?.parentID}>
                   <SubagentFooter />
@@ -2197,9 +2203,13 @@ function Task(props: ToolProps<typeof TaskTool>) {
   )
 
   const status = createMemo(() => sync.data.session_status[props.metadata.sessionId ?? ""])
-  const isRunning = createMemo(
-    () => props.part.state.status === "running" || (props.metadata.background === true && status() !== undefined),
-  )
+  const isRunning = createMemo(() => {
+    const value = status()
+    return (
+      props.part.state.status === "running" ||
+      (props.metadata.background === true && value !== undefined && value.type !== "idle")
+    )
+  })
   const retry = createMemo(() => {
     const value = status()
     if (value?.type !== "retry") return

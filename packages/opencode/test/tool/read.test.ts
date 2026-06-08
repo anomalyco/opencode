@@ -1,4 +1,4 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
@@ -141,12 +141,12 @@ const load = Effect.fn("ReadToolTest.load")(function* (p: string) {
   return yield* fs.readFileString(p)
 })
 const asks = () => {
-  const items: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+  const items: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
   return {
     items,
     next: {
       ...ctx,
-      ask: (req: Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">) =>
+      ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
         }),
@@ -329,7 +329,7 @@ describe("tool.read env file permissions", () => {
                 let asked = false
                 const next = {
                   ...ctx,
-                  ask: (req: Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">) =>
+                  ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
                     Effect.sync(() => {
                       for (const pattern of req.patterns) {
                         const rule = Permission.evaluate(req.permission, pattern, info.permission)
@@ -337,7 +337,7 @@ describe("tool.read env file permissions", () => {
                           asked = true
                         }
                         if (rule.action === "deny") {
-                          throw new PermissionLegacy.DeniedError({ ruleset: info.permission })
+                          throw new PermissionV1.DeniedError({ ruleset: info.permission })
                         }
                       }
                     }),
@@ -428,6 +428,15 @@ describe("tool.read truncation", () => {
       const result = yield* run({ filePath: path.join(test.directory, "small.txt") })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file")
+      expect(result.metadata.display).toMatchObject({
+        type: "file",
+        path: path.join(test.directory, "small.txt"),
+        text: "hello world",
+        lineStart: 1,
+        lineEnd: 1,
+        totalLines: 1,
+        truncated: false,
+      })
     }),
   )
 
@@ -495,6 +504,14 @@ describe("tool.read truncation", () => {
       const result = yield* exec(dir, { filePath: path.join(dir, "dir"), offset: 6, limit: 5 })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).not.toContain("Showing 5 of 10 entries")
+      expect(result.metadata.display).toMatchObject({
+        type: "directory",
+        path: path.join(dir, "dir"),
+        entries: ["file-5.txt", "file-6.txt", "file-7.txt", "file-8.txt", "file-9.txt"],
+        offset: 6,
+        totalEntries: 10,
+        truncated: false,
+      })
     }),
   )
 

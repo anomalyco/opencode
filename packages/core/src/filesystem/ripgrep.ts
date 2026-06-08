@@ -135,6 +135,7 @@ export interface TreeInput {
 }
 
 export interface Interface {
+  readonly filepath: Effect.Effect<string, Error>
   readonly files: (input: FilesInput) => Stream.Stream<string, PlatformError | Error>
   readonly tree: (input: TreeInput) => Effect.Effect<string, PlatformError | Error>
   readonly search: (input: SearchInput) => Effect.Effect<SearchResult, PlatformError | Error>
@@ -471,7 +472,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | ChildProcessSpa
         return lines.join("\n")
       })
 
-      return Service.of({ files, tree, search })
+      return Service.of({ filepath, files, tree, search })
     }),
   )
 

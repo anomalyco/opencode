@@ -9,7 +9,7 @@ import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "../../src/permission"
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
 import { Skill } from "../../src/skill"
@@ -28,7 +28,7 @@ const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const it = testEffect(agentLayer())
 
 // Helper to evaluate permission for a tool with wildcard pattern
-function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionLegacy.Action | undefined {
+function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionV1.Action | undefined {
   if (!agent) return undefined
   return Permission.evaluate(permission, "*", agent.permission).action
 }

@@ -17,7 +17,6 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { Filesystem } from "@/util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
@@ -32,14 +31,9 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
-import path from "path"
-import { Global } from "@opencode-ai/core/global"
-import { JsonMigration } from "@/storage/json-migration"
-import { Database } from "@opencode-ai/core/database/database"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
-import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { isRecord } from "@/util/record"
 import {
@@ -68,6 +62,7 @@ import {
 import { randomUUID } from "crypto"
 import { platform, arch, release } from "os"
 import { existsSync, readdirSync, readFileSync } from "fs"
+import path from "path"
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -654,11 +649,11 @@ export async function main(argv?: string[]) {
         })(),
       })
 
+      Heap.start()
+
       process.env.AGENT = "1"
       process.env.OPENCODE = "1"
       process.env.OPENCODE_PID = String(process.pid)
-
-      Heap.start()
 
       Log.Default.info("opencode", {
         version: InstallationVersion,
@@ -666,45 +661,6 @@ export async function main(argv?: string[]) {
         process_role: processMetadata.processRole,
         run_id: processMetadata.runID,
       })
-
-      const marker = Database.path()
-      if (!(await Filesystem.exists(marker))) {
-        const tty = process.stderr.isTTY
-        process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
-        const width = 36
-        const orange = "\x1b[38;5;214m"
-        const muted = "\x1b[0;2m"
-        const reset = "\x1b[0m"
-        let last = -1
-        if (tty) process.stderr.write("\x1b[?25l")
-        const sqlite = new (await import("bun:sqlite")).Database(marker)
-        try {
-          await JsonMigration.run(drizzle({ client: sqlite }), {
-            progress: (event) => {
-              const percent = Math.floor((event.current / event.total) * 100)
-              if (percent === last && event.current !== event.total) return
-              last = percent
-              if (tty) {
-                const fill = Math.round((percent / 100) * width)
-                const bar = `${"■".repeat(fill)}${"･".repeat(width - fill)}`
-                process.stderr.write(
-                  `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.label.padEnd(12)} ${event.current}/${event.total}${reset}`,
-                )
-                if (event.current === event.total) process.stderr.write("\n")
-              } else {
-                process.stderr.write(`sqlite-migration:${percent}${EOL}`)
-              }
-            },
-          })
-        } finally {
-          sqlite.close()
-          if (tty) process.stderr.write("\x1b[?25h")
-          else {
-            process.stderr.write(`sqlite-migration:done${EOL}`)
-          }
-        }
-        process.stderr.write("Database migration complete." + EOL)
-      }
     })
     .usage("")
     .completion("completion", "generate shell completion script")
@@ -715,6 +671,8 @@ export async function main(argv?: string[]) {
     .command(RunCommand)
     .command(GenerateCommand)
     .command(DebugCommand)
+    .command(ConsoleCommand)
+    .command(ProvidersCommand)
     .command(AgentCommand)
     .command(UpgradeCommand)
     .command(UninstallCommand)
@@ -727,12 +685,8 @@ export async function main(argv?: string[]) {
     .command(GithubCommand)
     .command(PrCommand)
     .command(SessionCommand)
-    .command(ConsoleCommand)
-    .command(ProvidersCommand)
     .command(PluginCommand)
     .command(DbCommand)
-
-  cli = cli
     .fail((msg, err) => {
       if (
         msg?.startsWith("Unknown argument") ||
@@ -759,6 +713,15 @@ export async function main(argv?: string[]) {
     }
   } catch (e) {
     let data: Record<string, any> = {}
+    if (e instanceof Error) {
+      Object.assign(data, {
+        name: e.name,
+        message: e.message,
+        cause: e.cause?.toString(),
+        stack: e.stack,
+      })
+    }
+
     if (e instanceof NamedError) {
       const obj = e.toObject()
       if (isRecord(obj.data)) {
@@ -767,15 +730,6 @@ export async function main(argv?: string[]) {
           data[key] = value
         }
       }
-    }
-
-    if (e instanceof Error) {
-      Object.assign(data, {
-        name: e.name,
-        message: e.message,
-        cause: e.cause?.toString(),
-        stack: e.stack,
-      })
     }
 
     if (e instanceof ResolveMessage) {
