@@ -30,7 +30,6 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
-
 type State = {
   hooks: Hooks[]
 }
@@ -163,8 +162,7 @@ export const layer = Layer.effect(
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
-            catch: (err) => {
-            },
+            catch: (err) => {},
           }).pipe(Effect.option)
           if (init._tag === "Some") hooks.push(init.value)
         }
@@ -179,10 +177,8 @@ export const layer = Layer.effect(
             items: plugins,
             kind: "server",
             report: {
-              start(candidate) {
-              },
-              missing(candidate, _retry, message) {
-              },
+              start(candidate) {},
+              missing(candidate, _retry, message) {},
               error(candidate, _retry, stage, error, resolved) {
                 const spec = candidate.plan.spec
                 const cause = error instanceof Error ? (error.cause ?? error) : error
@@ -260,8 +256,7 @@ export const layer = Layer.effect(
             (hook) =>
               Effect.tryPromise({
                 try: () => Promise.resolve(hook.dispose?.()),
-                catch: (error) => {
-                },
+                catch: (error) => {},
               }).pipe(Effect.ignore),
             { discard: true },
           ),

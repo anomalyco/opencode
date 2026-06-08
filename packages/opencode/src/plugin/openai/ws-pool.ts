@@ -5,7 +5,6 @@ import { OpenAIWebSocket } from "./ws"
 
 export const TITLE_HEADER = "x-opencode-title"
 
-
 export interface CreateWebSocketFetchOptions {
   httpFetch?: typeof globalThis.fetch
   url?: string

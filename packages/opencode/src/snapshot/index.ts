@@ -564,8 +564,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                     yield* Effect.logInfo(
                       "git cat-file --batch failed during snapshot diff, falling back to per-file git show",
                       {
-                      stderr: batch.stderr.toString("utf8"),
-                      refs: refs.length,
+                        stderr: batch.stderr.toString("utf8"),
+                        refs: refs.length,
                       },
                     )
                     return

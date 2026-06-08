@@ -174,233 +174,233 @@ function queueSplash(
 // scrollback commits and footer repaints happen in the same frame. After
 // the entry splash, RunFooter takes over the footer region.
 export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lifecycle> {
-      const source = resolveInteractiveStdin()
-      let unregisterKeymap: (() => void) | undefined
+  const source = resolveInteractiveStdin()
+  let unregisterKeymap: (() => void) | undefined
+
+  try {
+    const renderer = await createCliRenderer({
+      stdin: source.stdin,
+      targetFps: 30,
+      maxFps: 60,
+      useMouse: false,
+      autoFocus: false,
+      openConsoleOnError: false,
+      exitOnCtrlC: false,
+      useKittyKeyboard: { events: process.platform === "win32" },
+      screenMode: "split-footer",
+      footerHeight: FOOTER_HEIGHT,
+      externalOutputMode: "capture-stdout",
+      consoleMode: "disabled",
+      clearOnShutdown: false,
+    })
+    const theme = await resolveRunTheme(renderer)
+    renderer.setBackgroundColor(theme.background)
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    unregisterKeymap = registerOpencodeKeymap(keymap, renderer, input.tuiConfig)
+    const state: SplashState = {
+      entry: false,
+      exit: false,
+    }
+    const splash = splashInfo(input.sessionTitle, input.history)
+    const meta = splashMeta({
+      title: splash.title,
+      session_id: input.sessionID,
+    })
+    const labels = footerLabels({
+      agent: input.agent,
+      model: input.model,
+      variant: input.variant,
+    })
+    const footerTask = import("./footer")
+    const wrote = queueSplash(
+      renderer,
+      state,
+      "entry",
+      entrySplash({
+        ...meta,
+        theme: theme.splash,
+        showSession: splash.showSession,
+        detail: directoryLabel(input.directory),
+      }),
+    )
+    await renderer.idle().catch(() => {})
+
+    const { RunFooter } = await footerTask
+    let closed = false
+    let sigintRegistered = false
+
+    const footer = new RunFooter(renderer, {
+      directory: input.directory,
+      findFiles: input.findFiles,
+      agents: input.agents,
+      resources: input.resources,
+      sessionID: input.getSessionID ?? (() => input.sessionID),
+      ...labels,
+      model: input.model,
+      variant: input.variant,
+      first: input.first,
+      history: input.history,
+      theme,
+      wrote,
+      keymap,
+      tuiConfig: input.tuiConfig,
+      backgroundSubagents: input.backgroundSubagents,
+      diffStyle: input.tuiConfig.diff_style ?? "auto",
+      onPermissionReply: input.onPermissionReply,
+      onQuestionReply: input.onQuestionReply,
+      onQuestionReject: input.onQuestionReject,
+      onCycleVariant: input.onCycleVariant,
+      onModelSelect: input.onModelSelect,
+      onVariantSelect: input.onVariantSelect,
+      onInterrupt: input.onInterrupt,
+      onBackground: input.onBackground,
+      onEditorOpen: async ({ value }) => {
+        if (closed || renderer.isDestroyed) {
+          return
+        }
+
+        await renderer.idle().catch(() => {})
+        const ignore = () => {}
+        detachSigint()
+        process.on("SIGINT", ignore)
+        try {
+          return await openEditor({
+            value,
+            cwd: input.directory,
+            renderer,
+            stdin: source.stdin,
+          })
+        } finally {
+          process.off("SIGINT", ignore)
+          attachSigint()
+        }
+      },
+      onSubagentSelect: input.onSubagentSelect,
+    })
+
+    const sigint = () => {
+      footer.requestExit()
+    }
+
+    const attachSigint = () => {
+      if (closed || sigintRegistered) {
+        return
+      }
+
+      process.on("SIGINT", sigint)
+      sigintRegistered = true
+    }
+
+    const detachSigint = () => {
+      if (!sigintRegistered) {
+        return
+      }
+
+      process.off("SIGINT", sigint)
+      sigintRegistered = false
+    }
+
+    attachSigint()
+
+    const close = async (next: {
+      showExit: boolean
+      sessionTitle?: string
+      sessionID?: string
+      history?: RunPrompt[]
+    }) => {
+      if (closed) {
+        return
+      }
+
+      closed = true
+      detachSigint()
+      let wroteExit = false
 
       try {
-        const renderer = await createCliRenderer({
-          stdin: source.stdin,
-          targetFps: 30,
-          maxFps: 60,
-          useMouse: false,
-          autoFocus: false,
-          openConsoleOnError: false,
-          exitOnCtrlC: false,
-          useKittyKeyboard: { events: process.platform === "win32" },
-          screenMode: "split-footer",
-          footerHeight: FOOTER_HEIGHT,
-          externalOutputMode: "capture-stdout",
-          consoleMode: "disabled",
-          clearOnShutdown: false,
-        })
-        const theme = await resolveRunTheme(renderer)
-        renderer.setBackgroundColor(theme.background)
-        const keymap = createDefaultOpenTuiKeymap(renderer)
-        unregisterKeymap = registerOpencodeKeymap(keymap, renderer, input.tuiConfig)
-        const state: SplashState = {
-          entry: false,
-          exit: false,
+        await footer.idle().catch(() => {})
+
+        const show = renderer.isDestroyed ? false : next.showExit
+        if (!renderer.isDestroyed && show) {
+          const sessionID = next.sessionID || input.getSessionID?.() || input.sessionID
+          const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history)
+          wroteExit = queueSplash(
+            renderer,
+            state,
+            "exit",
+            exitSplash({
+              ...splashMeta({
+                title: splash.title,
+                session_id: sessionID,
+              }),
+              theme: footer.currentTheme().splash,
+            }),
+          )
+          await renderer.idle().catch(() => {})
         }
-        const splash = splashInfo(input.sessionTitle, input.history)
-        const meta = splashMeta({
-          title: splash.title,
-          session_id: input.sessionID,
-        })
-        const labels = footerLabels({
-          agent: input.agent,
-          model: input.model,
-          variant: input.variant,
-        })
-        const footerTask = import("./footer")
-        const wrote = queueSplash(
-          renderer,
-          state,
-          "entry",
+      } finally {
+        footer.close()
+        await footer.idle().catch(() => {})
+        footer.destroy()
+        unregisterKeymap?.()
+        shutdown(renderer)
+        if (!wroteExit) {
+          process.stdout.write("\n")
+        }
+        source.cleanup?.()
+      }
+    }
+
+    return {
+      footer,
+      refreshTheme() {
+        footer.refreshTheme()
+      },
+      onResize(fn) {
+        let width = renderer.terminalWidth
+        let height = renderer.terminalHeight
+        const resize = () => {
+          if (width === renderer.terminalWidth && height === renderer.terminalHeight) {
+            return
+          }
+
+          width = renderer.terminalWidth
+          height = renderer.terminalHeight
+          fn()
+        }
+        renderer.on(CliRenderEvents.RESIZE, resize)
+        return () => renderer.off(CliRenderEvents.RESIZE, resize)
+      },
+      async resetForReplay(next) {
+        if (closed || renderer.isDestroyed || footer.isClosed) {
+          throw new Error("runtime closed")
+        }
+
+        await footer.idle()
+        if (closed || renderer.isDestroyed || footer.isClosed) {
+          throw new Error("runtime closed")
+        }
+
+        footer.resetForReplay(true)
+        renderer.resetSplitFooterForReplay({ clearSavedLines: true })
+        const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history)
+        renderer.writeToScrollback(
           entrySplash({
-            ...meta,
-            theme: theme.splash,
+            ...splashMeta({
+              title: splash.title,
+              session_id: next.sessionID ?? input.getSessionID?.() ?? input.sessionID,
+            }),
+            theme: footer.currentTheme().splash,
             showSession: splash.showSession,
             detail: directoryLabel(input.directory),
           }),
         )
-        await renderer.idle().catch(() => {})
-
-        const { RunFooter } = await footerTask
-        let closed = false
-        let sigintRegistered = false
-
-        const footer = new RunFooter(renderer, {
-          directory: input.directory,
-          findFiles: input.findFiles,
-          agents: input.agents,
-          resources: input.resources,
-          sessionID: input.getSessionID ?? (() => input.sessionID),
-          ...labels,
-          model: input.model,
-          variant: input.variant,
-          first: input.first,
-          history: input.history,
-          theme,
-          wrote,
-          keymap,
-          tuiConfig: input.tuiConfig,
-          backgroundSubagents: input.backgroundSubagents,
-          diffStyle: input.tuiConfig.diff_style ?? "auto",
-          onPermissionReply: input.onPermissionReply,
-          onQuestionReply: input.onQuestionReply,
-          onQuestionReject: input.onQuestionReject,
-          onCycleVariant: input.onCycleVariant,
-          onModelSelect: input.onModelSelect,
-          onVariantSelect: input.onVariantSelect,
-          onInterrupt: input.onInterrupt,
-          onBackground: input.onBackground,
-          onEditorOpen: async ({ value }) => {
-            if (closed || renderer.isDestroyed) {
-              return
-            }
-
-            await renderer.idle().catch(() => {})
-            const ignore = () => {}
-            detachSigint()
-            process.on("SIGINT", ignore)
-            try {
-              return await openEditor({
-                value,
-                cwd: input.directory,
-                renderer,
-                stdin: source.stdin,
-              })
-            } finally {
-              process.off("SIGINT", ignore)
-              attachSigint()
-            }
-          },
-          onSubagentSelect: input.onSubagentSelect,
-        })
-
-        const sigint = () => {
-          footer.requestExit()
-        }
-
-        const attachSigint = () => {
-          if (closed || sigintRegistered) {
-            return
-          }
-
-          process.on("SIGINT", sigint)
-          sigintRegistered = true
-        }
-
-        const detachSigint = () => {
-          if (!sigintRegistered) {
-            return
-          }
-
-          process.off("SIGINT", sigint)
-          sigintRegistered = false
-        }
-
-        attachSigint()
-
-        const close = async (next: {
-          showExit: boolean
-          sessionTitle?: string
-          sessionID?: string
-          history?: RunPrompt[]
-        }) => {
-          if (closed) {
-            return
-          }
-
-          closed = true
-              detachSigint()
-              let wroteExit = false
-
-              try {
-                await footer.idle().catch(() => {})
-
-                const show = renderer.isDestroyed ? false : next.showExit
-                if (!renderer.isDestroyed && show) {
-                  const sessionID = next.sessionID || input.getSessionID?.() || input.sessionID
-                  const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history)
-                  wroteExit = queueSplash(
-                    renderer,
-                    state,
-                    "exit",
-                    exitSplash({
-                      ...splashMeta({
-                        title: splash.title,
-                        session_id: sessionID,
-                      }),
-                      theme: footer.currentTheme().splash,
-                    }),
-                  )
-                  await renderer.idle().catch(() => {})
-                }
-              } finally {
-                footer.close()
-                await footer.idle().catch(() => {})
-                footer.destroy()
-                unregisterKeymap?.()
-                shutdown(renderer)
-                if (!wroteExit) {
-                  process.stdout.write("\n")
-                }
-                source.cleanup?.()
-              }
-        }
-
-        return {
-          footer,
-          refreshTheme() {
-            footer.refreshTheme()
-          },
-          onResize(fn) {
-            let width = renderer.terminalWidth
-            let height = renderer.terminalHeight
-            const resize = () => {
-              if (width === renderer.terminalWidth && height === renderer.terminalHeight) {
-                return
-              }
-
-              width = renderer.terminalWidth
-              height = renderer.terminalHeight
-              fn()
-            }
-            renderer.on(CliRenderEvents.RESIZE, resize)
-            return () => renderer.off(CliRenderEvents.RESIZE, resize)
-          },
-          async resetForReplay(next) {
-            if (closed || renderer.isDestroyed || footer.isClosed) {
-              throw new Error("runtime closed")
-            }
-
-            await footer.idle()
-            if (closed || renderer.isDestroyed || footer.isClosed) {
-              throw new Error("runtime closed")
-            }
-
-            footer.resetForReplay(true)
-            renderer.resetSplitFooterForReplay({ clearSavedLines: true })
-            const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, next.history)
-            renderer.writeToScrollback(
-              entrySplash({
-                ...splashMeta({
-                  title: splash.title,
-                  session_id: next.sessionID ?? input.getSessionID?.() ?? input.sessionID,
-                }),
-                theme: footer.currentTheme().splash,
-                showSession: splash.showSession,
-                detail: directoryLabel(input.directory),
-              }),
-            )
-            renderer.requestRender()
-          },
-          close,
-        }
-      } catch (error) {
-        unregisterKeymap?.()
-        source.cleanup?.()
-        throw error
-      }
+        renderer.requestRender()
+      },
+      close,
+    }
+  } catch (error) {
+    unregisterKeymap?.()
+    source.cleanup?.()
+    throw error
+  }
 }

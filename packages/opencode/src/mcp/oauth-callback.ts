@@ -2,7 +2,6 @@ import { createConnection } from "net"
 import { createServer } from "http"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
-
 // Current callback server configuration (may differ from defaults if custom redirectUri is used)
 let currentPort = OAUTH_CALLBACK_PORT
 let currentPath = OAUTH_CALLBACK_PATH
@@ -84,7 +83,6 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   const state = url.searchParams.get("state")
   const error = url.searchParams.get("error")
   const errorDescription = url.searchParams.get("error_description")
-
 
   // Enforce state parameter presence
   if (!state) {

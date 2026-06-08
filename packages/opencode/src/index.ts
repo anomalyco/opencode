@@ -75,7 +75,6 @@ const cli = yargs(args)
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
-
   })
   .usage("")
   .completion("completion", "generate shell completion script")

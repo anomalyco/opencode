@@ -103,7 +103,11 @@ export const layer = Layer.effect(
       (materializer) =>
         materializer.run.pipe(
           Effect.catchCause((cause) =>
-            Effect.logWarning("failed to materialize project reference", { name: materializer.name, repository: materializer.repository, cause }),
+            Effect.logWarning("failed to materialize project reference", {
+              name: materializer.name,
+              repository: materializer.repository,
+              cause,
+            }),
           ),
         ),
       { concurrency: 4, discard: true },

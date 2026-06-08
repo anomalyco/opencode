@@ -73,7 +73,6 @@ function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
   }
 }
 
-
 export const CreateInput = Schema.Struct({
   id: Schema.optional(WorkspaceV2.ID),
   type: Info.fields.type,
@@ -341,7 +340,6 @@ export const layer = Layer.effect(
           )
         : {}
 
-
       const response = yield* http.execute(
         HttpClientRequest.post(route(url, "/sync/history"), {
           headers: new Headers(headers),
@@ -359,7 +357,6 @@ export const layer = Layer.effect(
       }
 
       const history = (yield* response.json) as HistoryEvent[]
-
 
       yield* Effect.forEach(
         history,
@@ -575,7 +572,6 @@ export const layer = Layer.effect(
 
     const sessionWarp = Effect.fn("Workspace.sessionWarp")(function* (input: SessionWarpInput) {
       return yield* Effect.gen(function* () {
-
         const current = yield* db
           .select({ workspaceID: SessionTable.workspace_id })
           .from(SessionTable)
@@ -590,10 +586,7 @@ export const layer = Layer.effect(
 
             if (target.type === "remote") {
               yield* syncHistory(previous, target.url, target.headers).pipe(
-                Effect.catch((error) =>
-                  Effect.sync(() => {
-                  }),
-                ),
+                Effect.catch((error) => Effect.sync(() => {})),
               )
             } else {
               yield* prompt.cancel(input.sessionID)
@@ -679,7 +672,6 @@ export const layer = Layer.effect(
         const batches = Iterable.chunksOf(rows, 10)
         const total = Iterable.size(batches)
 
-
         yield* Effect.forEach(
           batches,
           (events, i) =>
@@ -704,7 +696,6 @@ export const layer = Layer.effect(
                   body,
                 })
               }
-
             }),
           { discard: true },
         )
@@ -727,7 +718,6 @@ export const layer = Layer.effect(
         }
 
         yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
-
       })
     })
 
@@ -827,9 +817,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           yield* WorkspaceAdapterRuntime.remove(info)
         }),
-        () =>
-          Effect.sync(() => {
-          }),
+        () => Effect.sync(() => {}),
       )
 
       yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run().pipe(Effect.orDie)

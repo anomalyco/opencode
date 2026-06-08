@@ -439,7 +439,6 @@ export const layer = Layer.effect(
         return DISABLED_RESULT
       }
 
-
       const { client: mcpClient, status } =
         mcp.type === "remote"
           ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
@@ -843,7 +842,6 @@ export const layer = Layer.effect(
         yield* auth.clearOAuthState(mcpName)
         return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
       }
-
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
 

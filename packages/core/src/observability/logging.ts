@@ -20,7 +20,11 @@ function formatter(id: string = runID) {
   })
 }
 
-function flatten(input: Record<string, unknown>, prefix = "", seen = new WeakSet<object>()): Array<readonly [string, unknown]> {
+function flatten(
+  input: Record<string, unknown>,
+  prefix = "",
+  seen = new WeakSet<object>(),
+): Array<readonly [string, unknown]> {
   if (seen.has(input)) return [[prefix, "[Circular]"]]
   seen.add(input)
   const entries = Object.entries(input)

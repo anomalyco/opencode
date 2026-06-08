@@ -122,7 +122,11 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   if (!isSkillFrontmatter(md.data)) return
 
   if (state.skills[md.data.name]) {
-    yield* Effect.logWarning("duplicate skill name", { name: md.data.name, existing: state.skills[md.data.name].location, duplicate: match })
+    yield* Effect.logWarning("duplicate skill name", {
+      name: md.data.name,
+      existing: state.skills[md.data.name].location,
+      duplicate: match,
+    })
   }
 
   state.dirs.add(path.dirname(match))
@@ -153,7 +157,9 @@ const scan = Effect.fnUntraced(function* (
   }).pipe(
     Effect.catch((error) => {
       if (!opts?.scope) return Effect.die(error)
-      return Effect.logError(`failed to scan ${opts.scope} skills`, { dir: root, error: error }).pipe(Effect.as([] as string[]))
+      return Effect.logError(`failed to scan ${opts.scope} skills`, { dir: root, error: error }).pipe(
+        Effect.as([] as string[]),
+      )
     }),
   )
 

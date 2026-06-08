@@ -138,9 +138,7 @@ export const layer = Layer.effect(
         s.queue.set(sessionID, next)
         yield* flush(sessionID).pipe(
           Effect.delay(1000),
-          Effect.catchCause((cause) =>
-            Effect.logError("share flush failed", { sessionID: sessionID, cause: cause }),
-          ),
+          Effect.catchCause((cause) => Effect.logError("share flush failed", { sessionID: sessionID, cause: cause })),
           Effect.forkIn(s.scope),
         )
       })
@@ -263,7 +261,11 @@ export const layer = Layer.effect(
       )
 
       if (res.status >= 400) {
-        yield* Effect.logWarning("failed to sync share", { sessionID: sessionID, shareID: share.id, status: res.status })
+        yield* Effect.logWarning("failed to sync share", {
+          sessionID: sessionID,
+          shareID: share.id,
+          status: res.status,
+        })
       }
     })
 
@@ -325,9 +327,7 @@ export const layer = Layer.effect(
       const s = yield* InstanceState.get(state)
       s.shared.set(sessionID, result)
       yield* full(sessionID).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logError("share full sync failed", { sessionID: sessionID, cause: cause }),
-        ),
+        Effect.catchCause((cause) => Effect.logError("share full sync failed", { sessionID: sessionID, cause: cause })),
         Effect.forkIn(s.scope),
       )
       return result

@@ -8,7 +8,6 @@ import type {
 import { Effect } from "effect"
 import { McpAuth } from "./auth"
 
-
 const OAUTH_CALLBACK_PORT = 19876
 const OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
 

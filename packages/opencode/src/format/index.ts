@@ -94,12 +94,12 @@ export const layer = Layer.effect(
                 .pipe(
                   Effect.catch((error) =>
                     Effect.logError("failed to format file", {
-                        error: "spawn failed",
-                        command: cmd,
-                        ...item.environment,
-                        file: filepath,
-                        cause: errorMessage(error.cause ?? error),
-                      }).pipe(Effect.as(undefined)),
+                      error: "spawn failed",
+                      command: cmd,
+                      ...item.environment,
+                      file: filepath,
+                      cause: errorMessage(error.cause ?? error),
+                    }).pipe(Effect.as(undefined)),
                   ),
                 )
               if (result && result.exitCode !== 0) {

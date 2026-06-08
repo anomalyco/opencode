@@ -1306,7 +1306,6 @@ export const layer = Layer.effect(
           get: (key: string) => env.get(key),
         }
 
-
         function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
           const existing = providers[providerID]
           if (existing) {
@@ -1540,8 +1539,7 @@ export const layer = Layer.effect(
                   providers[gitlab].models[modelID] = model
                 }
               }
-            } catch (e) {
-            }
+            } catch (e) {}
           })
         }
 
@@ -1592,7 +1590,6 @@ export const layer = Layer.effect(
             delete providers[providerID]
             continue
           }
-
         }
 
         return {

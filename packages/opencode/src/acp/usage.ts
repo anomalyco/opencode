@@ -154,7 +154,9 @@ export const layer = Layer.effect(
             contextLimitLoader.providers(input.directory).pipe(
               Effect.map((providers) => findContextLimit(providers, input.providerID, input.modelID)),
               Effect.catch((error) =>
-                Effect.logError("failed to get providers for usage context limit", { error: error }).pipe(Effect.as(undefined)),
+                Effect.logError("failed to get providers for usage context limit", { error: error }).pipe(
+                  Effect.as(undefined),
+                ),
               ),
             ),
           )
@@ -176,11 +178,13 @@ export const layer = Layer.effect(
       readonly sessionID: string
       readonly directory: string
     }) {
-      const messages = yield* messageLoader.messages({ sessionID: input.sessionID, directory: input.directory }).pipe(
-        Effect.catch((error) =>
-          Effect.logError("failed to fetch messages for usage update", { error: error }).pipe(Effect.as(undefined)),
-        ),
-      )
+      const messages = yield* messageLoader
+        .messages({ sessionID: input.sessionID, directory: input.directory })
+        .pipe(
+          Effect.catch((error) =>
+            Effect.logError("failed to fetch messages for usage update", { error: error }).pipe(Effect.as(undefined)),
+          ),
+        )
       if (!messages) return
 
       const message = latestAssistantMessage(messages)

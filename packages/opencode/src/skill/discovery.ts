@@ -39,9 +39,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | Htt
         Effect.flatMap((res) => res.arrayBuffer),
         Effect.flatMap((body) => fs.writeWithDirs(dest, new Uint8Array(body))),
         Effect.as(true),
-        Effect.catch((err) =>
-          Effect.logError("failed to download", { url: url, error: err }).pipe(Effect.as(false)),
-        ),
+        Effect.catch((err) => Effect.logError("failed to download", { url: url, error: err }).pipe(Effect.as(false))),
       )
     })
 
@@ -66,8 +64,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | Htt
       const missing = data.skills.filter((skill) => !skill.files.includes("SKILL.md"))
       yield* Effect.forEach(
         missing,
-        (skill) =>
-          Effect.logWarning("skill entry missing SKILL.md", { url: index, skill: skill.name }),
+        (skill) => Effect.logWarning("skill entry missing SKILL.md", { url: index, skill: skill.name }),
         { discard: true },
       )
       const list = data.skills.filter((skill) => skill.files.includes("SKILL.md"))

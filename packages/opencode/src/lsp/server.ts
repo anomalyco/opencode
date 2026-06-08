@@ -206,7 +206,6 @@ export const ESLint: Info = {
       const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm"
       await Process.run([npmCmd, "install"], { cwd: finalPath })
       await Process.run([npmCmd, "run", "compile"], { cwd: finalPath })
-
     }
 
     const proc = spawn("node", [serverPath, "--stdio"], {
@@ -572,7 +571,6 @@ export const ElixirLS: Info = {
         await Process.run(["mix", "deps.get"], { cwd, env })
         await Process.run(["mix", "compile"], { cwd, env })
         await Process.run(["mix", "elixir_ls.release2", "-o", "release"], { cwd, env })
-
       }
     }
 
@@ -676,7 +674,6 @@ export const Zls: Info = {
       if (platform !== "win32") {
         await fs.chmod(bin, 0o755).catch(() => {})
       }
-
     }
 
     return {
@@ -775,7 +772,6 @@ async function installRoslynLanguageServer(disableLspDownload: boolean) {
   if (global) {
     return global
   }
-
 }
 
 async function roslynLanguageServerGlobalPath() {
@@ -1061,7 +1057,6 @@ export const Clangd: Info = {
 
     await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
     await fs.symlink(bin, path.join(Global.Path.bin, "clangd")).catch(() => {})
-
 
     return {
       process: spawn(bin, args, {
@@ -1507,7 +1502,6 @@ export const LuaLS: Info = {
           })
         if (!ok) return
       }
-
     }
 
     return {
@@ -1682,7 +1676,6 @@ export const TerraformLS: Info = {
       if (platform !== "win32") {
         await fs.chmod(bin, 0o755).catch(() => {})
       }
-
     }
 
     return {
@@ -1768,7 +1761,6 @@ export const TexLab: Info = {
       if (platform !== "win32") {
         await fs.chmod(bin, 0o755).catch(() => {})
       }
-
     }
 
     return {
@@ -1948,7 +1940,6 @@ export const Tinymist: Info = {
       if (platform !== "win32") {
         await fs.chmod(bin, 0o755).catch(() => {})
       }
-
     }
 
     return {
