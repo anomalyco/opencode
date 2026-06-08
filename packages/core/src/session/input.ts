@@ -315,6 +315,7 @@ export const promoteSteers = Effect.fn("SessionInput.promoteSteers")(function* (
       ),
     )
     .orderBy(asc(SessionInputTable.admitted_seq))
+    .limit(100)
     .all()
     .pipe(Effect.orDie)
   return yield* publish(db, events, sessionID, rows)

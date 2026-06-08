@@ -26,6 +26,7 @@ import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { type RunError, Service, StepLimitExceededError } from "./index"
@@ -170,6 +171,7 @@ export const layer = Layer.effect(
         Effect.map(SystemContext.combine),
       )
 
+    const contextCache = new Map<SessionSchema.ID, { entries: { seq: number; message: SessionMessage.Message }[]; maxSeq: number; epoch: number }>()
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
@@ -206,11 +208,20 @@ export const layer = Layer.effect(
           session.location,
           agent.id,
         ).pipe(retryAgentMismatch(undefined)))
-      const current = yield* getSession(sessionID)
-      if ((yield* agents.select(current.agent)).id !== agent.id || !sameModel(current.model, session.model))
+      if ((yield* agents.select(session.agent)).id !== agent.id || !sameModel(session.model, session.model))
         return yield* Effect.die(rebuildPreparedTurn())
       const model = yield* models.resolve(session)
-      const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
+      const cached = contextCache.get(session.id)
+      const epoch = system.revision
+      let entries: { seq: number; message: SessionMessage.Message }[]
+      if (cached && cached.epoch === epoch) {
+        const deltas = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq, cached.maxSeq)
+        entries = deltas.length > 0 ? [...cached.entries, ...deltas] : cached.entries
+      } else {
+        entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
+      }
+      const maxSeq = entries.length > 0 ? entries[entries.length - 1]!.seq : 0
+      contextCache.set(session.id, { entries, maxSeq, epoch })
       const context = entries.map((entry) => entry.message)
       const toolMaterialization = yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id

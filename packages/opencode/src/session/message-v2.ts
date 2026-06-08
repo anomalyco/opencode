@@ -500,16 +500,15 @@ export function stream(sessionID: SessionID) {
   })
 }
 
-export function parts(messageID: MessageID) {
+export function parts(messageID: MessageID, limit?: number) {
   return Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const rows = yield* db
+    const query = db
       .select()
       .from(PartTable)
       .where(eq(PartTable.message_id, messageID))
       .orderBy(PartTable.id)
-      .all()
-      .pipe(Effect.orDie)
+    const rows = yield* (limit === undefined ? query.all() : query.limit(limit).all()).pipe(Effect.orDie)
     return rows.map(part)
   })
 }

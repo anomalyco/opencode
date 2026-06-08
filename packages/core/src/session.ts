@@ -288,9 +288,8 @@ export const layer = Layer.effect(
             order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
+        const limit = input.limit ?? 50
+        const rows = yield* query.limit(limit).all().pipe(Effect.orDie)
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
@@ -322,9 +321,8 @@ export const layer = Layer.effect(
           .from(SessionMessageTable)
           .where(where)
           .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
+        const limit = input.limit ?? 200
+        const rows = yield* query.limit(limit).all().pipe(Effect.orDie)
         return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
       }),
       message: Effect.fn("V2Session.message")(function* (input) {
@@ -355,7 +353,6 @@ export const layer = Layer.effect(
             }, Effect.uninterruptible)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
-            const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
             const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
@@ -368,7 +365,11 @@ export const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (!SessionInput.equivalent(admitted, expected))
+            if (
+              admitted.sessionID !== input.sessionID ||
+              admitted.delivery !== delivery ||
+              !Prompt.equivalence(admitted.prompt, input.prompt)
+            )
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             return yield* returnPrompt(admitted)
           }),

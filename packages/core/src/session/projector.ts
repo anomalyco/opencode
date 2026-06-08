@@ -175,6 +175,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .from(SessionMessageTable)
             .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "shell")))
             .orderBy(desc(SessionMessageTable.seq))
+            .limit(200)
             .all()
             .pipe(Effect.orDie)
           return rows

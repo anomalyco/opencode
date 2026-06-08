@@ -9,6 +9,7 @@ import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
 
+
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
@@ -76,7 +77,23 @@ type Input = {
   readonly request: LLMRequest
 }
 
-const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
+const estimateTokens = (value: unknown, depth = 0): number => {
+  if (depth > 20) return 0
+  if (typeof value === "string") return Math.round(value.length / 4)
+  if (typeof value === "number" || typeof value === "boolean") return 1
+  if (value === null || value === undefined) return 0
+  if (Array.isArray(value)) {
+    let total = 0
+    for (let i = 0; i < value.length; i++) total += estimateTokens(value[i], depth + 1)
+    return total
+  }
+  if (typeof value === "object") {
+    let total = 0
+    for (const key in value as Record<string, unknown>) total += estimateTokens((value as Record<string, unknown>)[key]!, depth + 1)
+    return total
+  }
+  return 0
+}
 
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
@@ -233,7 +250,7 @@ export const make = (dependencies: Dependencies) => {
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
     if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
+      estimateTokens({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
       context - Math.max(output, config.buffer)
     )
       return false

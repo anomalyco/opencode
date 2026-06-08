@@ -12,7 +12,7 @@ const decode = Schema.decodeUnknownEffect(SessionMessage.Message)
 
 const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   return yield* db
-    .select()
+    .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
     .orderBy(desc(SessionMessageTable.seq))
@@ -26,13 +26,15 @@ const messageRows = Effect.fnUntraced(function* (
   sessionID: SessionSchema.ID,
   compaction: { readonly seq: number } | undefined,
   baselineSeq?: number,
+  sinceSeq?: number,
 ) {
   const rows = yield* db
-    .select()
+    .select({ id: SessionMessageTable.id, session_id: SessionMessageTable.session_id, type: SessionMessageTable.type, seq: SessionMessageTable.seq, data: SessionMessageTable.data })
     .from(SessionMessageTable)
     .where(
       and(
         eq(SessionMessageTable.session_id, sessionID),
+        sinceSeq === undefined ? undefined : gt(SessionMessageTable.seq, sinceSeq),
         compaction
           ? or(
               gte(SessionMessageTable.seq, compaction.seq),
@@ -52,7 +54,7 @@ const messageRows = Effect.fnUntraced(function* (
   return rows
 })
 
-const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
+const decodeMessageRow = (row: { readonly data: typeof SessionMessageTable.$inferSelect["data"]; readonly id: typeof SessionMessageTable.$inferSelect["id"]; readonly session_id: typeof SessionMessageTable.$inferSelect["session_id"]; readonly type: typeof SessionMessageTable.$inferSelect["type"] }) =>
   decode({ ...row.data, id: row.id, type: row.type }).pipe(
     Effect.mapError(
       () =>
@@ -91,8 +93,9 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   baselineSeq: number,
+  sinceSeq?: number,
 ) {
-  const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID), baselineSeq)
+  const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID), baselineSeq, sinceSeq)
   return yield* Effect.forEach(rows, (row) =>
     decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
