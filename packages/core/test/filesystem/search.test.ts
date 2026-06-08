@@ -19,6 +19,8 @@ const tmpdir = (init?: (dir: string) => Effect.Effect<void>) =>
   ).pipe(Effect.tap((dir) => init?.(dir) ?? Effect.void))
 
 const write = (file: string, data: string) => Effect.promise(() => Bun.write(file, data))
+const waitForFileIndex = (search: Search.Interface, cwd: string) =>
+  search.glob({ cwd, pattern: "**/*", limit: 1 }).pipe(Effect.ignore)
 
 describe("file.search", () => {
   it.live("uses fff for Bun-backed grep", () =>
@@ -43,6 +45,7 @@ describe("file.search", () => {
       yield* write(path.join(dir, "README.md"), "hello\n")
 
       const search = yield* Search.Service
+      yield* waitForFileIndex(search, dir)
       const results = yield* search.file({ cwd: dir, query: "rdme", limit: 10 })
 
       expect(results).toContain("README.md")
@@ -57,11 +60,27 @@ describe("file.search", () => {
       yield* write(path.join(dir, "src", "main.ts"), "export const main = true\n")
 
       const search = yield* Search.Service
+      yield* waitForFileIndex(search, dir)
       const results = yield* search.file({ cwd: dir, query: "", limit: 10, kind: "all" })
 
       expect(results).toContain("README.md")
       expect(results).toContain("src/")
       expect(results).not.toContain("")
+    }),
+  )
+
+  it.live("stabilizes equal score file candidates by path length", () =>
+    Effect.gen(function* () {
+      expect(Fff.available()).toBe(true)
+      const dir = yield* tmpdir()
+      yield* write(path.join(dir, "src", "longer-name.ts"), "export const longer = true\n")
+      yield* write(path.join(dir, "a.ts"), "export const shorter = true\n")
+
+      const search = yield* Search.Service
+      yield* waitForFileIndex(search, dir)
+      const results = yield* search.file({ cwd: dir, query: "", limit: 10 })
+
+      expect(results?.slice(0, 2)).toEqual(["a.ts", "src/longer-name.ts"])
     }),
   )
 
@@ -142,6 +161,7 @@ describe("file.search", () => {
       yield* write(path.join(dir, "alpha-target-two.ts"), "export const two = 2\n")
 
       const search = yield* Search.Service
+      yield* waitForFileIndex(search, dir)
       const results = yield* search.file({ cwd: dir, query: "alpha target two", limit: 10 })
       expect(results).toContain("alpha-target-two.ts")
 
