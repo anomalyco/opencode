@@ -5,6 +5,7 @@ import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { ACPProfile } from "@/acp/profile"
+import { forceEnableForAcp } from "@/acp/review-mode"
 
 export const AcpCommand = effectCmd({
   command: "acp",
@@ -21,6 +22,10 @@ export const AcpCommand = effectCmd({
     const { ACP } = yield* Effect.promise(() => import("@/acp/agent"))
     ACPProfile.mark("cli.acp.handler")
     process.env.OPENCODE_CLIENT = "acp"
+    // Opt this ACP session into review mode. It still only activates if the
+    // client reports the writeTextFile capability during initialize.
+    forceEnableForAcp()
+    log.info("ACP review-at-end enabled")
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)))
 

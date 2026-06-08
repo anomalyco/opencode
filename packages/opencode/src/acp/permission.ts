@@ -12,6 +12,7 @@ import { exists, readText } from "@/util/filesystem"
 import type { ACPSession } from "./session"
 import { pendingToolCall, toLocations, type ToolInput } from "./tool"
 import { Effect } from "effect"
+import { isActive } from "./review-mode"
 
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type Reply = "once" | "always" | "reject"
@@ -81,7 +82,9 @@ export class Handler {
       return
     }
 
-    if (permission.permission === "edit") {
+    // In review mode the overlay already sends edits to the client, so skip the
+    // proposed-edit message to avoid showing the same change twice.
+    if (permission.permission === "edit" && !isActive()) {
       await this.writeProposedEdit(session.id, permission.metadata).catch(() => {})
     }
 

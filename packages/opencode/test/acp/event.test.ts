@@ -1,9 +1,11 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type { Event, Message, OpencodeClient, Part, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
 import { ACPEvent } from "@/acp/event"
+import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
+import { reset, setClientWriteTextFileSupported, syncEnabled } from "@/acp/review-mode"
 import * as ACPService from "@/acp/service"
 import { Directory } from "@/acp/directory"
 import { ACPSession } from "@/acp/session"
@@ -747,5 +749,55 @@ describe("acp event routing", () => {
         { type: "content", content: { type: "image", mimeType: "image/png", data: image } },
       ],
     ])
+  })
+
+  afterEach(() => {
+    delete process.env.OPENCODE_ACP_REVIEW
+    delete process.env.OPENCODE_CLIENT
+    reset()
+  })
+
+  it("flushes staged writes after completed edit tool", async () => {
+    process.env.OPENCODE_ACP_REVIEW = "1"
+    process.env.OPENCODE_CLIENT = "acp"
+    setClientWriteTextFileSupported(true)
+    syncEnabled()
+
+    const writes: Array<{ sessionId: string; path: string; content: string }> = []
+    const harness = createHarness()
+    const subscription = new ACPEvent.Subscription({
+      sdk: harness.sdk,
+      connection: {
+        ...harness.connection,
+        writeTextFile: async (input) => {
+          writes.push(input)
+          return {}
+        },
+      },
+      session: harness.session,
+    })
+
+    ReviewOverlay.setActiveSession("ses_flush")
+    ReviewOverlay.stage("/workspace/file.ts", "staged body")
+
+    await Effect.runPromise(harness.session.create({ id: "ses_flush", cwd: "/workspace" }))
+    await subscription.handle(
+      toolUpdated(
+        completedTool("ses_flush", "call_edit", "edited", [], {
+          tool: "edit",
+          input: { filePath: "/workspace/file.ts", oldString: "a", newString: "b" },
+        }),
+      ),
+    )
+
+    expect(writes).toEqual([
+      {
+        sessionId: "ses_flush",
+        path: expect.stringContaining("file.ts"),
+        content: "staged body",
+      },
+    ])
+    subscription.stop()
+    harness.events.close()
   })
 })

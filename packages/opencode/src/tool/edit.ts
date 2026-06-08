@@ -18,6 +18,7 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "@/util/bom"
+import { isActive } from "@/acp/review-mode"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -109,14 +110,18 @@ export const EditTool = Tool.define(
                   },
                 })
                 yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
-                if (yield* format.file(filePath)) {
-                  contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+                // In review mode the write above is staged in the overlay, not on
+                // disk. Skip disk-only follow-ups (format + file events) here.
+                if (!isActive()) {
+                  if (yield* format.file(filePath)) {
+                    contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+                  }
+                  yield* events.publish(FileSystem.Event.Edited, { file: filePath })
+                  yield* events.publish(Watcher.Event.Updated, {
+                    file: filePath,
+                    event: "add",
+                  })
                 }
-                yield* events.publish(FileSystem.Event.Edited, { file: filePath })
-                yield* events.publish(Watcher.Event.Updated, {
-                  file: filePath,
-                  event: "add",
-                })
                 return
               }
 
@@ -153,14 +158,17 @@ export const EditTool = Tool.define(
               })
 
               yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
-              if (yield* format.file(filePath)) {
-                contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+              // Staged in review mode: skip format + file events (disk only).
+              if (!isActive()) {
+                if (yield* format.file(filePath)) {
+                  contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+                }
+                yield* events.publish(FileSystem.Event.Edited, { file: filePath })
+                yield* events.publish(Watcher.Event.Updated, {
+                  file: filePath,
+                  event: "change",
+                })
               }
-              yield* events.publish(FileSystem.Event.Edited, { file: filePath })
-              yield* events.publish(Watcher.Event.Updated, {
-                file: filePath,
-                event: "change",
-              })
               diff = trimDiff(
                 createTwoFilesPatch(
                   filePath,
@@ -194,11 +202,19 @@ export const EditTool = Tool.define(
           })
 
           let output = "Edit applied successfully."
-          yield* lsp.touchFile(filePath, "document")
-          const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = FSUtil.normalizePath(filePath)
-          const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
-          if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+          // LSP needs the file on disk, so skip diagnostics while the edit is
+          // staged in review mode.
+          const diagnostics = isActive()
+            ? {}
+            : yield* Effect.gen(function* () {
+                yield* lsp.touchFile(filePath, "document")
+                return yield* lsp.diagnostics()
+              })
+          if (!isActive()) {
+            const normalizedFilePath = FSUtil.normalizePath(filePath)
+            const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
+            if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+          }
 
           return {
             metadata: {

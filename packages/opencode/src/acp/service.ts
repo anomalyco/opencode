@@ -41,6 +41,9 @@ import { ACPEvent } from "./event"
 import { ACPSession } from "./session"
 import { UsageService } from "./usage"
 import { ACPProfile } from "./profile"
+import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
+import { syncEnabled, setClientWriteTextFileSupported } from "./review-mode"
+import { flushPendingWrites } from "./review-staging"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
@@ -105,6 +108,14 @@ export function make(input: {
           label: "OpenCode Login",
         },
       }
+    }
+
+    // Review mode needs the client to accept staged edits via writeTextFile.
+    // Record the capability from initialize so review activates only when usable.
+    setClientWriteTextFileSupported(params.clientCapabilities?.fs?.writeTextFile === true)
+    syncEnabled()
+    if (ReviewOverlay.isEnabled()) {
+      log.info("ACP review-at-end active")
     }
 
     const response = {
@@ -340,6 +351,7 @@ export function make(input: {
     const removed = yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
     sessionSnapshots.delete(params.sessionId)
+    ReviewOverlay.clear()
     if (!removed) return {}
 
     yield* abortBackingSession(removed)
@@ -348,6 +360,7 @@ export function make(input: {
 
   const cancel = Effect.fn("ACP.cancel")(function* (params: CancelNotification) {
     const current = yield* session.get(params.sessionId)
+    ReviewOverlay.clear()
     yield* abortBackingSession(current)
   })
 
@@ -491,79 +504,89 @@ export function make(input: {
     setSessionModel,
     prompt: Effect.fn("ACP.prompt")(function* (params: PromptRequest) {
       const current = yield* session.get(params.sessionId)
-      const snapshot = yield* directorySnapshot(current.cwd)
-      const selected = current.model ?? selectDefaultModel(snapshot)
-      if (!current.model) {
-        yield* session.setModel(params.sessionId, selected)
-      }
-      const variant = current.variant ?? selectVariant(snapshot, selected)
-      const modeId = current.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined)
-      const parts = promptContentToParts(params.prompt)
-      const command = detectSlashCommand(parts)
+      ReviewOverlay.setActiveSession(current.id)
+      syncEnabled()
+      // Always clear the staging overlay when the turn settles — success,
+      // failure, or interruption — so partial edits from a failed turn never
+      // leak into the next prompt.
+      return yield* Effect.gen(function* () {
+        const snapshot = yield* directorySnapshot(current.cwd)
+        const selected = current.model ?? selectDefaultModel(snapshot)
+        if (!current.model) {
+          yield* session.setModel(params.sessionId, selected)
+        }
+        const variant = current.variant ?? selectVariant(snapshot, selected)
+        const modeId = current.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined)
+        const parts = promptContentToParts(params.prompt)
+        const command = detectSlashCommand(parts)
 
-      if (!command) {
-        const response = yield* request(
-          () =>
-            input.sdk.session.prompt(
-              {
-                sessionID: current.id,
-                model: {
+        if (!command) {
+          const response = yield* request(
+            () =>
+              input.sdk.session.prompt(
+                {
+                  sessionID: current.id,
+                  model: {
+                    providerID: selected.providerID,
+                    modelID: selected.modelID,
+                  },
+                  ...(variant ? { variant } : {}),
+                  parts,
+                  ...(modeId ? { agent: modeId } : {}),
+                  directory: current.cwd,
+                },
+                { throwOnError: true },
+              ),
+            "session",
+          )
+          yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
+          yield* Effect.promise(() => flushPendingWrites(input.connection, current.id))
+          return yield* promptResponse(response.info, params.messageId)
+        }
+
+        const known = snapshot.availableCommands.find((item) => item.name === command.name)
+        if (known) {
+          const response = yield* request(
+            () =>
+              input.sdk.session.command(
+                {
+                  sessionID: current.id,
+                  command: known.name,
+                  arguments: command.args,
+                  model: `${selected.providerID}/${selected.modelID}`,
+                  ...(variant ? { variant } : {}),
+                  ...(modeId ? { agent: modeId } : {}),
+                  directory: current.cwd,
+                },
+                { throwOnError: true },
+              ),
+            "session",
+          )
+          yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
+          yield* Effect.promise(() => flushPendingWrites(input.connection, current.id))
+          return yield* promptResponse(response.info, params.messageId)
+        }
+
+        if (command.name === "compact") {
+          yield* request(
+            () =>
+              input.sdk.session.summarize(
+                {
+                  sessionID: current.id,
+                  directory: current.cwd,
                   providerID: selected.providerID,
                   modelID: selected.modelID,
                 },
-                ...(variant ? { variant } : {}),
-                parts,
-                ...(modeId ? { agent: modeId } : {}),
-                directory: current.cwd,
-              },
-              { throwOnError: true },
-            ),
-          "session",
-        )
+                { throwOnError: true },
+              ),
+            "session",
+          )
+        }
+
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return yield* promptResponse(response.info, params.messageId)
-      }
-
-      const known = snapshot.availableCommands.find((item) => item.name === command.name)
-      if (known) {
-        const response = yield* request(
-          () =>
-            input.sdk.session.command(
-              {
-                sessionID: current.id,
-                command: known.name,
-                arguments: command.args,
-                model: `${selected.providerID}/${selected.modelID}`,
-                ...(variant ? { variant } : {}),
-                ...(modeId ? { agent: modeId } : {}),
-                directory: current.cwd,
-              },
-              { throwOnError: true },
-            ),
-          "session",
-        )
-        yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return yield* promptResponse(response.info, params.messageId)
-      }
-
-      if (command.name === "compact") {
-        yield* request(
-          () =>
-            input.sdk.session.summarize(
-              {
-                sessionID: current.id,
-                directory: current.cwd,
-                providerID: selected.providerID,
-                modelID: selected.modelID,
-              },
-              { throwOnError: true },
-            ),
-          "session",
-        )
-      }
-
-      yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-      return yield* promptResponse(undefined, params.messageId)
+        yield* Effect.promise(() => flushPendingWrites(input.connection, current.id))
+        return yield* promptResponse(undefined, params.messageId)
+      }).pipe(Effect.ensuring(Effect.sync(() => ReviewOverlay.clear())))
     }),
     cancel,
   }

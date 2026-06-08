@@ -14,6 +14,8 @@ import DESCRIPTION from "./apply_patch.txt"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
+import { isActive } from "@/acp/review-mode"
+import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -199,6 +201,9 @@ export const ApplyPatchTool = Tool.define(
         additions: change.additions,
         deletions: change.deletions,
         movePath: change.movePath,
+        diffPath: change.movePath ?? change.filePath,
+        oldText: change.oldContent,
+        newText: change.type === "delete" ? "" : change.newContent,
       }))
 
       // Check permissions if needed
@@ -214,6 +219,11 @@ export const ApplyPatchTool = Tool.define(
         },
       })
 
+      // In review mode, add/update writes are staged in the overlay (see ReviewFs)
+      // instead of going to disk. Skip the disk-only steps below: formatting,
+      // file events, and LSP diagnostics.
+      const review = isActive()
+
       // Apply the changes
       const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
 
@@ -221,8 +231,6 @@ export const ApplyPatchTool = Tool.define(
         const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
         switch (change.type) {
           case "add":
-            // Create parent directories (recursive: true is safe on existing/root dirs)
-
             yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
             updates.push({ file: change.filePath, event: "add" })
             break
@@ -234,10 +242,9 @@ export const ApplyPatchTool = Tool.define(
 
           case "move":
             if (change.movePath) {
-              // Create parent directories (recursive: true is safe on existing/root dirs)
-
               yield* afs.writeWithDirs(change.movePath!, Bom.join(change.newContent, change.bom))
               yield* afs.remove(change.filePath)
+              if (review) ReviewOverlay.markDeleted(change.filePath)
               updates.push({ file: change.filePath, event: "unlink" })
               updates.push({ file: change.movePath, event: "add" })
             }
@@ -245,11 +252,12 @@ export const ApplyPatchTool = Tool.define(
 
           case "delete":
             yield* afs.remove(change.filePath)
+            if (review) ReviewOverlay.markDeleted(change.filePath)
             updates.push({ file: change.filePath, event: "unlink" })
             break
         }
 
-        if (edited) {
+        if (edited && !review) {
           if (yield* format.file(edited)) {
             yield* Bom.syncFile(afs, edited, change.bom)
           }
@@ -257,18 +265,22 @@ export const ApplyPatchTool = Tool.define(
         }
       }
 
-      // Publish file change events
-      for (const update of updates) {
-        yield* events.publish(Watcher.Event.Updated, update)
+      if (!review) {
+        for (const update of updates) {
+          yield* events.publish(Watcher.Event.Updated, update)
+        }
       }
 
-      // Notify LSP of file changes and collect diagnostics
-      for (const change of fileChanges) {
-        if (change.type === "delete") continue
-        const target = change.movePath ?? change.filePath
-        yield* lsp.touchFile(target, "document")
-      }
-      const diagnostics = yield* lsp.diagnostics()
+      const diagnostics = review
+        ? {}
+        : yield* Effect.gen(function* () {
+            for (const change of fileChanges) {
+              if (change.type === "delete") continue
+              const target = change.movePath ?? change.filePath
+              yield* lsp.touchFile(target, "document")
+            }
+            return yield* lsp.diagnostics()
+          })
 
       // Generate output summary
       const summaryLines = fileChanges.map((change) => {
@@ -283,13 +295,23 @@ export const ApplyPatchTool = Tool.define(
       })
       let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
 
-      for (const change of fileChanges) {
-        if (change.type === "delete") continue
-        const target = change.movePath ?? change.filePath
-        const block = LSP.Diagnostic.report(target, diagnostics[FSUtil.normalizePath(target)] ?? [])
-        if (!block) continue
-        const rel = path.relative(instance.worktree, target).replaceAll("\\", "/")
-        output += `\n\nLSP errors detected in ${rel}, please fix:\n${block}`
+      // ACP has no deleteFile/renameFile, so deletions and moves are applied to
+      // disk immediately even in review mode (only add/update are staged for
+      // review). Surface this so a reviewer knows those changes are not undone
+      // by rejecting the staged edits.
+      if (review && fileChanges.some((change) => change.type === "delete" || change.type === "move")) {
+        output += `\n\nNote: deletions and moves were applied directly to disk and are not part of the staged review.`
+      }
+
+      if (!review) {
+        for (const change of fileChanges) {
+          if (change.type === "delete") continue
+          const target = change.movePath ?? change.filePath
+          const block = LSP.Diagnostic.report(target, diagnostics[FSUtil.normalizePath(target)] ?? [])
+          if (!block) continue
+          const rel = path.relative(instance.worktree, target).replaceAll("\\", "/")
+          output += `\n\nLSP errors detected in ${rel}, please fix:\n${block}`
+        }
       }
 
       return {

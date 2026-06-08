@@ -4,9 +4,11 @@ import {
   completedToolContent,
   completedToolUpdate,
   completedToolRawOutput,
+  deleteDiffContent,
   extractImageAttachments,
   imageContents,
   pendingToolCall,
+  moveDiffContent,
   shellOutputSnapshot,
   toLocations,
   toToolKind,
@@ -294,5 +296,67 @@ describe("acp tool conversion", () => {
     expect(shellOutputSnapshot({ metadata: { output: "line 1\nline 2" } })).toBe("line 1\nline 2")
     expect(shellOutputSnapshot({ metadata: { output: 42 } })).toBeUndefined()
     expect(shellOutputSnapshot({ metadata: undefined })).toBeUndefined()
+  })
+
+  test("builds Codex-style delete and move diff helpers", () => {
+    expect(deleteDiffContent("/tmp/remove.ts", "gone")).toEqual([
+      { type: "diff", path: "/tmp/remove.ts", oldText: "gone", newText: "" },
+    ])
+    expect(moveDiffContent("/tmp/dest.ts", "old body", "new body")).toEqual([
+      { type: "diff", path: "/tmp/dest.ts", oldText: "old body", newText: "new body" },
+    ])
+  })
+
+  test("builds apply_patch completed content with delete and move diffs from metadata", () => {
+    expect(
+      completedToolContent("apply_patch", {
+        status: "completed",
+        input: { patchText: "*** Begin Patch\n*** End Patch" },
+        output: "Success.",
+        metadata: {
+          files: [
+            {
+              type: "delete",
+              filePath: "/tmp/remove.ts",
+              diffPath: "/tmp/remove.ts",
+              oldText: "remove me",
+              newText: "",
+            },
+            {
+              type: "move",
+              filePath: "/tmp/src.ts",
+              movePath: "/tmp/dest.ts",
+              diffPath: "/tmp/dest.ts",
+              oldText: "before move",
+              newText: "after move",
+            },
+            {
+              type: "update",
+              filePath: "/tmp/keep.ts",
+              diffPath: "/tmp/keep.ts",
+              oldText: "old",
+              newText: "new",
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      {
+        type: "content",
+        content: { type: "text", text: "Success." },
+      },
+      {
+        type: "diff",
+        path: "/tmp/remove.ts",
+        oldText: "remove me",
+        newText: "",
+      },
+      {
+        type: "diff",
+        path: "/tmp/dest.ts",
+        oldText: "before move",
+        newText: "after move",
+      },
+    ])
   })
 })

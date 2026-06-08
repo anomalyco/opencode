@@ -14,6 +14,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
+import { isActive } from "@/acp/review-mode"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -62,31 +63,42 @@ export const WriteTool = Tool.define(
           })
 
           yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
-          if (yield* format.file(filepath)) {
-            yield* Bom.syncFile(fs, filepath, desiredBom)
+          // In review mode the write above is staged in the overlay, not on disk.
+          // Skip disk-only follow-ups (format + file events) here.
+          if (!isActive()) {
+            if (yield* format.file(filepath)) {
+              yield* Bom.syncFile(fs, filepath, desiredBom)
+            }
+            yield* events.publish(FileSystem.Event.Edited, { file: filepath })
+            yield* events.publish(Watcher.Event.Updated, {
+              file: filepath,
+              event: exists ? "change" : "add",
+            })
           }
-          yield* events.publish(FileSystem.Event.Edited, { file: filepath })
-          yield* events.publish(Watcher.Event.Updated, {
-            file: filepath,
-            event: exists ? "change" : "add",
-          })
 
           let output = "Wrote file successfully."
-          yield* lsp.touchFile(filepath, "document")
-          const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilepath = FSUtil.normalizePath(filepath)
-          let projectDiagnosticsCount = 0
-          for (const [file, issues] of Object.entries(diagnostics)) {
-            const current = file === normalizedFilepath
-            if (!current && projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
-            const block = LSP.Diagnostic.report(current ? filepath : file, issues)
-            if (!block) continue
-            if (current) {
-              output += `\n\nLSP errors detected in this file, please fix:\n${block}`
-              continue
+          // LSP needs the file on disk, so skip diagnostics while staged.
+          const diagnostics = isActive()
+            ? {}
+            : yield* Effect.gen(function* () {
+                yield* lsp.touchFile(filepath, "document")
+                return yield* lsp.diagnostics()
+              })
+          if (!isActive()) {
+            const normalizedFilepath = FSUtil.normalizePath(filepath)
+            let projectDiagnosticsCount = 0
+            for (const [file, issues] of Object.entries(diagnostics)) {
+              const current = file === normalizedFilepath
+              if (!current && projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
+              const block = LSP.Diagnostic.report(current ? filepath : file, issues)
+              if (!block) continue
+              if (current) {
+                output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+                continue
+              }
+              projectDiagnosticsCount++
+              output += `\n\nLSP errors detected in other files:\n${block}`
             }
-            projectDiagnosticsCount++
-            output += `\n\nLSP errors detected in other files:\n${block}`
           }
 
           return {
