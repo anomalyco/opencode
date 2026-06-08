@@ -175,6 +175,39 @@ describe("ProviderTransform.options - zai/zhipuai thinking", () => {
   }
 })
 
+describe("ProviderTransform.options - minimax m3 thinking", () => {
+  const createModel = (npm: string) =>
+    ({
+      id: "minimax/minimax-m3",
+      providerID: "minimax",
+      api: {
+        id: "minimax-m3",
+        url: "https://api.minimax.com",
+        npm,
+      },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    }) as any
+
+  test("explicitly enables adaptive thinking with the anthropic SDK", () => {
+    expect(
+      ProviderTransform.options({
+        model: createModel("@ai-sdk/anthropic"),
+        sessionID: "test-session-123",
+      }).thinking,
+    ).toEqual({ type: "adaptive" })
+  })
+
+  test("uses the native default with the openai-compatible SDK", () => {
+    expect(
+      ProviderTransform.options({
+        model: createModel("@ai-sdk/openai-compatible"),
+        sessionID: "test-session-123",
+      }).thinking,
+    ).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 
@@ -2450,6 +2483,39 @@ describe("ProviderTransform.variants", () => {
     })
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({})
+  })
+
+  test("minimax m3 using anthropic returns thinking toggles", () => {
+    const model = createMockModel({
+      id: "minimax/minimax-m3",
+      providerID: "minimax",
+      api: {
+        id: "MiniMax-M3",
+        url: "https://api.minimax.com/anthropic/v1",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      none: { thinking: { type: "disabled" } },
+      thinking: { thinking: { type: "adaptive" } },
+    })
+  })
+
+  test("minimax m3 using openai-compatible returns thinking toggles", () => {
+    const model = createMockModel({
+      id: "minimax/minimax-m3",
+      providerID: "minimax",
+      api: {
+        id: "minimax-m3",
+        url: "https://api.minimax.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      none: { thinking: { type: "disabled" } },
+      thinking: { thinking: { type: "adaptive" } },
+    })
   })
 
   test("glm returns empty object", () => {

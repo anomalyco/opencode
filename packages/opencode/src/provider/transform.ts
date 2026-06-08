@@ -641,6 +641,15 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
+  if (
+    model.api.id.toLowerCase().includes("minimax-m3") &&
+    ["@ai-sdk/anthropic", "@ai-sdk/openai-compatible"].includes(model.api.npm)
+  ) {
+    return {
+      none: { thinking: { type: "disabled" } },
+      thinking: { thinking: { type: "adaptive" } },
+    }
+  }
   const adaptiveOpus = anthropicOpus47OrLater(model.api.id)
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   if (
@@ -1076,8 +1085,13 @@ export function options(input: {
     }
   }
 
-  // Enable thinking by default for kimi models using anthropic SDK
   const modelId = input.model.api.id.toLowerCase()
+  // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
+  if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
+    result["thinking"] = { type: "adaptive" }
+  }
+
+  // Enable thinking by default for kimi models using anthropic SDK
   if (
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
     (modelId.includes("k2p") || modelId.includes("kimi-k2.") || modelId.includes("kimi-k2p"))
