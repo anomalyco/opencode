@@ -238,13 +238,13 @@ Do not port legacy provider model `reasoning`, `temperature`, or `interleaved` f
 
 Agent behavior and tool-access policy. Review together because agent configuration can contain permissions and model choices.
 
-| Field           | Current Purpose                                     | Status   | Notes                                                                                                                          |
-| --------------- | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `default_agent` | Choose default primary agent                        | remove   | Do not retain a separate top-level selector; default choice should be designed with the v2 agent configuration model.          |
-| `mode`          | Legacy agent configuration alias                    | remove   | Do not port deprecated alias; configure agents through the v2 agent surface only.                                              |
-| `agent`         | Configure primary, subagent, and specialized agents | redesign | Rename to plural `agents`; retain a named map of built-in overrides and custom agent definitions.                              |
-| `permission`    | Tool permission rules                               | redesign | Rename to plural `permissions`; replace legacy map shorthand with an ordered array of `{ permission, pattern, action }` rules. |
-| `tools`         | Legacy tool enable/disable map                      | remove   | Do not port boolean enable/disable alias; express tool access through permissions.                                             |
+| Field           | Current Purpose                                     | Status   | Notes                                                                                                                       |
+| --------------- | --------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `default_agent` | Choose default primary agent                        | remove   | Do not retain a separate top-level selector; default choice should be designed with the v2 agent configuration model.       |
+| `mode`          | Legacy agent configuration alias                    | remove   | Do not port deprecated alias; configure agents through the v2 agent surface only.                                           |
+| `agent`         | Configure primary, subagent, and specialized agents | redesign | Rename to plural `agents`; retain a named map of built-in overrides and custom agent definitions.                           |
+| `permission`    | Tool permission rules                               | redesign | Rename to plural `permissions`; replace legacy map shorthand with an ordered array of `{ action, resource, effect }` rules. |
+| `tools`         | Legacy tool enable/disable map                      | remove   | Do not port boolean enable/disable alias; express tool access through permissions.                                          |
 
 Do not port `default_agent` ahead of the v2 agent design. The legacy runtime uses it to choose a visible, non-subagent fallback instead of `build`, but exposing that selection as an isolated top-level field would pre-commit v2 to the legacy agent model before agents and their policy surface are defined together.
 
@@ -281,7 +281,7 @@ Retain `description`, `hidden`, and `steps`; they define an agent's discoverabil
       "color": "warning",
       "steps": 12,
       "disabled": false,
-      "permissions": [{ "permission": "edit", "pattern": "*", "action": "deny" }],
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
     },
   },
 }
@@ -289,13 +289,13 @@ Retain `description`, `hidden`, and `steps`; they define an agent's discoverabil
 
 Do not port `tools`, either as a top-level setting or as an agent-entry alias. The legacy loader already converts tool booleans into permission rules, including collapsing write-adjacent tool names into `edit`; v2 should avoid carrying that lossy compatibility input forward.
 
-Rename legacy `permission` to `permissions` and expose the normalized ordered ruleset already modeled by `PermissionV2.Ruleset`. Rules retain the interactive `"ask"` action in addition to `"allow"` and `"deny"`; this is distinct from `experimental.policies`, whose provider enforcement currently needs only allow/deny decisions. The same `permissions` ruleset shape should be used inside future `agents` entries.
+Rename legacy `permission` to `permissions` and expose the normalized ordered ruleset already modeled by `PermissionV2.Ruleset`. Rules retain the interactive `"ask"` effect in addition to `"allow"` and `"deny"`; this is distinct from `experimental.policies`, whose provider enforcement currently needs only allow/deny decisions. The same `permissions` ruleset shape should be used inside future `agents` entries.
 
 ```jsonc
 {
   "permissions": [
-    { "permission": "bash", "pattern": "*", "action": "ask" },
-    { "permission": "bash", "pattern": "git status", "action": "allow" },
+    { "action": "bash", "resource": "*", "effect": "ask" },
+    { "action": "bash", "resource": "git status", "effect": "allow" },
   ],
 }
 ```

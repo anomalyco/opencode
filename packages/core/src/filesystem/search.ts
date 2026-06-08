@@ -133,22 +133,17 @@ function item(hit: Fff.Hit): Item {
   }
 }
 
-function collectPaths<T>(
-  out: { items: T[]; scores: Array<{ total: number }> },
-  toPath: (item: T) => string,
-  opts?: { includeZeroScore?: boolean },
-): string[] {
-  return Array.from(
-    new Set(
-      out.items.flatMap((item, idx): string[] => {
-        const score = out.scores[idx]
-        if (!score || (!opts?.includeZeroScore && score.total <= 0)) return []
-        const text = toPath(item)
-        if (!text) return []
-        return [text]
-      }),
-    ),
+function collectPaths<T>(items: T[], scores: Array<{ total: number }>, toPath: (item: T) => string): string[] {
+  const rows = items.flatMap((item, index): Array<{ text: string; score: number }> => {
+    const text = toPath(item)
+    if (!text) return []
+    return [{ text, score: scores[index]?.total ?? 0 }]
+  })
+  rows.sort(
+    (a, b) => b.score - a.score || a.text.length - b.text.length || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
   )
+
+  return Array.from(new Set(rows.map((item) => item.text)))
 }
 
 function searchFff(
@@ -162,7 +157,7 @@ function searchFff(
     if (!out.ok) return out
     return {
       ok: true,
-      value: collectPaths(out.value, (entry) => normalize(entry.relativePath), { includeZeroScore: !query }),
+      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
     }
   }
   if (kind === "all") {
@@ -170,14 +165,14 @@ function searchFff(
     if (!out.ok) return out
     return {
       ok: true,
-      value: collectPaths(out.value, (entry) => normalize(entry.item.relativePath), { includeZeroScore: !query }),
+      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.item.relativePath)),
     }
   }
   const out = pick.fileSearch(query, opts)
   if (!out.ok) return out
   return {
     ok: true,
-    value: collectPaths(out.value, (entry) => normalize(entry.relativePath), { includeZeroScore: !query }),
+    value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
   }
 }
 
@@ -237,13 +232,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
     // and does not await the scan; the native background scan starts as soon as
     // the picker exists. The `wait` gate dedupes concurrent creation.
     const acquire = Effect.fn("Search.acquire")(function* (cwd: string) {
-      const available = yield* fffSync("check availability", () => Fff.available()).pipe(
-        Effect.catch((error) => {
-          log.warn("fff availability check failed", { error })
-          return Effect.succeed(false)
-        }),
-      )
-      if (!available) return undefined
+      // The opencode test runtime owns an isolated XDG tree that Windows must
+      // remove before process exit, so use ripgrep instead of native FFF there.
+      if (process.env.OPENCODE_TEST_HOME) return undefined
 
       const dir = FSUtil.resolve(cwd)
       const existing = state.pick.get(dir)
@@ -251,6 +242,14 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
 
       const pending = state.wait.get(dir)
       if (pending) return yield* Deferred.await(pending)
+
+      const available = yield* fffSync("check availability", () => Fff.available()).pipe(
+        Effect.catch((error) => {
+          log.warn("fff availability check failed", { error })
+          return Effect.succeed(false)
+        }),
+      )
+      if (!available) return undefined
 
       const gate = yield* Deferred.make<Picker, Error>()
       state.wait.set(dir, gate)
@@ -262,10 +261,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             basePath: dir,
             frecencyDbPath: path.join(root, `${id}.frecency.mdb`),
             historyDbPath: path.join(root, `${id}.history.mdb`),
-            // fff uses a bit different log version, also with spans so keep
-            // them in the same folder for debuggability
-            logFilePath: path.join(Global.Path.log, "fff.log"),
-            logLevel: Log.getLevel().toLowerCase() as Lowercase<Log.Level>,
             aiMode: true,
             // only the first toolcall picker can accumulate resources to index
             // home directory, if the user specifically opened opencode at the
@@ -349,13 +344,12 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       const query = input.query.trim()
       const kind = input.kind ?? "file"
 
-      const pick = yield* picker(input.cwd)
-      if (!pick) return undefined
-
+      const entry = yield* acquire(input.cwd).pipe(Effect.catch(() => Effect.succeed<Picker | undefined>(undefined)))
+      if (!entry) return undefined
       const dir = FSUtil.resolve(input.cwd)
       const limit = input.limit ?? 100
       const fffResult = yield* fffSync(`${kind} search`, () =>
-        searchFff(pick, kind, query, {
+        searchFff(entry.pick, kind, query, {
           pageIndex: 0,
           currentFile: input.current, // supports both relative and absolute (relative preferred)
           pageSize: limit,

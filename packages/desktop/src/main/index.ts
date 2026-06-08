@@ -13,7 +13,7 @@ import contextMenu from "electron-context-menu"
 
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
-import { CHANNEL, UPDATER_ENABLED } from "./constants"
+import { CHANNEL } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
@@ -26,7 +26,7 @@ import {
   spawnLocalServer,
   type SidecarListener,
 } from "./server"
-import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
+import { setupAutoUpdater, showUpdaterDialog } from "./updater"
 import {
   createMainWindow,
   registerRendererProtocol,
@@ -145,8 +145,10 @@ const main = Effect.gen(function* () {
       })
     },
     {
-      log: (message, meta) => logger.log(message, meta),
-      error: (message, meta) => logger.error(message, meta),
+      logger: {
+        log: (message, meta) => logger.log(message, meta),
+        error: (message, meta) => logger.error(message, meta),
+      },
     },
   )
   const stopSidecars = async () => {
@@ -232,6 +234,13 @@ const main = Effect.gen(function* () {
 
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
 
+  yield* Effect.promise(() => app.whenReady())
+
+  if (!TEST_ONBOARDING) migrate()
+  app.setAsDefaultProtocolClient("opencode")
+  registerRendererProtocol()
+  setDockIcon()
+  const updater = setupAutoUpdater(stopSidecars)
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
     relaunch,
@@ -244,7 +253,6 @@ const main = Effect.gen(function* () {
       },
       (e) => Effect.runPromise(e),
     ),
-    getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
     consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
     getDefaultServerUrl: () => getDefaultServerUrl(),
     setDefaultServerUrl: (url) => setDefaultServerUrl(url),
@@ -253,22 +261,17 @@ const main = Effect.gen(function* () {
     parseMarkdown: async (markdown) => parseMarkdown(markdown),
     checkAppExists: (appName) => checkAppExists(appName),
     resolveAppPath: async (appName) => resolveAppPath(appName),
-    runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, stopSidecars),
-    checkUpdate: async () => checkUpdate(),
-    installUpdate: async () => installUpdate(stopSidecars),
+    updater,
+    showUpdater: () => showUpdaterDialog(updater, true),
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
   })
   registerWslIpcHandlers(wslServers)
-
-  yield* Effect.promise(() => app.whenReady())
-
-  if (!TEST_ONBOARDING) migrate()
-  app.setAsDefaultProtocolClient("opencode")
-  registerRendererProtocol()
-  setDockIcon()
-  setupAutoUpdater()
+  void updater.start()
+  const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
+  updateTimer.unref()
+  app.once("will-quit", () => clearInterval(updateTimer))
   yield* Effect.promise(() => startNetLog()).pipe(
     Effect.catch((error) =>
       Effect.sync(() => {
@@ -326,7 +329,9 @@ const main = Effect.gen(function* () {
       password,
     })
 
-    void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
+    if (process.platform === "win32") {
+      void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
+    }
 
     yield* Effect.promise(() => health.wait).pipe(
       Effect.timeout("30 seconds"),
@@ -350,7 +355,7 @@ const main = Effect.gen(function* () {
         if (win) sendMenuCommand(win, id)
       },
       checkForUpdates: () => {
-        void checkForUpdates(true, stopSidecars)
+        void showUpdaterDialog(updater, true)
       },
       relaunch: () => {
         relaunch()

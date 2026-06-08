@@ -63,7 +63,7 @@ export type Editor = {
 
 export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
-  readonly update: (update: State.Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
+  readonly update: State.Interface<Data, Editor>["update"]
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly default: () => Effect.Effect<Info | undefined>
   readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
@@ -113,10 +113,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      update: Effect.fn("AgentV2.update")(function* (update) {
-        const transform = yield* state.transform()
-        yield* transform(update)
-      }),
+      update: state.update,
       get: Effect.fn("AgentV2.get")(function* (id) {
         return state.get().agents.get(id)
       }),
