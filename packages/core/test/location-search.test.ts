@@ -44,6 +44,29 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
   ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
 }
 
+describe("FileSystem.find", () => {
+  it.live("uses shallow search for global directory finds", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(directory, "alpha", "nested", "deep"), { recursive: true })
+          await fs.mkdir(path.join(directory, "beta"))
+          await fs.writeFile(path.join(directory, "alpha", "nested", "deep", "file.txt"), "deep\n")
+        })
+        const filesystem = yield* FileSystem.Service
+        const paths = (yield* filesystem.find({ query: "", type: "directory" }))
+          .map((item) => item.path)
+          .sort()
+
+        expect(paths).toContain(RelativePath.make("alpha"))
+        expect(paths).toContain(RelativePath.make("alpha/nested"))
+        expect(paths).toContain(RelativePath.make("beta"))
+        expect(paths).not.toContain(RelativePath.make("alpha/nested/deep"))
+      }).pipe(provide(directory)),
+    ),
+  )
+})
+
 describe("LocationSearch", () => {
   it.live("greps an absolute managed tool-output file", () =>
     withTmp((directory) => {

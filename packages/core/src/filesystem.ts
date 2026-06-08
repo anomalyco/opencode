@@ -298,8 +298,8 @@ export const layer = Layer.effect(
       })
     })
 
-    const scan = Effect.fnUntraced(function* () {
-      if (location.directory === Global.Path.home && location.project.id === "global") {
+    const scan = Effect.fnUntraced(function* (options?: { shallow?: boolean }) {
+      if (options?.shallow || (location.directory === Global.Path.home && location.project.id === "global")) {
         const protectedNames = Protected.names()
         const nested = new Set(["node_modules", "dist", "build", "target", "vendor"])
         return (yield* Effect.forEach(
@@ -601,7 +601,8 @@ export const layer = Layer.effect(
       }),
       listPageResolved,
       find: Effect.fn("FileSystem.find")(function* (input) {
-        const items = (yield* scan()).filter((item) => input.type !== "file" || !item.endsWith("/"))
+        const shallow = input.type === "directory" && location.project.id === "global"
+        const items = (yield* scan({ shallow })).filter((item) => input.type !== "file" || !item.endsWith("/"))
         const filtered = items.filter((item) => input.type !== "directory" || item.endsWith("/"))
         const sorted = input.query.trim()
           ? fuzzysort.go(input.query.trim(), filtered, { limit: input.limit ?? 100 }).map((item) => item.target)
