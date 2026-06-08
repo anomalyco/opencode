@@ -1,11 +1,9 @@
 export * as ACPReviewStaging from "./review-staging"
 
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import * as Log from "@opencode-ai/core/util/log"
+import { Effect } from "effect"
 import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
 import { isActive } from "./review-mode"
-
-const log = Log.create({ service: "acp-review-staging" })
 
 type Connection = Partial<Pick<AgentSideConnection, "writeTextFile">>
 
@@ -18,9 +16,6 @@ export async function flushPendingWrites(connection: Connection | undefined, ses
   }
 
   const pending = ReviewOverlay.drainPendingWrites()
-  if (pending.length > 0) {
-    log.info("flushing staged writes", { count: pending.length })
-  }
 
   for (const item of pending) {
     await connection
@@ -29,12 +24,14 @@ export async function flushPendingWrites(connection: Connection | undefined, ses
         path: item.path,
         content: item.content,
       })
-      .catch((error: unknown) => {
-        log.error("failed to write staged edit through ACP", {
-          error,
-          path: item.path,
-          sessionID: item.sessionID,
-        })
-      })
+      .catch((error: unknown) =>
+        Effect.runPromise(
+          Effect.logError("failed to write staged edit through ACP", {
+            error,
+            path: item.path,
+            sessionID: item.sessionID,
+          }),
+        ),
+      )
   }
 }
