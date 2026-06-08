@@ -20,6 +20,8 @@ export type SidecarListener = { stop: () => Promise<void> }
 const SIDECAR_SERVICE_NAME = "opencode server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
 const SIDECAR_STOP_TIMEOUT = 6_000
+const APP_SETTINGS_STORE = "default.dat"
+const APP_SETTINGS_KEY = "settings.v3"
 const LocalSidecarStartupSettings = Schema.Struct({
   general: Schema.optional(
     Schema.Struct({
@@ -53,7 +55,9 @@ export function setDefaultServerUrl(url: string | null) {
 }
 
 export function getLocalSidecarStartupEnabled(): boolean {
-  const settings = Option.getOrUndefined(decodeLocalSidecarStartupSettings(getStore().get("settings.v3")))
+  const settings = Option.getOrUndefined(
+    decodeLocalSidecarStartupSettings(getStore(APP_SETTINGS_STORE).get(APP_SETTINGS_KEY)),
+  )
   return settings?.general?.localSidecarStartup ?? true
 }
 
