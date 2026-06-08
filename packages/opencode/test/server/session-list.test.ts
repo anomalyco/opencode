@@ -16,7 +16,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
 
 void Log.init({ print: false })
-const it = testEffect(
+const layer = (experimentalWorkspaces: boolean) =>
   Layer.mergeAll(
     Database.defaultLayer,
     SessionNs.layer.pipe(
@@ -25,11 +25,12 @@ const it = testEffect(
       Layer.provide(Database.defaultLayer),
       Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(SessionProjector.defaultLayer),
-      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
+      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
       Layer.provide(BackgroundJob.defaultLayer),
     ),
-  ),
-)
+  )
+const it = testEffect(layer(false))
+const itWorkspaces = testEffect(layer(true))
 
 const withSession = (input?: Parameters<SessionNs.Interface["create"]>[0]) =>
   Effect.acquireRelease(SessionNs.use.create(input), (created) =>
@@ -93,6 +94,30 @@ describe("session.list", () => {
         )).map((session) => session.id)
         expect(ids).not.toContain(root.id)
         expect(ids).not.toContain(parent.id)
+        expect(ids).toContain(current.id)
+        expect(ids).not.toContain(sibling.id)
+      }),
+    { git: true },
+  )
+
+  itWorkspaces.instance(
+    "filters by directory when experimental workspaces are enabled",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode"), { recursive: true }))
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "app"), { recursive: true }))
+
+        const current = yield* withSession({ title: "current" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "opencode")),
+        )
+        const sibling = yield* withSession({ title: "sibling" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "app")),
+        )
+
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({ directory: path.join(test.directory, "packages", "opencode") }),
+        )).map((session) => session.id)
         expect(ids).toContain(current.id)
         expect(ids).not.toContain(sibling.id)
       }),

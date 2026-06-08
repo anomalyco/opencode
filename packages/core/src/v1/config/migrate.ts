@@ -5,6 +5,8 @@ import { ConfigAgentV1 } from "./agent"
 import { ConfigMCPV1 } from "./mcp"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigProviderV1 } from "./provider"
+import { ConfigProviderOptionsV1 } from "./provider-options"
+import { ModelRequest } from "../../model-request"
 
 const keys = new Set([
   "logLevel",
@@ -17,7 +19,6 @@ const keys = new Set([
   "disabled_providers",
   "enabled_providers",
   "small_model",
-  "default_agent",
   "mode",
   "agent",
   "provider",
@@ -37,6 +38,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     $schema: info.$schema,
     shell: info.shell,
     model: info.model,
+    default_agent: info.default_agent,
     autoupdate: info.autoupdate,
     share: info.share ?? (info.autoshare ? "auto" : undefined),
     enterprise: info.enterprise,
@@ -54,12 +56,12 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
       auto: info.compaction.auto,
       prune: info.compaction.prune,
       keep: {
-        turns: info.compaction.tail_turns,
         tokens: info.compaction.preserve_recent_tokens,
       },
       buffer: info.compaction.reserved,
     },
     skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
+    commands: info.command,
     instructions: info.instructions,
     references: info.reference,
     plugins: info.plugin?.map((plugin) =>
@@ -99,10 +101,10 @@ function agents(info: typeof ConfigV1.Info.Type) {
     ...Object.entries(info.mode ?? {}).map(([name, agent]) => [name, { ...agent, mode: "primary" as const }] as const),
   ]
   if (!entries.length) return undefined
-  return Object.fromEntries(entries.map(([name, agent]) => [name, migrateAgent(agent)]))
+  return Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
 }
 
-function migrateAgent(info: ConfigAgentV1.Info) {
+export function migrateAgent(info: ConfigAgentV1.Info) {
   const body = {
     ...info.options,
     ...(info.temperature === undefined ? {} : { temperature: info.temperature }),
@@ -111,7 +113,7 @@ function migrateAgent(info: ConfigAgentV1.Info) {
   return {
     model: info.model,
     variant: info.variant,
-    options: Object.keys(body).length ? { body } : undefined,
+    request: Object.keys(body).length ? { body } : undefined,
     system: info.prompt,
     description: info.description,
     mode: info.mode,
@@ -160,22 +162,34 @@ function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
 }
 
 function migrateProvider(info: ConfigProviderV1.Info) {
+  const lowerer = ConfigProviderOptionsV1.get(info.npm)
+  const options = lowerer.provider(info.options ?? {})
   return {
     name: info.name,
     env: info.env,
-    endpoint: info.npm && {
-      type: "aisdk" as const,
-      package: info.npm,
-      url: info.api ?? (typeof info.options?.baseURL === "string" ? info.options.baseURL : undefined),
-    },
-    options: info.options && { body: info.options },
+    api: info.npm
+      ? {
+          type: "aisdk" as const,
+          package: info.npm,
+          url: info.api ?? options.url,
+          settings: options.settings ?? {},
+        }
+      : undefined,
+    request: info.options && { headers: options.headers, body: options.body },
     models:
       info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
+      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)])),
   }
 }
 
-function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
+function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: string) {
+  const packageID = info.provider?.npm ?? packageName
+  const lowerer = ConfigProviderOptionsV1.get(packageID)
+  const ingest = (options: Readonly<Record<string, unknown>>) => {
+    const request = ModelRequest.normalizeAiSdkOptions(packageID, options)
+    return { ...lowerer.request(request.body), ...request.generation, ...request.options }
+  }
+  const request = info.options && ingest(info.options)
   const costs = info.cost && [
     {
       input: info.cost.input,
@@ -198,15 +212,40 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
       ? { tools: info.tool_call ?? false, input: info.modalities?.input ?? [], output: info.modalities?.output ?? [] }
       : undefined
   return {
-    api_id: info.id,
     family: info.family,
     name: info.name,
-    endpoint: info.provider?.npm && { type: "aisdk" as const, package: info.provider.npm, url: info.provider.api },
+    api: info.provider?.npm
+      ? {
+          ...(info.id === undefined ? {} : { id: info.id }),
+          type: "aisdk" as const,
+          package: info.provider.npm,
+          url: info.provider.api,
+          settings: {},
+        }
+      : info.id === undefined
+        ? undefined
+        : { id: info.id },
     capabilities,
-    options: (info.headers || info.options) && { headers: info.headers, body: info.options },
-    variants: info.variants && Object.entries(info.variants).map(([id, options]) => ({ id, body: options })),
+    request: (info.headers || request) && {
+      headers: info.headers,
+      body: request,
+    },
+    variants:
+      info.variants &&
+      Object.entries(info.variants).map(([id, options]) => ({
+        id,
+        body: ingest(options),
+      })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
-    limit: info.limit,
+    limit: info.limit && {
+      context: int(info.limit.context),
+      input: info.limit.input === undefined ? undefined : int(info.limit.input),
+      output: int(info.limit.output),
+    },
   }
+}
+
+function int(value: number) {
+  return Math.max(Number.MIN_SAFE_INTEGER, Math.min(Number.MAX_SAFE_INTEGER, Math.trunc(value)))
 }

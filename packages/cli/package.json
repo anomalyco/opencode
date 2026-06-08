@@ -1,13 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/cli",
-  "version": "1.15.13",
-  "private": true,
+  "version": "1.16.2",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "opencode": "./src/index.ts"
+    "lildax": "./bin/lildax.cjs"
   },
+  "files": [
+    "bin"
+  ],
   "scripts": {
     "build": "bun run script/build.ts",
     "dev": "bun run src/index.ts",
@@ -16,9 +18,17 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@opencode-ai/core": "workspace:*",
-    "effect": "catalog:"
+    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/server": "workspace:*",
+    "@opencode-ai/tui": "workspace:*",
+    "@opentui/core": "catalog:",
+    "@opentui/solid": "catalog:",
+    "@parcel/watcher": "2.5.1",
+    "effect": "catalog:",
+    "solid-js": "catalog:"
   },
   "devDependencies": {
+    "@opencode-ai/script": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"

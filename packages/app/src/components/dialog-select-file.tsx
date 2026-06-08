@@ -261,7 +261,11 @@ function createSessionEntries(props: {
   return { sessions }
 }
 
-export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
+export function DialogSelectFile(props: {
+  mode?: DialogSelectFileMode
+  onOpenFile?: (path: string) => void
+  onSelectFile?: (path: string) => void
+}) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
@@ -375,6 +379,10 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     }
 
     if (!item.path) return
+    if (props.onSelectFile) {
+      props.onSelectFile(item.path)
+      return
+    }
     open(item.path)
   }
 
@@ -386,6 +394,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   return (
     <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
       <List
+        class="px-3"
         search={{
           placeholder: filesOnly()
             ? language.t("session.header.searchFiles")
@@ -398,6 +407,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
         items={items}
         key={(item) => item.id}
         filterKeys={["title", "description", "category"]}
+        skipFilter={(item) => item.type === "file"}
         groupBy={grouped() ? (item) => item.category : () => ""}
         onMove={handleMove}
         onSelect={handleSelect}

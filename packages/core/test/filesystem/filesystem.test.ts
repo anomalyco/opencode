@@ -109,6 +109,21 @@ describe("FSUtil", () => {
         expect(result).toEqual(data)
       }),
     )
+
+    it(
+      "fails invalid JSON through the error channel",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "broken.json")
+        yield* filesys.writeFileString(file, "{")
+
+        const result = yield* fs.readJson(file).pipe(Effect.catch((error) => Effect.succeed(error)))
+
+        expect(result).toHaveProperty("_tag", "FileSystemError")
+      }),
+    )
   })
 
   describe("ensureDir", () => {
@@ -354,13 +369,18 @@ describe("FSUtil", () => {
 
     test("contains checks path containment", () => {
       expect(FSUtil.contains("/a/b", "/a/b/c")).toBe(true)
+      expect(FSUtil.contains("/a/b", "/a/b")).toBe(true)
       expect(FSUtil.contains("/a/b", "/a/c")).toBe(false)
+      expect(FSUtil.contains("/a/b", "/a/bad")).toBe(false)
+      if (process.platform === "win32") expect(FSUtil.contains("C:\\a", "D:\\b")).toBe(false)
     })
 
     test("overlaps detects overlapping paths", () => {
       expect(FSUtil.overlaps("/a/b", "/a/b/c")).toBe(true)
       expect(FSUtil.overlaps("/a/b/c", "/a/b")).toBe(true)
       expect(FSUtil.overlaps("/a", "/b")).toBe(false)
+      expect(FSUtil.overlaps("/a/b", "/a/bad")).toBe(false)
+      if (process.platform === "win32") expect(FSUtil.overlaps("C:\\a", "D:\\b")).toBe(false)
     })
   })
 })

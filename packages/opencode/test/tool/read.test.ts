@@ -8,6 +8,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -59,6 +60,7 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Instruction.defaultLayer,
     LSP.defaultLayer,
     referenceLayer(flags),
+    Search.defaultLayer,
     Truncate.defaultLayer,
   )
 
@@ -428,6 +430,15 @@ describe("tool.read truncation", () => {
       const result = yield* run({ filePath: path.join(test.directory, "small.txt") })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file")
+      expect(result.metadata.display).toMatchObject({
+        type: "file",
+        path: path.join(test.directory, "small.txt"),
+        text: "hello world",
+        lineStart: 1,
+        lineEnd: 1,
+        totalLines: 1,
+        truncated: false,
+      })
     }),
   )
 
@@ -495,6 +506,14 @@ describe("tool.read truncation", () => {
       const result = yield* exec(dir, { filePath: path.join(dir, "dir"), offset: 6, limit: 5 })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).not.toContain("Showing 5 of 10 entries")
+      expect(result.metadata.display).toMatchObject({
+        type: "directory",
+        path: path.join(dir, "dir"),
+        entries: ["file-5.txt", "file-6.txt", "file-7.txt", "file-8.txt", "file-9.txt"],
+        offset: 6,
+        totalEntries: 10,
+        truncated: false,
+      })
     }),
   )
 
