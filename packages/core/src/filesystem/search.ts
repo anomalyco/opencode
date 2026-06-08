@@ -133,14 +133,22 @@ function item(hit: Fff.Hit): Item {
   }
 }
 
-function collectPaths<T>(items: T[], toPath: (item: T) => string): string[] {
+function collectPaths<T>(items: T[], scores: Array<{ total: number }>, toPath: (item: T) => string): string[] {
+  const rows = items.flatMap((item, index): Array<{ text: string; score: number }> => {
+    const text = toPath(item)
+    if (!text) return []
+    return [{ text, score: scores[index]?.total ?? 0 }]
+  })
+  rows.sort(
+    (a, b) =>
+      b.score - a.score ||
+      a.text.length - b.text.length ||
+      (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
+  )
+
   return Array.from(
     new Set(
-      items.flatMap((item): string[] => {
-        const text = toPath(item)
-        if (!text) return []
-        return [text]
-      }),
+      rows.map((item) => item.text),
     ),
   )
 }
@@ -156,7 +164,7 @@ function searchFff(
     if (!out.ok) return out
     return {
       ok: true,
-      value: collectPaths(out.value.items, (entry) => normalize(entry.relativePath)),
+      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
     }
   }
   if (kind === "all") {
@@ -164,14 +172,14 @@ function searchFff(
     if (!out.ok) return out
     return {
       ok: true,
-      value: collectPaths(out.value.items, (entry) => normalize(entry.item.relativePath)),
+      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.item.relativePath)),
     }
   }
   const out = pick.fileSearch(query, opts)
   if (!out.ok) return out
   return {
     ok: true,
-    value: collectPaths(out.value.items, (entry) => normalize(entry.relativePath)),
+    value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
   }
 }
 
