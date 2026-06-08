@@ -1,6 +1,6 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { RGBA, type CliRenderer } from "@opentui/core"
-import type { HostPluginApi } from "../../src/cli/cmd/tui/plugin/slots"
+import type { HostPluginApi } from "@opencode-ai/tui/plugin/slots"
 import { createTuiResolvedConfig } from "./tui-runtime"
 
 type Count = {
@@ -89,6 +89,7 @@ type Opts = {
   renderer?: HostPluginApi["renderer"]
   attention?: AttentionOpts
   event?: HostPluginApi["event"]
+  mode?: HostPluginApi["mode"]
   count?: Count
   keymap?: HostPluginApi["keymap"]
   tuiConfig?: Partial<HostPluginApi["tuiConfig"]>
@@ -237,6 +238,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
     },
     keymap,
+    mode: opts.mode ?? {
+      current: () => "base",
+      push: () => () => {},
+    },
     route: {
       register: () => {
         if (count) count.route_add += 1

@@ -21,7 +21,7 @@
   flex-direction: column;
   gap: 12px;
   overflow: hidden;
-  padding: 0 12px;
+  /*padding: 0 12px;*/
 
   [data-slot="list-search-wrapper"] {
     display: flex;
