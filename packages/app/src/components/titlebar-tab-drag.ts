@@ -8,7 +8,7 @@ export const ACTIVATION_DISTANCE = 4
 export const HYSTERESIS_DEADBAND = 8
 export const AUTOSCROLL_EDGE = 24
 export const AUTOSCROLL_MAX_SPEED = 8
-export const FLOATER_LEFT_OVERSHOOT_MAX = 8
+export const FLOATER_OVERSHOOT_MAX = 8
 export const STALE_POINTER_MS = 100
 
 export function pointerDistance(x1: number, y1: number, x2: number, y2: number) {
@@ -105,8 +105,8 @@ export function draftOrderChanged(initial: readonly string[], final: readonly st
   return final.some((key, index) => key !== initial[index])
 }
 
-function easeLeftOvershoot(overshoot: number) {
-  return FLOATER_LEFT_OVERSHOOT_MAX * overshoot / (overshoot + FLOATER_LEFT_OVERSHOOT_MAX)
+function easeOvershoot(overshoot: number) {
+  return FLOATER_OVERSHOOT_MAX * overshoot / (overshoot + FLOATER_OVERSHOOT_MAX)
 }
 
 export function clampFloaterLeft(left: number, width: number, stripLeft: number, stripRight: number) {
@@ -114,9 +114,8 @@ export function clampFloaterLeft(left: number, width: number, stripLeft: number,
   if (width >= stripWidth) return stripLeft
 
   const maxLeft = stripRight - width
-  if (left > maxLeft) return maxLeft
-
-  if (left < stripLeft) return stripLeft - easeLeftOvershoot(stripLeft - left)
+  if (left > maxLeft) return maxLeft + easeOvershoot(left - maxLeft)
+  if (left < stripLeft) return stripLeft - easeOvershoot(stripLeft - left)
 
   return left
 }
