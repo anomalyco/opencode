@@ -175,7 +175,7 @@ export function DialogSessionList() {
           : undefined
         : x.directory
       const footer =
-        directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 30) : ""
+        directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
 
       const isDeleting = toDelete() === x.id
       const status = sync.data.session_status?.[x.id]
