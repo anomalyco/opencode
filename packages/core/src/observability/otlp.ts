@@ -1,5 +1,4 @@
 import { Effect, Layer, Logger } from "effect"
-import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
 import { Flag } from "../flag/flag"
@@ -52,21 +51,12 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
 
 function loggingLayer() {
   return Logger.layer(
-    [
-      ...Logging.loggers(),
-      OtlpLogger.make({
-        url: `${endpoint}/v1/logs`,
-        resource: resource(),
-        headers,
-      }),
-    ],
-    { mergeWithExisting: false },
+    [OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })],
+    { mergeWithExisting: true },
   ).pipe(
     Layer.provide(OtlpSerialization.layerJson),
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(NodeFileSystem.layer),
     Layer.orDie,
-    Layer.merge(Logging.levelLayer()),
   )
 }
 
