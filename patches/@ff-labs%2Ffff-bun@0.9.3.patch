@@ -1,0 +1,34 @@
+diff --git a/src/download.ts b/src/download.ts
+index 3454256..6dca25a 100644
+--- a/src/download.ts
++++ b/src/download.ts
+@@ -7,7 +7,6 @@
+  */
+ 
+ import { existsSync } from "node:fs";
+-import { createRequire } from "node:module";
+ import { dirname, join } from "node:path";
+ import { fileURLToPath } from "node:url";
+ import { getLibFilename, getNpmPackageName } from "./platform";
+@@ -54,14 +53,14 @@ export function binaryExists(): boolean {
+  * in the same directory.
+  */
+ function resolveFromNpmPackage(): string | null {
+-  const packageName = getNpmPackageName();
+-
+   try {
+-    // Use createRequire to resolve the platform package's location
+-    const require = createRequire(join(getPackageDir(), "package.json"));
+-    const packageJsonPath = require.resolve(`${packageName}/package.json`);
+-    const packageDir = dirname(packageJsonPath);
+-    const binaryPath = join(packageDir, getLibFilename());
++    const binaryPath = process.platform === "win32"
++      ? require(`../../../../../@ff-labs+fff-bin-win32-${process.arch}@0.9.3/node_modules/@ff-labs/fff-bin-win32-${process.arch}/fff_c.dll`)
++      : process.platform === "darwin"
++        ? require(`../../../../../@ff-labs+fff-bin-darwin-${process.arch}@0.9.3/node_modules/@ff-labs/fff-bin-darwin-${process.arch}/libfff_c.dylib`)
++        : getNpmPackageName().endsWith("musl")
++          ? require(`../../../../../@ff-labs+fff-bin-linux-${process.arch}-musl@0.9.3/node_modules/@ff-labs/fff-bin-linux-${process.arch}-musl/libfff_c.so`)
++          : require(`../../../../../@ff-labs+fff-bin-linux-${process.arch}-gnu@0.9.3/node_modules/@ff-labs/fff-bin-linux-${process.arch}-gnu/libfff_c.so`);
+ 
+     if (existsSync(binaryPath)) {
+       return binaryPath;
