@@ -374,6 +374,7 @@ describe("HttpApi SDK", () => {
           expectStatus(() => sdk.project.current(), 200),
           expectStatus(() => sdk.config.get(), 200),
           expectStatus(() => sdk.config.providers(), 200),
+          expectStatus(() => sdk.find.files({ query: "hello", limit: 10 }), 200),
         ])
       }),
   )
@@ -389,10 +390,13 @@ describe("HttpApi SDK", () => {
           onRequest: (value) => (request = value),
         })
         const file = yield* call(() => sdk.v2.fs.read({ path: "hello.txt" }))
+        const found = yield* call(() => sdk.v2.fs.find({ query: "hello", type: "file" }))
         const url = new URL(request!.url)
 
         expect(file.response.status).toBe(200)
         expect(file.data).toMatchObject({ data: { content: "hello" } })
+        expect(found.response.status).toBe(200)
+        expect(found.data).toMatchObject({ data: [{ path: "hello.txt", type: "file" }] })
         expect(url.searchParams.get("directory")).toBe(directory)
         expect(url.searchParams.get("workspace")).toBe(workspaceID)
         expect(url.searchParams.get("location[directory]")).toBe(directory)
@@ -519,6 +523,7 @@ describe("HttpApi SDK", () => {
         const file = yield* capture(() => sdk.file.read({ path: "hello.txt" }))
         const files = yield* capture(() => sdk.file.list({ path: "." }))
         const fileStatus = yield* capture(() => sdk.file.status())
+        const findFiles = yield* capture(() => sdk.find.files({ query: "hello", limit: 10 }))
         const findText = yield* capture(() => sdk.find.text({ pattern: "sdk-parity" }))
         const agents = yield* capture(() => sdk.app.agents())
         const skills = yield* capture(() => sdk.app.skills())
@@ -537,6 +542,7 @@ describe("HttpApi SDK", () => {
             file,
             files,
             fileStatus,
+            findFiles,
             findText,
             agents,
             skills,
@@ -549,6 +555,7 @@ describe("HttpApi SDK", () => {
           paths: { directorySelected: record(paths.data).directory === directory },
           file: record(file.data).content,
           hasProject: array(projects.data).length > 0,
+          foundFile: JSON.stringify(findFiles.data).includes("hello.txt"),
           foundText: JSON.stringify(findText.data ?? null).includes("sdk-parity"),
           listedFile: JSON.stringify(files.data).includes("hello.txt"),
           vcs: { hasBranch: typeof record(vcs.data).branch === "string" },
