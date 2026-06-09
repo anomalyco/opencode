@@ -79,7 +79,7 @@ function makeQueryOptionsApi(
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, sdkFor(directory)),
     mcp: (directory: PathKey) => loadMcpQuery(scope, directory, sdkFor(directory)),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory, sdkFor(directory)),
-    sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
+    sessions: (directory: PathKey, projectID?: string) => ({ queryKey: [scope, directory, projectID, "loadSessions"] as const }),
   }
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
@@ -93,7 +93,7 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
-  const sessionMeta = new Map<string, { limit: number }>()
+  const sessionMeta = new Map<string, { limit: number; projectID?: string }>()
 
   const sdkFor = (directory: string) => {
     const key = directoryKey(directory)
@@ -216,7 +216,13 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
     scope: serverSDK.scope,
     persist: persisted,
     isBooting: (directory) => booting.has(directory),
-    isLoadingSessions: (directory) => sessionLoads.has(directory),
+    isLoadingSessions: (directory) => {
+      const key = directoryKey(directory)
+      for (const loadKey of sessionLoads.keys()) {
+        if (loadKey === key || loadKey.startsWith(`${key}:`)) return true
+      }
+      return false
+    },
     onBootstrap: (directory) => {
       void bootstrapInstance(directory)
     },
@@ -248,9 +254,10 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
     },
   })
 
-  async function loadSessions(directory: string, options?: { limit?: number }) {
+  async function loadSessions(directory: string, options?: { limit?: number; projectID?: string }) {
     const key = directoryKey(directory)
-    const pending = sessionLoads.get(key)
+    const loadKey = `${key}:${options?.projectID ?? ""}`
+    const pending = sessionLoads.get(loadKey)
     if (pending) {
       await pending
       return loadSessions(directory, options)
@@ -260,7 +267,7 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(key)
     const retainedLimit = Math.max(store.limit, options?.limit ?? 0, meta?.limit ?? 0)
-    if (meta && meta.limit >= retainedLimit) {
+    if (meta && meta.projectID === options?.projectID && meta.limit >= retainedLimit) {
       const next = trimSessions(store.session, {
         limit: retainedLimit,
         permission: store.permission,
@@ -276,10 +283,11 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
     const limit = Math.max(retainedLimit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
     const promise = queryClient
       .fetchQuery({
-        ...queryOptionsApi.sessions(key),
+        ...queryOptionsApi.sessions(key, options?.projectID),
         queryFn: () =>
           loadRootSessionsWithFallback({
             directory,
+            projectID: options?.projectID,
             limit,
             list: (query) => serverSDK.client.session.list(query),
           })
@@ -306,7 +314,7 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
                 setStore("session", reconcile(sessions, { key: "id" }))
                 cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
               })
-              sessionMeta.set(key, { limit })
+              sessionMeta.set(key, { limit, projectID: options?.projectID })
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
@@ -321,9 +329,9 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
       })
       .then(() => {})
 
-    sessionLoads.set(key, promise)
+    sessionLoads.set(loadKey, promise)
     void promise.finally(() => {
-      sessionLoads.delete(key)
+      sessionLoads.delete(loadKey)
       children.unpin(key)
     })
     return promise

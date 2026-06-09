@@ -25,10 +25,12 @@ import { described } from "./metadata"
 import { QueryBoolean } from "./query"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { ProjectV2 } from "@opencode-ai/core/project"
 
 const root = "/session"
 export const ListQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
+  projectID: Schema.optional(ProjectV2.ID),
   scope: Schema.optional(Schema.Literals(["project"])),
   path: Schema.optional(Schema.String),
   roots: Schema.optional(QueryBoolean),

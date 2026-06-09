@@ -547,7 +547,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           sessionTimer = undefined
           void Promise.all(
             server.projects.list().map((project) => {
-              return serverSync.project.loadSessions(project.worktree)
+              const projectID = "id" in project && typeof project.id === "string" ? project.id : undefined
+              return serverSync.project.loadSessions(project.worktree, { projectID })
             }),
           )
         }, 0)

@@ -7674,6 +7674,7 @@ export type SessionListData = {
   query?: {
     directory?: string
     workspace?: string
+    projectID?: string
     scope?: "project"
     path?: string
     roots?: boolean | "true" | "false"

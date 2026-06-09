@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Session as SessionNs } from "@/session/session"
-import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance, tmpdir } from "../fixture/fixture"
 import { mkdir } from "fs/promises"
 import path from "path"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -64,6 +64,9 @@ describe("session.list", () => {
         expect(ids).toContain(parent.id)
         expect(ids).toContain(current.id)
         expect(ids).toContain(sibling.id)
+
+        const fallbackIDs = (yield* SessionNs.use.list({ projectID: undefined })).map((session) => session.id)
+        expect(fallbackIDs).toContain(current.id)
       }),
     { git: true },
   )
@@ -94,6 +97,22 @@ describe("session.list", () => {
         expect(ids).not.toContain(parent.id)
         expect(ids).toContain(current.id)
         expect(ids).not.toContain(sibling.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "filters by explicit project id",
+    () =>
+      Effect.gen(function* () {
+        const other = yield* Effect.promise(() => tmpdir({ git: true }))
+        yield* Effect.addFinalizer(() => Effect.promise(() => other[Symbol.asyncDispose]()))
+        const current = yield* withSession({ title: "current-project" })
+        const foreign = yield* withSession({ title: "other-project" }).pipe(provideInstance(other.path))
+
+        const ids = (yield* SessionNs.use.list({ projectID: foreign.projectID })).map((session) => session.id)
+        expect(ids).not.toContain(current.id)
+        expect(ids).toContain(foreign.id)
       }),
     { git: true },
   )

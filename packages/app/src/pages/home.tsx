@@ -159,18 +159,31 @@ function HomeDesign() {
       projects()[0],
   )
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
-  const projectDirectories = createMemo(() => {
+  const projectDirectoryEntries = createMemo(() => {
     const project = selectedProject()
-    if (!project) return projects().flatMap(directories)
-    return directories(project)
+    const list = project ? [project] : projects()
+    return list.flatMap((project) =>
+      directories(project).map((directory) => ({
+        directory,
+        projectID: directory === project.worktree ? project.id : undefined,
+      })),
+    )
+  })
+  const projectDirectories = createMemo(() => {
+    return projectDirectoryEntries().map((entry) => entry.directory)
   })
   const search = createMemo(() => state.search.trim())
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", state.selection.server, ...projectDirectories()] as const,
+    queryKey: [
+      "home",
+      "sessions",
+      state.selection.server,
+      ...projectDirectoryEntries().map((entry) => `${entry.directory}:${entry.projectID ?? ""}`),
+    ] as const,
     queryFn: async () => {
       await Promise.all(
-        projectDirectories().map((directory) =>
-          focusedSync().project.loadSessions(directory, { limit: HOME_SESSION_LIMIT }),
+        projectDirectoryEntries().map((entry) =>
+          focusedSync().project.loadSessions(entry.directory, { limit: HOME_SESSION_LIMIT, projectID: entry.projectID }),
         ),
       )
       return null

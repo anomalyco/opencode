@@ -288,6 +288,7 @@ export const MessagesInput = Schema.Struct({
   limit: Schema.optional(NonNegativeInt),
 })
 export type ListInput = {
+  projectID?: ProjectV2.ID
   directory?: string
   scope?: "project"
   path?: string
@@ -587,9 +588,9 @@ export const layer: Layer.Layer<
     const list = Effect.fn("Session.list")(function* (input?: ListInput) {
       const ctx = yield* InstanceState.context
       return yield* listByProject(db, {
-        projectID: ctx.project.id,
         experimentalWorkspaces: flags.experimentalWorkspaces,
         ...input,
+        projectID: input?.projectID ?? ctx.project.id,
       })
     })
 

@@ -321,14 +321,16 @@ export const SortableWorkspace = (props: {
   const boot = createMemo(() => open() || active())
   const count = createMemo(() => sessions()?.length ?? 0)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
-  const fetching = useIsFetching(() => queryOptions.sessions(pathKey(props.directory)))
+  const fetching = useIsFetching(() =>
+    queryOptions.sessions(pathKey(props.directory), local() ? props.project.id : undefined),
+  )
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
   const loading = () => fetching() > 0 && count() === 0
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
   const loadMore = async () => {
     setWorkspaceStore("limit", (limit) => (limit ?? 0) + 5)
-    await serverSync.project.loadSessions(props.directory)
+    await serverSync.project.loadSessions(props.directory, { projectID: local() ? props.project.id : undefined })
   }
 
   const workspaceEditActive = createMemo(() => props.ctx.editorOpen(`workspace:${props.directory}`))
@@ -456,12 +458,12 @@ export const LocalWorkspace = (props: {
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
   const count = createMemo(() => sessions()?.length ?? 0)
-  const fetching = useIsFetching(() => queryOptions.sessions(pathKey(props.project.worktree)))
+  const fetching = useIsFetching(() => queryOptions.sessions(pathKey(props.project.worktree), props.project.id))
   const hasMore = createMemo(() => workspace().store.sessionTotal > count())
   const loading = () => fetching() > 0 && count() === 0
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
-    await serverSync.project.loadSessions(props.project.worktree)
+    await serverSync.project.loadSessions(props.project.worktree, { projectID: props.project.id })
   }
 
   return (

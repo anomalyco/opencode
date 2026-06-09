@@ -124,8 +124,15 @@ export type DisposeCheck = {
 
 export type RootLoadArgs = {
   directory: string
+  projectID?: string
   limit: number
-  list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
+  list: (query: {
+    directory?: string
+    projectID?: string
+    scope?: "project"
+    roots: true
+    limit?: number
+  }) => Promise<{ data?: Session[] }>
 }
 
 export type RootLoadResult = {

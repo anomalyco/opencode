@@ -1829,14 +1829,18 @@ export default function Layout(props: ParentProps) {
         }
 
         const next = new Set(dirs)
+        const project = currentProject()
         for (const directory of next) {
-          if (loadedSessionDirs.has(directory)) continue
-          void serverSync.project.loadSessions(directory)
+          const projectID = directory === project?.worktree ? project.id : undefined
+          const loadKey = `${directory}:${projectID ?? ""}`
+          if (loadedSessionDirs.has(loadKey)) continue
+          void serverSync.project.loadSessions(directory, { projectID })
         }
 
         loadedSessionDirs.clear()
         for (const directory of next) {
-          loadedSessionDirs.add(directory)
+          const projectID = directory === project?.worktree ? project.id : undefined
+          loadedSessionDirs.add(`${directory}:${projectID ?? ""}`)
         }
       },
       { defer: true },
