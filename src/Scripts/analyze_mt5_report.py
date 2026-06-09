@@ -34,20 +34,23 @@ def main() -> int:
             ],
         ),
         "largest_lot": extract_largest_lot(log_text),
-        "net_profit": extract_number(report_text, [r"Total Net Profit:\s+([\-\d\s]+)"]),
-        "profit_factor": extract_number(report_text, [r"Profit Factor:\s+([\d\s.]+)"]),
-        "sharpe_ratio": extract_number(report_text, [r"Sharpe Ratio:\s+([\-\d\s.]+)"]),
-        "balance_drawdown_relative_pct": extract_percent(report_text, [r"Balance Drawdown Relative:\s+(\d+)%"]),
-        "equity_drawdown_relative_pct": extract_percent(report_text, [r"Equity Drawdown Relative:\s+(\d+)%"]),
-        "balance_drawdown_absolute": extract_number(report_text, [r"Balance Drawdown Absolute:\s+([\d\s]+)"]),
-        "equity_drawdown_absolute": extract_number(report_text, [r"Equity Drawdown Absolute:\s+([\d\s]+)"]),
-        "total_trades": extract_int(report_text, [r"Total Trades:\s+(\d+)"]),
-        "win_count": extract_int(report_text, [r"Profit Trades \(% of total\):\s+(\d+)"]),
-        "loss_count": extract_int(report_text, [r"Loss Trades \(% of total\):\s+(\d+)"]),
+        "net_profit": extract_number(report_text, [r"Total Net Profit:\s*([\-\d\s.,]+)"]),
+        "profit_factor": extract_number(report_text, [r"Profit Factor:\s*([\d\s.,]+)"]),
+        "sharpe_ratio": extract_number(report_text, [r"Sharpe Ratio:\s*([\-\d\s.,]+)"]),
+        "balance_drawdown_relative_pct": extract_percent(report_text, [r"Balance Drawdown Relative:\s*([\d.,]+)%"]),
+        "equity_drawdown_relative_pct": extract_percent(report_text, [r"Equity Drawdown Relative:\s*([\d.,]+)%"]),
+        "balance_drawdown_absolute": extract_number(report_text, [r"Balance Drawdown Absolute:\s*([\d\s.,]+)"]),
+        "equity_drawdown_absolute": extract_number(report_text, [r"Equity Drawdown Absolute:\s*([\d\s.,]+)"]),
+        "total_trades": extract_int(report_text, [r"Total Trades:\s*(\d+)"]),
+        "win_count": extract_int(report_text, [r"Profit Trades \(% of total\):\s*(\d+)"]),
+        "loss_count": extract_int(report_text, [r"Loss Trades \(% of total\):\s*(\d+)"]),
     }
     metrics["win_rate"] = calculate_win_rate(metrics["win_count"], metrics["loss_count"])
     failed_rules: list[str] = []
     warnings: list[str] = []
+
+    append_trade_consistency_warning(metrics, warnings)
+    append_drawdown_gap_warning(metrics, warnings, rules)
 
     for marker in rules.get("required_log_markers", []):
         if marker not in log_text:
@@ -168,7 +171,7 @@ def extract_int(text: str, patterns: list[str]) -> int | None:
     if value is None:
         return None
     try:
-        return int(value.replace(",", ""))
+        return int(parse_number(value))
     except ValueError:
         return None
 
@@ -187,6 +190,10 @@ def extract_percent(text: str, patterns: list[str]) -> float | None:
 
 def parse_number(value: str) -> float:
     cleaned = value.strip().replace(" ", "")
+    if "," in cleaned and "." in cleaned:
+        if cleaned.rfind(",") > cleaned.rfind("."):
+            return float(cleaned.replace(".", "").replace(",", "."))
+        return float(cleaned.replace(",", ""))
     if "," in cleaned and "." not in cleaned:
         parts = cleaned.split(",")
         if len(parts[-1]) <= 2:
@@ -206,6 +213,24 @@ def calculate_win_rate(win_count: int | None, loss_count: int | None) -> float |
 def require_metric(metrics: dict[str, Any], key: str, failed_rules: list[str]) -> None:
     if metrics.get(key) is None:
         failed_rules.append(f"missing metric: {key}")
+
+
+def append_trade_consistency_warning(metrics: dict[str, Any], warnings: list[str]) -> None:
+    if metrics["win_count"] is None or metrics["loss_count"] is None or metrics["total_trades"] is None:
+        return
+    total = metrics["win_count"] + metrics["loss_count"]
+    if total != metrics["total_trades"]:
+        warnings.append(f"trade counts are inconsistent: wins+losses={total} total_trades={metrics['total_trades']}")
+
+
+def append_drawdown_gap_warning(metrics: dict[str, Any], warnings: list[str], rules: dict[str, Any]) -> None:
+    balance = metrics["balance_drawdown_relative_pct"]
+    equity = metrics["equity_drawdown_relative_pct"]
+    if balance is None or equity is None:
+        return
+    threshold = rules.get("warn_drawdown_gap_pct", 3.0)
+    if isinstance(threshold, (int, float)) and abs(balance - equity) > float(threshold):
+        warnings.append(f"drawdown gap exceeds warning threshold: balance={balance} equity={equity}")
 
 
 if __name__ == "__main__":

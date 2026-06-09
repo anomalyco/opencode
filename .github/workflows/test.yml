@@ -74,6 +74,24 @@ jobs:
         working-directory: packages/opencode
         run: bun run test:httpapi
 
+      - name: Setup Python
+        uses: actions/setup-python@42375524a0ff495b1635e79d6175a73cd50a1d5f # v5.4.0
+        with:
+          python-version: "3.11"
+
+      - name: Run MT5 parser fixture tests
+        working-directory: src/Scripts/tests
+        run: set -o pipefail; python -m unittest -v test_analyze_mt5_report.py 2>&1 | tee "$GITHUB_WORKSPACE/parser-unittest-${{ runner.os }}.log"
+
+      - name: Upload parser test log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: parser-unittest-${{ runner.os }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: parser-unittest-${{ runner.os }}.log
+
       - name: Publish unit reports
         if: always()
         uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0

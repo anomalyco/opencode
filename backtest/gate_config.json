@@ -7,6 +7,7 @@
     "required_log_markers": ["RISK_V3_ORDER_CALC_PROFIT"],
     "reject_no_money": true,
     "reject_margin_error": true,
-    "warn_largest_lot_above": 1.0
+    "warn_largest_lot_above": 1.0,
+    "warn_drawdown_gap_pct": 3.0
   }
 }
