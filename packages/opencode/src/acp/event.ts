@@ -1,4 +1,4 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, PlanEntry } from "@agentclientprotocol/sdk"
 import type {
   Event,
   EventMessagePartDelta,
@@ -40,6 +40,9 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
+  private readonly lastPlanBySession = new Map<string, PlanEntry[]>()
+  private readonly lastPlanFingerprintBySession = new Map<string, string>()
+  private readonly everInProgressBySession = new Map<string, Set<string>>()
   private readonly permission: ACPPermission.Handler
   private started = false
 
@@ -74,6 +77,10 @@ export class Subscription {
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+      case "todo.updated":
+        return this.handleTodoUpdated(event)
+      case "session.idle":
+        return this.handleSessionIdle(event)
     }
   }
 
@@ -330,6 +337,81 @@ export class Subscription {
   private clearTool(toolCallId: string) {
     this.toolStarts.delete(toolCallId)
     this.shellSnapshots.delete(toolCallId)
+  }
+
+  private async handleTodoUpdated(event: Extract<Event, { type: "todo.updated" }>) {
+    const sessionId = event.properties.sessionID
+    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
+    if (!session) return
+    const entries = event.properties.todos.flatMap((todo) => {
+      const entry = toPlanEntry(todo)
+      return entry ? [entry] : []
+    })
+
+    const everStarted = this.everInProgressBySession.get(sessionId) ?? new Set<string>()
+    for (const entry of entries) {
+      if (entry.status === "in_progress") everStarted.add(entry.content)
+    }
+    if (everStarted.size > 0) this.everInProgressBySession.set(sessionId, everStarted)
+
+    await this.sendPlan(sessionId, entries)
+  }
+
+  // When a turn ends, any entry the agent ever started during the session
+  // should be considered done — either it really was finished (model forgot to
+  // mark it completed) or the model demoted it back to pending without
+  // updating it again before stopping. Both render as a non-checked item in
+  // ACP clients, which contradicts the visible reality that work stopped.
+  // Genuinely planned-but-never-started entries (status: pending and never
+  // in_progress) are left alone so future plans still render correctly.
+  private async handleSessionIdle(event: Extract<Event, { type: "session.idle" }>) {
+    const sessionId = event.properties.sessionID
+    const previous = this.lastPlanBySession.get(sessionId)
+    if (!previous) return
+    const everStarted = this.everInProgressBySession.get(sessionId)
+    if (!everStarted || everStarted.size === 0) return
+    if (!previous.some((entry) => everStarted.has(entry.content) && entry.status !== "completed")) {
+      return
+    }
+    const next = previous.map((entry) =>
+      everStarted.has(entry.content) && entry.status !== "completed"
+        ? { ...entry, status: "completed" as const }
+        : entry,
+    )
+    await this.sendPlan(sessionId, next)
+  }
+
+  private async sendPlan(sessionId: string, entries: PlanEntry[]) {
+    const fingerprint = JSON.stringify(entries)
+    if (this.lastPlanFingerprintBySession.get(sessionId) === fingerprint) return
+    this.lastPlanFingerprintBySession.set(sessionId, fingerprint)
+    this.lastPlanBySession.set(sessionId, entries)
+    await this.input.connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "plan",
+        entries,
+      },
+    })
+  }
+}
+
+// opencode's todowrite allows a "cancelled" status and free-form priority;
+// ACP's PlanEntry only models pending/in_progress/completed and high/medium/low,
+// so collapse cancelled into completed and default unknown priorities to medium.
+function toPlanEntry(raw: unknown): PlanEntry | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const todo = raw as { content?: unknown; status?: unknown; priority?: unknown }
+  if (typeof todo.content !== "string" || todo.content.length === 0) return undefined
+  return {
+    content: todo.content,
+    status:
+      todo.status === "in_progress"
+        ? "in_progress"
+        : todo.status === "completed" || todo.status === "cancelled"
+          ? "completed"
+          : "pending",
+    priority: todo.priority === "high" || todo.priority === "low" ? todo.priority : "medium",
   }
 }
 

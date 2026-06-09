@@ -276,6 +276,28 @@ function completedTool(
   } satisfies ToolPart
 }
 
+function todoUpdatedEvent(
+  sessionID: string,
+  todos: Array<{ content: string; status: string; priority?: string }>,
+): Event {
+  return {
+    id: `evt_todo_${sessionID}_${Math.random()}`,
+    type: "todo.updated",
+    properties: {
+      sessionID,
+      todos: todos.map((todo) => ({ ...todo, priority: todo.priority ?? "" })),
+    },
+  }
+}
+
+function sessionIdleEvent(sessionID: string): Event {
+  return {
+    id: `evt_idle_${sessionID}_${Math.random()}`,
+    type: "session.idle",
+    properties: { sessionID },
+  }
+}
+
 function errorTool(sessionID: string, callID: string) {
   return {
     id: `part_${callID}`,
@@ -704,6 +726,120 @@ describe("acp event routing", () => {
       content: [{ type: "content", content: { type: "text", text: "failed hard" } }],
       rawOutput: { error: "failed hard", metadata: { exit: 1 } },
     })
+  })
+
+  it("emits an ACP plan session update from todo.updated events", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_plan", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      todoUpdatedEvent("ses_plan", [
+        { content: "first", status: "in_progress", priority: "high" },
+        { content: "second", status: "pending", priority: "weird" },
+        { content: "third", status: "cancelled", priority: "low" },
+        { content: "fourth", status: "completed" },
+      ]),
+    )
+
+    const planUpdates = harness.updates.filter((u) => u.update.sessionUpdate === "plan")
+    expect(planUpdates).toHaveLength(1)
+    expect(planUpdates[0]).toMatchObject({
+      sessionId: "ses_plan",
+      update: {
+        sessionUpdate: "plan",
+        entries: [
+          { content: "first", status: "in_progress", priority: "high" },
+          { content: "second", status: "pending", priority: "medium" },
+          { content: "third", status: "completed", priority: "low" },
+          { content: "fourth", status: "completed", priority: "medium" },
+        ],
+      },
+    })
+  })
+
+  it("dedupes identical sequential plan updates and re-emits on change", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_plan2", cwd: "/workspace" }))
+
+    const todos = [{ content: "a", status: "pending", priority: "medium" }]
+    await harness.subscription.handle(todoUpdatedEvent("ses_plan2", todos))
+    await harness.subscription.handle(todoUpdatedEvent("ses_plan2", todos))
+    await harness.subscription.handle(
+      todoUpdatedEvent("ses_plan2", [{ content: "a", status: "in_progress", priority: "medium" }]),
+    )
+
+    const planUpdates = harness.updates.filter((u) => u.update.sessionUpdate === "plan")
+    expect(planUpdates).toHaveLength(2)
+    expect(planUpdates[0]?.update).toMatchObject({ entries: [{ status: "pending" }] })
+    expect(planUpdates[1]?.update).toMatchObject({ entries: [{ status: "in_progress" }] })
+  })
+
+  it("promotes leftover in_progress entries to completed on session.idle", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_idle", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      todoUpdatedEvent("ses_idle", [
+        { content: "done", status: "completed", priority: "medium" },
+        { content: "stuck", status: "in_progress", priority: "high" },
+        { content: "later", status: "pending", priority: "low" },
+      ]),
+    )
+    await harness.subscription.handle(sessionIdleEvent("ses_idle"))
+
+    const planUpdates = harness.updates.filter((u) => u.update.sessionUpdate === "plan")
+    expect(planUpdates).toHaveLength(2)
+    expect(planUpdates[1]?.update).toMatchObject({
+      entries: [
+        { content: "done", status: "completed" },
+        { content: "stuck", status: "completed" },
+        { content: "later", status: "pending" },
+      ],
+    })
+  })
+
+  it("promotes entries demoted from in_progress back to pending on session.idle", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_demoted", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      todoUpdatedEvent("ses_demoted", [
+        { content: "done", status: "completed", priority: "medium" },
+        { content: "active", status: "in_progress", priority: "high" },
+      ]),
+    )
+    await harness.subscription.handle(
+      todoUpdatedEvent("ses_demoted", [
+        { content: "done", status: "completed", priority: "medium" },
+        { content: "active", status: "pending", priority: "high" },
+      ]),
+    )
+    await harness.subscription.handle(sessionIdleEvent("ses_demoted"))
+
+    const planUpdates = harness.updates.filter((u) => u.update.sessionUpdate === "plan")
+    expect(planUpdates).toHaveLength(3)
+    expect(planUpdates[2]?.update).toMatchObject({
+      entries: [
+        { content: "done", status: "completed" },
+        { content: "active", status: "completed" },
+      ],
+    })
+  })
+
+  it("does not promote pending entries that were never in_progress on session.idle", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_idle2", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      todoUpdatedEvent("ses_idle2", [
+        { content: "done", status: "completed", priority: "medium" },
+        { content: "future", status: "pending", priority: "low" },
+      ]),
+    )
+    await harness.subscription.handle(sessionIdleEvent("ses_idle2"))
+
+    const planUpdates = harness.updates.filter((u) => u.update.sessionUpdate === "plan")
+    expect(planUpdates).toHaveLength(1)
   })
 
   it("emits image attachments as ACP image content for live and replayed completed tool updates", async () => {
