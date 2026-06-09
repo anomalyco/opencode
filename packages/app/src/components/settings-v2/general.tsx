@@ -1,5 +1,4 @@
 import { Component, Show, createMemo, createResource, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/icon"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
@@ -8,13 +7,13 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { showToast } from "@/utils/toast"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
+import { useUpdaterAction } from "../updater-action"
 import {
   monoDefault,
   monoFontFamily,
@@ -93,9 +92,7 @@ export const SettingsGeneralV2: Component = () => {
   const params = useParams()
   const settings = useSettings()
 
-  const [store, setStore] = createStore({
-    checking: false,
-  })
+  const updater = useUpdaterAction()
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const dir = createMemo(() => decode64(params.dir))
@@ -125,66 +122,14 @@ export const SettingsGeneralV2: Component = () => {
   }
   const desktop = createMemo(() => platform.platform === "desktop")
 
-  const check = () => {
-    if (!platform.checkUpdate) return
-    setStore("checking", true)
-
-    void platform
-      .checkUpdate()
-      .then((result) => {
-        if (!result.updateAvailable) {
-          showToast({
-            variant: "success",
-            icon: "circle-check",
-            title: language.t("settings.updates.toast.latest.title"),
-            description: language.t("settings.updates.toast.latest.description", { version: platform.version ?? "" }),
-          })
-          return
-        }
-
-        const actions = platform.updateAndRestart
-          ? [
-              {
-                label: language.t("toast.update.action.installRestart"),
-                onClick: async () => {
-                  await platform.updateAndRestart!()
-                },
-              },
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss" as const,
-              },
-            ]
-          : [
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss" as const,
-              },
-            ]
-
-        showToast({
-          persistent: true,
-          icon: "download",
-          title: language.t("toast.update.title"),
-          description: language.t("toast.update.description", { version: result.version ?? "" }),
-          actions,
-        })
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
-      .finally(() => setStore("checking", false))
-  }
-
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
-  const globalSync = useServerSync()
-  const globalSdk = useServerSDK()
+  const serverSync = useServerSync()
+  const serverSdk = useServerSDK()
 
   const [shells] = createResource(
     () =>
-      globalSdk.client.pty
+      serverSdk.client.pty
         .shells()
         .then((res) => res.data ?? [])
         .catch(() => [] as ShellOption[]),
@@ -208,11 +153,11 @@ export const SettingsGeneralV2: Component = () => {
   })
 
   const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
-  const currentShell = createMemo(() => globalSync.data.config.shell ?? "")
+  const currentShell = createMemo(() => serverSync.data.config.shell ?? "")
 
   const shellOptions = createMemo<ShellSelectOption[]>(() => {
     const list = shells.latest
-    const current = globalSync.data.config.shell
+    const current = serverSync.data.config.shell
 
     const nameCounts = new Map<string, number>()
     for (const s of list) {
@@ -347,7 +292,7 @@ export const SettingsGeneralV2: Component = () => {
             onSelect={(option) => {
               if (!option) return
               if (option.value === currentShell()) return
-              globalSync.updateConfig({ shell: option.value })
+              serverSync.updateConfig({ shell: option.value })
             }}
           />
         </SettingsRowV2>
@@ -741,19 +686,6 @@ export const SettingsGeneralV2: Component = () => {
 
       <SettingsListV2>
         <SettingsRowV2
-          title={language.t("settings.updates.row.startup.title")}
-          description={language.t("settings.updates.row.startup.description")}
-        >
-          <div data-action="settings-updates-startup">
-            <Switch
-              checked={settings.updates.startup()}
-              disabled={!platform.checkUpdate}
-              onChange={(checked) => settings.updates.setStartup(checked)}
-            />
-          </div>
-        </SettingsRowV2>
-
-        <SettingsRowV2
           title={language.t("settings.general.row.releaseNotes.title")}
           description={language.t("settings.general.row.releaseNotes.description")}
         >
@@ -769,10 +701,8 @@ export const SettingsGeneralV2: Component = () => {
           title={language.t("settings.updates.row.check.title")}
           description={language.t("settings.updates.row.check.description")}
         >
-          <ButtonV2 size="normal" variant="neutral" disabled={store.checking || !platform.checkUpdate} onClick={check}>
-            {store.checking
-              ? language.t("settings.updates.action.checking")
-              : language.t("settings.updates.action.checkNow")}
+          <ButtonV2 size="normal" variant="neutral" disabled={!updater.action().run} onClick={updater.run}>
+            {language.t(updater.action().label)}
           </ButtonV2>
         </SettingsRowV2>
       </SettingsListV2>

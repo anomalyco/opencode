@@ -11,7 +11,6 @@ Options:
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
-      --env-file     path to ANR .env config file                                           [string]
       --port         port to listen on                                         [number] [default: 0]
       --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
@@ -28,7 +27,7 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 manage MCP (Model Context Protocol) servers
 
 Commands:
-  opencode mcp add            add an MCP server
+  opencode mcp add [name]     add an MCP server
   opencode mcp list           list MCP servers and their status                        [aliases: ls]
   opencode mcp auth [name]    authenticate with an OAuth-enabled MCP server
   opencode mcp logout [name]  remove OAuth credentials for an MCP server
@@ -39,8 +38,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode attach --help 1`] = `
@@ -57,7 +55,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
       --dir         directory to run in                                                     [string]
   -c, --continue    continue the last session                                              [boolean]
   -s, --session     session id to continue                                                  [string]
@@ -80,7 +77,6 @@ Options:
       --print-logs                    print logs to stderr                                 [boolean]
       --log-level                     log level [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure                          run without external plugins                         [boolean]
-      --env-file                      path to ANR .env config file                          [string]
       --command                       the command to run, use message for args              [string]
   -c, --continue                      continue the last session                            [boolean]
   -s, --session                       session id to continue                                [string]
@@ -134,7 +130,6 @@ Commands:
   opencode debug snapshot      snapshot debugging utilities
   opencode debug startup       print startup timing
   opencode debug agent <name>  show agent configuration details
-  opencode debug otel          OpenTelemetry debugging and diagnostic utilities
   opencode debug v2            debug v2 catalog and built-in plugins
   opencode debug info          show debug information
   opencode debug paths         show global paths (data, config, cache, state)
@@ -145,8 +140,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers --help 1`] = `
@@ -155,17 +149,16 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 manage AI providers and credentials
 
 Commands:
-  opencode providers list         list providers and credentials                       [aliases: ls]
-  opencode providers login [url]  log in to a provider
-  opencode providers logout       log out from a configured provider
+  opencode providers list               list providers and credentials                 [aliases: ls]
+  opencode providers login [url]        log in to a provider
+  opencode providers logout [provider]  log out from a configured provider
 
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode agent --help 1`] = `
@@ -182,8 +175,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode upgrade --help 1`] = `
@@ -200,7 +192,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
   -m, --method      installation method to use
                           [string] [choices: "curl", "npm", "pnpm", "bun", "brew", "choco", "scoop"]"
 `;
@@ -216,7 +207,6 @@ Options:
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
-      --env-file     path to ANR .env config file                                           [string]
   -c, --keep-config  keep configuration files                             [boolean] [default: false]
   -d, --keep-data    keep session data and snapshots                      [boolean] [default: false]
       --dry-run      show what would be removed without removing          [boolean] [default: false]
@@ -234,7 +224,6 @@ Options:
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
-      --env-file     path to ANR .env config file                                           [string]
       --port         port to listen on                                         [number] [default: 0]
       --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
@@ -255,7 +244,6 @@ Options:
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
-      --env-file     path to ANR .env config file                                           [string]
       --port         port to listen on                                         [number] [default: 0]
       --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
@@ -279,7 +267,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
       --verbose     use more verbose model output (includes metadata like costs)           [boolean]
       --refresh     refresh the models cache from models.dev                               [boolean]"
 `;
@@ -295,7 +282,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
       --days        show stats for the last N days (default: all time)                      [number]
       --tools       number of tools to show (default: all)                                  [number]
       --models      show model statistics (default: hidden). Pass a number to show top N, otherwise
@@ -317,7 +303,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
       --sanitize    redact sensitive transcript and file data                              [boolean]"
 `;
 
@@ -334,8 +319,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github --help 1`] = `
@@ -352,8 +336,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode pr --help 1`] = `
@@ -369,8 +352,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session --help 1`] = `
@@ -387,8 +369,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin --help 1`] = `
@@ -405,7 +386,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
   -g, --global      install in global config                              [boolean] [default: false]
   -f, --force       replace existing plugin version                       [boolean] [default: false]"
 `;
@@ -428,7 +408,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
       --format      Output format                 [string] [choices: "json", "tsv"] [default: "tsv"]"
 `;
 
@@ -442,14 +421,16 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp add --help 1`] = `
-"opencode mcp add
+"opencode mcp add [name]
 
 add an MCP server
+
+Positionals:
+  name  name of the MCP server                                                              [string]
 
 Options:
   -h, --help        show help                                                              [boolean]
@@ -457,7 +438,9 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --url         URL for a remote MCP server                                             [string]
+      --env         environment variable for a local MCP server (KEY=VALUE)                  [array]
+      --header      HTTP header for a remote MCP server (KEY=VALUE)                          [array]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp auth --help 1`] = `
@@ -476,8 +459,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp logout --help 1`] = `
@@ -493,8 +475,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers list --help 1`] = `
@@ -507,8 +488,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers login --help 1`] = `
@@ -525,23 +505,24 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
   -p, --provider    provider id or name to log in to (skips provider selection)             [string]
   -m, --method      login method label (skips method selection)                             [string]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers logout --help 1`] = `
-"opencode providers logout
+"opencode providers logout [provider]
 
 log out from a configured provider
+
+Positionals:
+  provider  provider id or name to log out from                                             [string]
 
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode agent create --help 1`] = `
@@ -555,7 +536,6 @@ Options:
       --print-logs            print logs to stderr                                         [boolean]
       --log-level             log level         [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure                  run without external plugins                                 [boolean]
-      --env-file              path to ANR .env config file                                  [string]
       --path                  directory path to generate the agent file                     [string]
       --description           what the agent should do                                      [string]
       --mode                  agent mode            [string] [choices: "all", "primary", "subagent"]
@@ -575,8 +555,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session list --help 1`] = `
@@ -590,7 +569,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
   -n, --max-count   limit to N most recent sessions                                         [number]
       --format      output format             [string] [choices: "table", "json"] [default: "table"]"
 `;
@@ -608,8 +586,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github install --help 1`] = `
@@ -622,8 +599,7 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github run --help 1`] = `
@@ -637,7 +613,6 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]
       --event       GitHub mock event to run the agent for                                  [string]
       --token       GitHub personal access token (github_pat_********)                      [string]"
 `;
@@ -652,6 +627,5 @@ Options:
   -v, --version     show version number                                                    [boolean]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --env-file    path to ANR .env config file                                            [string]"
+      --pure        run without external plugins                                           [boolean]"
 `;

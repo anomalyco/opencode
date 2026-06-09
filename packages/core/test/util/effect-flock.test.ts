@@ -65,19 +65,25 @@ function spawnWorker(msg: Msg) {
   })
 }
 
-function stopWorker(proc: ReturnType<typeof spawnWorker>) {
-  if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve()
+async function stopWorker(proc: ReturnType<typeof spawnWorker>) {
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+
+  const closed = new Promise<void>((resolve) => proc.once("close", () => resolve()))
+
   if (process.platform !== "win32" || !proc.pid) {
     proc.kill()
-    return Promise.resolve()
+    await closed
+    return
   }
-  return new Promise<void>((resolve) => {
+
+  await new Promise<void>((resolve) => {
     const killProc = spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"])
     killProc.on("close", () => {
       proc.kill()
       resolve()
     })
   })
+  await closed
 }
 
 async function waitForFile(file: string, timeout = 3_000) {
@@ -363,7 +369,6 @@ describe("util.effect-flock", () => {
         try {
           await waitForFile(ready, 5_000)
           await stopWorker(proc)
-          await new Promise((resolve) => proc.on("close", resolve))
 
           // Backdate lock files so they're past STALE_MS (60s)
           const lockDir = lock(dir, "eflock:crash")

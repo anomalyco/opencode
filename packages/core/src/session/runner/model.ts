@@ -9,6 +9,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect"
 import { produce } from "immer"
 import { Catalog } from "../../catalog"
 import { ModelV2 } from "../../model"
+import { ModelRequest } from "../../model-request"
 import { PluginBoot } from "../../plugin/boot"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
@@ -50,24 +51,30 @@ const apiKey = (model: ModelV2.Info, provider?: ProviderV2.Info) => {
   return provider?.enabled !== false && provider?.enabled.via === "env" ? Auth.config(provider.enabled.name) : undefined
 }
 
-const withDefaults = (model: ModelV2.Info, route: AnyRoute) =>
-  route.with({
+const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
+  const options = model.request.options ?? {}
+  const namespace = model.api.type === "aisdk" ? ModelRequest.namespace(model.api.package) : undefined
+  const body = model.request.body
+  const httpBody = Object.hasOwn(body, "apiKey")
+    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "apiKey"))
+    : body
+  return route.with({
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
-    http: {
-      body: Object.fromEntries(Object.entries(model.request.body).filter(([key]) => key !== "apiKey")),
-    },
+    generation: model.request.generation,
+    providerOptions: namespace && Object.keys(options).length > 0 ? { [namespace]: options } : undefined,
+    http: { body: httpBody },
     limits: { context: model.limit.context, output: model.limit.output },
   })
+}
 
 const withVariant = (model: ModelV2.Info, variantID: ModelV2.VariantID | undefined) => {
   const id = variantID === "default" || variantID === undefined ? model.request.variant : variantID
   const variant = model.variants.find((item) => item.id === id)
   if (!variant) return model
   return produce(model, (draft) => {
-    Object.assign(draft.request.headers, variant.headers)
-    Object.assign(draft.request.body, variant.body)
+    ModelRequest.assign(draft.request, variant)
   })
 }
 
@@ -128,10 +135,9 @@ export const locationLayer = Layer.effect(
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         yield* boot.wait()
-        const preferred = yield* catalog.model.default()
         const selected = session.model
           ? yield* catalog.model.get(session.model.providerID, session.model.id)
-          : (Option.getOrUndefined(preferred.pipe(Option.filter(supported))) ??
+          : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
             (yield* catalog.model.available()).find(supported))
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
         return yield* resolve(session, selected, yield* catalog.provider.get(selected.providerID))

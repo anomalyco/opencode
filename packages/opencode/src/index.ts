@@ -4,7 +4,6 @@ import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
-import * as Log from "@opencode-ai/core/util/log"
 import { ConsoleCommand } from "./cli/cmd/account"
 import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
@@ -12,7 +11,6 @@ import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
-import { Installation } from "./installation"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { FormatError } from "./cli/error"
@@ -23,8 +21,8 @@ import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
-import { AttachCommand } from "./cli/cmd/tui/attach"
-import { TuiThreadCommand } from "./cli/cmd/tui/thread"
+import { AttachCommand } from "./cli/cmd/attach"
+import { TuiThreadCommand } from "./cli/cmd/tui"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
@@ -34,7 +32,6 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
-import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { isRecord } from "@/util/record"
 import {
   getValidatedANRConfig,
@@ -63,8 +60,6 @@ import { randomUUID } from "crypto"
 import { platform, arch, release } from "os"
 import { existsSync, readdirSync, readFileSync } from "fs"
 import path from "path"
-
-const processMetadata = ensureProcessMetadata("main")
 
 // ANR mode state (when running with OPENCODE_FLAVOR=anr)
 let anrContext: {
@@ -449,15 +444,11 @@ async function initializeANR(envFile?: string): Promise<void> {
 }
 
 process.on("unhandledRejection", (e) => {
-  Log.Default.error("rejection", {
-    e: errorMessage(e),
-  })
+  console.error("unhandled rejection:", errorMessage(e))
 })
 
 process.on("uncaughtException", (e) => {
-  Log.Default.error("exception", {
-    e: errorMessage(e),
-  })
+  console.error("uncaught exception:", errorMessage(e))
 })
 
 const ANR_MARKERS = ["OPENCODE_API_ENDPOINT", "PROVIDER_DOMAIN", "IDENTITY_POOL_ID"]
@@ -603,7 +594,7 @@ export async function main(argv?: string[]) {
     const text = out.trimStart()
     if (!text.startsWith("opencode ")) {
       process.stderr.write(UI.logo() + EOL + EOL)
-      process.stderr.write(text)
+      process.stderr.write(text + EOL)
       return
     }
     process.stderr.write(out)
@@ -635,32 +626,17 @@ export async function main(argv?: string[]) {
       type: "string",
     })
     .middleware(async (opts) => {
+      if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
+      if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
       if (opts.pure) {
         process.env.OPENCODE_PURE = "1"
       }
-
-      await Log.init({
-        print: process.argv.includes("--print-logs"),
-        dev: Installation.isLocal(),
-        level: (() => {
-          if (opts.logLevel) return opts.logLevel as Log.Level
-          if (Installation.isLocal()) return "DEBUG"
-          return "INFO"
-        })(),
-      })
 
       Heap.start()
 
       process.env.AGENT = "1"
       process.env.OPENCODE = "1"
       process.env.OPENCODE_PID = String(process.pid)
-
-      Log.Default.info("opencode", {
-        version: InstallationVersion,
-        args: process.argv.slice(2),
-        process_role: processMetadata.processRole,
-        run_id: processMetadata.runID,
-      })
     })
     .usage("")
     .completion("completion", "generate shell completion script")
@@ -743,11 +719,11 @@ export async function main(argv?: string[]) {
         importKind: e.importKind,
       })
     }
-    Log.Default.error("fatal", data)
+    console.error("fatal error:", data)
     const formatted = FormatError(e)
     if (formatted) UI.error(formatted)
     if (formatted === undefined) {
-      UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
+      UI.error("Unexpected error" + EOL)
       process.stderr.write(errorMessage(e) + EOL)
     }
     process.exitCode = 1

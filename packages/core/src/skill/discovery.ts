@@ -6,7 +6,6 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { AbsolutePath } from "../schema"
-import * as Log from "../util/log"
 
 const skillConcurrency = 4
 const fileConcurrency = 8
@@ -71,7 +70,6 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
-    const log = Log.create({ service: "skill-discovery" })
     const http = (yield* HttpClient.HttpClient).pipe(
       HttpClient.retryTransient({
         retryOn: "errors-and-responses",
@@ -87,7 +85,7 @@ export const layer = Layer.effect(
         http.execute,
         Effect.flatMap((response) => response.arrayBuffer),
         Effect.flatMap((body) => fs.writeWithDirs(destination, new Uint8Array(body))),
-        Effect.catch((error) => Effect.sync(() => log.error("failed to download skill file", { url, error }))),
+        Effect.catch((error) => Effect.logError("failed to download skill file", { url, error })),
       )
     })
 
@@ -100,10 +98,9 @@ export const layer = Layer.effect(
           HttpClientRequest.acceptJson,
           http.execute,
           Effect.flatMap(HttpClientResponse.schemaBodyJson(Index)),
-          Effect.catch((error) => {
-            log.error("failed to fetch skill index", { url: index, error })
-            return Effect.succeed(undefined)
-          }),
+          Effect.catch((error) =>
+            Effect.logError("failed to fetch skill index", { url: index, error }).pipe(Effect.as(undefined)),
+          ),
         )
         if (!data) return []
 
@@ -111,17 +108,14 @@ export const layer = Layer.effect(
         return yield* Effect.forEach(
           data.skills.flatMap((skill) => {
             if (!isSafeSegment(skill.name)) {
-              log.warn("skill entry has unsafe name", { url: index, skill: skill.name })
               return []
             }
             if (!skill.files.includes("SKILL.md") && !skill.files.includes(`${skill.name}.md`)) {
-              log.warn("skill entry missing Markdown definition", { url: index, skill: skill.name })
               return []
             }
 
             const root = path.resolve(sourceRoot, skill.name)
             if (!FSUtil.contains(sourceRoot, root) || root === sourceRoot) {
-              log.warn("skill entry escapes cache root", { url: index, skill: skill.name })
               return []
             }
 
@@ -144,7 +138,6 @@ export const layer = Layer.effect(
               }
             })
             if (files.some((file) => file === undefined)) {
-              log.warn("skill entry has unsafe file", { url: index, skill: skill.name })
               return []
             }
             return [{ skill, root, files: files as { url: string; destination: string }[] }]

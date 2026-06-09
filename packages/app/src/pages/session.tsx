@@ -39,6 +39,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
@@ -54,6 +55,7 @@ import {
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useServer } from "@/context/server"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
@@ -190,13 +192,15 @@ export default function Page() {
   const dialog = useDialog()
   const language = useLanguage()
   const sdk = useSDK()
+  const serverSDK = useServerSDK()
   const settings = useSettings()
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
+  const server = useServer()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
-  const { params, sessionKey, tabs, view } = useSessionLayout()
+  const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
   createEffect(() => {
@@ -223,7 +227,6 @@ export default function Page() {
 
   const composer = createSessionComposerState()
 
-  const workspaceKey = createMemo(() => params.dir ?? "")
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
 
   createEffect(
@@ -239,6 +242,7 @@ export default function Page() {
           layout.handoff.clearTabs()
           return
         }
+        if (pending.scope !== server.scope()) return
 
         if (pending.id !== id) return
         layout.handoff.clearTabs()
@@ -386,7 +390,7 @@ export default function Page() {
   })
 
   const [followup, setFollowup] = persisted(
-    Persist.workspace(sdk.directory, "followup", ["followup.v1"]),
+    Persist.serverWorkspace(serverSDK.scope, sdk.directory, "followup", ["followup.v1"]),
     createStore<{
       items: Record<string, FollowupItem[] | undefined>
       failed: Record<string, string | undefined>
@@ -633,7 +637,7 @@ export default function Page() {
       const stale = !cached
         ? false
         : (() => {
-            const info = getSessionPrefetch(directory, id)
+            const info = getSessionPrefetch(serverSDK.scope, directory, id)
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
@@ -1741,80 +1745,84 @@ export default function Page() {
 
         <div
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
+            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
             "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
             "transition-[width]": !isV2NewSessionPage(),
-            "rounded-[10px] shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
           }}
           style={{
             width: sessionPanelWidth(),
           }}
         >
           <div
-            class="flex-1 min-h-0 overflow-hidden"
             classList={{
-              "rounded-[10px]": settings.general.newLayoutDesigns(),
+              "flex-1 min-h-0 flex flex-col": true,
+              "bg-v2-background-bg-deep": isV2NewSessionPage(),
+              "bg-background-stronger": !isV2NewSessionPage(),
+              "rounded-[10px] overflow-hidden": settings.general.newLayoutDesigns(),
+              "shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
             }}
           >
-            <Switch>
-              <Match when={params.id && mobileChanges()}>
-                <div class="relative h-full overflow-hidden">
-                  {reviewContent({
-                    diffStyle: "unified",
-                    classes: {
-                      root: "pb-8",
-                      header: "px-4",
-                      container: "px-4",
-                    },
-                    loadingClass: "px-4 py-4 text-text-weak",
-                    emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-                  })}
-                </div>
-              </Match>
-              <Match when={params.id}>
-                <Show when={messagesReady()}>
-                  <MessageTimeline
-                    actions={actions}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    onUserScroll={markUserScroll}
-                    onHistoryScroll={historyLoader.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    shouldAnchorBottom={() =>
-                      !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                    }
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+            <div class="flex-1 min-h-0 overflow-hidden">
+              <Switch>
+                <Match when={params.id && mobileChanges()}>
+                  <div class="relative h-full overflow-hidden">
+                    {reviewContent({
+                      diffStyle: "unified",
+                      classes: {
+                        root: "pb-8",
+                        header: "px-4",
+                        container: "px-4",
+                      },
+                      loadingClass: "px-4 py-4 text-text-weak",
+                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+                    })}
+                  </div>
+                </Match>
+                <Match when={params.id}>
+                  <Show when={messagesReady()}>
+                    <MessageTimeline
+                      actions={actions}
+                      scroll={ui.scroll}
+                      onResumeScroll={resumeScroll}
+                      setScrollRef={setScrollRef}
+                      onScheduleScrollState={scheduleScrollState}
+                      onAutoScrollHandleScroll={autoScroll.handleScroll}
+                      onMarkScrollGesture={markScrollGesture}
+                      hasScrollGesture={hasScrollGesture}
+                      onUserScroll={markUserScroll}
+                      onHistoryScroll={historyLoader.onScrollerScroll}
+                      onAutoScrollInteraction={autoScroll.handleInteraction}
+                      shouldAnchorBottom={() =>
+                        !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
+                      }
+                      centered={centered()}
+                      setContentRef={(el) => {
+                        content = el
+                        autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    historyShift={historyLoader.shift()}
-                    userMessages={historyLoader.userMessages()}
-                    anchor={anchor}
-                    setRevealMessage={(fn) => {
-                      revealMessage = fn
-                    }}
-                  />
-                </Show>
-              </Match>
-              <Match when={true}>
-                <Show when={newSessionDesign()} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
-                  <NewSessionDesignView>{composerRegion("inline")}</NewSessionDesignView>
-                </Show>
-              </Match>
-            </Switch>
+                        const root = scroller
+                        if (root) scheduleScrollState(root)
+                      }}
+                      historyShift={historyLoader.shift()}
+                      userMessages={historyLoader.userMessages()}
+                      anchor={anchor}
+                      setRevealMessage={(fn) => {
+                        revealMessage = fn
+                      }}
+                    />
+                  </Show>
+                </Match>
+                <Match when={true}>
+                  <Show when={newSessionDesign()} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
+                    <NewSessionDesignView>{composerRegion("inline")}</NewSessionDesignView>
+                  </Show>
+                </Match>
+              </Switch>
+            </div>
+
+            <Show when={params.id || !newSessionDesign()}>{composerRegion("dock")}</Show>
           </div>
-
-          <Show when={params.id || !newSessionDesign()}>{composerRegion("dock")}</Show>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>

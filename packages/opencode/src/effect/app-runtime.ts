@@ -1,6 +1,6 @@
 import { Layer, ManagedRuntime } from "effect"
 import { attach } from "./run-service"
-import * as Observability from "@opencode-ai/core/effect/observability"
+import * as Observability from "@opencode-ai/core/observability"
 
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Database } from "@opencode-ai/core/database/database"
@@ -9,6 +9,7 @@ import { Account } from "@/account/account"
 import { Config } from "@/config/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
@@ -41,7 +42,6 @@ import { Format } from "@/format"
 import { InstanceLayer } from "@/project/instance-layer"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
-import { Reference } from "@/reference/reference"
 import { Workspace } from "@/control-plane/workspace"
 import { Worktree } from "@/worktree"
 import { Installation } from "@/installation"
@@ -62,6 +62,7 @@ export const AppLayer = Layer.mergeAll(
   Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
+  Search.defaultLayer,
   Storage.defaultLayer,
   Snapshot.defaultLayer,
   Plugin.defaultLayer,
@@ -96,7 +97,6 @@ export const AppLayer = Layer.mergeAll(
   Format.defaultLayer,
   Project.defaultLayer,
   Vcs.defaultLayer,
-  Reference.defaultLayer,
   Workspace.defaultLayer,
   Worktree.appLayer,
   Installation.defaultLayer,
