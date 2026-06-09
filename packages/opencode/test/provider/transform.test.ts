@@ -2483,6 +2483,31 @@ describe("ProviderTransform.message - cache control on gateway", () => {
   })
 })
 
+describe("ProviderTransform.options - Cohere North", () => {
+  test("disables citations by default for north-mini-code-1-0", () => {
+    const result = ProviderTransform.options({
+      model: {
+        id: "cohere/north-mini-code-1-0",
+        providerID: "cohere",
+        api: {
+          id: "North-Mini-Code-1-0-latest",
+          url: "https://api.cohere.com/compatibility/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        capabilities: { reasoning: true },
+      } as any,
+      sessionID: "test-session-123",
+    })
+    expect(result.options).toEqual({ citation_options: { mode: "disabled" } })
+  })
+})
+
+describe("ProviderTransform.temperature - Cohere North", () => {
+  test("defaults north-mini-code models to 1.0", () => {
+    expect(ProviderTransform.temperature({ id: "cohere/North-Mini-Code-1-0-latest" } as any)).toBe(1.0)
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
@@ -3208,6 +3233,23 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+
+    test("north-mini-code-1-0 returns only none and high", () => {
+      const model = createMockModel({
+        id: "cohere/north-mini-code-1-0",
+        providerID: "cohere",
+        api: {
+          id: "North-Mini-Code-1-0-latest",
+          url: "https://api.cohere.com/compatibility/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({
+        none: { reasoningEffort: "none" },
+        high: { reasoningEffort: "high" },
+      })
     })
   })
 

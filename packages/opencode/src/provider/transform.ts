@@ -478,6 +478,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
 
 export function temperature(model: Provider.Model) {
   const id = model.id.toLowerCase()
+  if (id.includes("north-mini-code")) return 1.0
   if (id.includes("qwen")) return 0.55
   if (id.includes("claude")) return undefined
   if (id.includes("gemini")) return 1.0
@@ -826,6 +827,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
+      if (model.api.id.toLowerCase().includes("north-mini-code")) {
+        return Object.fromEntries(["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]))
+      }
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
@@ -1105,6 +1109,10 @@ export function options(input: {
   }
 
   const modelId = input.model.api.id.toLowerCase()
+  if (modelId.includes("north-mini-code") && input.model.api.npm === "@ai-sdk/openai-compatible") {
+    result["options"] = { citation_options: { mode: "disabled" } }
+  }
+
   // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
   if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
     result["thinking"] = { type: "adaptive" }
