@@ -356,7 +356,7 @@ function formatUpdatedAtParts(value: string, timeZone: string) {
       timeZone,
     }).format(date),
     time: new Intl.DateTimeFormat("en", {
-      hour: "numeric",
+      hour: "2-digit",
       minute: "2-digit",
       timeZone,
       timeZoneName: "short",
