@@ -42,6 +42,20 @@ if [ ! -e "$dest/securecode.json" ]; then
   echo "  2. securecode run \"Hello\""
 else
   echo "skipped (already exists): $dest/securecode.json"
+  lsp_added=$(SECURECODE_CONF="$dest/securecode.json" node -e "
+const fs = require('fs');
+const p = process.env.SECURECODE_CONF;
+try {
+  const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+  if (cfg.lsp !== undefined) { process.stdout.write('no'); process.exit(0); }
+  cfg.lsp = { eslint: { disabled: true } };
+  fs.writeFileSync(p, JSON.stringify(cfg, null, 2) + '\n');
+  process.stdout.write('yes');
+} catch (e) { process.stdout.write('no'); }
+  " 2>/dev/null)
+  if [ "$lsp_added" = "yes" ]; then
+    echo "migrated: added lsp config (ESLint disabled) to $dest/securecode.json"
+  fi
 fi
 
 mkdir -p "$dest/themes"

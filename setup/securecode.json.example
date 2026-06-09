@@ -23,5 +23,8 @@
     }
   },
   "model": "qwen/qwen3.6-35b-a3b-fp8",
-  "small_model": "qwen/qwen3.6-35b-a3b-fp8"
+  "small_model": "qwen/qwen3.6-35b-a3b-fp8",
+  "lsp": {
+    "eslint": { "disabled": true }
+  }
 }
