@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import { InstanceState } from "@/effect/instance-state"
@@ -424,5 +425,7 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
+
+export const node = LayerNode.make(layer, [Git.node, EventV2Bridge.node])
 
 export * as Vcs from "./vcs"

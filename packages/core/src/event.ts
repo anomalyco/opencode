@@ -7,6 +7,7 @@ import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
 import { externalID, type ExternalID, NonNegativeInt, withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
+import { LayerNode } from "./effect/layer-node"
 import { isDeepStrictEqual } from "node:util"
 
 export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
@@ -674,5 +675,6 @@ export const layerWith = (options?: LayerOptions) =>
   )
 
 export const layer = layerWith()
+export const node = LayerNode.make(layer, [Database.node])
 
 export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))

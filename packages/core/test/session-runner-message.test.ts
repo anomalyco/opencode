@@ -7,7 +7,6 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { AgentAttachment, FileAttachment } from "@opencode-ai/core/session/prompt"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
@@ -150,13 +149,13 @@ Recent work
                 status: "completed",
                 input: { path: "README.md" },
                 content: [
-                  new ToolOutput.TextContent({ type: "text", text: "Hello" }),
-                  new ToolOutput.FileContent({
+                  { type: "text", text: "Hello" },
+                  {
                     type: "file",
-                    source: { type: "data", data: "aGVsbG8=" },
+                    uri: "data:image/png;base64,aGVsbG8=",
                     mime: "image/png",
                     name: "hello.png",
-                  }),
+                  },
                 ],
                 structured: {},
               }),
@@ -174,7 +173,7 @@ Recent work
               state: new SessionMessage.ToolStateCompleted({
                 status: "completed",
                 input: { query: "Effect" },
-                content: [new ToolOutput.TextContent({ type: "text", text: "Found it" })],
+                content: [{ type: "text", text: "Found it" }],
                 structured: {},
               }),
               time: { created, completed: created },
@@ -257,7 +256,7 @@ Recent work
           type: "content",
           value: [
             { type: "text", text: "Hello" },
-            { type: "media", mediaType: "image/png", data: "aGVsbG8=", filename: "hello.png" },
+            { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" },
           ],
         },
       },

@@ -8,7 +8,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { ToolOutput } from "@opencode-ai/core/tool-output"
 
 test.skip("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
@@ -182,7 +181,7 @@ test.skip("tool completion stores completed timestamp", () => {
         timestamp: DateTime.makeUnsafe(4),
         callID,
         structured: {},
-        content: [ToolOutput.text({ type: "text", text: "/tmp" })],
+        content: [{ type: "text", text: "/tmp" }],
         provider: { executed: true, metadata: { fake: { status: "done" } } },
       },
     } satisfies SessionEvent.Event),

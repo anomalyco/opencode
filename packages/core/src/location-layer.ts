@@ -19,6 +19,7 @@ import { PermissionV2 } from "./permission"
 import { PermissionSaved } from "./permission/saved"
 import { FileSystem } from "./filesystem"
 import { Watcher } from "./filesystem/watcher"
+import { Search } from "./filesystem/search"
 import { LocationMutation } from "./location-mutation"
 import { LocationSearch } from "./location-search"
 import { FileMutation } from "./file-mutation"
@@ -124,5 +125,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
     ApplicationTools.layer,
+    Search.defaultLayer,
   ],
 }) {}

@@ -1,8 +1,7 @@
 export * as GrepTool from "./grep"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
-import { FileSystem } from "../filesystem"
 import { LocationSearch } from "../location-search"
 import { Ripgrep } from "../ripgrep"
 import { PermissionV2 } from "../permission"
@@ -57,7 +56,6 @@ export const toModelOutput = (output: Output) => {
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
-    const filesystem = yield* FileSystem.Service
     const search = yield* LocationSearch.Service
     const permission = yield* PermissionV2.Service
 
@@ -68,16 +66,15 @@ export const layer = Layer.effectDiscard(
             "Search file contents by regular expression within the active Location or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
           input: Input,
           output: LocationSearch.GrepResult,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
           execute: (input, context) =>
             Effect.gen(function* () {
-              const root = yield* filesystem.resolveRoot(input)
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
                 save: ["*"],
                 metadata: {
-                  root: root.resource,
+                  root: input.path ?? ".",
                   path: input.path,
                   include: input.include,
                   limit: input.limit,

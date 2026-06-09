@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Effect, Layer } from "effect"
 
 import { InstanceState } from "@/effect/instance-state"
@@ -80,5 +81,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer))
+
+export const node = LayerNode.make(layer, [Skill.node])
 
 export * as SystemPrompt from "./system"

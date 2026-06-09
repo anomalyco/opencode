@@ -1,8 +1,7 @@
 export * from "./gen/types.gen.js"
 export type {
-  FileSystemBinaryContent as LocationFileSystemBinaryContent,
+  FileSystemContent as LocationFileSystemContent,
   FileSystemEntry as LocationFileSystemEntry,
-  FileSystemTextContent as LocationFileSystemTextContent,
 } from "./gen/types.gen.js"
 
 import { createClient } from "./gen/client/client.gen.js"
