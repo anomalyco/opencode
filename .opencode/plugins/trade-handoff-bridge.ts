@@ -94,13 +94,21 @@ export function createTradeHandoffBridgeHooks(directory: string, options?: { sta
     input.append(block)
     if (input.modelID) sessionModelState.set(input.sessionID, { lastInjectedModelID: input.modelID })
     const resultPendingSince = readPendingSince(result)
-    if (isFreshEnough(result, pending?.pendingSince ?? resultPendingSince, synced)) {
+    const resultPendingModelID = readPendingModelID(result)
+    const contentHash = readContentHash(result)
+    const expectedPendingSince = pending?.pendingSince ?? resultPendingSince
+    const expectedModelID = pending?.modelID ?? resultPendingModelID
+    if (isFreshEnough(result, expectedPendingSince, synced) && pendingReadyForAck(pending, expectedPendingSince, expectedModelID, contentHash, synced)) {
       const acked = await postJson("/handoff/ack", {
         session_id: input.sessionID,
-        model_id: input.modelID,
+        model_id: input.modelID ?? expectedModelID,
         acked_at: Date.now(),
-      }).then(() => true).catch(() => false)
-      if (acked) pendingSessions.delete(input.sessionID)
+        expected_pending_since: expectedPendingSince,
+        expected_model_id: expectedModelID,
+        content_hash: contentHash,
+      }).then((response) => isAckCleared(response)).catch(() => false)
+      const current = pendingSessions.get(input.sessionID)
+      if (acked && pendingMatches(current, expectedPendingSince, expectedModelID)) pendingSessions.delete(input.sessionID)
     }
   }
 
@@ -174,6 +182,40 @@ function readPendingSince(result: unknown) {
   if (!result || typeof result !== "object") return undefined
   const pending = Reflect.get(result, "pendingSince")
   return typeof pending === "number" ? pending : undefined
+}
+
+function readPendingModelID(result: unknown) {
+  if (!result || typeof result !== "object") return undefined
+  const pending = Reflect.get(result, "pendingModelID")
+  return typeof pending === "string" ? pending : undefined
+}
+
+function readContentHash(result: unknown) {
+  if (!result || typeof result !== "object") return undefined
+  const value = Reflect.get(result, "contentHash")
+  return typeof value === "string" ? value : undefined
+}
+
+function isAckCleared(result: unknown) {
+  if (!result || typeof result !== "object") return false
+  return Reflect.get(result, "cleared") === true
+}
+
+function pendingReadyForAck(
+  pending: PendingSession | undefined,
+  expectedPendingSince: number | undefined,
+  expectedModelID: string | undefined,
+  contentHash: string | undefined,
+  synced: boolean,
+) {
+  if (!expectedPendingSince || !contentHash) return false
+  if (!pending) return true
+  return pending.eventPosted && synced
+}
+
+function pendingMatches(pending: PendingSession | undefined, pendingSince: number | undefined, modelID: string | undefined) {
+  if (!pending) return true
+  return pending.pendingSince === pendingSince && pending.modelID === modelID
 }
 
 function isFreshEnough(result: unknown, pendingSince: number | undefined, synced: boolean) {

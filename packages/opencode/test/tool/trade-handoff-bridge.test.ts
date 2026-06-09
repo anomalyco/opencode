@@ -84,6 +84,36 @@ describe("trade-handoff bridge", () => {
     }
   })
 
+  test("late ack does not clear newer pending handoff", async () => {
+    await using tmp = await tmpdir()
+    const sourceDbPath = path.join(tmp.path, "opencode.db")
+    const indexDbPath = path.join(tmp.path, "memory.sqlite3")
+    seedSourceDb(sourceDbPath)
+    process.env.OPENCODE_DB = sourceDbPath
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_AUTOSTART = "false"
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN = "test-token"
+
+    const service = createTradeMemoryService({ indexDbPath, sourceDbPath })
+    const first = service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.4", pendingSince: 100 })
+    service.sync()
+    const context = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.4" })
+    service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.5", pendingSince: 200 })
+
+    const ack = service.ackHandoff({
+      sessionID: "ses_test",
+      modelID: "gpt-5.4",
+      ackedAt: 300,
+      expectedPendingSince: first.pendingSince,
+      expectedModelID: context.pendingModelID ?? undefined,
+      contentHash: context.contentHash,
+    })
+    const state = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.5" })
+
+    expect(ack.cleared).toBe(false)
+    expect(state.pendingSince).toBe(200)
+    expect(state.pendingModelID).toBe("gpt-5.5")
+  })
+
   test("sync failure keeps pending and warns", async () => {
     await using tmp = await tmpdir()
     const indexDbPath = path.join(tmp.path, "memory.sqlite3")

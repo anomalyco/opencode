@@ -136,6 +136,9 @@ function toHandoffAckInput(input: unknown) {
     sessionID: readRequiredString(body.session_id, "session_id"),
     modelID: readOptionalString(body.model_id, "model_id"),
     ackedAt: readOptionalInteger(body.acked_at, "acked_at"),
+    expectedPendingSince: readOptionalInteger(body.expected_pending_since, "expected_pending_since"),
+    expectedModelID: readOptionalString(body.expected_model_id, "expected_model_id"),
+    contentHash: readOptionalString(body.content_hash, "content_hash"),
     indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
   }
 }

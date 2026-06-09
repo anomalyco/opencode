@@ -91,12 +91,43 @@ describe("trade-memory service", () => {
     const service = createTradeMemoryService({ indexDbPath: path.join(tmp.path, "memory.sqlite3") })
 
     service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.4", pendingSince: 100 })
-    service.ackHandoff({ sessionID: "ses_test", modelID: "gpt-5.4", ackedAt: 200 })
+    const context = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.4" })
+    service.ackHandoff({
+      sessionID: "ses_test",
+      modelID: "gpt-5.4",
+      ackedAt: 200,
+      expectedPendingSince: context.pendingSince ?? undefined,
+      expectedModelID: context.pendingModelID ?? undefined,
+      contentHash: context.contentHash,
+    })
     const result = service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.4", pendingSince: 150 })
     const state = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.4" })
 
     expect(result).toMatchObject({ ignored: true })
     expect(state.pendingSince).toBeNull()
     expect(state.fresh).toBe(true)
+  })
+
+  test("ackHandoff only clears matching pending state", async () => {
+    await using tmp = await tmpdir()
+    const service = createTradeMemoryService({ indexDbPath: path.join(tmp.path, "memory.sqlite3") })
+
+    service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.4", pendingSince: 100 })
+    const first = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.4" })
+    service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.5", pendingSince: 200 })
+
+    const ack = service.ackHandoff({
+      sessionID: "ses_test",
+      modelID: "gpt-5.4",
+      ackedAt: 300,
+      expectedPendingSince: first.pendingSince ?? undefined,
+      expectedModelID: first.pendingModelID ?? undefined,
+      contentHash: first.contentHash,
+    })
+    const state = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.5" })
+
+    expect(ack.cleared).toBe(false)
+    expect(state.pendingSince).toBe(200)
+    expect(state.pendingModelID).toBe("gpt-5.5")
   })
 })

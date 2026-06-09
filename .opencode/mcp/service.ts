@@ -186,7 +186,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
             "select last_model_id, last_injected_at, pending_since from handoff_state where session_id = ? limit 1",
           )
           .get(sessionID)
-        if (current?.last_model_id === modelID && current.last_injected_at && current.last_injected_at >= pendingSince) {
+        if (current && current.last_model_id === modelID && current.last_injected_at && current.last_injected_at >= pendingSince) {
           return { indexDbPath, ok: true, pendingSince, ignored: true }
         }
         if (current?.pending_since && current.pending_since > pendingSince) {
@@ -219,9 +219,12 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
         const maxChars = clampPositive(input.maxChars, DEFAULT_HANDOFF_MAX_CHARS)
         const lastSyncAt = Number(readMeta(indexDb, "last_sync_at") ?? 0) || null
         const handoffState = indexDb
-          .query<{ pending_since: number | null }, [string]>("select pending_since from handoff_state where session_id = ? limit 1")
+          .query<{ pending_since: number | null; pending_model_id: string | null }, [string]>(
+            "select pending_since, pending_model_id from handoff_state where session_id = ? limit 1",
+          )
           .get(sessionID)
         const pendingSince = handoffState?.pending_since ?? null
+        const pendingModelID = handoffState?.pending_model_id ?? null
         const fresh = !pendingSince || (!!lastSyncAt && lastSyncAt >= pendingSince)
         const pinned = indexDb
           .query<MemoryNoteRow & { pin_id: string; priority: number; always_include: number; reason: string }, [number]>(
@@ -259,13 +262,21 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
             "insert into handoff_log (id, session_id, model_id, event_type, content_hash, created_at) values (?, ?, ?, ?, ?, ?)",
           )
           .run(crypto.randomUUID(), sessionID, modelID ?? null, "handoff-context", contentHash, Date.now())
-        return { indexDbPath, block, contentHash, lastSyncAt, pendingSince, fresh }
+        return { indexDbPath, block, contentHash, lastSyncAt, pendingSince, pendingModelID, fresh }
       } finally {
         indexDb.close(false)
       }
     },
 
-    ackHandoff(input: { sessionID: string; modelID?: string; ackedAt?: number; indexDbPath?: string }) {
+    ackHandoff(input: {
+      sessionID: string
+      modelID?: string
+      ackedAt?: number
+      expectedPendingSince?: number
+      expectedModelID?: string
+      contentHash?: string
+      indexDbPath?: string
+    }) {
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -273,17 +284,25 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
         ensureIndexSchema(indexDb)
         const sessionID = requireNonEmpty(input.sessionID, "sessionID")
         const ackedAt = clampTimestamp(input.ackedAt) ?? Date.now()
+        const expectedPendingSince = clampTimestamp(input.expectedPendingSince)
+        const expectedModelID = normalizeOptionalString(input.expectedModelID) ?? null
+        const modelID = normalizeOptionalString(input.modelID) ?? expectedModelID
+        const contentHash = normalizeOptionalString(input.contentHash) ?? null
+        if (!expectedPendingSince || !contentHash) {
+          throw new TradeMemoryInputError("expectedPendingSince and contentHash are required")
+        }
+        const cleared =
+          indexDb
+            .query(
+              "update handoff_state set last_model_id = ?, pending_provider_id = null, pending_model_id = null, pending_since = null, last_injected_at = ?, last_event_type = ?, updated_at = ? where session_id = ? and pending_since = ? and coalesce(pending_model_id, '') = coalesce(?, '') and exists (select 1 from handoff_log where session_id = ? and event_type = 'handoff-context' and content_hash = ?)",
+            )
+            .run(modelID, ackedAt, "handoff-ack", ackedAt, sessionID, expectedPendingSince, expectedModelID, sessionID, contentHash).changes > 0
         indexDb
           .query(
-            "insert into handoff_state (session_id, last_model_id, pending_provider_id, pending_model_id, pending_since, last_injected_at, last_event_type, updated_at) values (?, ?, null, null, null, ?, ?, ?) on conflict(session_id) do update set last_model_id = excluded.last_model_id, pending_provider_id = null, pending_model_id = null, pending_since = null, last_injected_at = excluded.last_injected_at, last_event_type = excluded.last_event_type, updated_at = excluded.updated_at",
+            "insert into handoff_log (id, session_id, model_id, event_type, content_hash, created_at) values (?, ?, ?, ?, ?, ?)",
           )
-          .run(sessionID, normalizeOptionalString(input.modelID) ?? null, ackedAt, "handoff-ack", ackedAt)
-        indexDb
-          .query(
-            "insert into handoff_log (id, session_id, model_id, event_type, created_at) values (?, ?, ?, ?, ?)",
-          )
-          .run(crypto.randomUUID(), sessionID, normalizeOptionalString(input.modelID) ?? null, "handoff-ack", ackedAt)
-        return { indexDbPath, ok: true, ackedAt }
+          .run(crypto.randomUUID(), sessionID, modelID, cleared ? "handoff-ack" : "handoff-ack-skipped", contentHash, ackedAt)
+        return { indexDbPath, ok: true, ackedAt, cleared }
       } finally {
         indexDb.close(false)
       }
