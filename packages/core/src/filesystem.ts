@@ -320,7 +320,7 @@ export const layer = Layer.effect(
         )).flat()
       }
 
-      const files = Array.from(yield* ripgrep.files({ cwd: location.directory }).pipe(Stream.runCollect, Effect.orDie))
+      const files = Array.from(yield* ripgrep.files({ cwd: location.directory, follow: true }).pipe(Stream.runCollect, Effect.orDie))
       const dirs = new Set<string>()
       for (const file of files) {
         let current = file
