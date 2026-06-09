@@ -164,9 +164,7 @@ export const layer = Layer.effect(
             try: () => plugin(input),
             catch: errorMessage,
           }).pipe(
-            Effect.tapError((error) =>
-              Effect.logError("failed to load internal plugin", { name: plugin.name, error }),
-            ),
+            Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
             Effect.option,
           )
           if (init._tag === "Some") hooks.push(init.value)
