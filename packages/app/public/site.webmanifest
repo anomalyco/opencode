@@ -3,6 +3,7 @@
   "start_url": "/",
   "name": "OpenCode",
   "short_name": "OpenCode",
+  "description": "AI coding agent for your terminal and browser",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
