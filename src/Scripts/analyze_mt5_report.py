@@ -16,7 +16,7 @@ def main() -> int:
     args = parse_args()
     config = load_json(Path(args.config))
     rules = config.get("default", {})
-    report_text = read_text(Path(args.report))
+    report_text = re.sub(r'<[^>]+>', '', read_text(Path(args.report)))
     log_text = read_text(Path(args.log))
     metrics = {
         "report_path": str(Path(args.report)),
@@ -34,14 +34,16 @@ def main() -> int:
             ],
         ),
         "largest_lot": extract_largest_lot(log_text),
-        "net_profit": extract_number(report_text, [r"Net Profit[^\d\-]*([\-\d.,]+)"]),
-        "profit_factor": extract_number(report_text, [r"Profit Factor[^\d]*([\d.,]+)"]),
-        "sharpe_ratio": extract_number(report_text, [r"Sharpe Ratio[^\d\-]*([\-\d.,]+)"]),
-        "balance_drawdown_percent": extract_percent(report_text, [r"Balance Drawdown[^\n%]*?([\d.,]+)\s*%"]),
-        "equity_drawdown_percent": extract_percent(report_text, [r"Equity Drawdown[^\n%]*?([\d.,]+)\s*%"]),
-        "total_trades": extract_int(report_text, [r"Total Trades[^\d]*([\d,]+)"]),
-        "win_count": extract_int(report_text, [r"Profit Trades[^\d]*([\d,]+)", r"Winning Trades[^\d]*([\d,]+)"]),
-        "loss_count": extract_int(report_text, [r"Loss Trades[^\d]*([\d,]+)", r"Losing Trades[^\d]*([\d,]+)"]),
+        "net_profit": extract_number(report_text, [r"Total Net Profit:\s+([\-\d\s]+)"]),
+        "profit_factor": extract_number(report_text, [r"Profit Factor:\s+([\d\s.]+)"]),
+        "sharpe_ratio": extract_number(report_text, [r"Sharpe Ratio:\s+([\-\d\s.]+)"]),
+        "balance_drawdown_relative_pct": extract_percent(report_text, [r"Balance Drawdown Relative:\s+(\d+)%"]),
+        "equity_drawdown_relative_pct": extract_percent(report_text, [r"Equity Drawdown Relative:\s+(\d+)%"]),
+        "balance_drawdown_absolute": extract_number(report_text, [r"Balance Drawdown Absolute:\s+([\d\s]+)"]),
+        "equity_drawdown_absolute": extract_number(report_text, [r"Equity Drawdown Absolute:\s+([\d\s]+)"]),
+        "total_trades": extract_int(report_text, [r"Total Trades:\s+(\d+)"]),
+        "win_count": extract_int(report_text, [r"Profit Trades \(% of total\):\s+(\d+)"]),
+        "loss_count": extract_int(report_text, [r"Loss Trades \(% of total\):\s+(\d+)"]),
     }
     metrics["win_rate"] = calculate_win_rate(metrics["win_count"], metrics["loss_count"])
     failed_rules: list[str] = []
@@ -78,7 +80,7 @@ def main() -> int:
 
     max_drawdown_pct = rules.get("max_drawdown_pct")
     if isinstance(max_drawdown_pct, (int, float)):
-        drawdown_values = [value for value in (metrics["balance_drawdown_percent"], metrics["equity_drawdown_percent"]) if value is not None]
+        drawdown_values = [value for value in (metrics["balance_drawdown_relative_pct"], metrics["equity_drawdown_relative_pct"]) if value is not None]
         if not drawdown_values:
             failed_rules.append("missing drawdown percent")
         elif max(drawdown_values) > float(max_drawdown_pct):
