@@ -135,7 +135,7 @@ async function paginate<T, R extends { nextCursor?: string }>(
   for (let page = 0; page < MAX_LIST_PAGES; page++) {
     const page = await list(cursor)
     result.push(...items(page))
-    if (!page.nextCursor) return result
+    if (page.nextCursor === undefined) return result
     if (cursors.has(page.nextCursor)) throw new Error(`MCP list returned duplicate cursor: ${page.nextCursor}`)
     cursors.add(page.nextCursor)
     cursor = page.nextCursor
@@ -149,8 +149,12 @@ function listTools(client: MCPClient, timeout: number) {
     try: () =>
       paginate(
         async (cursor) => {
-          const params = cursor ? { cursor } : undefined
-          return client.listTools(params, { timeout }).catch(async (error) => {
+          const params = cursor === undefined ? undefined : { cursor }
+          return (
+            cursor === undefined
+              ? client.listTools(params, { timeout })
+              : client.request({ method: "tools/list", params }, ListToolsResultSchema, { timeout })
+          ).catch(async (error) => {
             if (!isOutputSchemaValidationError(error)) throw error
             return client.request({ method: "tools/list", params }, TolerantListToolsResultSchema, { timeout })
           })
@@ -714,7 +718,7 @@ export const layer = Layer.effect(
         (c) =>
           c.getServerCapabilities()?.prompts
             ? paginate(
-                (cursor) => c.listPrompts(cursor ? { cursor } : undefined),
+                (cursor) => c.listPrompts(cursor === undefined ? undefined : { cursor }),
                 (result) => result.prompts,
               )
             : Promise.resolve([]),
@@ -729,7 +733,7 @@ export const layer = Layer.effect(
         (c) =>
           c.getServerCapabilities()?.resources
             ? paginate(
-                (cursor) => c.listResources(cursor ? { cursor } : undefined),
+                (cursor) => c.listResources(cursor === undefined ? undefined : { cursor }),
                 (result) => result.resources,
               )
             : Promise.resolve([]),
