@@ -2,7 +2,6 @@ export * as GlobTool from "./glob"
 
 import { ToolFailure, toolText } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
-import { FileSystem } from "../filesystem"
 import { LocationSearch } from "../location-search"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
@@ -42,7 +41,6 @@ export const toModelOutput = (output: ModelOutput) => {
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
-    const filesystem = yield* FileSystem.Service
     const search = yield* LocationSearch.Service
     const permission = yield* PermissionV2.Service
 
@@ -56,13 +54,12 @@ export const layer = Layer.effectDiscard(
           toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
           execute: (input, context) =>
             Effect.gen(function* () {
-              const root = yield* filesystem.resolveRoot({ path: input.path })
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
                 save: ["*"],
                 metadata: {
-                  root: root.resource,
+                  root: input.path ?? ".",
                   path: input.path,
                   limit: input.limit,
                 },

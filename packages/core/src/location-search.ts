@@ -2,10 +2,12 @@ export * as LocationSearch from "./location-search"
 
 import path from "path"
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { FileSystem } from "./filesystem"
 import { FSUtil } from "./fs-util"
+import { Global } from "./global"
+import { Location } from "./location"
 import { Ripgrep } from "./ripgrep"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
+import { ToolOutputStore } from "./tool-output-store"
 
 /**
  * Location-scoped raw search substrate. Search authority is selected only by
@@ -25,7 +27,7 @@ export const ResultLimit = PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_RESU
 
 export const FilesInput = Schema.Struct({
   pattern: Schema.String,
-  ...FileSystem.ListInput.fields,
+  path: Schema.String.pipe(Schema.optional),
   limit: ResultLimit.pipe(Schema.optional),
 })
 export type FilesInput = typeof FilesInput.Type & { readonly signal?: AbortSignal }
@@ -33,7 +35,7 @@ export type FilesInput = typeof FilesInput.Type & { readonly signal?: AbortSigna
 export const GrepInput = Schema.Struct({
   pattern: Schema.String,
   include: Schema.String.pipe(Schema.optional),
-  ...FileSystem.ListInput.fields,
+  path: Schema.String.pipe(Schema.optional),
   limit: ResultLimit.pipe(Schema.optional),
 })
 export type GrepInput = typeof GrepInput.Type & { readonly signal?: AbortSignal }
@@ -89,10 +91,37 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const filesystem = yield* FileSystem.Service
+    const location = yield* Location.Service
+    const global = yield* Effect.serviceOption(Global.Service)
     const ripgrep = yield* Ripgrep.Service
 
-    const candidate = Effect.fnUntraced(function* (root: FileSystem.RootTarget, cwd: string, value: string) {
+    const resolve = Effect.fnUntraced(function* (input?: string) {
+      const directory = input && path.isAbsolute(input) ? path.dirname(input) : location.directory
+      const absolute = path.resolve(location.directory, input ?? ".")
+      if (!path.isAbsolute(input ?? "") && !FSUtil.contains(location.directory, absolute))
+        return yield* Effect.die(new globalThis.Error("Path escapes the location"))
+      if (path.isAbsolute(input ?? "")) {
+        const managed = path.join(
+          Option.match(global, { onNone: () => Global.Path.data, onSome: (value) => value.data }),
+          ToolOutputStore.MANAGED_DIRECTORY,
+        )
+        if (directory !== managed || !path.basename(absolute).startsWith("tool_"))
+          return yield* Effect.die(new globalThis.Error("Absolute path is not managed tool output"))
+      }
+      const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
+      const root = yield* fs.realPath(directory).pipe(Effect.orDie)
+      if (!FSUtil.contains(root, real)) return yield* Effect.die(new globalThis.Error("Path escapes the search root"))
+      const info = yield* fs.stat(real).pipe(Effect.orDie)
+      const type = info.type === "File" ? ("file" as const) : info.type === "Directory" ? ("directory" as const) : undefined
+      if (!type) return yield* Effect.die(new globalThis.Error("Search root is not a file or directory"))
+      return { real, root, resource: slash(path.relative(root, real)) || ".", type }
+    })
+
+    const candidate = Effect.fnUntraced(function* (
+      root: { readonly real: string; readonly root: string; readonly type: "file" | "directory" },
+      cwd: string,
+      value: string,
+    ) {
       const absolute = path.resolve(cwd, value)
       const lexicallyContained =
         root.type === "directory" ? FSUtil.contains(root.real, absolute) : absolute === root.real
@@ -115,7 +144,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       files: Effect.fn("LocationSearch.files")(function* (input) {
-        const root = yield* filesystem.resolveRoot(input)
+        const root = yield* resolve(input.path)
         if (root.type !== "directory")
           return yield* Effect.die(new globalThis.Error("Files search path must be a directory"))
         const result = yield* ripgrep.files({
@@ -137,7 +166,7 @@ export const layer = Layer.effect(
         })
       }),
       grep: Effect.fn("LocationSearch.grep")(function* (input) {
-        const root = yield* filesystem.resolveRoot(input)
+        const root = yield* resolve(input.path)
         const cwd = root.type === "directory" ? root.real : path.dirname(root.real)
         const result = yield* ripgrep.grep({
           cwd,

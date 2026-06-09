@@ -3,60 +3,52 @@ import { Effect, Exit, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Location } from "@opencode-ai/core/location"
 import { Image } from "@opencode-ai/core/image"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Global } from "@opencode-ai/core/global"
+import { location } from "./fixture/location"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ReadTool } from "@opencode-ai/core/tool/read"
+import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const assertions: PermissionV2.AssertInput[] = []
 const readCalls: {
-  input: FileSystem.ReadInput & FileSystem.TextPageInput
-  page: FileSystem.TextPageInput
+  input: AbsolutePath
+  page: ReadToolFileSystem.PageInput
 }[] = []
-const listCalls: FileSystem.ListPageInput[] = []
+const listCalls: ReadToolFileSystem.PageInput[] = []
 let resolvedType: "file" | "directory" = "file"
 let resolveFailure: unknown
-let readResult: FileSystem.Content | FileSystem.TextPage = new FileSystem.TextContent({
+let readResult: FileSystem.Content | ReadToolFileSystem.TextPage = new FileSystem.TextContent({
   type: "text",
   content: "hello",
   mime: "text/plain",
 })
 let readFailure: unknown
 let configEntries: Config.Entry[] = []
-const filesystem = Layer.succeed(
-  FileSystem.Service,
-  FileSystem.Service.of({
-    read: () => Effect.die("unused"),
-    resolveReadPath: (input) =>
+const reader = Layer.succeed(
+  ReadToolFileSystem.Service,
+  ReadToolFileSystem.Service.of({
+    inspect: () =>
       resolveFailure === undefined
-        ? Effect.succeed(
-            new FileSystem.ReadPath({
-              type: resolvedType,
-              resource: input.path,
-            }),
-          )
+        ? Effect.succeed(resolvedType)
         : Effect.die(resolveFailure),
-    readTool: (input, page = {}) => {
+    read: (input, _resource, page = {}) => {
       readCalls.push({ input, page })
       if (readFailure !== undefined) return Effect.die(readFailure)
       return Effect.succeed(readResult)
     },
-    resolveRoot: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-    resolveList: () => Effect.die("unused"),
-    listResolved: () => Effect.die("unused"),
-    listPage: (input = {}) =>
+    list: (_path, input = {}) =>
       Effect.sync(() => {
         listCalls.push(input)
-        return new FileSystem.ListPage({ entries: [], truncated: false })
+        return new ReadToolFileSystem.ListPage({ entries: [], truncated: false })
       }),
-    listPageResolved: () => Effect.die("unused"),
-    find: () => Effect.die("unused"),
-    grep: () => Effect.die("unused"),
-    isIgnored: () => false,
   }),
 )
 let allow = true
@@ -77,27 +69,40 @@ const permission = Layer.succeed(
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
 const image = Image.layer.pipe(Layer.provide(config))
+const testFileSystem = Layer.effect(
+  FSUtil.Service,
+  FSUtil.Service.use((fs) =>
+    Effect.succeed(FSUtil.Service.of({ ...fs, realPath: (path) => Effect.succeed(path) })),
+  ),
+).pipe(Layer.provide(FSUtil.defaultLayer))
+const infrastructure = Layer.mergeAll(
+  testFileSystem,
+  Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) }))),
+  Global.layerWith({ data: Global.Path.data }),
+)
 const unavailableImage = Layer.succeed(
   Image.Service,
   Image.Service.of({ normalize: () => Effect.fail(new Image.ResizerUnavailableError()) }),
 )
 const read = ReadTool.layer.pipe(
   Layer.provide(registry),
-  Layer.provide(filesystem),
+  Layer.provide(reader),
   Layer.provide(permission),
   Layer.provide(config),
   Layer.provide(image),
+  Layer.provide(infrastructure),
 )
-const it = testEffect(Layer.mergeAll(registry, filesystem, permission, config, image, read))
+const it = testEffect(Layer.mergeAll(registry, reader, permission, config, image, infrastructure, read))
 const unavailableRead = ReadTool.layer.pipe(
   Layer.provide(registry),
-  Layer.provide(filesystem),
+  Layer.provide(reader),
   Layer.provide(permission),
   Layer.provide(config),
   Layer.provide(unavailableImage),
+  Layer.provide(infrastructure),
 )
 const itWithoutResizer = testEffect(
-  Layer.mergeAll(registry, filesystem, permission, config, unavailableImage, unavailableRead),
+  Layer.mergeAll(registry, reader, permission, config, unavailableImage, infrastructure, unavailableRead),
 )
 const sessionID = SessionV2.ID.make("ses_read_tool_test")
 
@@ -128,7 +133,7 @@ describe("ReadTool", () => {
         }),
       ).toEqual({ type: "json", value: { type: "text", content: "hello", mime: "text/plain" } })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
-      expect(readCalls).toEqual([{ input: { path: "README.md" }, page: {} }])
+      expect(readCalls).toEqual([{ input: AbsolutePath.make(`${process.cwd()}/README.md`), page: {} }])
     }),
   )
 
@@ -156,7 +161,7 @@ describe("ReadTool", () => {
           { type: "media", mediaType: "image/png", data: png, filename: "pixel.png" },
         ],
       })
-      expect(readCalls).toEqual([{ input: { path: "pixel.png" }, page: {} }])
+      expect(readCalls).toEqual([{ input: AbsolutePath.make(`${process.cwd()}/pixel.png`), page: {} }])
 
       const settled = yield* settleTool(registry, {
         sessionID,
@@ -379,7 +384,7 @@ describe("ReadTool", () => {
 
   it.effect("preserves unexpected filesystem defects", () =>
     Effect.gen(function* () {
-      readFailure = new FileSystem.BinaryFileError("archive.dat")
+      readFailure = new ReadToolFileSystem.BinaryFileError("archive.dat")
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -397,7 +402,7 @@ describe("ReadTool", () => {
         ),
       ).toBe(true)
       expect(readCalls).toEqual([
-        { input: { path: "archive.dat", offset: 2, limit: 1 }, page: { offset: 2, limit: 1 } },
+        { input: AbsolutePath.make(`${process.cwd()}/archive.dat`), page: { offset: 2, limit: 1 } },
       ])
     }),
   )
@@ -436,7 +441,7 @@ describe("ReadTool", () => {
         }),
       ).toEqual({ type: "json", value: { entries: [], truncated: false } })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["src"], save: ["*"] }])
-      expect(listCalls).toEqual([{ path: "src", offset: 2, limit: 10 }])
+      expect(listCalls).toEqual([{ offset: 2, limit: 10 }])
     }),
   )
 
@@ -478,7 +483,7 @@ describe("ReadTool", () => {
 
   it.effect("forwards pagination and returns bounded text pages with continuation", () =>
     Effect.gen(function* () {
-      readResult = new FileSystem.TextPage({
+      readResult = new ReadToolFileSystem.TextPage({
         type: "text-page",
         content: "hello",
         mime: "text/plain",
@@ -503,7 +508,9 @@ describe("ReadTool", () => {
         type: "json",
         value: { type: "text-page", content: "hello", mime: "text/plain", offset: 2, truncated: true, next: 3 },
       })
-      expect(readCalls).toEqual([{ input: { path: "large.txt", offset: 2, limit: 1 }, page: { offset: 2, limit: 1 } }])
+      expect(readCalls).toEqual([
+        { input: AbsolutePath.make(`${process.cwd()}/large.txt`), page: { offset: 2, limit: 1 } },
+      ])
     }),
   )
 

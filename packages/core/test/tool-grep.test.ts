@@ -5,6 +5,7 @@ import { Effect, Exit, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { Ripgrep as FileSystemRipgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { LocationSearch } from "@opencode-ai/core/location-search"
 import { PermissionV2 } from "@opencode-ai/core/permission"
@@ -26,31 +27,6 @@ let allow = true
 let result = new LocationSearch.GrepResult({ items: [], truncated: false, partial: false })
 let searchFailure: Ripgrep.InvalidPatternError | undefined
 
-const filesystem = Layer.succeed(
-  FileSystem.Service,
-  FileSystem.Service.of({
-    read: () => Effect.die("unused"),
-    resolveReadPath: () => Effect.die("unused"),
-    readTool: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-    resolveRoot: (input = {}) =>
-      Effect.succeed(
-        new FileSystem.RootTarget({
-          real: `/project/${input.path ?? "."}`,
-          root: "/project",
-          resource: input.path ?? ".",
-          type: "directory",
-        }),
-      ),
-    resolveList: () => Effect.die("unused"),
-    listResolved: () => Effect.die("unused"),
-    listPage: () => Effect.die("unused"),
-    listPageResolved: () => Effect.die("unused"),
-    find: () => Effect.die("unused"),
-    grep: () => Effect.die("unused"),
-    isIgnored: () => false,
-  }),
-)
 const search = Layer.succeed(
   LocationSearch.Service,
   LocationSearch.Service.of({
@@ -80,11 +56,10 @@ const permission = Layer.succeed(
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const grep = GrepTool.layer.pipe(
   Layer.provide(registry),
-  Layer.provide(filesystem),
   Layer.provide(search),
   Layer.provide(permission),
 )
-const it = testEffect(Layer.mergeAll(registry, filesystem, search, permission, grep))
+const it = testEffect(Layer.mergeAll(registry, search, permission, grep))
 const sessionID = SessionV2.ID.make("ses_grep_tool_test")
 
 const execute = (input: Record<string, unknown>) =>
@@ -117,6 +92,7 @@ function provideLive(directory: string) {
   const dependencies = Layer.mergeAll(
     FSUtil.defaultLayer,
     FileSystemRipgrep.defaultLayer,
+    Search.defaultLayer,
     AppProcess.defaultLayer,
     Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
   )

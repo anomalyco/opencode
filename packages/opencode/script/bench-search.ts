@@ -92,7 +92,7 @@ for (const q of FILE_QUERIES) {
   const t = performance.now()
   const r = await run(Search.Service.use((svc) => svc.file({ cwd: dir, query: q, limit: FILE_LIMIT })))
   console.log(
-    `[Search.file] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r?.length ?? "undefined (cache fallback)"} results)`,
+    `[Search.file] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} results)`,
   )
 }
 
