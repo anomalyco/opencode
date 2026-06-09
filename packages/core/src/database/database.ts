@@ -3,6 +3,7 @@ export * as Database from "./database"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
+import { sql } from "drizzle-orm"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
@@ -30,6 +31,14 @@ export const layer = Layer.effect(
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+
+    // One-time migration: enable incremental auto-vacuum (takes effect after next VACUUM)
+    const autoVacuumMode = yield* db.get<{ auto_vacuum: number }>(sql`PRAGMA auto_vacuum`)
+    if (autoVacuumMode?.auto_vacuum === 0) {
+      yield* db.run("PRAGMA auto_vacuum = INCREMENTAL")
+      yield* db.run("VACUUM")
+    }
+
     yield* DatabaseMigration.apply(db)
 
     return { db }
