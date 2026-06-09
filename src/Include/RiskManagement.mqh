@@ -11,6 +11,7 @@
 class CRiskManager
   {
 private:
+   ulong  m_magic_number;
    double m_global_dd_limit;      // -25%
    double m_monthly_dd_limit;     // -20%
    double m_daily_dd_limit;       // -3%
@@ -32,8 +33,9 @@ private:
    bool     m_risk_version_logged;
 
 public:
-   CRiskManager() : m_global_dd_limit(-0.25),
-                     m_monthly_dd_limit(-0.20),
+   CRiskManager(ulong magic_number = 0) : m_magic_number(magic_number),
+                     m_global_dd_limit(-0.25),
+                      m_monthly_dd_limit(-0.20),
                      m_daily_dd_limit(-0.03),
                      m_kelly_fraction(0.25),
                      m_risk_per_trade_pct(0.005),
@@ -219,22 +221,24 @@ public:
       return 0.0;
       }
    
-   bool CanEnter()
-      {
-      return IsHealthy();
-      }
+    bool CanEnter()
+       {
+       return IsHealthy();
+       }
 
-   bool HasOpenPositionForCurrentSymbol()
-     {
-      for(int i = PositionsTotal() - 1; i >= 0; i--)
-        {
-         ulong ticket = PositionGetTicket(i);
-         if(ticket == 0) continue;
-         if(PositionGetString(POSITION_SYMBOL) == _Symbol)
-            return true;
-        }
-      return false;
-     }
+    bool HasOpenPositionForCurrentSymbol()
+      {
+       for(int i = PositionsTotal() - 1; i >= 0; i--)
+         {
+          ulong ticket = PositionGetTicket(i);
+          if(ticket == 0) continue;
+          if(!IsManagedPosition())
+             continue;
+          if(PositionGetString(POSITION_SYMBOL) == _Symbol)
+             return true;
+         }
+       return false;
+      }
 
 private:
    double NormalizeLotDown(double lot, double lot_step, double max_lot)
@@ -291,21 +295,25 @@ private:
       }
 
 public:
-   bool PlaceOrder(ENUM_ORDER_TYPE type, double lot, double price, double sl, double tp)
-     {
-      MqlTradeRequest request = {};
-      MqlTradeResult result = {};
-      
-      request.action       = TRADE_ACTION_DEAL;
-      request.symbol       = _Symbol;
+    bool PlaceOrder(ENUM_ORDER_TYPE type, double lot, double price, double sl, double tp)
+      {
+       if(m_magic_number == 0)
+          return false;
+
+       MqlTradeRequest request = {};
+       MqlTradeResult result = {};
+       
+       request.action       = TRADE_ACTION_DEAL;
+       request.symbol       = _Symbol;
       request.volume       = lot;
       request.type         = type;
-      request.price        = price;
-      request.sl           = sl;
-      request.tp           = tp;
-      request.deviation    = 10;
-      request.type_filling = ORDER_FILLING_IOC;
-      request.comment      = "opencode-trade";
+       request.price        = price;
+       request.sl           = sl;
+       request.tp           = tp;
+       request.deviation    = 10;
+       request.magic        = m_magic_number;
+       request.type_filling = ORDER_FILLING_IOC;
+       request.comment      = "opencode-trade";
       
       int max_retries = 3;
       for(int i = 0; i < max_retries; i++)
@@ -339,13 +347,16 @@ public:
    void UpdateTrailingStop()
      {
       // Iterate through open positions and update trailing stops
-      for(int i = PositionsTotal() - 1; i >= 0; i--)
-        {
-         ulong ticket = PositionGetTicket(i);
-         if(ticket == 0) continue;
-         
-         if(PositionGetString(POSITION_SYMBOL) != _Symbol)
-            continue;
+       for(int i = PositionsTotal() - 1; i >= 0; i--)
+         {
+          ulong ticket = PositionGetTicket(i);
+          if(ticket == 0) continue;
+          
+          if(!IsManagedPosition())
+             continue;
+
+          if(PositionGetString(POSITION_SYMBOL) != _Symbol)
+             continue;
          
          double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
          double current_sl = PositionGetDouble(POSITION_SL);
@@ -376,8 +387,13 @@ public:
      }
 
 private:
-   void ResetMonthlyIfNeeded()
+   bool IsManagedPosition()
       {
+       return PositionGetInteger(POSITION_MAGIC) == (long)m_magic_number;
+      }
+
+   void ResetMonthlyIfNeeded()
+       {
        datetime now = TimeCurrent();
        MqlDateTime dt_now, dt_last;
 

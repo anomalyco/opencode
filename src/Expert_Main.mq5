@@ -16,6 +16,7 @@ input double InpStopLossATRMultiplier = 1.5;
 input double InpTakeProfitATRMultiplier = 3.0;
 input int    InpSessionStartHour = 12;
 input int    InpSessionEndHour = 24;
+input ulong  InpMagicNumber = 12345;
 
 //+------------------------------------------------------------------+
 //| CExpertAdvisor class                                              |
@@ -35,11 +36,16 @@ private:
    CDataFeed               m_data;
 
 public:
-   //--- Initialization
-    int OnInit()
-      {
-       m_sig_breakout.Init();
-        m_sig_breakout.SetUseH1EMAFilter(InpUseH1EMAFilter);
+    CExpertAdvisor() : m_risk(InpMagicNumber) {}
+
+    //--- Initialization
+     int OnInit()
+       {
+        if(InpMagicNumber == 0)
+           return(INIT_FAILED);
+
+        m_sig_breakout.Init();
+         m_sig_breakout.SetUseH1EMAFilter(InpUseH1EMAFilter);
         m_sig_breakout.SetLookbackBars(InpBreakoutLookbackBars);
         m_sig_breakout.SetATRMin(InpBreakoutATRMin);
         m_sig_breakout.SetStopLossATRMultiplier(InpStopLossATRMultiplier);
