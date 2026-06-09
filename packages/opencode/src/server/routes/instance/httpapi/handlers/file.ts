@@ -93,9 +93,9 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
         FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make(ctx.query.path) })),
       ).pipe(
         Effect.map((item) => ({
-          type: item.type,
-          content: item.type === "text" ? item.content.trim() : item.content,
-          ...(item.type === "binary" ? { encoding: item.encoding, mimeType: item.mime } : {}),
+          type: item.encoding === "utf8" ? ("text" as const) : ("binary" as const),
+          content: item.encoding === "utf8" ? item.content.trim() : item.content,
+          ...(item.encoding === "base64" ? { encoding: item.encoding, mimeType: item.mime } : {}),
         })),
       )
     })

@@ -14,20 +14,13 @@ export const ReadInput = Schema.Struct({
 })
 export type ReadInput = typeof ReadInput.Type
 
-export class TextContent extends Schema.Class<TextContent>("FileSystem.TextContent")({
-  type: Schema.Literal("text"),
+export const Content = Schema.Struct({
+  uri: Schema.String,
+  name: Schema.String.pipe(Schema.optional),
   content: Schema.String,
+  encoding: Schema.Literals(["utf8", "base64"]),
   mime: Schema.String,
-}) {}
-
-export class BinaryContent extends Schema.Class<BinaryContent>("FileSystem.BinaryContent")({
-  type: Schema.Literal("binary"),
-  content: Schema.String,
-  encoding: Schema.Literal("base64"),
-  mime: Schema.String,
-}) {}
-
-export const Content = Schema.Union([TextContent, BinaryContent]).pipe(Schema.toTaggedUnion("type"))
+}).annotate({ identifier: "FileSystem.Content" })
 export type Content = typeof Content.Type
 
 export const ListInput = Schema.Struct({
@@ -129,14 +122,22 @@ export const layer = Layer.effect(
           const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
             Effect.option,
           )
-          if (Option.isSome(content)) return new TextContent({ type: "text", content: content.value, mime })
+          if (Option.isSome(content))
+            return {
+              uri: pathToFileURL(target.real).href,
+              name: path.basename(target.real),
+              content: content.value,
+              encoding: "utf8" as const,
+              mime,
+            }
         }
-        return new BinaryContent({
-          type: "binary",
+        return {
+          uri: pathToFileURL(target.real).href,
+          name: path.basename(target.real),
           content: Buffer.from(bytes).toString("base64"),
-          encoding: "base64",
+          encoding: "base64" as const,
           mime,
-        })
+        }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         const target = yield* resolve(input.path)

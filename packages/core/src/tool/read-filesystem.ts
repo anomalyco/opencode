@@ -120,12 +120,13 @@ export const read = Effect.fn("ReadTool.read")(function* (
         }
         if (total > MAX_MEDIA_INGEST_BYTES)
           return yield* Effect.die(new MediaIngestLimitError(resource, MAX_MEDIA_INGEST_BYTES))
-        return new FileSystem.BinaryContent({
-          type: "binary",
+        return {
+          uri: pathToFileURL(real).href,
+          name: path.basename(real),
           content: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total).toString("base64"),
-          encoding: "base64",
+          encoding: "base64" as const,
           mime,
-        })
+        }
       }
       if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || binary(resource, first))
         return yield* Effect.die(new BinaryFileError(resource))
@@ -140,7 +141,13 @@ export const read = Effect.fn("ReadTool.read")(function* (
           text.push(yield* Effect.sync(() => decoder.decode(chunk.value, { stream: true })))
         }
         text.push(yield* Effect.sync(() => decoder.decode()))
-        return new FileSystem.TextContent({ type: "text", content: text.join(""), mime: FSUtil.mimeType(real) })
+        return {
+          uri: pathToFileURL(real).href,
+          name: path.basename(real),
+          content: text.join(""),
+          encoding: "utf8" as const,
+          mime: FSUtil.mimeType(real),
+        }
       }
       const offset = page.offset ?? 1
       const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)

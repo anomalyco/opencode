@@ -1,6 +1,6 @@
 export * as GrepTool from "./grep"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { LocationSearch } from "../location-search"
 import { Ripgrep } from "../ripgrep"
@@ -66,7 +66,7 @@ export const layer = Layer.effectDiscard(
             "Search file contents by regular expression within the active Location or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
           input: Input,
           output: LocationSearch.GrepResult,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* permission.assert({

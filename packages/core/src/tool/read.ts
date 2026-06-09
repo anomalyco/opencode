@@ -44,7 +44,8 @@ export const layer = Layer.effectDiscard(
           input: Input,
           output: Output,
           toModelOutput: ({ input, output }) => {
-            if (!("type" in output) || output.type !== "binary" || !SUPPORTED_IMAGE_MIMES.has(output.mime)) return []
+            if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime))
+              return []
             return [
               { type: "text", text: "Image read successfully" },
               { type: "file", data: output.content, mime: output.mime, name: input.path },
@@ -76,12 +77,12 @@ export const layer = Layer.effectDiscard(
                 offset: input.offset,
                 limit: input.limit,
               })
-              if (content.type === "binary" && SUPPORTED_IMAGE_MIMES.has(content.mime)) {
+              if ("encoding" in content && content.encoding === "base64" && SUPPORTED_IMAGE_MIMES.has(content.mime)) {
                 return yield* image
-                  .normalize(resource, content)
+                  .normalize(resource, { ...content, encoding: "base64" })
                   .pipe(Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)))
               }
-              if (content.type === "binary")
+              if ("encoding" in content && content.encoding === "base64")
                 return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError(resource))
               return content
             }).pipe(

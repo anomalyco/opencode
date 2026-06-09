@@ -63,7 +63,7 @@ describe("ApplicationTools", () => {
         type: "content",
         value: [
           { type: "text", text: "ONCE" },
-          { type: "media", mediaType: "image/png", data: "aGVsbG8=", filename: "result.png" },
+          { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "result.png" },
         ],
       })
       expect(contexts).toEqual([{ sessionID, agent, assistantMessageID, toolCallID: "call-opaque" }])
@@ -132,14 +132,14 @@ describe("ApplicationTools", () => {
           type: "content",
           value: [
             { type: "text", text: "HELLO" },
-            { type: "media", mediaType: "image/png", data: "aGVsbG8=", filename: "result.png" },
+            { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "result.png" },
           ],
         },
         output: {
           structured: { answer: "HELLO" },
           content: [
             { type: "text", text: "HELLO" },
-            { type: "file", source: { type: "data", data: "aGVsbG8=" }, mime: "image/png", name: "result.png" },
+            { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "result.png" },
           ],
         },
       })

@@ -2985,19 +2985,7 @@ export type ToolTextContent = {
 
 export type ToolFileContent = {
   type: "file"
-  source:
-    | {
-        type: "data"
-        data: string
-      }
-    | {
-        type: "url"
-        url: string
-      }
-    | {
-        type: "file"
-        uri: string
-      }
+  uri: string
   mime: string
   name?: string
 }
@@ -4131,16 +4119,11 @@ export type PermissionSavedInfo = {
   resource: string
 }
 
-export type FileSystemTextContent = {
-  type: "text"
+export type FileSystemContent = {
+  uri: string
+  name?: string
   content: string
-  mime: string
-}
-
-export type FileSystemBinaryContent = {
-  type: "binary"
-  content: string
-  encoding: "base64"
+  encoding: "utf8" | "base64"
   mime: string
 }
 
@@ -10095,7 +10078,7 @@ export type V2FsReadResponses = {
    */
   200: {
     location: LocationInfo
-    data: FileSystemTextContent | FileSystemBinaryContent
+    data: FileSystemContent
   }
 }
 

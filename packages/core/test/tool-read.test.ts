@@ -25,11 +25,13 @@ const readCalls: {
 const listCalls: ReadToolFileSystem.PageInput[] = []
 let resolvedType: "file" | "directory" = "file"
 let resolveFailure: unknown
-let readResult: FileSystem.Content | ReadToolFileSystem.TextPage = new FileSystem.TextContent({
-  type: "text",
+let readResult: FileSystem.Content | ReadToolFileSystem.TextPage = {
+  uri: "file:///README.md",
+  name: "README.md",
   content: "hello",
+  encoding: "utf8",
   mime: "text/plain",
-})
+}
 let readFailure: unknown
 let configEntries: Config.Entry[] = []
 const reader = Layer.succeed(
@@ -114,7 +116,13 @@ describe("ReadTool", () => {
     allow = true
     resolvedType = "file"
     resolveFailure = undefined
-    readResult = new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
+    readResult = {
+      uri: "file:///README.md",
+      name: "README.md",
+      content: "hello",
+      encoding: "utf8",
+      mime: "text/plain",
+    }
     readFailure = undefined
     configEntries = []
   })
@@ -131,7 +139,16 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
-      ).toEqual({ type: "json", value: { type: "text", content: "hello", mime: "text/plain" } })
+      ).toEqual({
+        type: "json",
+        value: {
+          uri: "file:///README.md",
+          name: "README.md",
+          content: "hello",
+          encoding: "utf8",
+          mime: "text/plain",
+        },
+      })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
       expect(readCalls).toEqual([{ input: AbsolutePath.make(`${process.cwd()}/README.md`), page: {} }])
     }),
@@ -140,12 +157,13 @@ describe("ReadTool", () => {
   it.effect("returns a small PNG as native media instead of durable base64 text", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///pixel.png",
+        name: "pixel.png",
         content: png,
         encoding: "base64",
         mime: "image/png",
-      })
+      }
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -158,7 +176,7 @@ describe("ReadTool", () => {
         type: "content",
         value: [
           { type: "text", text: "Image read successfully" },
-          { type: "media", mediaType: "image/png", data: png, filename: "pixel.png" },
+          { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "pixel.png" },
         ],
       })
       expect(readCalls).toEqual([{ input: AbsolutePath.make(`${process.cwd()}/pixel.png`), page: {} }])
@@ -168,10 +186,15 @@ describe("ReadTool", () => {
         ...toolIdentity,
         call: { type: "tool-call", id: "call-image-settle", name: "read", input: { path: "pixel.png" } },
       })
-      expect(settled.output?.structured).toMatchObject({ type: "binary", mime: "image/png", encoding: "base64" })
+      expect(settled.output?.structured).toMatchObject({
+        uri: "file:///pixel.png",
+        name: "pixel.png",
+        mime: "image/png",
+        encoding: "base64",
+      })
       expect(settled.output?.content).toMatchObject([
         { type: "text", text: "Image read successfully" },
-        { type: "file", mime: "image/png", source: { type: "data", data: png } },
+        { type: "file", mime: "image/png", uri: `data:image/png;base64,${png}` },
       ])
     }),
   )
@@ -184,12 +207,13 @@ describe("ReadTool", () => {
       const png = Buffer.from(source.get_bytes()).toString("base64")
       source.free()
       expect(Buffer.byteLength(png)).toBeGreaterThan(50 * 1024)
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///large.png",
+        name: "large.png",
         content: png,
         encoding: "base64",
         mime: "image/png",
-      })
+      }
       const registry = yield* ToolRegistry.Service
 
       const settled = yield* settleTool(registry, {
@@ -199,12 +223,17 @@ describe("ReadTool", () => {
       })
 
       expect(settled.outputPaths).toBeUndefined()
-      expect(settled.output?.structured).toMatchObject({ type: "binary", mime: "image/png", encoding: "base64" })
+      expect(settled.output?.structured).toMatchObject({
+        uri: "file:///large.png",
+        name: "large.png",
+        mime: "image/png",
+        encoding: "base64",
+      })
       expect(settled.result).toEqual({
         type: "content",
         value: [
           { type: "text", text: "Image read successfully" },
-          { type: "media", mediaType: "image/png", data: png, filename: "large.png" },
+          { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "large.png" },
         ],
       })
     }),
@@ -213,12 +242,13 @@ describe("ReadTool", () => {
   itWithoutResizer.effect("returns the original image when the resizer is unavailable", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///pixel.png",
+        name: "pixel.png",
         content: png,
         encoding: "base64",
         mime: "image/png",
-      })
+      }
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -229,19 +259,20 @@ describe("ReadTool", () => {
         }),
       ).toMatchObject({
         type: "content",
-        value: [{ type: "text" }, { type: "media", mediaType: "image/png", data: png }],
+        value: [{ type: "text" }, { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png" }],
       })
     }),
   )
 
   it.effect("rejects invalid image data returned by the filesystem", () =>
     Effect.gen(function* () {
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///truncated.png",
+        name: "truncated.png",
         content: "iVBORw0KGgo=",
         encoding: "base64",
         mime: "image/png",
-      })
+      }
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -260,12 +291,13 @@ describe("ReadTool", () => {
       const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
       const base64 = Buffer.from(source.get_bytes()).toString("base64")
       source.free()
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///wide.png",
+        name: "wide.png",
         content: base64,
         encoding: "base64",
         mime: "image/png",
-      })
+      }
       configEntries = [
         new Config.Document({
           type: "document",
@@ -294,12 +326,13 @@ describe("ReadTool", () => {
       const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
       const base64 = Buffer.from(source.get_bytes()).toString("base64")
       source.free()
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///wide.png",
+        name: "wide.png",
         content: base64,
         encoding: "base64",
         mime: "image/png",
-      })
+      }
       configEntries = [
         new Config.Document({
           type: "document",
@@ -318,9 +351,9 @@ describe("ReadTool", () => {
       expect(result.type).toBe("content")
       if (result.type !== "content") return
       const media = result.value[1]
-      expect(media?.type).toBe("media")
-      if (media?.type !== "media") return
-      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(media.data, "base64"))
+      expect(media?.type).toBe("file")
+      if (media?.type !== "file") return
+      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(media.uri.split(",")[1] ?? "", "base64"))
       expect(resized.get_width()).toBeLessThanOrEqual(4)
       expect(resized.get_height()).toBeLessThanOrEqual(2_000)
       resized.free()
@@ -330,12 +363,13 @@ describe("ReadTool", () => {
   it.effect("enforces max base64 bytes after resize attempts", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///pixel.png",
+        name: "pixel.png",
         content: png,
         encoding: "base64",
         mime: "image/png",
-      })
+      }
       configEntries = [
         new Config.Document({
           type: "document",
@@ -361,12 +395,13 @@ describe("ReadTool", () => {
   it.effect("returns supported image contents despite a misleading binary extension", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///pixel.bin",
+        name: "pixel.bin",
         content: png,
         encoding: "base64",
         mime: "image/png",
-      })
+      }
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -377,7 +412,7 @@ describe("ReadTool", () => {
         }),
       ).toMatchObject({
         type: "content",
-        value: [{ type: "text" }, { type: "media", mediaType: "image/png", filename: "pixel.bin" }],
+        value: [{ type: "text" }, { type: "file", mime: "image/png", name: "pixel.bin" }],
       })
     }),
   )
@@ -516,12 +551,13 @@ describe("ReadTool", () => {
 
   it.effect("rejects unsupported binary discovered by a direct read", () =>
     Effect.gen(function* () {
-      readResult = new FileSystem.BinaryContent({
-        type: "binary",
+      readResult = {
+        uri: "file:///late-binary",
+        name: "late-binary",
         content: "AAECAw==",
         encoding: "base64",
         mime: "application/octet-stream",
-      })
+      }
       const registry = yield* ToolRegistry.Service
 
       expect(

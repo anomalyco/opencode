@@ -41,17 +41,24 @@ describe("FileSystem", () => {
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "large.txt"), text))
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "data.bin"), Buffer.from([0, 1, 2])))
         const service = yield* FileSystem.Service
-        expect(yield* service.read({ path: RelativePath.make("large.txt") })).toEqual({
-          type: "text",
+        const textContent = yield* service.read({ path: RelativePath.make("large.txt") })
+        expect(textContent).toEqual({
+          uri: textContent.uri,
+          name: "large.txt",
           content: text,
+          encoding: "utf8",
           mime: "text/plain",
         })
-        expect(yield* service.read({ path: RelativePath.make("data.bin") })).toEqual({
-          type: "binary",
+        expect(fileURLToPath(textContent.uri)).toBe(path.join(directory, "large.txt"))
+        const binaryContent = yield* service.read({ path: RelativePath.make("data.bin") })
+        expect(binaryContent).toEqual({
+          uri: binaryContent.uri,
+          name: "data.bin",
           content: "AAEC",
           encoding: "base64",
           mime: "application/octet-stream",
         })
+        expect(fileURLToPath(binaryContent.uri)).toBe(path.join(directory, "data.bin"))
       }).pipe(provide(directory)),
     ),
   )

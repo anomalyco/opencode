@@ -1,8 +1,7 @@
 import {
-  ToolOutput as LLMToolOutput,
+  ToolOutput,
   type LLMEvent,
   type ProviderMetadata,
-  type ToolOutput as LLMToolOutputType,
   type ToolResultValue,
   type Usage,
 } from "@opencode-ai/llm"
@@ -45,13 +44,13 @@ const message = (value: unknown) => {
   }
 }
 
-type ToolOutput =
-  | { readonly structured: Record<string, unknown>; readonly content: LLMToolOutputType["content"] }
+type SettledOutput =
+  | { readonly structured: Record<string, unknown>; readonly content: ToolOutput["content"] }
   | { readonly error: { readonly type: "unknown"; readonly message: string } }
 
-const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultValue): ToolOutput => {
+const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): SettledOutput => {
   if (result.type === "error") return { error: { type: "unknown", message: message(result.value) } }
-  const settled = value ?? LLMToolOutput.fromResultValue(result)
+  const settled = value ?? ToolOutput.fromResultValue(result)
   if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
   return { structured: record(settled.structured), content: settled.content }
 }

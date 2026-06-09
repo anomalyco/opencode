@@ -1,6 +1,6 @@
 export * as GlobTool from "./glob"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { LocationSearch } from "../location-search"
 import { PermissionV2 } from "../permission"
@@ -51,7 +51,7 @@ export const layer = Layer.effectDiscard(
             "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
           input: Input,
           output: LocationSearch.FilesResult,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* permission.assert({
