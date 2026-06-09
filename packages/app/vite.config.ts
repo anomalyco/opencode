@@ -1,5 +1,6 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "vite"
+import { VitePWA } from "vite-plugin-pwa"
 import desktopPlugin from "./vite"
 
 const sentry =
@@ -20,7 +21,30 @@ const sentry =
     : false
 
 export default defineConfig({
-  plugins: [desktopPlugin, sentry] as any,
+  plugins: [
+    desktopPlugin,
+    VitePWA({
+      registerType: "prompt",
+      manifest: false,
+      devOptions: {
+        enabled: false,
+      },
+      includeAssets: ["favicon*.{ico,png,svg}", "apple-touch-icon*.png", "web-app-manifest-*.png"],
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,woff,woff2,ttf,eot,png,svg,ico}"],
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\//, /^https?:\/\/localhost:4096\//],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }: { url: URL }) =>
+              url.hostname === "localhost" && url.port === "4096",
+            handler: "NetworkOnly",
+          },
+        ],
+      },
+    }),
+    sentry,
+  ] as any,
   server: {
     host: "0.0.0.0",
     allowedHosts: true,

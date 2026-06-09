@@ -17,6 +17,7 @@
     "emitDeclarationOnly": true,
     "outDir": "node_modules/.ts-dist",
     "isolatedModules": true,
+    "types": ["vite-plugin-pwa/solid"],
     "paths": {
       "@/*": ["./src/*"]
     }

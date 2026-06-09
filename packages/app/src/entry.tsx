@@ -3,6 +3,7 @@
 import * as Sentry from "@sentry/solid"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
+import { PwaUpdatePrompt } from "@/components/PwaUpdatePrompt"
 import { type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
@@ -166,16 +167,19 @@ if (root instanceof HTMLElement) {
   }
   render(
     () => (
-      <PlatformProvider value={platform}>
-        <AppBaseProviders>
-          <AppInterface
-            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
-            canonicalLocalServer={ServerConnection.key(server)}
-            servers={[server]}
-            disableHealthCheck
-          />
-        </AppBaseProviders>
-      </PlatformProvider>
+      <>
+        <PlatformProvider value={platform}>
+          <AppBaseProviders>
+            <AppInterface
+              defaultServer={ServerConnection.Key.make(getDefaultUrl())}
+              canonicalLocalServer={ServerConnection.key(server)}
+              servers={[server]}
+              disableHealthCheck
+            />
+          </AppBaseProviders>
+        </PlatformProvider>
+        <PwaUpdatePrompt />
+      </>
     ),
     root,
   )

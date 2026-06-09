@@ -76,6 +76,8 @@
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
-    "virtua": "catalog:"
+    "virtua": "catalog:",
+    "vite-plugin-pwa": "1.3.0",
+    "workbox-window": "7.4.1"
   }
 }
