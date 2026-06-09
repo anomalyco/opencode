@@ -1599,6 +1599,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
   test("filters out empty text parts from array content", () => {
     const msgs = [
+      { role: "user", content: "Start" },
       {
         role: "assistant",
         content: [
@@ -1611,13 +1612,14 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(1)
-    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+    expect(result).toHaveLength(2)
+    expect(result[1].content).toHaveLength(1)
+    expect(result[1].content[0]).toEqual({ type: "text", text: "Hello" })
   })
 
   test("filters out empty reasoning parts from array content", () => {
     const msgs = [
+      { role: "user", content: "Start" },
       {
         role: "assistant",
         content: [
@@ -1630,9 +1632,9 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(1)
-    expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
+    expect(result).toHaveLength(2)
+    expect(result[1].content).toHaveLength(1)
+    expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
   test("removes entire message when all parts are empty", () => {
@@ -1657,6 +1659,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
   test("keeps non-text/reasoning parts even if text parts are empty", () => {
     const msgs = [
+      { role: "user", content: "Start" },
       {
         role: "assistant",
         content: [
@@ -1664,13 +1667,14 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "tool-call", toolCallId: "123", toolName: "bash", input: { command: "ls" } },
         ],
       },
+      { role: "tool", content: [{ type: "tool-result", toolCallId: "123", toolName: "bash", output: { type: "text", value: "done" } }] },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(1)
-    expect(result[0].content[0]).toEqual({
+    expect(result).toHaveLength(3)
+    expect(result[1].content).toHaveLength(1)
+    expect(result[1].content[0]).toEqual({
       type: "tool-call",
       toolCallId: "123",
       toolName: "bash",
@@ -1680,6 +1684,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
   test("keeps messages with valid text alongside empty parts", () => {
     const msgs = [
+      { role: "user", content: "Start" },
       {
         role: "assistant",
         content: [
@@ -1692,10 +1697,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(2)
-    expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
-    expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
+    expect(result).toHaveLength(2)
+    expect(result[1].content).toHaveLength(2)
+    expect(result[1].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
+    expect(result[1].content[1]).toEqual({ type: "text", text: "Result" })
   })
 
   test("filters empty content for bedrock provider", () => {
@@ -1742,6 +1747,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     }
 
     const msgs = [
+      { role: "user", content: "Start" },
       { role: "assistant", content: "" },
       {
         role: "assistant",
@@ -1751,13 +1757,14 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, openaiModel, {})
 
-    expect(result).toHaveLength(2)
-    expect(result[0].content).toBe("")
-    expect(result[1].content).toHaveLength(1)
+    expect(result).toHaveLength(3)
+    expect(result[1].content).toBe("")
+    expect(result[2].content).toHaveLength(1)
   })
 
   test("leaves valid anthropic assistant tool ordering unchanged", () => {
     const msgs = [
+      { role: "user", content: "Start" },
       {
         role: "assistant",
         content: [
@@ -1766,12 +1773,16 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
         ],
       },
+      { role: "tool", content: [
+        { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "done" } },
+        { type: "tool-result", toolCallId: "toolu_2", toolName: "glob", output: { type: "text", value: "done" } },
+      ]},
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
 
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toMatchObject([
+    expect(result).toHaveLength(3)
+    expect(result[1].content).toMatchObject([
       { type: "text", text: "I checked your home directory and looked for PDF files." },
       { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
       { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
@@ -2008,6 +2019,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     }
     const msgs = [
+      { role: "user", content: "Start" },
       {
         role: "assistant",
         content: [
@@ -2027,7 +2039,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     // store=false preserves metadata for non-openai packages
     const result = ProviderTransform.message(msgs, anthropicModel, { store: false }) as any[]
 
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
+    expect(result[1].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
   })
 
   test("preserves metadata using providerID key when store is false", () => {
@@ -2118,6 +2130,10 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     }
     const msgs = [
       {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+      {
         role: "assistant",
         content: [
           {
@@ -2135,7 +2151,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
 
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
+    expect(result[1].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
   })
 })
 
@@ -4087,5 +4103,381 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.message - orphaned tool_use repair", () => {
+  const anthropicModel = {
+    id: "anthropic/claude-3-5-sonnet",
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet-20241022",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude 3.5 Sonnet",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("injects synthetic tool-result for orphaned tool-call", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me check that." },
+          { type: "tool-call", toolCallId: "toolu_orphan123", toolName: "read", args: { path: "/test" } },
+        ],
+      },
+      { role: "user", content: "Continue" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(4)
+    expect(result[2].role).toBe("tool")
+    expect(result[2].content).toHaveLength(1)
+    expect(result[2].content[0].type).toBe("tool-result")
+    expect(result[2].content[0].toolCallId).toBe("toolu_orphan123")
+    expect(result[2].content[0].output.type).toBe("error-text")
+  })
+
+  test("does not modify messages when all tool-calls have matching tool-results", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me check that." },
+          { type: "tool-call", toolCallId: "toolu_matched123", toolName: "read", args: { path: "/test" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "toolu_matched123",
+            toolName: "read",
+            output: { type: "text", value: "file contents" },
+          },
+        ],
+      },
+      { role: "user", content: "Thanks" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(4)
+    expect(result[2].role).toBe("tool")
+    expect(result[2].content[0].toolCallId).toBe("toolu_matched123")
+    expect(result[2].content[0].output.type).toBe("text")
+  })
+
+  test("handles multiple orphaned tool-calls in single assistant message", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_orphan1", toolName: "read", args: {} },
+          { type: "tool-call", toolCallId: "toolu_orphan2", toolName: "bash", args: {} },
+        ],
+      },
+      { role: "user", content: "Continue" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(4)
+    expect(result[2].role).toBe("tool")
+    expect(result[2].content).toHaveLength(2)
+    expect(result[2].content[0].toolCallId).toBe("toolu_orphan1")
+    expect(result[2].content[1].toolCallId).toBe("toolu_orphan2")
+  })
+
+  test("appends to existing tool message when partial orphans exist", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_matched", toolName: "read", args: {} },
+          { type: "tool-call", toolCallId: "toolu_orphan", toolName: "bash", args: {} },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "toolu_matched",
+            toolName: "read",
+            output: { type: "text", value: "ok" },
+          },
+        ],
+      },
+      { role: "user", content: "Continue" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(4)
+    expect(result[2].role).toBe("tool")
+    expect(result[2].content).toHaveLength(2)
+    expect(result[2].content.find((c: any) => c.toolCallId === "toolu_orphan")).toBeDefined()
+  })
+
+  test("does not mutate original input messages when appending orphan results", () => {
+    const originalToolContent = [
+      {
+        type: "tool-result",
+        toolCallId: "toolu_matched",
+        toolName: "read",
+        output: { type: "text", value: "ok" },
+      },
+    ]
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_matched", toolName: "read", args: {} },
+          { type: "tool-call", toolCallId: "toolu_orphan", toolName: "bash", args: {} },
+        ],
+      },
+      {
+        role: "tool",
+        content: originalToolContent,
+      },
+      { role: "user", content: "Continue" },
+    ] as any[]
+
+    const originalContentLength = originalToolContent.length
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(originalToolContent.length).toBe(originalContentLength)
+    expect(originalToolContent).toHaveLength(1)
+    expect(originalToolContent[0].toolCallId).toBe("toolu_matched")
+
+    const toolMsg = result.find((m: any) => m.role === "tool")
+    expect(toolMsg.content).toHaveLength(2)
+    expect(toolMsg.content).not.toBe(originalToolContent)
+  })
+
+  test("does not inject synthetic result when orphan is at end of message array (in-progress turn)", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me check." },
+          { type: "tool-call", toolCallId: "toolu_final", toolName: "read", args: {} },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[1].role).toBe("assistant")
+  })
+
+  test("handles orphan when assistant is followed by another assistant", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_orphan", toolName: "read", args: {} },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Actually, let me try something else." }],
+      },
+      { role: "user", content: "OK" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    const hasToolResult = result.some(
+      (m: any) => m.role === "tool" && m.content?.some((c: any) => c.toolCallId === "toolu_orphan"),
+    )
+    expect(hasToolResult).toBe(true)
+  })
+})
+
+describe("ProviderTransform.message - ensureUserFirst for Anthropic", () => {
+  const anthropicModel = {
+    id: "anthropic/claude-3-5-sonnet",
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet-20241022",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude 3.5 Sonnet",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const openaiModel = {
+    id: "openai/gpt-4o",
+    providerID: "openai",
+    api: { id: "gpt-4o", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
+    name: "GPT-4o",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: true,
+    },
+    cost: { input: 0.005, output: 0.015 },
+    limit: { context: 128000, output: 16000 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("inserts synthetic user after system messages when first non-system is assistant", () => {
+    const msgs = [
+      { role: "system", content: "You are helpful" },
+      { role: "system", content: "Additional instructions" },
+      { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+      { role: "user", content: [{ type: "text", text: "Hi" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result[0].role).toBe("system")
+    expect(result[1].role).toBe("system")
+    expect(result[2].role).toBe("user")
+    expect(result[2].content[0].text).toBe("[Session context restored]")
+    expect(result[3].role).toBe("assistant")
+  })
+
+  test("inserts synthetic user when messages start with assistant (no system)", () => {
+    const msgs = [
+      { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+      { role: "user", content: [{ type: "text", text: "Hi" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result[0].role).toBe("user")
+    expect(result[0].content[0].text).toBe("[Session context restored]")
+    expect(result[1].role).toBe("assistant")
+  })
+
+  test("does not modify messages when first non-system is user", () => {
+    const msgs = [
+      { role: "system", content: "You are helpful" },
+      { role: "user", content: [{ type: "text", text: "Hi" }] },
+      { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(3)
+    expect(result[0].role).toBe("system")
+    expect(result[1].role).toBe("user")
+    expect(result[2].role).toBe("assistant")
+  })
+
+  test("does not modify OpenAI messages when first non-system is assistant", () => {
+    const msgs = [
+      { role: "system", content: "You are helpful" },
+      { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+      { role: "user", content: [{ type: "text", text: "Hi" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {}) as any[]
+
+    expect(result).toHaveLength(3)
+    expect(result[0].role).toBe("system")
+    expect(result[1].role).toBe("assistant")
+    expect(result[2].role).toBe("user")
+  })
+
+  test("handles system followed by assistant with tool-call", () => {
+    const msgs = [
+      { role: "system", content: "You are helpful" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me help" },
+          { type: "tool-call", toolCallId: "toolu_123", toolName: "read", input: {} },
+        ],
+      },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "toolu_123", toolName: "read", output: { type: "text", value: "content" } }],
+      },
+      { role: "user", content: [{ type: "text", text: "Thanks" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result[0].role).toBe("system")
+    expect(result[1].role).toBe("user")
+    expect(result[1].content[0].text).toBe("[Session context restored]")
+    expect(result[2].role).toBe("assistant")
+    expect(result[3].role).toBe("tool")
+  })
+
+  test("returns empty array unchanged", () => {
+    const msgs: any[] = []
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+    expect(result).toHaveLength(0)
+  })
+
+  test("returns all-system messages unchanged", () => {
+    const msgs = [
+      { role: "system", content: "You are helpful" },
+      { role: "system", content: "Additional instructions" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0].role).toBe("system")
+    expect(result[1].role).toBe("system")
   })
 })

@@ -427,9 +427,124 @@ function mapProviderOptions(
   })
 }
 
+function ensureToolIntegrity(msgs: ModelMessage[]): ModelMessage[] {
+  const toolResultIds = new Set<string>()
+
+  for (const msg of msgs) {
+    if (msg.role !== "tool" || !Array.isArray(msg.content)) continue
+    for (const part of msg.content) {
+      if (part.type === "tool-result") {
+        toolResultIds.add(part.toolCallId)
+      }
+    }
+  }
+
+  const result: ModelMessage[] = []
+  const pendingOrphans: Array<{ toolCallId: string; toolName: string }> = []
+
+  for (let i = 0; i < msgs.length; i++) {
+    const msg = msgs[i]
+
+    if (pendingOrphans.length > 0 && msg.role === "tool" && Array.isArray(msg.content)) {
+      const augmentedContent = [
+        ...msg.content,
+        ...pendingOrphans.map((call) => ({
+          type: "tool-result" as const,
+          toolCallId: call.toolCallId,
+          toolName: call.toolName,
+          output: {
+            type: "error-text" as const,
+            value: "[Tool result lost during session recovery]",
+          },
+        })),
+      ]
+      result.push({ ...msg, content: augmentedContent } as ModelMessage)
+      for (const call of pendingOrphans) {
+        toolResultIds.add(call.toolCallId)
+      }
+      pendingOrphans.length = 0
+      continue
+    }
+
+    if (pendingOrphans.length > 0 && (msg.role === "user" || msg.role === "assistant")) {
+      const syntheticToolMsg: ModelMessage = {
+        role: "tool",
+        content: pendingOrphans.map((call) => ({
+          type: "tool-result" as const,
+          toolCallId: call.toolCallId,
+          toolName: call.toolName,
+          output: {
+            type: "error-text" as const,
+            value: "[Tool result lost during session recovery]",
+          },
+        })),
+      }
+      result.push(syntheticToolMsg as ModelMessage)
+      for (const call of pendingOrphans) {
+        toolResultIds.add(call.toolCallId)
+      }
+      pendingOrphans.length = 0
+    }
+
+    result.push(msg)
+
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+
+    const orphanedCalls = msg.content.filter(
+      (part): part is Extract<typeof part, { type: "tool-call" }> =>
+        part.type === "tool-call" && !toolResultIds.has(part.toolCallId),
+    )
+
+    if (orphanedCalls.length === 0) continue
+
+    for (const call of orphanedCalls) {
+      pendingOrphans.push({ toolCallId: call.toolCallId, toolName: call.toolName })
+    }
+  }
+
+  // Orphans are flushed before user or assistant messages (block 469-487).
+  // Trailing orphans only remain when the last message is an assistant with
+  // in-progress tool calls - we intentionally preserve those for tool execution.
+
+  return result
+}
+
+function ensureUserFirst(msgs: ModelMessage[]): ModelMessage[] {
+  if (msgs.length === 0) return msgs
+
+  const firstNonSystemIndex = msgs.findIndex((m) => m.role !== "system")
+  if (firstNonSystemIndex === -1) return msgs
+
+  const firstNonSystem = msgs[firstNonSystemIndex]
+  if (firstNonSystem.role === "user") return msgs
+
+  const syntheticUser: ModelMessage = {
+    role: "user",
+    content: [{ type: "text", text: "[Session context restored]" }],
+  } as ModelMessage
+
+  return [...msgs.slice(0, firstNonSystemIndex), syntheticUser, ...msgs.slice(firstNonSystemIndex)]
+}
+
+function isAnthropicLike(model: Provider.Model): boolean {
+  return (
+    model.providerID === "anthropic" ||
+    model.providerID === "google-vertex-anthropic" ||
+    model.api.id.includes("anthropic") ||
+    model.api.id.includes("claude") ||
+    model.id.includes("anthropic") ||
+    model.id.includes("claude") ||
+    model.api.npm === "@ai-sdk/anthropic"
+  )
+}
+
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  msgs = ensureToolIntegrity(msgs)
+  if (isAnthropicLike(model)) {
+    msgs = ensureUserFirst(msgs)
+  }
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
