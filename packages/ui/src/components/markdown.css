@@ -151,12 +151,36 @@
     position: relative;
   }
 
+  [data-component="markdown-math"] {
+    position: relative;
+    max-width: 100%;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  [data-slot="markdown-math-viewport"] {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    > .katex-display {
+      margin: 0;
+    }
+  }
+
   [data-slot="markdown-copy-button"] {
     position: absolute;
     right: 4px;
     opacity: 0;
-    transition: opacity 0.15s ease;
-    z-index: 1;
+    transform: translateY(-2px) scale(0.94);
+    transition:
+      opacity 0.16s ease,
+      transform 0.16s ease;
+    z-index: 2;
 
     &::after {
       content: attr(data-tooltip);
@@ -195,6 +219,7 @@
 
   [data-slot="markdown-copy-button"][data-position="bottom"] {
     bottom: 4px;
+    transform: translateY(2px) scale(0.94);
   }
 
   [data-slot="markdown-copy-button"]:hover::after,
@@ -203,16 +228,40 @@
   }
 
   [data-slot="markdown-copy-button"][data-variant="secondary"] {
-    box-shadow: none;
-    border: 1px solid var(--border-weak-base);
+    background: rgba(22, 22, 22, 0.58);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(8px);
+  }
+
+  [data-slot="markdown-copy-button"][data-variant="secondary"]:hover,
+  [data-slot="markdown-copy-button"][data-variant="secondary"]:focus-visible {
+    background: rgba(22, 22, 22, 0.74);
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
   [data-slot="markdown-copy-button"][data-variant="secondary"] [data-slot="icon-svg"] {
-    color: var(--icon-base);
+    color: rgba(255, 255, 255, 0.86);
+    transition:
+      color 0.16s ease,
+      transform 0.16s ease;
+  }
+
+  [data-slot="markdown-copy-button"][data-variant="secondary"]:hover [data-slot="icon-svg"],
+  [data-slot="markdown-copy-button"][data-variant="secondary"]:focus-visible [data-slot="icon-svg"] {
+    color: #ffffff;
+    transform: scale(1.05);
   }
 
   [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"] {
     opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  [data-component="markdown-math"]:hover [data-slot="markdown-copy-button"],
+  [data-component="markdown-math"]:focus-within [data-slot="markdown-copy-button"] {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 
   [data-slot="markdown-copy-button"] [data-slot="check-icon"] {

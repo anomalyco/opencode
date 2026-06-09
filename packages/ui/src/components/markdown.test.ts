@@ -111,6 +111,7 @@ $$`
 
     const html = renderMathExpressions(protectedHtml, "html")
 
+    expect(html).toContain('data-opencode-math-tex="n_k(a)&#10;=&#10;E_k&#92;left')
     expect(html).toContain("katex-display")
     expect(html).toContain("mrel")
     expect(html).toContain("mtable")
@@ -147,6 +148,7 @@ $$`
     const html = renderMathExpressions(protectedHtml, "html")
 
     expect(html).toContain("katex")
+    expect(html).not.toContain("data-opencode-math-tex")
     expect(html).toContain("mspace")
     expect(html).toContain("vlist")
     expect(html).not.toContain("E_0!")

@@ -582,10 +582,17 @@ function protectInlineMath(text: string) {
 }
 
 function renderMathInText(text: string, output: MathOutput): string {
+  const addDisplayMathTex = (html: string, latex: string) => {
+    return html.replace(
+      /^<span class="([^"]*\bkatex-display\b[^"]*)"/,
+      `<span class="$1" data-opencode-math-tex="${escapeMathHtml(latex)}"`,
+    )
+  }
+
   const render = (math: string, displayMode: boolean, fallback: string) => {
     try {
       const latex = unescapeHtmlEntities(math)
-      return katex.renderToString(
+      const rendered = katex.renderToString(
         displayMode ? stripEquationNumbers(latex) : latex,
         {
           displayMode,
@@ -593,6 +600,7 @@ function renderMathInText(text: string, output: MathOutput): string {
           throwOnError: false,
         },
       )
+      return displayMode ? addDisplayMathTex(rendered, latex) : rendered
     } catch {
       return fallback
     }

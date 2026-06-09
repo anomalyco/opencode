@@ -219,6 +219,7 @@ function markFileLinks(root: HTMLDivElement) {
       const parent = node.parentElement
       if (!parent) return NodeFilter.FILTER_REJECT
       if (parent.closest("a, pre, code")) return NodeFilter.FILTER_REJECT
+      if (parent.closest('[data-component="markdown-math"], .katex')) return NodeFilter.FILTER_REJECT
       if (findFileLinks(node.textContent ?? "").length === 0) return NodeFilter.FILTER_REJECT
       return NodeFilter.FILTER_ACCEPT
     },
@@ -268,6 +269,7 @@ function createIcon(path: string, slot: string) {
 type CopyButtonPosition = "top" | "bottom"
 
 const copyButtonPositions: CopyButtonPosition[] = ["top", "bottom"]
+const mathCopyButtonPositions: CopyButtonPosition[] = ["top"]
 
 function createCopyButton(labels: CopyLabels, position: CopyButtonPosition) {
   const button = document.createElement("button")
@@ -296,14 +298,14 @@ function setCopyState(button: HTMLButtonElement, labels: CopyLabels, copied: boo
   button.setAttribute("data-tooltip", labels.copy)
 }
 
-function ensureCopyButtons(parent: Element, labels: CopyLabels) {
+function ensureCopyButtons(parent: Element, labels: CopyLabels, positions: CopyButtonPosition[] = copyButtonPositions) {
   const buttons = Array.from(parent.children).filter(
     (el): el is HTMLButtonElement =>
       el instanceof HTMLButtonElement && el.getAttribute("data-slot") === "markdown-copy-button",
   )
   const used = new Set<HTMLButtonElement>()
 
-  for (const position of copyButtonPositions) {
+  for (const position of positions) {
     let button = buttons.find(
       (candidate) => candidate.getAttribute("data-position") === position && !used.has(candidate),
     )
@@ -339,6 +341,43 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   }
 
   ensureCopyButtons(parent, labels)
+}
+
+function ensureMathWrapper(block: HTMLElement, labels: CopyLabels) {
+  const tex = block.getAttribute("data-opencode-math-tex")
+  if (!tex) return
+
+  const existing = block.closest('[data-component="markdown-math"]')
+  if (existing instanceof HTMLElement) {
+    existing.setAttribute("data-opencode-math-tex", tex)
+    const viewport = Array.from(existing.children).find(
+      (child): child is HTMLDivElement =>
+        child instanceof HTMLDivElement && child.getAttribute("data-slot") === "markdown-math-viewport",
+    )
+    if (viewport) {
+      if (block.parentElement !== viewport) viewport.appendChild(block)
+    } else {
+      const next = document.createElement("div")
+      next.setAttribute("data-slot", "markdown-math-viewport")
+      block.parentElement?.replaceChild(next, block)
+      next.appendChild(block)
+    }
+    ensureCopyButtons(existing, labels, mathCopyButtonPositions)
+    return
+  }
+
+  const parent = block.parentElement
+  if (!parent) return
+
+  const wrapper = document.createElement("div")
+  wrapper.setAttribute("data-component", "markdown-math")
+  wrapper.setAttribute("data-opencode-math-tex", tex)
+  const viewport = document.createElement("div")
+  viewport.setAttribute("data-slot", "markdown-math-viewport")
+  parent.replaceChild(wrapper, block)
+  wrapper.appendChild(viewport)
+  viewport.appendChild(block)
+  ensureCopyButtons(wrapper, labels, mathCopyButtonPositions)
 }
 
 function markCodeLinks(root: HTMLDivElement) {
@@ -387,6 +426,12 @@ function decorate(root: HTMLDivElement, labels: CopyLabels) {
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
+
+  const mathBlocks = Array.from(root.querySelectorAll(".katex-display[data-opencode-math-tex]"))
+  for (const block of mathBlocks) {
+    if (block instanceof HTMLElement) ensureMathWrapper(block, labels)
+  }
+
   markFileLinks(root)
   markCodeLinks(root)
 }
@@ -458,9 +503,12 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
 
     const button = target.closest('[data-slot="markdown-copy-button"]')
     if (!(button instanceof HTMLButtonElement)) return
-    const wrapper = button.closest('[data-component="markdown-code"]')
-    const code = wrapper?.querySelector("code")
-    const content = code?.textContent ?? ""
+    const wrapper = button.closest('[data-component="markdown-code"],[data-component="markdown-math"]')
+    if (!wrapper) return
+    const content =
+      wrapper.getAttribute("data-component") === "markdown-math"
+        ? (wrapper.getAttribute("data-opencode-math-tex") ?? "")
+        : (wrapper.querySelector("code")?.textContent ?? "")
     if (!content) return
     const clipboard = navigator?.clipboard
     if (!clipboard) return
@@ -521,6 +569,46 @@ function wrapCodeBlocks(container: HTMLElement) {
     parent.replaceChild(wrapper, block)
     wrapper.appendChild(block)
   }
+}
+
+function wrapMathBlocks(container: HTMLElement) {
+  for (const block of Array.from(container.querySelectorAll(".katex-display[data-opencode-math-tex]"))) {
+    if (!(block instanceof HTMLElement)) continue
+    const tex = block.getAttribute("data-opencode-math-tex")
+    if (!tex) continue
+    const existing = block.closest('[data-component="markdown-math"]')
+    if (existing instanceof HTMLElement) {
+      existing.setAttribute("data-opencode-math-tex", tex)
+      const viewport = Array.from(existing.children).find(
+        (child): child is HTMLDivElement =>
+          child instanceof HTMLDivElement && child.getAttribute("data-slot") === "markdown-math-viewport",
+      )
+      if (viewport) {
+        if (block.parentElement !== viewport) viewport.appendChild(block)
+      } else {
+        const next = document.createElement("div")
+        next.setAttribute("data-slot", "markdown-math-viewport")
+        block.parentElement?.replaceChild(next, block)
+        next.appendChild(block)
+      }
+      continue
+    }
+    const parent = block.parentElement
+    if (!parent) continue
+    const wrapper = document.createElement("div")
+    wrapper.setAttribute("data-component", "markdown-math")
+    wrapper.setAttribute("data-opencode-math-tex", tex)
+    const viewport = document.createElement("div")
+    viewport.setAttribute("data-slot", "markdown-math-viewport")
+    parent.replaceChild(wrapper, block)
+    wrapper.appendChild(viewport)
+    viewport.appendChild(block)
+  }
+}
+
+function wrapMarkdownBlocks(container: HTMLElement) {
+  wrapCodeBlocks(container)
+  wrapMathBlocks(container)
 }
 
 function readLang(code: Element) {
@@ -1093,7 +1181,7 @@ export function Markdown(
       if (existingCount > 0) {
         const temp = document.createElement("div")
         temp.innerHTML = content
-        wrapCodeBlocks(temp)
+        wrapMarkdownBlocks(temp)
         const newCount = temp.childNodes.length
 
         // Check how many leading children are identical
@@ -1128,7 +1216,7 @@ export function Markdown(
     // Chunked path prefers a simple replace on first mount to avoid expensive diffing.
     const temp = document.createElement("div")
     temp.innerHTML = content
-    wrapCodeBlocks(temp)
+    wrapMarkdownBlocks(temp)
 
     if (chunked && !prevHtml) {
       container.replaceChildren(...Array.from(temp.childNodes))
@@ -1155,6 +1243,7 @@ export function Markdown(
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
         if (fromEl.isEqualNode(toEl)) return false
+        if (fromEl.getAttribute("data-opencode-math-tex") !== toEl.getAttribute("data-opencode-math-tex")) return true
         if (stable(fromEl) && stable(toEl) && fromEl.textContent === toEl.textContent) {
           console.debug("[markdown] skip stable math subtree", {
             key: local.cacheKey ?? "",
