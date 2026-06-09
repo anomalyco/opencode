@@ -5400,64 +5400,6 @@
         ]
       }
     },
-    "/reference": {
-      "get": {
-        "tags": ["reference"],
-        "operationId": "reference.list",
-        "parameters": [
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resolved configured references",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ReferenceDescriptor"
-                  },
-                  "description": "Resolved configured references"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "description": "List configured references resolved in the current workspace.",
-        "summary": "List configured references",
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.reference.list({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/session": {
       "get": {
         "tags": ["session"],
@@ -11414,14 +11356,6 @@
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "reference",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "security": [],
@@ -11510,14 +11444,6 @@
           },
           {
             "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "reference",
             "in": "query",
             "schema": {
               "type": "string"
@@ -12058,6 +11984,87 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.question.reject({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/reference": {
+      "get": {
+        "tags": ["reference"],
+        "operationId": "v2.reference.list",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReferenceInfo"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List references available in the requested location.",
+        "summary": "List references",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.reference.list({\n  ...\n})"
           }
         ]
       }
@@ -14067,12 +14074,6 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PromptAgentAttachment"
-            }
-          },
-          "references": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromptReferenceAttachment"
             }
           }
         },
@@ -20041,70 +20042,6 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
-      "ReferenceDescriptor": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "kind": {
-                "type": "string",
-                "enum": ["local"]
-              },
-              "path": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "kind", "path"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "kind": {
-                "type": "string",
-                "enum": ["git"]
-              },
-              "repository": {
-                "type": "string"
-              },
-              "path": {
-                "type": "string"
-              },
-              "branch": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "kind", "repository", "path"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "kind": {
-                "type": "string",
-                "enum": ["invalid"]
-              },
-              "repository": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "kind", "message"],
-            "additionalProperties": false
-          }
-        ]
-      },
       "NotFoundError": {
         "type": "object",
         "required": ["name", "data"],
@@ -21496,41 +21433,6 @@
           }
         },
         "required": ["name"],
-        "additionalProperties": false
-      },
-      "PromptReferenceAttachment": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": ["local", "git", "invalid"]
-          },
-          "uri": {
-            "type": "string"
-          },
-          "repository": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "target": {
-            "type": "string"
-          },
-          "targetUri": {
-            "type": "string"
-          },
-          "problem": {
-            "type": "string"
-          },
-          "source": {
-            "$ref": "#/components/schemas/PromptSource"
-          }
-        },
-        "required": ["name", "kind"],
         "additionalProperties": false
       },
       "SessionErrorUnknown": {
@@ -24339,12 +24241,6 @@
               "$ref": "#/components/schemas/PromptAgentAttachment"
             }
           },
-          "references": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromptReferenceAttachment"
-            }
-          },
           "type": {
             "type": "string",
             "enum": ["user"]
@@ -25212,6 +25108,60 @@
           }
         },
         "required": ["answers"],
+        "additionalProperties": false
+      },
+      "ReferenceLocalSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["local"]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "path"],
+        "additionalProperties": false
+      },
+      "ReferenceGitSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["git"]
+          },
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "repository"],
+        "additionalProperties": false
+      },
+      "ReferenceInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceLocalSource"
+              },
+              {
+                "$ref": "#/components/schemas/ReferenceGitSource"
+              }
+            ]
+          }
+        },
+        "required": ["name", "path", "source"],
         "additionalProperties": false
       },
       "EventModels-devRefreshed": {
@@ -28768,10 +28718,6 @@
       "description": "Experimental HttpApi provider routes."
     },
     {
-      "name": "reference",
-      "description": "Configured reference routes."
-    },
-    {
       "name": "session",
       "description": "Experimental HttpApi session routes."
     },
@@ -28834,6 +28780,10 @@
     {
       "name": "session questions",
       "description": "Experimental session question routes."
+    },
+    {
+      "name": "reference",
+      "description": "Location-scoped project references."
     },
     {
       "name": "pty",

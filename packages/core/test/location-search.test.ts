@@ -8,7 +8,6 @@ import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationSearch } from "@opencode-ai/core/location-search"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Ripgrep as FileSystemRipgrep } from "@opencode-ai/core/filesystem/ripgrep"
-import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
@@ -16,15 +15,12 @@ import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-const inertReferences = references({})
-
-function provide(directory: string, projectReferences = inertReferences, data = Global.Path.data) {
+function provide(directory: string, data = Global.Path.data) {
   const dependencies = Layer.mergeAll(
     FSUtil.defaultLayer,
     FileSystemRipgrep.defaultLayer,
     AppProcess.defaultLayer,
     Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-    Layer.succeed(ProjectReference.Service, projectReferences),
     Global.layerWith({ data }),
   )
   const filesystem = FileSystem.layer.pipe(Layer.provide(dependencies))
@@ -56,7 +52,7 @@ describe("LocationSearch", () => {
         const search = yield* LocationSearch.Service
         const result = yield* search.grep({ pattern: "FAIL", path: output })
         expect(result.items).toMatchObject([{ canonical: output, line: 2, lines: "FAIL here\n" }])
-      }).pipe(provide(directory, inertReferences, data))
+      }).pipe(provide(directory, data))
     }),
   )
 
@@ -83,7 +79,7 @@ describe("LocationSearch", () => {
     ),
   )
 
-  it.live("searches files under a relative subdirectory and named local reference", () =>
+  it.live("searches files under a relative subdirectory", () =>
     withTmp((directory) => {
       const docs = path.join(directory, "docs")
       return Effect.gen(function* () {
@@ -98,11 +94,7 @@ describe("LocationSearch", () => {
         expect(
           (yield* search.files({ pattern: "*.ts", path: RelativePath.make("src") })).items.map((item) => item.path),
         ).toEqual([RelativePath.make("src/active.ts")])
-        const guide = yield* Effect.promise(() => fs.realpath(path.join(docs, "guide.md")))
-        expect((yield* search.files({ pattern: "*.md", reference: "docs" })).items).toMatchObject([
-          { path: RelativePath.make("guide.md"), resource: "docs:guide.md", canonical: guide },
-        ])
-      }).pipe(provide(directory, references({ docs: { name: "docs", kind: "local", path: docs } })))
+      }).pipe(provide(directory))
     }),
   )
 
@@ -264,13 +256,3 @@ describe("LocationSearch", () => {
     expect(() => decode({ pattern: "*", limit: LocationSearch.MAX_RESULT_LIMIT + 1 })).toThrow()
   })
 })
-
-function references(entries: Record<string, ProjectReference.Resolved>) {
-  return ProjectReference.Service.of({
-    list: () => Effect.succeed(Object.values(entries)),
-    get: (name) => Effect.succeed(entries[name]),
-    resolveMention: () => Effect.succeed(undefined),
-    ensurePath: () => Effect.void,
-    containsManagedPath: () => Effect.succeed(false),
-  })
-}

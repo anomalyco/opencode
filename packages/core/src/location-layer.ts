@@ -22,7 +22,7 @@ import { Watcher } from "./filesystem/watcher"
 import { LocationMutation } from "./location-mutation"
 import { LocationSearch } from "./location-search"
 import { FileMutation } from "./file-mutation"
-import { ProjectReference } from "./project-reference"
+import { Reference } from "./reference"
 import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
@@ -52,7 +52,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       location,
       Policy.locationLayer,
       Config.locationLayer,
-      ProjectReference.locationLayer,
+      Reference.locationLayer,
       PluginV2.locationLayer,
       Catalog.locationLayer,
       CommandV2.locationLayer,

@@ -9,7 +9,6 @@ import { Ripgrep as FileSystemRipgrep } from "@opencode-ai/core/filesystem/ripgr
 import { LocationSearch } from "@opencode-ai/core/location-search"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AppProcess } from "@opencode-ai/core/process"
-import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -39,8 +38,7 @@ const filesystem = Layer.succeed(
         new FileSystem.RootTarget({
           real: `/project/${input.path ?? "."}`,
           root: "/project",
-          resource: input.reference === undefined ? (input.path ?? ".") : `${input.reference}:${input.path ?? "."}`,
-          reference: input.reference,
+          resource: input.path ?? ".",
           type: "directory",
         }),
       ),
@@ -115,23 +113,12 @@ const reset = () => {
   result = new LocationSearch.GrepResult({ items: [], truncated: false, partial: false })
 }
 
-function references(entries: Record<string, ProjectReference.Resolved>) {
-  return ProjectReference.Service.of({
-    list: () => Effect.succeed(Object.values(entries)),
-    get: (name) => Effect.succeed(entries[name]),
-    resolveMention: () => Effect.succeed(undefined),
-    ensurePath: () => Effect.void,
-    containsManagedPath: () => Effect.succeed(false),
-  })
-}
-
-function provideLive(directory: string, projectReferences = references({})) {
+function provideLive(directory: string) {
   const dependencies = Layer.mergeAll(
     FSUtil.defaultLayer,
     FileSystemRipgrep.defaultLayer,
     AppProcess.defaultLayer,
     Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-    Layer.succeed(ProjectReference.Service, projectReferences),
   )
   const filesystem = FileSystem.layer.pipe(Layer.provide(dependencies))
   const search = LocationSearch.layer.pipe(
@@ -170,26 +157,10 @@ describe("GrepTool", () => {
           action: "grep",
           resources: ["needle"],
           save: ["*"],
-          metadata: { root: "src", reference: undefined, path: RelativePath.make("src"), include: "*.ts", limit: 2 },
+          metadata: { root: "src", path: RelativePath.make("src"), include: "*.ts", limit: 2 },
         },
       ])
       expect(searches).toEqual([{ pattern: "needle", path: RelativePath.make("src"), include: "*.ts", limit: 2 }])
-    }),
-  )
-
-  it.effect("delegates named reference grep and exposes the canonical selected root in metadata", () =>
-    Effect.gen(function* () {
-      reset()
-
-      yield* execute({ pattern: "guide", path: "docs", reference: "manual", include: "*.md" })
-
-      expect(assertions[0]).toMatchObject({
-        resources: ["guide"],
-        metadata: { root: "manual:docs", reference: "manual", path: RelativePath.make("docs"), include: "*.md" },
-      })
-      expect(searches).toEqual([
-        { pattern: "guide", path: RelativePath.make("docs"), reference: "manual", include: "*.md" },
-      ])
     }),
   )
 
@@ -248,7 +219,7 @@ describe("GrepTool", () => {
     }),
   )
 
-  runtimeIt.live("greps active Location and named-reference files with include globs", () =>
+  runtimeIt.live("greps active Location files with include globs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -259,23 +230,15 @@ describe("GrepTool", () => {
           reset()
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(tmp.path, "src"))
-            await fs.mkdir(docs)
             await fs.writeFile(path.join(tmp.path, "src", "index.ts"), "needle ts\n")
             await fs.writeFile(path.join(tmp.path, "src", "notes.txt"), "needle txt\n")
-            await fs.writeFile(path.join(docs, "guide.md"), "needle docs\n")
           })
 
           expect(yield* execute({ pattern: "needle", path: "src", include: "*.ts" })).toEqual({
             type: "text",
             value: "Found 1 matches\nsrc/index.ts:\n  Line 1: needle ts\n",
           })
-          expect(yield* execute({ pattern: "needle", reference: "docs", include: "*.md" })).toEqual({
-            type: "text",
-            value: "Found 1 matches\ndocs:guide.md:\n  Line 1: needle docs\n",
-          })
-        }).pipe(
-          Effect.provide(provideLive(tmp.path, references({ docs: { name: "docs", kind: "local", path: docs } }))),
-        )
+        }).pipe(Effect.provide(provideLive(tmp.path)))
       }),
     ),
   )

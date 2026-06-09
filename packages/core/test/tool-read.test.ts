@@ -35,7 +35,7 @@ const filesystem = Layer.succeed(
         ? Effect.succeed(
             new FileSystem.ReadPath({
               type: resolvedType,
-              resource: input.reference === undefined ? input.path : `${input.reference}:${input.path}`,
+              resource: input.path,
             }),
           )
         : Effect.die(resolveFailure),
@@ -454,20 +454,6 @@ describe("ReadTool", () => {
         }),
       ).toEqual({ type: "error", value: "Unable to read src" })
       expect(listCalls).toEqual([])
-    }),
-  )
-
-  it.effect("authorizes project references with their canonical identity", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-
-      yield* executeTool(registry, {
-        sessionID,
-        ...toolIdentity,
-        call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md", reference: "docs" } },
-      })
-
-      expect(assertions).toMatchObject([{ resources: ["docs:README.md"] }])
     }),
   )
 

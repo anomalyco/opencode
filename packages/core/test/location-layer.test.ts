@@ -18,7 +18,7 @@ import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
-import { ProjectReference } from "../src/project-reference"
+import { Reference } from "../src/reference"
 import { LocationSearch } from "../src/location-search"
 import { ToolRegistry } from "../src/tool/registry"
 import { ApplicationTools } from "../src/tool/application-tools"
@@ -71,7 +71,7 @@ describe("LocationServiceMap", () => {
           const update = (directory: string) =>
             Effect.gen(function* () {
               yield* PluginBoot.Service.use((boot) => boot.wait())
-              yield* ProjectReference.Service
+              yield* Reference.Service
               yield* LocationSearch.Service
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()

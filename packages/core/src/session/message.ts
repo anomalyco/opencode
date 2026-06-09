@@ -37,7 +37,6 @@ export class User extends Schema.Class<User>("Session.Message.User")({
   text: Prompt.fields.text,
   files: Prompt.fields.files,
   agents: Prompt.fields.agents,
-  references: Prompt.fields.references,
   type: Schema.Literal("user"),
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
