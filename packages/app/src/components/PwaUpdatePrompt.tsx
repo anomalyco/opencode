@@ -14,15 +14,10 @@ export function PwaUpdatePrompt() {
     onNeedRefresh() {
       setShow(true)
     },
-    onRegisterError() {
-      // SW registration or update failed — keep the banner visible for retry
-      setShow(true)
-    },
   })
   const [needRefresh] = needRefreshSignal
 
   const handleReload = () => {
-    // Optimistically hide the banner; onRegisterError will restore it if the update fails
     updateServiceWorker?.(true)
     setShow(false)
   }

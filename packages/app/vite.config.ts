@@ -34,9 +34,9 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,woff,woff2,ttf,eot,png,svg,ico}"],
         navigateFallback: "/index.html",
-        // Exclude API routes from SW navigation fallback.
-        // If new non-HTML backend paths are added (e.g. /ws/, /oauth/), append them here.
-        navigateFallbackDenylist: [/^\/api\//],
+        // Exclude API and PTY routes from SW navigation fallback.
+        // If new non-HTML backend paths are added, append them here.
+        navigateFallbackDenylist: [/^\/api\//, /^\/pty\//],
       },
     }),
     sentry,
