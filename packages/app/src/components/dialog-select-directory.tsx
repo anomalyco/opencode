@@ -265,7 +265,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
   const start = createMemo(
-    () => sync.data.path.home || sync.data.path.directory || fallbackPath()?.home || fallbackPath()?.directory,
+    () => sync.data.path.directory || sync.data.path.home || fallbackPath()?.directory || fallbackPath()?.home,
   )
 
   const directories = useDirectorySearch({
