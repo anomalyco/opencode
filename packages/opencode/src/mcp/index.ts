@@ -458,6 +458,19 @@ export const layer = Layer.effect(
           : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
 
       if (!mcpClient) {
+        if (status.status === "failed") {
+          yield* Effect.logWarning("connection failed", { key, type: mcp.type, error: status.error })
+        }
+        if (status.status === "needs_auth") {
+          yield* Effect.logWarning("connection requires authentication", { key, type: mcp.type })
+        }
+        if (status.status === "needs_client_registration") {
+          yield* Effect.logWarning("connection requires client registration", {
+            key,
+            type: mcp.type,
+            error: status.error,
+          })
+        }
         return { status } satisfies CreateResult
       }
 
