@@ -103,7 +103,18 @@ export const layer = Layer.effect(
               add,
               dir: input.dir,
             }),
-        }) as Effect.Effect<ArboristTree, InstallFailedError>
+        }).pipe(
+          Effect.timeout("5 minutes"),
+          Effect.catchTag("TimeoutException", () =>
+            Effect.fail(
+              new InstallFailedError({
+                cause: new Error("npm install timed out after 5 minutes"),
+                add,
+                dir: input.dir,
+              })
+            )
+          )
+        ) as Effect.Effect<ArboristTree, InstallFailedError>
       }).pipe(
         Effect.withSpan("Npm.reify", {
           attributes: input,
