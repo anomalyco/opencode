@@ -32,6 +32,7 @@ export function DialogSelectTheme() {
       case "dark":
         return language.t("theme.scheme.dark")
     }
+    return scheme
   }
 
   const items = createMemo(() => {
@@ -106,7 +107,7 @@ const handleSelect = (item: ThemeEntry | undefined) => {
   })
 
   return (
-    <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
+    <Dialog class="pt-4 !max-h-[480px]" transition>
       <List
         search={{
           placeholder: language.t("dialog.theme.search.placeholder"),

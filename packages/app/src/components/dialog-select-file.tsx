@@ -288,7 +288,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
     const directory = projectDirectory()
-    if (!directory) return
+    if (!directory) return undefined
     return projectOwner(directory, layout.projects.list())?.project
   })
   const workspaces = createMemo(() => {
@@ -362,7 +362,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
 
   const open = (path: string) => {
     const value = file.tab(path)
-    tabs().open(value)
+    void tabs().open(value)
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
     layout.fileTree.setTab("all")
     props.onOpenFile?.(path)
@@ -400,7 +400,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   })
 
   return (
-    <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
+    <Dialog class="pt-4 !max-h-[480px]" transition>
       <List
         search={{
           placeholder: commandsOnly()

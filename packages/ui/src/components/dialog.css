@@ -112,6 +112,10 @@
         flex: 1;
         overflow: hidden;
 
+        > [data-component="list"] {
+          padding: 0 16px 16px;
+        }
+
         &:focus-visible {
           outline: none;
         }
