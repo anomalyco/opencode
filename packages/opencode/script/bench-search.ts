@@ -91,9 +91,7 @@ console.log("--- Search service (warm) ---")
 for (const q of FILE_QUERIES) {
   const t = performance.now()
   const r = await run(Search.Service.use((svc) => svc.file({ cwd: dir, query: q, limit: FILE_LIMIT })))
-  console.log(
-    `[Search.file] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} results)`,
-  )
+  console.log(`[Search.file] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} results)`)
 }
 
 for (const q of GREP_QUERIES) {

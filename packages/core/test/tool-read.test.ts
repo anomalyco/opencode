@@ -37,10 +37,7 @@ let configEntries: Config.Entry[] = []
 const reader = Layer.succeed(
   ReadToolFileSystem.Service,
   ReadToolFileSystem.Service.of({
-    inspect: () =>
-      resolveFailure === undefined
-        ? Effect.succeed(resolvedType)
-        : Effect.die(resolveFailure),
+    inspect: () => (resolveFailure === undefined ? Effect.succeed(resolvedType) : Effect.die(resolveFailure)),
     read: (input, _resource, page = {}) => {
       readCalls.push({ input, page })
       if (readFailure !== undefined) return Effect.die(readFailure)
@@ -73,9 +70,7 @@ const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => 
 const image = Image.layer.pipe(Layer.provide(config))
 const testFileSystem = Layer.effect(
   FSUtil.Service,
-  FSUtil.Service.use((fs) =>
-    Effect.succeed(FSUtil.Service.of({ ...fs, realPath: (path) => Effect.succeed(path) })),
-  ),
+  FSUtil.Service.use((fs) => Effect.succeed(FSUtil.Service.of({ ...fs, realPath: (path) => Effect.succeed(path) }))),
 ).pipe(Layer.provide(FSUtil.defaultLayer))
 const infrastructure = Layer.mergeAll(
   testFileSystem,

@@ -59,7 +59,8 @@ export const layer = Layer.effectDiscard(
                 return yield* Effect.die(new Error("Path escapes the allowed read root"))
               const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
               const root = yield* fs.realPath(selected).pipe(Effect.orDie)
-              if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the allowed read root"))
+              if (!FSUtil.contains(root, real))
+                return yield* Effect.die(new Error("Path escapes the allowed read root"))
               const resource = path.relative(root, real).replaceAll("\\", "/") || "."
               const target = AbsolutePath.make(real)
               const type = yield* reader.inspect(target)
@@ -71,8 +72,7 @@ export const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
-              if (type === "directory")
-                return yield* reader.list(target, { offset: input.offset, limit: input.limit })
+              if (type === "directory") return yield* reader.list(target, { offset: input.offset, limit: input.limit })
               const content = yield* reader.read(target, resource, {
                 offset: input.offset,
                 limit: input.limit,

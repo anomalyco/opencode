@@ -43,11 +43,7 @@ const search = Layer.succeed(
 )
 
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const glob = GlobTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(permission),
-  Layer.provide(search),
-)
+const glob = GlobTool.layer.pipe(Layer.provide(registry), Layer.provide(permission), Layer.provide(search))
 const it = testEffect(Layer.mergeAll(registry, permission, search, glob))
 
 const reset = () => {

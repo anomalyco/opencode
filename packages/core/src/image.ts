@@ -35,7 +35,10 @@ export interface Interface {
   readonly normalize: (
     resource: string,
     content: FileSystem.Content & { readonly encoding: "base64" },
-  ) => Effect.Effect<FileSystem.Content & { readonly encoding: "base64" }, ResizerUnavailableError | DecodeError | SizeError>
+  ) => Effect.Effect<
+    FileSystem.Content & { readonly encoding: "base64" },
+    ResizerUnavailableError | DecodeError | SizeError
+  >
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Image") {}

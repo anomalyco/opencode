@@ -327,12 +327,18 @@ describe("OpenAI Chat route", () => {
             Message.tool({
               id: "call_1",
               name: "read",
-              result: { type: "content", value: [{ type: "file", uri: "data:image/png;base64,AAEC", mime: "image/png" }] },
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAEC", mime: "image/png" }],
+              },
             }),
             Message.tool({
               id: "call_2",
               name: "read",
-              result: { type: "content", value: [{ type: "file", uri: "data:image/webp;base64,UklG", mime: "image/webp" }] },
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/webp;base64,UklG", mime: "image/webp" }],
+              },
             }),
             Message.system("Inspect both images."),
           ],

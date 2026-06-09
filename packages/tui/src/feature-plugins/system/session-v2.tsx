@@ -1073,8 +1073,7 @@ function toolOutput(content?: Array<ToolTextContent | ToolFileContent>) {
   return (content ?? [])
     .map((item) => {
       if (item.type === "text") return item.text.trim()
-      const source =
-        item.uri
+      const source = item.uri
       return `[file ${item.name ?? source}]`
     })
     .filter(Boolean)

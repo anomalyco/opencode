@@ -112,7 +112,8 @@ export const layer = Layer.effect(
       const root = yield* fs.realPath(directory).pipe(Effect.orDie)
       if (!FSUtil.contains(root, real)) return yield* Effect.die(new globalThis.Error("Path escapes the search root"))
       const info = yield* fs.stat(real).pipe(Effect.orDie)
-      const type = info.type === "File" ? ("file" as const) : info.type === "Directory" ? ("directory" as const) : undefined
+      const type =
+        info.type === "File" ? ("file" as const) : info.type === "Directory" ? ("directory" as const) : undefined
       if (!type) return yield* Effect.die(new globalThis.Error("Search root is not a file or directory"))
       return { real, root, resource: slash(path.relative(root, real)) || ".", type }
     })

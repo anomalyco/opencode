@@ -595,13 +595,14 @@ export const layer = Layer.effect(
               const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
               const content = [
                 { type: "text" as const, text: output.output },
-                ...(output.attachments?.map((item: SessionV1.FilePart) =>
-                  ({
-                    type: "file",
-                    uri: item.url,
-                    mime: item.mime,
-                    name: item.filename,
-                  }) as const,
+                ...(output.attachments?.map(
+                  (item: SessionV1.FilePart) =>
+                    ({
+                      type: "file",
+                      uri: item.url,
+                      mime: item.mime,
+                      name: item.filename,
+                    }) as const,
                 ) ?? []),
               ]
               const unsupported = content.find((item) => item.type === "file" && !item.uri.startsWith("data:"))

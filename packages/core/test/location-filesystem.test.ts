@@ -73,8 +73,12 @@ describe("FileSystem", () => {
           { path: RelativePath.make("src"), type: "directory", mime: "application/x-directory" },
           { path: RelativePath.make("README.md"), type: "file", mime: "text/markdown" },
         ])
-        expect(yield* Effect.promise(() => Promise.all(entries.map((entry) => fs.realpath(fileURLToPath(entry.uri)))))).toEqual(
-          yield* Effect.promise(() => Promise.all([fs.realpath(path.join(directory, "src")), fs.realpath(path.join(directory, "README.md"))])),
+        expect(
+          yield* Effect.promise(() => Promise.all(entries.map((entry) => fs.realpath(fileURLToPath(entry.uri))))),
+        ).toEqual(
+          yield* Effect.promise(() =>
+            Promise.all([fs.realpath(path.join(directory, "src")), fs.realpath(path.join(directory, "README.md"))]),
+          ),
         )
       }).pipe(provide(directory)),
     ),
@@ -84,12 +88,16 @@ describe("FileSystem", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         const service = yield* FileSystem.Service
-        expect(Exit.isFailure(yield* service.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(yield* service.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)),
+        ).toBe(true)
         if (process.platform === "win32") return
         const outside = `${directory}-outside.txt`
         yield* Effect.promise(() => fs.writeFile(outside, "outside"))
         yield* Effect.promise(() => fs.symlink(outside, path.join(directory, "link.txt")))
-        expect(Exit.isFailure(yield* service.read({ path: RelativePath.make("link.txt") }).pipe(Effect.exit))).toBe(true)
+        expect(Exit.isFailure(yield* service.read({ path: RelativePath.make("link.txt") }).pipe(Effect.exit))).toBe(
+          true,
+        )
         yield* Effect.promise(() => fs.rm(outside, { force: true }))
       }).pipe(provide(directory)),
     ),

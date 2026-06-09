@@ -147,10 +147,7 @@ function collectPaths<T>(
     return [{ ...result, score: scores[index]?.total ?? 0 }]
   })
   rows.sort(
-    (a, b) =>
-      b.score - a.score ||
-      a.path.length - b.path.length ||
-      (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+    (a, b) => b.score - a.score || a.path.length - b.path.length || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
   )
 
   const seen = new Set<string>()

@@ -53,16 +53,45 @@ export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
 
 export interface Interface {
   readonly inspect: (path: AbsolutePath) => Effect.Effect<"file" | "directory">
-  readonly read: (path: AbsolutePath, resource: string, page?: PageInput) => Effect.Effect<FileSystem.Content | TextPage>
+  readonly read: (
+    path: AbsolutePath,
+    resource: string,
+    page?: PageInput,
+  ) => Effect.Effect<FileSystem.Content | TextPage>
   readonly list: (path: AbsolutePath, page?: PageInput) => Effect.Effect<ListPage>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ReadToolFileSystem") {}
 
 const extensions = new Set([
-  ".zip", ".tar", ".gz", ".exe", ".dll", ".so", ".class", ".jar", ".war", ".7z", ".doc", ".docx",
-  ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".bin", ".dat", ".obj", ".o", ".a",
-  ".lib", ".wasm", ".pyc", ".pyo",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".exe",
+  ".dll",
+  ".so",
+  ".class",
+  ".jar",
+  ".war",
+  ".7z",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".bin",
+  ".dat",
+  ".obj",
+  ".o",
+  ".a",
+  ".lib",
+  ".wasm",
+  ".pyc",
+  ".pyo",
 ])
 const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
 const imageMime = (bytes: Uint8Array) => {
@@ -113,7 +142,9 @@ export const read = Effect.fn("ReadTool.read")(function* (
         const chunks = [first]
         let total = first.length
         while (total <= MAX_MEDIA_INGEST_BYTES) {
-          const chunk = yield* file.readAlloc(Math.min(64 * 1024, MAX_MEDIA_INGEST_BYTES + 1 - total)).pipe(Effect.orDie)
+          const chunk = yield* file
+            .readAlloc(Math.min(64 * 1024, MAX_MEDIA_INGEST_BYTES + 1 - total))
+            .pipe(Effect.orDie)
           if (Option.isNone(chunk)) break
           chunks.push(chunk.value)
           total += chunk.value.length
@@ -123,7 +154,10 @@ export const read = Effect.fn("ReadTool.read")(function* (
         return {
           uri: pathToFileURL(real).href,
           name: path.basename(real),
-          content: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total).toString("base64"),
+          content: Buffer.concat(
+            chunks.map((chunk) => Buffer.from(chunk)),
+            total,
+          ).toString("base64"),
           encoding: "base64" as const,
           mime,
         }
@@ -226,11 +260,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
   )
 })
 
-export const list = Effect.fn("ReadTool.list")(function* (
-  fs: FSUtil.Interface,
-  input: string,
-  page: PageInput = {},
-) {
+export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, input: string, page: PageInput = {}) {
   const real = yield* fs.realPath(input).pipe(Effect.orDie)
   const items = yield* fs.readDirectoryEntries(real).pipe(Effect.orDie)
   const offset = page.offset ?? 1

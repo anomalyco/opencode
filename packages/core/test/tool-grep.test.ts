@@ -54,11 +54,7 @@ const permission = Layer.succeed(
   }),
 )
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const grep = GrepTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(search),
-  Layer.provide(permission),
-)
+const grep = GrepTool.layer.pipe(Layer.provide(registry), Layer.provide(search), Layer.provide(permission))
 const it = testEffect(Layer.mergeAll(registry, search, permission, grep))
 const sessionID = SessionV2.ID.make("ses_grep_tool_test")
 

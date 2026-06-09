@@ -241,16 +241,12 @@ describe("LLMClient tools", () => {
         uri: "data:image/png;base64,AAAA",
         mime: "image/png",
       })
-      expect(
-        decode({ type: "file", uri: "https://example.test/image.png", mime: "image/png" }),
-      ).toEqual({
+      expect(decode({ type: "file", uri: "https://example.test/image.png", mime: "image/png" })).toEqual({
         type: "file",
         uri: "https://example.test/image.png",
         mime: "image/png",
       })
-      expect(
-        decode({ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }),
-      ).toEqual({
+      expect(decode({ type: "file", uri: "file:///tmp/image.png", mime: "image/png" })).toEqual({
         type: "file",
         uri: "file:///tmp/image.png",
         mime: "image/png",
@@ -270,9 +266,7 @@ describe("LLMClient tools", () => {
       })
       expect(
         ToolOutput.toResultValue(
-          ToolOutput.make({}, [
-            { type: "file", uri: "https://example.test/image.png", mime: "image/png" },
-          ]),
+          ToolOutput.make({}, [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }]),
         ),
       ).toEqual({
         type: "content",
@@ -280,9 +274,7 @@ describe("LLMClient tools", () => {
       })
       expect(
         ToolOutput.toResultValue(
-          ToolOutput.make({}, [
-            { type: "file", uri: "file:///tmp/image.png", mime: "image/png" },
-          ]),
+          ToolOutput.make({}, [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }]),
         ),
       ).toEqual({
         type: "content",
@@ -307,9 +299,7 @@ describe("LLMClient tools", () => {
         parameters: Schema.Struct({}),
         success: Schema.Struct({ ok: Schema.Boolean }),
         execute: () => Effect.succeed({ ok: true }),
-        toModelOutput: () => [
-          { type: "file", uri: "https://example.test/image.png", mime: "image/png" },
-        ],
+        toModelOutput: () => [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
       })
 
       const dispatched = yield* ToolRuntime.dispatch(

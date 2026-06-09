@@ -92,11 +92,10 @@ export function make<Input extends SchemaType<any>, Output extends SchemaType<an
                 ),
               ),
             ),
-            Effect.map((output) =>
-              ({
-                structured: output,
-                content:
-                  config.toModelOutput?.({ input, output }).map((part) =>
+            Effect.map((output) => ({
+              structured: output,
+              content:
+                config.toModelOutput?.({ input, output }).map((part) =>
                   part.type === "text"
                     ? { type: "text" as const, text: part.text }
                     : {
@@ -105,9 +104,8 @@ export function make<Input extends SchemaType<any>, Output extends SchemaType<an
                         mime: part.mime,
                         name: part.name,
                       },
-                  ) ?? (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
-              }),
-            ),
+                ) ?? (typeof output === "string" ? [{ type: "text" as const, text: output }] : []),
+            })),
           ),
         ),
       ),
