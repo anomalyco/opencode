@@ -10,11 +10,12 @@ const _banner = template(
 
 export function PwaUpdatePrompt() {
   const [show, setShow] = createSignal(false)
-  const { needRefresh, updateServiceWorker } = useRegisterSW({
+  const { needRefresh: needRefreshSignal, updateServiceWorker } = useRegisterSW({
     onNeedRefresh() {
       setShow(true)
     },
   })
+  const [needRefresh] = needRefreshSignal
 
   const handleReload = () => {
     updateServiceWorker?.(true)
