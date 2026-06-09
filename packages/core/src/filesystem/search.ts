@@ -8,6 +8,7 @@ import { serviceUse } from "../effect/service-use"
 import { makeRuntime } from "../effect/runtime"
 import { Fff } from "#fff"
 import { Ripgrep } from "./ripgrep"
+import { LayerNode } from "../effect/layer-node"
 
 const root = path.join(Global.Path.cache, "fff")
 
@@ -539,6 +540,7 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(Ripgrep.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, Ripgrep.node])
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 

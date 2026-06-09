@@ -11,6 +11,8 @@ import { CrossSpawnSpawner } from "../cross-spawn-spawner"
 import { Global } from "../global"
 import { NonNegativeInt } from "../schema"
 import { which } from "../util/which"
+import { LayerNode } from "../effect/layer-node"
+import { httpClient } from "../effect/layer-node-platform"
 
 const VERSION = "15.1.0"
 const PLATFORM = {
@@ -480,5 +482,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, CrossSpawnSpawner.node, httpClient])
 
 export * as Ripgrep from "./ripgrep"

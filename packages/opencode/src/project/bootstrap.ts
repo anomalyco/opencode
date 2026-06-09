@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "@/lsp/lsp"
@@ -73,5 +74,17 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
     Vcs.defaultLayer,
   ]),
 )
+
+export const node = LayerNode.make(layer, [
+  Config.node,
+  Format.node,
+  LSP.node,
+  Plugin.node,
+  Project.node,
+  Search.node,
+  ShareNext.node,
+  Snapshot.node,
+  Vcs.node,
+])
 
 export * as InstanceBootstrap from "./bootstrap"

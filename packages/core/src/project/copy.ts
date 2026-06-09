@@ -8,6 +8,7 @@ import { FSUtil } from "../fs-util"
 import { Git } from "../git"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
+import { LayerNode } from "../effect/layer-node"
 import { Project } from "../project"
 import { ProjectDirectoryTable } from "./sql"
 import { makeStrategies } from "./copy-strategies"
@@ -275,3 +276,4 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, Git.node, EventV2.node, Database.node])
