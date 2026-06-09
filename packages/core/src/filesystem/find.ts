@@ -68,7 +68,7 @@ export const ripgrepLayer = Layer.effect(
             const clean = type === "directory" ? relative.slice(0, -path.sep.length) : relative
             const absolute = path.resolve(location.directory, clean)
             return new FileSystem.Entry({
-              path: RelativePath.make(clean),
+              path: RelativePath.make(clean + (type === "directory" ? path.sep : "")),
               uri: pathToFileURL(absolute).href,
               type,
               mime: type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
@@ -84,7 +84,13 @@ export const fffLayer = Layer.effect(
   Effect.gen(function* () {
     const location = yield* Location.Service
     const result = yield* Effect.try({
-      try: () => Fff.create({ basePath: location.directory, aiMode: true }),
+      try: () =>
+        Fff.create({
+          basePath: location.directory,
+          aiMode: true,
+          enableFsRootScanning: true,
+          enableHomeDirScanning: true,
+        }),
       catch: (cause) => cause,
     }).pipe(Effect.orDie)
     if (!result.ok) return yield* Effect.die(result.error)
@@ -117,7 +123,7 @@ export const fffLayer = Layer.effect(
             const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
             const absolute = path.resolve(location.directory, relative)
             return new FileSystem.Entry({
-              path: RelativePath.make(relative),
+              path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
               uri: pathToFileURL(absolute).href,
               type: item.type,
               mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),

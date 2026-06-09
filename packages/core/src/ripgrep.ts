@@ -143,7 +143,7 @@ export const layer = Layer.effect(
           args: [
             "--no-config",
             "--files",
-            "--glob=!.git/*", // TODO: Review .git exclusion policy before leaf tool exposure.
+            "--glob=!**/.git/**",
             "--hidden",
             `--glob=${input.pattern}`,
             ".",
@@ -157,7 +157,7 @@ export const layer = Layer.effect(
             "--no-config",
             "--json",
             "--hidden",
-            "--glob=!.git/*", // TODO: Review .git exclusion policy before leaf tool exposure.
+            "--glob=!**/.git/**",
             "--no-messages",
             ...(input.include ? [`--glob=${input.include}`] : []),
             "--",
