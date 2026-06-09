@@ -33,14 +33,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,woff,woff2,ttf,eot,png,svg,ico}"],
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^https?:\/\/localhost:4096\//],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }: { url: URL }) =>
-              url.hostname === "localhost" && url.port === "4096",
-            handler: "NetworkOnly",
-          },
-        ],
+        navigateFallbackDenylist: [/^\/api\//],
       },
     }),
     sentry,
