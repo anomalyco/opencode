@@ -47,7 +47,7 @@ function format(input: unknown) {
 }
 
 export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
-  return Logger.toFile(formatter(id), file, { flag: "a", batchWindow: 0 })
+  return Logger.toFile(formatter(id), file, { flag: "a" })
 }
 
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
