@@ -1,6 +1,6 @@
 export * as WebFetchTool from "./webfetch"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Duration, Effect, Layer, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
@@ -136,7 +136,7 @@ export const layer = Layer.effectDiscard(
           description,
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: output.output })],
+          toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* Effect.try({

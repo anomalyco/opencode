@@ -72,7 +72,6 @@ export interface DialogSelectOption<T = any> {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
-  selected: DialogSelectOption<T> | undefined
   moveTo(value: T): void
 }
 
@@ -409,9 +408,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     get filtered() {
       return filtered()
     },
-    get selected() {
-      return selected()
-    },
     moveTo(value) {
       const index = flat().findIndex((option) => isDeepEqual(option.value, value))
       if (index >= 0) moveTo(index, true)
@@ -462,7 +458,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return (
       <box
         flexDirection="row"
-        paddingRight={1}
         backgroundColor={active() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
         onMouseUp={() => triggerAction(item)}
       >

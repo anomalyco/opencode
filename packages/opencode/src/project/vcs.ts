@@ -1,13 +1,12 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import { InstanceState } from "@/effect/instance-state"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Git } from "@/git"
-import * as Log from "@opencode-ai/core/util/log"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 
-const log = Log.create({ service: "vcs" })
 const PATCH_CONTEXT_LINES = 2_147_483_647
 const MAX_PATCH_BYTES = 10_000_000
 const MAX_TOTAL_PATCH_BYTES = 10_000_000
@@ -107,7 +106,6 @@ const batchPatches = Effect.fnUntraced(function* (
     context: options?.context ?? PATCH_CONTEXT_LINES,
     maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
   })
-  if (result.truncated) log.warn("batched patch exceeded byte limit", { max: MAX_TOTAL_PATCH_BYTES })
 
   return {
     patches: splitGitPatch(result).reduce((acc, patch, index) => {
@@ -139,13 +137,11 @@ const nativePatch = Effect.fnUntraced(function* (
         })
   if (!result.truncated && result.text) return result.text
 
-  if (result.truncated) log.warn("patch exceeded byte limit", { file: item.file, max: MAX_PATCH_BYTES })
   return emptyPatch(item.file)
 })
 
 const totalPatch = (file: string, patch: string, total: number) => {
   if (total + Buffer.byteLength(patch) <= MAX_TOTAL_PATCH_BYTES) return { patch, capped: false }
-  log.warn("total patch budget exceeded", { file, max: MAX_TOTAL_PATCH_BYTES })
   return { patch: emptyPatch(file), capped: true }
 }
 
@@ -325,7 +321,6 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
           concurrency: 2,
         })
         const value = { current, root }
-        log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
         const unsubscribe = yield* events.listen((event) => {
           if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
@@ -335,7 +330,6 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
           return Effect.gen(function* () {
             const next = yield* get()
             if (next !== value.current) {
-              log.info("branch changed", { from: value.current, to: next })
               value.current = next
               yield* events.publish(Event.BranchUpdated, { branch: next })
             }
@@ -431,5 +425,7 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
+
+export const node = LayerNode.make(layer, [Git.node, EventV2Bridge.node])
 
 export * as Vcs from "./vcs"

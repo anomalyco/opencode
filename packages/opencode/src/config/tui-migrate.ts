@@ -6,10 +6,7 @@ import { TuiConfig } from "@opencode-ai/tui/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
-import * as Log from "@opencode-ai/core/util/log"
 import * as ConfigPaths from "@/config/paths"
-
-const log = Log.create({ service: "tui.migrate" })
 
 const TUI_SCHEMA_URL = "https://opencode.ai/tui.json"
 
@@ -32,10 +29,7 @@ interface MigrateInput {
 export async function migrateTuiConfig(input: MigrateInput) {
   const opencode = await opencodeFiles(input)
   for (const file of opencode) {
-    const source = await Filesystem.readText(file).catch((error) => {
-      log.warn("failed to read config for tui migration", { path: file, error })
-      return undefined
-    })
+    const source = await Filesystem.readText(file).catch(() => undefined)
     if (!source) continue
     const errors: JsoncParseError[] = []
     const data = parseJsonc(source, errors, { allowTrailingComma: true })
@@ -65,18 +59,11 @@ export async function migrateTuiConfig(input: MigrateInput) {
 
     const wrote = await Filesystem.write(target, JSON.stringify(payload, null, 2))
       .then(() => true)
-      .catch((error) => {
-        log.warn("failed to write tui migration target", { from: file, to: target, error })
-        return false
-      })
+      .catch(() => false)
     if (!wrote) continue
 
     const stripped = await backupAndStripLegacy(file, source)
-    if (!stripped) {
-      log.warn("tui config migrated but source file was not stripped", { from: file, to: target })
-      continue
-    }
-    log.info("migrated tui config", { from: file, to: target })
+    if (!stripped) continue
   }
 }
 
@@ -106,10 +93,7 @@ async function backupAndStripLegacy(file: string, source: string) {
     ? true
     : await Filesystem.write(backup, source)
         .then(() => true)
-        .catch((error) => {
-          log.warn("failed to backup source config during tui migration", { path: file, backup, error })
-          return false
-        })
+        .catch(() => false)
   if (!backed) return false
 
   const text = ["theme", "keybinds", "tui"].reduce((acc, key) => {
@@ -124,14 +108,8 @@ async function backupAndStripLegacy(file: string, source: string) {
   }, source)
 
   return Filesystem.write(file, text)
-    .then(() => {
-      log.info("stripped tui keys from server config", { path: file, backup })
-      return true
-    })
-    .catch((error) => {
-      log.warn("failed to strip legacy tui keys from server config", { path: file, backup, error })
-      return false
-    })
+    .then(() => true)
+    .catch(() => false)
 }
 
 async function opencodeFiles(input: { directories: string[]; cwd: string }) {

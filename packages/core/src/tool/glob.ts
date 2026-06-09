@@ -1,8 +1,7 @@
 export * as GlobTool from "./glob"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
-import { FileSystem } from "../filesystem"
 import { LocationSearch } from "../location-search"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
@@ -14,9 +13,6 @@ export const Input = Schema.Struct({
   pattern: LocationSearch.FilesInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
   path: LocationSearch.FilesInput.fields.path.annotate({
     description: "Relative directory to search. Defaults to the active Location.",
-  }),
-  reference: LocationSearch.FilesInput.fields.reference.annotate({
-    description: "Named project reference to search instead of the active Location",
   }),
   limit: LocationSearch.FilesInput.fields.limit.annotate({
     description: `Maximum results to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})`,
@@ -41,13 +37,10 @@ export const toModelOutput = (output: ModelOutput) => {
 /**
  * Location-scoped glob leaf. FileSystem supplies canonical permission metadata;
  * LocationSearch resolves the current root and owns containment and traversal.
- *
- * TODO: Revisit root-specific search permission resources if named-reference policy needs independent allow/deny rules.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
-    const filesystem = yield* FileSystem.Service
     const search = yield* LocationSearch.Service
     const permission = yield* PermissionV2.Service
 
@@ -55,20 +48,18 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description:
-            "Find files by glob pattern within the active Location or a named project reference. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
+            "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
           input: Input,
           output: LocationSearch.FilesResult,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
           execute: (input, context) =>
             Effect.gen(function* () {
-              const root = yield* filesystem.resolveRoot({ path: input.path, reference: input.reference })
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
                 save: ["*"],
                 metadata: {
-                  root: root.resource,
-                  reference: input.reference,
+                  root: input.path ?? ".",
                   path: input.path,
                   limit: input.limit,
                 },

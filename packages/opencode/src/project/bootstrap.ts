@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "@/lsp/lsp"
@@ -11,7 +12,6 @@ import { Search } from "@opencode-ai/core/filesystem/search"
 import { Effect, Layer } from "effect"
 import { Config } from "@/config/config"
 import { Service } from "./bootstrap-service"
-import { Reference } from "@/reference/reference"
 
 export { Service } from "./bootstrap-service"
 export type { Interface } from "./bootstrap-service"
@@ -27,7 +27,6 @@ export const layer = Layer.effect(
     const lsp = yield* LSP.Service
     const plugin = yield* Plugin.Service
     const project = yield* Project.Service
-    const reference = yield* Reference.Service
     const search = yield* Search.Service
     const shareNext = yield* ShareNext.Service
     const snapshot = yield* Snapshot.Service
@@ -39,7 +38,7 @@ export const layer = Layer.effect(
 
     const run = Effect.gen(function* () {
       const ctx = yield* InstanceState.context
-      yield* Effect.logInfo("bootstrapping").pipe(Effect.annotateLogs("directory", ctx.directory))
+      yield* Effect.logInfo("bootstrapping", { directory: ctx.directory })
       // everything depends on config so eager load it for nice traces
       yield* config.get()
       // in 99% of use cases user that is opened opencode at certain directory will
@@ -52,7 +51,7 @@ export const layer = Layer.effect(
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
       yield* Effect.forEach(
-        [reference, lsp, shareNext, format, vcs, snapshot, project],
+        [lsp, shareNext, format, vcs, snapshot, project],
         (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
@@ -69,12 +68,23 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
     LSP.defaultLayer,
     Plugin.defaultLayer,
     Project.defaultLayer,
-    Reference.defaultLayer,
     Search.defaultLayer,
     ShareNext.defaultLayer,
     Snapshot.defaultLayer,
     Vcs.defaultLayer,
   ]),
 )
+
+export const node = LayerNode.make(layer, [
+  Config.node,
+  Format.node,
+  LSP.node,
+  Plugin.node,
+  Project.node,
+  Search.node,
+  ShareNext.node,
+  Snapshot.node,
+  Vcs.node,
+])
 
 export * as InstanceBootstrap from "./bootstrap"

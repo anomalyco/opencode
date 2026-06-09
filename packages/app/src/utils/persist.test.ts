@@ -166,6 +166,24 @@ describe("persist localStorage resilience", () => {
     expect(storage.getItem(`${target.legacyStorageNames![0]}:${target.key}`)).toBeNull()
   })
 
+  test("draft target isolates storage per draft and namespaces keys", () => {
+    const a = Persist.draft("draft-a", "prompt")
+    const b = Persist.draft("draft-b", "prompt")
+
+    expect(a.key).toBe("draft:prompt")
+    expect(a.storage).not.toBe(b.storage)
+    expect(a.storage).not.toBe(Persist.workspace("/home/luke/repo", "prompt").storage)
+  })
+
+  test("removes draft storage when removing persisted target", () => {
+    const target = Persist.draft("draft-a", "prompt")
+    storage.setItem(`${target.storage}:${target.key}`, '{"value":1}')
+
+    removePersisted(target)
+
+    expect(storage.getItem(`${target.storage}:${target.key}`)).toBeNull()
+  })
+
   test("server workspace target preserves local storage and isolates remote storage", () => {
     const local = Persist.serverWorkspace(ServerScope.local, "/home/luke/repo", "prompt")
     const windows = Persist.serverWorkspace("https://windows.example" as ServerScope, "/home/luke/repo", "prompt")

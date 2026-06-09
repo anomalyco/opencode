@@ -4,14 +4,13 @@ import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Search } from "@opencode-ai/core/filesystem/search"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Log } from "@opencode-ai/core/util/log"
+import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Effect, Layer } from "effect"
+import ignore from "ignore"
 import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-
-const log = Log.create({ service: "server.file" })
 
 export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handlers) =>
   Effect.gen(function* () {
@@ -38,40 +37,17 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       const limit = ctx.query.limit ?? 10
       const kind = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : "all")
       const started = performance.now()
-      // Prefer fff (frecency + fuzzy ranking) and trust its ordering. Fall back
-      // to the ripgrep-backed FileSystem.find when fff is unavailable.
       const fff = yield* search.file({ cwd: directory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
-      if (fff !== undefined) {
-        log.info("find file", {
-          engine: "fff",
-          query: ctx.query.query,
-          kind,
-          directory,
-          limit,
-          results: fff.length,
-          duration: Math.round(performance.now() - started),
-        })
-        return fff
-      }
-      const fallback = (yield* filesystem(
-        FileSystem.Service.use((fs) =>
-          fs.find({
-            query: ctx.query.query,
-            limit,
-            type: ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined),
-          }),
-        ),
-      )).map((item) => item.path)
-      log.info("find file", {
-        engine: "ripgrep",
+      yield* Effect.logInfo("find file", {
+        engine: "fff",
         query: ctx.query.query,
         kind,
         directory,
         limit,
-        results: fallback.length,
+        results: fff.length,
         duration: Math.round(performance.now() - started),
       })
-      return fallback
+      return fff.map((item) => item.path)
     })
 
     const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
@@ -81,19 +57,30 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     const list = Effect.fn("FileHttpApi.list")(function* (ctx: { query: { path: string } }) {
       const directory = (yield* InstanceState.context).directory
       return yield* filesystem(
-        FileSystem.Service.use((fs) =>
-          fs.list({ path: RelativePath.make(ctx.query.path) }).pipe(
-            Effect.map((items) =>
-              items.map((item) => ({
-                name: path.basename(item.path),
-                path: item.path,
-                absolute: path.join(directory, item.path),
-                type: item.type,
-                ignored: fs.isIgnored(item.path, item.type),
-              })),
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.Service
+          const raw = yield* FSUtil.Service
+          const location = yield* Location.Service
+          const ignored = ignore()
+          const gitignore = yield* raw
+            .readFileString(path.join(location.project.directory, ".gitignore"))
+            .pipe(Effect.catch(() => Effect.succeed("")))
+          if (gitignore) ignored.add(gitignore)
+          const ignorefile = yield* raw
+            .readFileString(path.join(location.project.directory, ".ignore"))
+            .pipe(Effect.catch(() => Effect.succeed("")))
+          if (ignorefile) ignored.add(ignorefile)
+          return (yield* fs.list({ path: RelativePath.make(ctx.query.path) })).map((item) => ({
+            name: path.basename(item.path),
+            path: item.path,
+            absolute: path.join(directory, item.path),
+            type: item.type,
+            ignored: ignored.ignores(
+              path.relative(location.project.directory, path.join(location.directory, item.path)) +
+                (item.type === "directory" ? "/" : ""),
             ),
-          ),
-        ),
+          }))
+        }),
       )
     })
 
@@ -106,9 +93,9 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
         FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make(ctx.query.path) })),
       ).pipe(
         Effect.map((item) => ({
-          type: item.type,
-          content: item.type === "text" ? item.content.trim() : item.content,
-          ...(item.type === "binary" ? { encoding: item.encoding, mimeType: item.mime } : {}),
+          type: item.encoding === "utf8" ? ("text" as const) : ("binary" as const),
+          content: item.encoding === "utf8" ? item.content.trim() : item.content,
+          ...(item.encoding === "base64" ? { encoding: item.encoding, mimeType: item.mime } : {}),
         })),
       )
     })

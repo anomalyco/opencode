@@ -1,6 +1,6 @@
 export * as WebSearchTool from "./websearch"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Context, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { truthy } from "../flag/flag"
@@ -194,7 +194,7 @@ export const layer = Layer.effectDiscard(
           description,
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: output.text })],
+          toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
           execute: (input, context) => {
             const provider = selectProvider(context.sessionID, config, config.provider)
             return Effect.gen(function* () {

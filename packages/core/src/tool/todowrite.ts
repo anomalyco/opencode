@@ -1,6 +1,6 @@
 export * as TodoWriteTool from "./todowrite"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { PermissionV2 } from "../permission"
 import { SessionTodo } from "../session/todo"
@@ -33,7 +33,7 @@ export const layer = Layer.effectDiscard(
             "Create and maintain a structured task list for the current coding session. Use it to track progress during multi-step work and keep todo statuses current.",
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
+          toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* permission.assert({

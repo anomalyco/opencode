@@ -1687,7 +1687,7 @@ describe("SessionRunnerLLM", () => {
             type: "content",
             value: [
               { type: "text", text: "Hello" },
-              { type: "media", mediaType: "image/png", data: "data:image/png;base64,aGVsbG8=", filename: "hello.png" },
+              { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" },
             ],
           },
           providerExecuted: true,
@@ -1740,7 +1740,7 @@ describe("SessionRunnerLLM", () => {
                 structured: {},
                 content: [
                   { type: "text", text: "Hello" },
-                  { type: "file", mime: "image/png", source: { type: "data", data: "aGVsbG8=" }, name: "hello.png" },
+                  { type: "file", mime: "image/png", uri: "data:image/png;base64,aGVsbG8=", name: "hello.png" },
                 ],
               },
             },

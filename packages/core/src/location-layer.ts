@@ -19,10 +19,11 @@ import { PermissionV2 } from "./permission"
 import { PermissionSaved } from "./permission/saved"
 import { FileSystem } from "./filesystem"
 import { Watcher } from "./filesystem/watcher"
+import { Search } from "./filesystem/search"
 import { LocationMutation } from "./location-mutation"
 import { LocationSearch } from "./location-search"
 import { FileMutation } from "./file-mutation"
-import { ProjectReference } from "./project-reference"
+import { Reference } from "./reference"
 import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
@@ -52,7 +53,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       location,
       Policy.locationLayer,
       Config.locationLayer,
-      ProjectReference.locationLayer,
+      Reference.locationLayer,
       PluginV2.locationLayer,
       Catalog.locationLayer,
       CommandV2.locationLayer,
@@ -124,5 +125,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
     ApplicationTools.layer,
+    Search.defaultLayer,
   ],
 }) {}

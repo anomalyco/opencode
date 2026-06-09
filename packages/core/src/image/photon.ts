@@ -19,7 +19,7 @@ export const make = Effect.gen(function* () {
   )
   return Effect.fn("Image.Photon.normalize")(function* (
     resource: string,
-    content: FileSystem.BinaryContent,
+    content: FileSystem.Content & { readonly encoding: "base64" },
     limits: {
       readonly autoResize: boolean
       readonly maxWidth: number
@@ -72,7 +72,7 @@ export const make = Effect.gen(function* () {
           for (const [mime, encode] of encoders) {
             const candidate = Buffer.from(encode()).toString("base64")
             if (Buffer.byteLength(candidate, "utf-8") <= limits.maxBase64Bytes)
-              return new FileSystem.BinaryContent({ type: "binary", content: candidate, encoding: "base64", mime })
+              return { ...content, content: candidate, encoding: "base64" as const, mime }
           }
         } finally {
           resized.free()

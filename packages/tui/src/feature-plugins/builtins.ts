@@ -1,7 +1,6 @@
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import HomeFooter from "./home/footer"
 import HomeTips from "./home/tips"
-import SessionSwitcher from "./session"
 import SidebarContext from "./sidebar/context"
 import SidebarFiles from "./sidebar/files"
 import SidebarFooter from "./sidebar/footer"
@@ -20,10 +19,7 @@ export type BuiltinTuiPlugin = Omit<TuiPluginModule, "id"> & {
   enabled?: boolean
 }
 
-export function createBuiltinPlugins(options: {
-  experimentalEventSystem: boolean
-  experimentalSessionSwitcher: boolean
-}): BuiltinTuiPlugin[] {
+export function createBuiltinPlugins(options: { experimentalEventSystem: boolean }): BuiltinTuiPlugin[] {
   return [
     HomeFooter,
     HomeTips,
@@ -38,6 +34,5 @@ export function createBuiltinPlugins(options: {
     WhichKey,
     DiffViewer,
     ...(options.experimentalEventSystem ? [SessionV2Debug] : []),
-    ...(options.experimentalSessionSwitcher ? [SessionSwitcher] : []),
   ]
 }
