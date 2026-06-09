@@ -57,7 +57,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@opencode-ai/core/search"
 import { Format } from "../../src/format"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 

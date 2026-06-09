@@ -33,7 +33,7 @@ import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@opencode-ai/core/search"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 
 const originalEnv = {

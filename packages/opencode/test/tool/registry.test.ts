@@ -26,7 +26,7 @@ import { Instruction } from "@/session/instruction"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Format } from "@/format"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@opencode-ai/core/search"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 

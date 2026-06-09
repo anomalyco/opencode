@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { Fff } from "@opencode-ai/core/filesystem/fff.bun"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@opencode-ai/core/search"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceStore } from "@/project/instance-store"
 

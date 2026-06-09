@@ -1,5 +1,5 @@
 import { FileSystem } from "@opencode-ai/core/filesystem"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@opencode-ai/core/search"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Effect } from "effect"

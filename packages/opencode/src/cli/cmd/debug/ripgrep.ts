@@ -1,7 +1,7 @@
 import { EOL } from "os"
 import { Effect, Stream } from "effect"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@opencode-ai/core/search"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"

@@ -1,7 +1,7 @@
 import { EOL } from "os"
 import { Effect } from "effect"
 import { FileSystem } from "@opencode-ai/core/filesystem"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@opencode-ai/core/search"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"

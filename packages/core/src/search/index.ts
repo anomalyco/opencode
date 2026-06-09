@@ -1,4 +1,4 @@
-export * as Search from "./search"
+export * as Search from "./index"
 
 import path from "path"
 import { pathToFileURL } from "url"
@@ -7,6 +7,7 @@ import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
+import { Global } from "../global"
 import { Ripgrep } from "../ripgrep"
 import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema"
 
@@ -81,6 +82,7 @@ export const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const ripgrep = yield* Ripgrep.Service
+    const fs = yield* FSUtil.Service
     const scope = yield* Scope.Scope
     const cache = new Map<
       string,
@@ -103,29 +105,63 @@ export const ripgrepLayer = Layer.effect(
                 directories: [] as string[],
                 scan: undefined as Fiber.Fiber<void, Error> | undefined,
               }
-              state.scan = yield* ripgrep.files({ cwd, pattern: "*", limit: Number.MAX_SAFE_INTEGER }).pipe(
-                Effect.tap((result) =>
-                  Effect.sync(() => {
-                    state.files = result.items.map((item) => item.replaceAll("\\", "/"))
-                    state.directories = Array.from(
-                      new Set(
-                        state.files.flatMap((file) => {
-                          const parts = file.split("/")
-                          return parts
-                            .slice(0, -1)
-                            .map((_, index) => parts.slice(0, index + 1).join("/") + path.sep)
-                        }),
+              state.scan = yield* (cwd === Global.Path.home
+                ? Effect.gen(function* () {
+                    const ignored = new Set([
+                      "node_modules",
+                      "dist",
+                      "build",
+                      "target",
+                      "vendor",
+                      ...(process.platform === "darwin" ? ["Library"] : []),
+                      ...(process.platform === "win32" ? ["AppData"] : []),
+                    ])
+                    const top = yield* fs.readDirectoryEntries(cwd).pipe(Effect.catch(() => Effect.succeed([])))
+                    state.directories = yield* Effect.forEach(
+                      top.filter(
+                        (entry) => entry.type === "directory" && !entry.name.startsWith(".") && !ignored.has(entry.name),
                       ),
-                    )
-                  }),
-                ),
-                Effect.mapError((cause) => new Error({ cause })),
-                Effect.asVoid,
-                Effect.forkIn(scope),
-              )
+                      (entry) =>
+                        fs.readDirectoryEntries(path.join(cwd, entry.name)).pipe(
+                          Effect.catch(() => Effect.succeed([])),
+                          Effect.map((children) => [
+                            entry.name + path.sep,
+                            ...children
+                              .filter(
+                                (child) =>
+                                  child.type === "directory" &&
+                                  !child.name.startsWith(".") &&
+                                  !ignored.has(child.name),
+                              )
+                              .map((child) => path.join(entry.name, child.name) + path.sep),
+                          ]),
+                        ),
+                      { concurrency: "unbounded" },
+                    ).pipe(Effect.map((entries) => entries.flat()))
+                  })
+                : ripgrep.files({ cwd, pattern: "*", limit: Number.MAX_SAFE_INTEGER }).pipe(
+                    Effect.tap((result) =>
+                      Effect.sync(() => {
+                        state.files = result.items.map((item) => item.replaceAll("\\", "/"))
+                        state.directories = Array.from(
+                          new Set(
+                            state.files.flatMap((file) => {
+                              const parts = file.split("/")
+                              return parts
+                                .slice(0, -1)
+                                .map((_, index) => parts.slice(0, index + 1).join("/") + path.sep)
+                            }),
+                          ),
+                        )
+                      }),
+                    ),
+                    Effect.asVoid,
+                  )
+              ).pipe(Effect.mapError((cause) => new Error({ cause })), Effect.forkIn(scope))
               cache.set(cwd, state)
               return state
             }))
+          if (cwd === Global.Path.home && result.scan) yield* Fiber.join(result.scan)
           const items =
             input.type === "file"
               ? result.files
@@ -348,4 +384,4 @@ export const layer = Layer.unwrap(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Ripgrep.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(Ripgrep.defaultLayer), Layer.provide(FSUtil.defaultLayer))
