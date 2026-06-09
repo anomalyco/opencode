@@ -145,7 +145,7 @@ export default (async () => {
     fullResync?: boolean
   }): SyncReport => {
     const sourceDbPath = resolveSourceDbPath(args.sourceDbPath ?? process.env.OPENCODE_DB)
-    const indexDbPath = args.indexDbPath ?? DEFAULT_MEMORY_DB
+    const indexDbPath = resolveIndexDbPath(args.indexDbPath)
     let sourceDb: Database | undefined
     let indexDb: Database | undefined
 
@@ -252,7 +252,7 @@ export default (async () => {
           index_db_path: tool.schema.string().optional().describe("Optional path to the external memory SQLite database."),
         },
         async execute(args) {
-          const indexDbPath = args.index_db_path ?? DEFAULT_MEMORY_DB
+          const indexDbPath = resolveIndexDbPath(args.index_db_path)
           const indexDb = openDatabase(indexDbPath, false)
 
           try {
@@ -337,7 +337,7 @@ export default (async () => {
           index_db_path: tool.schema.string().optional().describe("Optional path to the external memory SQLite database."),
         },
         async execute(args) {
-          const indexDbPath = args.index_db_path ?? DEFAULT_MEMORY_DB
+          const indexDbPath = resolveIndexDbPath(args.index_db_path)
           const indexDb = openDatabase(indexDbPath, false)
 
           try {
@@ -382,7 +382,7 @@ export default (async () => {
           index_db_path: tool.schema.string().optional().describe("Optional path to the external memory SQLite database."),
         },
         async execute(args) {
-          const indexDbPath = args.index_db_path ?? DEFAULT_MEMORY_DB
+          const indexDbPath = resolveIndexDbPath(args.index_db_path)
           const indexDb = openDatabase(indexDbPath, false)
 
           try {
@@ -407,7 +407,7 @@ export default (async () => {
           index_db_path: tool.schema.string().optional().describe("Optional path to the external memory SQLite database."),
         },
         async execute(args) {
-          const indexDbPath = args.index_db_path ?? DEFAULT_MEMORY_DB
+          const indexDbPath = resolveIndexDbPath(args.index_db_path)
           const indexDb = openDatabase(indexDbPath, false)
 
           try {
@@ -492,6 +492,7 @@ export default (async () => {
 }) satisfies Plugin
 
 function openDatabase(filename: string, readonly: boolean) {
+  if (!filename.trim()) throw new Error("database path must not be empty")
   const dir = path.dirname(filename)
   if (!readonly) fs.mkdirSync(dir, { recursive: true })
   return new Database(filename, { readonly, create: !readonly })
@@ -796,6 +797,12 @@ function resolveSourceDbPath(input: string | undefined) {
   if (!input) return requireExistingSourceDbPath(DEFAULT_OPENCODE_DB_CANDIDATES)
   if (path.isAbsolute(input) || input === ":memory:") return input
   return path.join(DEFAULT_OPENCODE_DATA_DIR, input)
+}
+
+export function resolveIndexDbPath(input: string | undefined) {
+  const resolved = input?.trim() || DEFAULT_MEMORY_DB
+  if (!resolved.trim()) throw new Error("resolved memory database path must not be empty")
+  return resolved
 }
 
 function runConversationSearch(db: Database, query: string, limit: number) {
