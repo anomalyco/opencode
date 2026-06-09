@@ -1084,14 +1084,27 @@ const layer = Layer.effect(
         let structured: unknown
         let step = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
+        let msgs: MessageV2.WithParts[] | undefined
+        let needsFullReload = true
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
           yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
-          let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
-            Effect.provideService(Database.Service, database),
-          )
+          if (needsFullReload || !msgs) {
+            msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            needsFullReload = false
+          } else {
+            const fresh = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            const knownIDs = new Set(msgs.map((m) => m.info.id))
+            for (const m of fresh) {
+              if (!knownIDs.has(m.info.id)) msgs.push(m)
+            }
+          }
 
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
@@ -1143,6 +1156,7 @@ const layer = Layer.effect(
 
           if (task?.type === "subtask") {
             yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+            needsFullReload = true
             continue
           }
 
@@ -1155,6 +1169,7 @@ const layer = Layer.effect(
               overflow: task.overflow,
             })
             if (result === "stop") break
+            needsFullReload = true
             continue
           }
 
@@ -1164,6 +1179,7 @@ const layer = Layer.effect(
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            needsFullReload = true
             continue
           }
 
@@ -1325,6 +1341,7 @@ const layer = Layer.effect(
                 auto: true,
                 overflow: !handle.message.finish,
               })
+              needsFullReload = true
             }
             return "continue" as const
           }).pipe(

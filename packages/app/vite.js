@@ -23,6 +23,7 @@ export default [
         resolve: {
           alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
+            "@opencode-ai/core": fileURLToPath(new URL("../core/src", import.meta.url)),
           },
         },
         define: {
