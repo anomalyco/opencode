@@ -15,7 +15,9 @@
  */
 import { mock } from "bun:test"
 
-const solidPkg = "/code-projects/personal/opencode/node_modules/.bun/solid-js@1.9.10/node_modules/solid-js"
+// Resolve solid-js at runtime relative to this file so the path works on any
+// machine regardless of checkout location or Bun cache layout.
+const solidPkg = Bun.resolveSync("solid-js", import.meta.dir).replace(/\/dist\/solid\.js$/, "")
 
 // Override solid-js with browser build — must use async factory so the mock
 // is in place before the module graph for any test file resolves.
