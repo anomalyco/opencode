@@ -178,6 +178,8 @@ if (root instanceof HTMLElement) {
             />
           </AppBaseProviders>
         </PlatformProvider>
+        {/* Mounted outside AppBaseProviders so it remains visible during connection errors
+            and is not caught by inner ErrorBoundaries. */}
         <PwaUpdatePrompt />
       </>
     ),
