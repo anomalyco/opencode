@@ -23864,7 +23864,18 @@
       "ProjectDirectories": {
         "type": "array",
         "items": {
-          "type": "string"
+          "type": "object",
+          "properties": {
+            "directory": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["main", "root", "git_worktree"]
+            }
+          },
+          "required": ["directory", "type"],
+          "additionalProperties": false
         }
       },
       "ProjectCopyCopy": {
