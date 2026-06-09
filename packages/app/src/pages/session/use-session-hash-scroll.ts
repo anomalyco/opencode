@@ -1,6 +1,6 @@
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
+import { createEffect, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
 
 export const useSessionHashScroll = (input: {
@@ -22,8 +22,10 @@ export const useSessionHashScroll = (input: {
   scheduleScrollState: (el: HTMLDivElement) => void
   consumePendingMessage: (key: string) => string | undefined
 }) => {
-  const visibleUserMessages = createMemo(() => input.visibleUserMessages())
-  const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))
+  // Use input directly instead of wrapping in a memo without an equality comparator.
+  // Replace the Map (rebuilt on every change) with a lazy lookup — user message
+  // counts are small enough that linear scan is fine for the point lookups here.
+  const findMessage = (id: string) => input.visibleUserMessages().find((m) => m.id === id)
   let pendingKey = ""
   let clearing = false
 
@@ -110,7 +112,7 @@ export const useSessionHashScroll = (input: {
     const messageId = messageIdFromHash(hash)
     if (messageId) {
       input.autoScroll.pause()
-      const msg = messageById().get(messageId)
+      const msg = findMessage(messageId)
       if (msg) {
         scrollToMessage(msg, behavior)
         return
@@ -141,7 +143,8 @@ export const useSessionHashScroll = (input: {
   createEffect(() => {
     if (!input.sessionID() || !input.messagesReady()) return
 
-    visibleUserMessages()
+    // Subscribe to message list changes
+    input.visibleUserMessages()
 
     let targetId = input.pendingMessage()
     if (!targetId) {
@@ -160,7 +163,7 @@ export const useSessionHashScroll = (input: {
     if (!targetId) return
 
     const pending = input.pendingMessage() === targetId
-    const msg = messageById().get(targetId)
+    const msg = findMessage(targetId)
     if (!msg) return
 
     if (pending) input.setPendingMessage(undefined)
@@ -175,12 +178,13 @@ export const useSessionHashScroll = (input: {
     const sessionID = input.sessionID()
     if (!sessionID || !input.messagesReady()) return
 
-    visibleUserMessages()
+    // Subscribe to message list changes
+    input.visibleUserMessages()
 
     let targetId = input.pendingMessage()
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
     if (!targetId) return
-    if (messageById().has(targetId)) return
+    if (findMessage(targetId)) return
     if (!input.historyMore() || input.historyLoading()) return
 
     void input.loadMore(sessionID)
