@@ -11,10 +11,13 @@
   Content-Type: text/css
 
 /*.js
+  Cache-Control: no-cache
   Content-Type: application/javascript
 
 /*.mjs
+  Cache-Control: no-cache
   Content-Type: application/javascript
 
 /*.css
+  Cache-Control: no-cache
   Content-Type: text/css

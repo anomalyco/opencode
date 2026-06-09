@@ -34,9 +34,10 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,woff,woff2,ttf,eot,png,svg,ico}"],
         navigateFallback: "/index.html",
-        // Exclude API and PTY routes from SW navigation fallback.
-        // If new non-HTML backend paths are added, append them here.
-        navigateFallbackDenylist: [/^\/api\//, /^\/pty\//],
+        // Only explicit SPA routes receive the navigation fallback.
+        // All other paths (API, auth, events, etc.) pass to the network by default.
+        // SPA routes: / and /:dir/session/:id? (from app.tsx Route definitions).
+        navigateFallbackAllowlist: [/^\/$/, /^\/[^/]+\/session(\/[^/]+)?$/],
       },
     }),
     sentry,

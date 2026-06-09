@@ -39,13 +39,15 @@
       "src": "/screenshots/desktop.png",
       "sizes": "1440x940",
       "type": "image/png",
-      "form_factor": "wide"
+      "form_factor": "wide",
+      "label": "OpenCode session view on desktop"
     },
     {
       "src": "/screenshots/mobile.png",
       "sizes": "390x844",
       "type": "image/png",
-      "form_factor": "narrow"
+      "form_factor": "narrow",
+      "label": "OpenCode session view on mobile"
     }
   ]
 }

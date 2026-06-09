@@ -78,6 +78,13 @@ describe("site.webmanifest", () => {
     expect(hasAnyPurpose).toBe(true)
   })
 
+  test("192x192 icon has purpose 'any'", () => {
+    const icon192 = manifest.icons?.find(
+      (i) => i.sizes === "192x192" && (i.purpose ?? "").split(/\s+/).includes("any"),
+    )
+    expect(icon192).toBeDefined()
+  })
+
   test("theme_color is #F8F7F7 (consistent with index.html meta theme-color)", () => {
     expect(manifest.theme_color).toBe("#F8F7F7")
   })
