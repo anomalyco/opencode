@@ -1,3 +1,6 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
@@ -436,5 +439,29 @@ function normalizeZodJsonSchema(value: unknown): unknown {
 function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
+
+export const node = LayerNode.make(layer, [
+  Config.node,
+  Plugin.node,
+  Question.node,
+  Todo.node,
+  Agent.node,
+  Skill.node,
+  Session.node,
+  BackgroundJob.node,
+  Provider.node,
+  LSP.node,
+  Instruction.node,
+  FSUtil.node,
+  EventV2Bridge.node,
+  httpClient,
+  CrossSpawnSpawner.node,
+  Ripgrep.node,
+  Search.node,
+  Format.node,
+  Truncate.node,
+  RuntimeFlags.node,
+  Database.node,
+])
 
 export * as ToolRegistry from "./registry"

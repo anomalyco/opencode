@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
@@ -223,5 +224,7 @@ export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<st
 }
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node])
 
 export * as Permission from "."

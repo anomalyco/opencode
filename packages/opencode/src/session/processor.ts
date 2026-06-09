@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -1063,5 +1064,21 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(EventV2Bridge.defaultLayer),
   ),
 )
+
+export const node = LayerNode.make(layer, [
+  Session.node,
+  Config.node,
+  Snapshot.node,
+  Agent.node,
+  LLM.node,
+  Permission.node,
+  Plugin.node,
+  SessionSummary.node,
+  SessionStatus.node,
+  Image.node,
+  EventV2Bridge.node,
+  RuntimeFlags.node,
+  Database.node,
+])
 
 export * as SessionProcessor from "./processor"

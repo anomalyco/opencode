@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import { Context, Effect, Layer } from "effect"
-import { build, node, replace, type Node } from "@/effect/app-graph"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
 class A extends Context.Service<A, { readonly value: "a" }>()("test/A") {}
 class B extends Context.Service<B, { readonly value: "b" }>()("test/B") {}
@@ -51,35 +51,35 @@ void (0 as unknown as BProvides)
 void (0 as unknown as BRequires)
 void (0 as unknown as CRequires)
 
-const a = node(aImplementation, [])
-const b = node(bImplementation, [a])
-const c = node(cImplementation, [a, b])
-const failingA = node(failingAImplementation, [])
-const bWithFailingA = node(bImplementation, [failingA])
-const notFoundA = node(notFoundAImplementation, [])
-const diskA = node(diskAImplementation, [])
-const networkA = node(networkAImplementation, [])
-const notFoundOrDiskA = node(notFoundOrDiskAImplementation, [])
+const a = LayerNode.make(aImplementation, [])
+const b = LayerNode.make(bImplementation, [a])
+const c = LayerNode.make(cImplementation, [a, b])
+const failingA = LayerNode.make(failingAImplementation, [])
+const bWithFailingA = LayerNode.make(bImplementation, [failingA])
+const notFoundA = LayerNode.make(notFoundAImplementation, [])
+const diskA = LayerNode.make(diskAImplementation, [])
+const networkA = LayerNode.make(networkAImplementation, [])
+const notFoundOrDiskA = LayerNode.make(notFoundOrDiskAImplementation, [])
 
 // @ts-expect-error B requires A
-node(bImplementation, [])
+LayerNode.make(bImplementation, [])
 
 // @ts-expect-error C requires both A and B
-node(cImplementation, [a])
+LayerNode.make(cImplementation, [a])
 
-type ANodeProvides = Assert<Equal<typeof a, Node<A, never>>>
-type BNodeProvides = Assert<Equal<typeof b, Node<B, never>>>
-type CNodeProvides = Assert<Equal<typeof c, Node<C, never>>>
-type FailingANodeError = Assert<Equal<typeof failingA, Node<A, LayerError>>>
-type DependentNodeError = Assert<Equal<typeof bWithFailingA, Node<B, LayerError>>>
+type ANodeProvides = Assert<Equal<typeof a, LayerNode.Node<A, never>>>
+type BNodeProvides = Assert<Equal<typeof b, LayerNode.Node<B, never>>>
+type CNodeProvides = Assert<Equal<typeof c, LayerNode.Node<C, never>>>
+type FailingANodeError = Assert<Equal<typeof failingA, LayerNode.Node<A, LayerError>>>
+type DependentNodeError = Assert<Equal<typeof bWithFailingA, LayerNode.Node<B, LayerError>>>
 void (0 as unknown as ANodeProvides)
 void (0 as unknown as BNodeProvides)
 void (0 as unknown as CNodeProvides)
 void (0 as unknown as FailingANodeError)
 void (0 as unknown as DependentNodeError)
 
-const closed = build(c)
-const closedWithError = build(bWithFailingA)
+const closed = LayerNode.buildLayer(c)
+const closedWithError = LayerNode.buildLayer(bWithFailingA)
 type ClosedProvides = Assert<Equal<Layer.Success<typeof closed>, C>>
 type ClosedRequires = Assert<Equal<Layer.Services<typeof closed>, never>>
 type ClosedError = Assert<Equal<Layer.Error<typeof closedWithError>, LayerError>>
@@ -87,15 +87,15 @@ void (0 as unknown as ClosedProvides)
 void (0 as unknown as ClosedRequires)
 void (0 as unknown as ClosedError)
 
-const replacement = node(Layer.succeed(A, A.of({ value: "a" })), [])
-replace(a, replacement)
-replace(notFoundOrDiskA, notFoundA)
-replace(notFoundOrDiskA, diskA)
+const replacement = LayerNode.make(Layer.succeed(A, A.of({ value: "a" })), [])
+LayerNode.replace(a, replacement)
+LayerNode.replace(notFoundOrDiskA, notFoundA)
+LayerNode.replace(notFoundOrDiskA, diskA)
 
 // @ts-expect-error An override for A must still provide A
-replace(a, b)
+LayerNode.replace(a, b)
 
 // @ts-expect-error A replacement cannot introduce NetworkError
-replace(notFoundOrDiskA, networkA)
+LayerNode.replace(notFoundOrDiskA, networkA)
 
 test("type exploration compiles", () => {})

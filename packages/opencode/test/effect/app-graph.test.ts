@@ -1,21 +1,24 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Context, Effect, Exit, Layer } from "effect"
-import { build, group, node, replace, type Node } from "@/effect/app-graph"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+
+const { buildLayer: build, group, replace } = LayerNode
+const node = LayerNode.make
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/Value") {}
 class Greeting extends Context.Service<Greeting, { readonly text: string }>()("test/Greeting") {}
 
-const value = node(Layer.succeed(Value, Value.of({ value: "production" })), [])
+const value = LayerNode.make(Layer.succeed(Value, Value.of({ value: "production" })), [])
 const greetingImplementation = Layer.effect(
   Greeting,
   Effect.gen(function* () {
     return Greeting.of({ text: `hello ${(yield* Value).value}` })
   }),
 )
-const greeting = node(greetingImplementation, [value])
+const greeting = LayerNode.make(greetingImplementation, [value])
 
 // @ts-expect-error Greeting requires Value
-node(greetingImplementation, [])
+LayerNode.make(greetingImplementation, [])
 
 describe("app graph", () => {
   test("creates any selected dependency layer", async () => {
@@ -179,7 +182,7 @@ describe("app graph", () => {
 
   test("rejects a direct cycle", () => {
     const cyclic = node(Layer.succeed(Value, Value.of({ value: "cyclic" })), [])
-    ;(cyclic.dependencies as Node<unknown, unknown>[]).push(cyclic)
+    ;(cyclic.dependencies as LayerNode.Node<unknown, unknown>[]).push(cyclic)
 
     expect(() => build(cyclic)).toThrow("Cycle detected in app graph: layer#1 -> layer#1")
   })
@@ -188,7 +191,7 @@ describe("app graph", () => {
     const first = node(Layer.succeed(Value, Value.of({ value: "first" })), [])
     const second = node(Layer.succeed(Value, Value.of({ value: "second" })), [first])
     const third = node(Layer.succeed(Value, Value.of({ value: "third" })), [second])
-    ;(first.dependencies as Node<unknown, unknown>[]).push(third)
+    ;(first.dependencies as LayerNode.Node<unknown, unknown>[]).push(third)
 
     expect(() => build(first)).toThrow("Cycle detected in app graph: layer#1 -> layer#2 -> layer#3 -> layer#1")
   })
@@ -196,7 +199,7 @@ describe("app graph", () => {
   test("rejects a cycle introduced by a replacement", () => {
     const replacement = node(Layer.succeed(Value, Value.of({ value: "replacement" })), [])
     const consumer = node(greetingImplementation, [value])
-    ;(replacement.dependencies as Node<unknown, unknown>[]).push(consumer)
+    ;(replacement.dependencies as LayerNode.Node<unknown, unknown>[]).push(consumer)
 
     expect(() => build(consumer, { replacements: [replace(value, replacement)] })).toThrow(
       "Cycle detected in app graph: layer#1 -> layer#2 -> layer#1",

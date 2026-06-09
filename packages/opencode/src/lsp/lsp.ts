@@ -1,3 +1,5 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import * as LSPClient from "./client"
@@ -503,5 +505,7 @@ export const defaultLayer = layer.pipe(
 )
 
 export * as Diagnostic from "./diagnostic"
+
+export const node = LayerNode.make(layer, [Config.node, RuntimeFlags.node, FSUtil.node, EventV2Bridge.node])
 
 export * as LSP from "./lsp"
