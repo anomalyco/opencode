@@ -30,8 +30,8 @@ export function PwaUpdatePrompt() {
     get when() {
       return show() && needRefresh()
     },
-    get children() {
-      const _el = _banner.cloneNode(true) as HTMLDivElement
+    get children(): HTMLDivElement {
+      const _el = _banner() as HTMLDivElement
       const _buttons = _el.querySelectorAll("button")
       const _reloadBtn = _buttons[0] as HTMLButtonElement
       const _dismissBtn = _buttons[1] as HTMLButtonElement
@@ -39,5 +39,5 @@ export function PwaUpdatePrompt() {
       _dismissBtn.addEventListener("click", handleDismiss)
       return _el
     },
-  })
+  } as Parameters<typeof Show>[0])
 }
