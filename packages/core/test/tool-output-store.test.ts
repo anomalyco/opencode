@@ -90,7 +90,7 @@ describe("ToolOutputStore", () => {
           toolCallID: "call-file",
           output: {
             structured: { caption: "pixel" },
-            content: [{ type: "file", source: { type: "data", data }, mime: "image/png", name: "pixel.png" }],
+            content: [{ type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "pixel.png" }],
           },
         })
         expect(result.outputPaths).toEqual([])
@@ -98,7 +98,7 @@ describe("ToolOutputStore", () => {
         expect(result.output.content).toHaveLength(1)
         expect(result.output.content[0]).toEqual({
           type: "file",
-          source: { type: "data", data },
+          uri: `data:image/png;base64,${data}`,
           mime: "image/png",
           name: "pixel.png",
         })
@@ -112,7 +112,7 @@ describe("ToolOutputStore", () => {
         const text = "x".repeat(ToolOutputStore.MAX_BYTES + 1)
         const media = {
           type: "file" as const,
-          source: { type: "data" as const, data: "aGVsbG8=" },
+          uri: "data:image/png;base64,aGVsbG8=",
           mime: "image/png",
           name: "pixel.png",
         }

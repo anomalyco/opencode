@@ -14,7 +14,6 @@ import {
   type ScrollbackSurface,
 } from "@opentui/core"
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
-import { withRunSpan } from "./otel"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { turnSummaryCommit } from "./turn-summary"
 import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
@@ -424,17 +423,7 @@ export class RunScrollbackStream {
   }
 
   public async complete(trailingNewline = false): Promise<void> {
-    return withRunSpan(
-      "RunScrollbackStream.complete",
-      {
-        "opencode.entry.active": !!this.active,
-        "opencode.trailing_newline": trailingNewline,
-        "session.id": this.sessionID?.() || undefined,
-      },
-      async () => {
-        this.markRendered(await this.finishActive(trailingNewline))
-      },
-    )
+    this.markRendered(await this.finishActive(trailingNewline))
   }
 
   public async writeTurnSummary(input: { agent: string; model: string; duration: string }): Promise<void> {

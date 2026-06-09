@@ -7,8 +7,7 @@
   "private": true,
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test": "bun test --timeout 30000",
-    "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "test": "bun test --timeout 30000 --only-failures",
     "test:httpapi": "bun run script/httpapi-exercise.ts --mode coverage --fail-on-missing --fail-on-skip && bun run script/httpapi-exercise.ts --mode auth --fail-on-missing --fail-on-skip && bun run script/httpapi-exercise.ts --mode effect --fail-on-missing --fail-on-skip",
     "bench:test": "bun run script/bench-test-suite.ts",
     "profile:test": "bun run script/profile-test-files.ts",
@@ -122,6 +121,7 @@
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
     "htmlparser2": "8.0.2",
+    "ignore": "7.0.5",
     "immer": "11.1.4",
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",

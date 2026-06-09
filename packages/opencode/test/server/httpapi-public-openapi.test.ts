@@ -94,17 +94,13 @@ describe("PublicApi OpenAPI v2 errors", () => {
     }
   })
 
-  test("documents optional project reference aliases for filesystem reads and lists", () => {
+  test("documents references separately from filesystem routes", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
     for (const path of ["/api/fs/read", "/api/fs/list"]) {
-      expect(spec.paths[path]?.get?.parameters, path).toContainEqual({
-        in: "query",
-        name: "reference",
-        required: false,
-        schema: { type: "string" },
-      })
+      expect(spec.paths[path]?.get?.parameters, path).not.toContainEqual(expect.objectContaining({ name: "reference" }))
     }
+    expect(spec.paths["/api/reference"]?.get).toBeDefined()
   })
 
   test("preserves required request bodies for v2 mutations", () => {

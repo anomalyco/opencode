@@ -1,14 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import net from "node:net"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-
-void Log.init({ print: false })
 
 const original = {
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,

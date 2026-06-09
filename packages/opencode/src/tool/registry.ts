@@ -23,7 +23,6 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
-import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
@@ -47,13 +46,10 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
-import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-
-const log = Log.create({ service: "tool.registry" })
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
@@ -94,7 +90,6 @@ export const layer: Layer.Layer<
   | Session.Service
   | BackgroundJob.Service
   | Provider.Service
-  | Reference.Service
   | LSP.Service
   | Instruction.Service
   | FSUtil.Service
@@ -307,7 +302,6 @@ export const layer: Layer.Layer<
       return yield* Effect.forEach(
         filtered,
         Effect.fnUntraced(function* (tool: Tool.Def) {
-          using _ = log.time(tool.id)
           const output = {
             description: tool.description,
             parameters: tool.parameters,
@@ -354,7 +348,6 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Session.defaultLayer),
       Layer.provide(BackgroundJob.defaultLayer),
       Layer.provide(Provider.defaultLayer),
-      Layer.provide(Reference.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(FSUtil.defaultLayer),
