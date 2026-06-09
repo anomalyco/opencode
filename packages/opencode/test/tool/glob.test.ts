@@ -133,5 +133,4 @@ describe("tool.glob", () => {
       }
     }),
   )
-
 })

@@ -13,11 +13,7 @@ import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-function provide(
-  directory: string,
-  filesystem = FSUtil.defaultLayer,
-  data = Global.Path.data,
-) {
+function provide(directory: string, filesystem = FSUtil.defaultLayer, data = Global.Path.data) {
   return Effect.provide(
     FileSystem.layer.pipe(
       Layer.provide(
@@ -447,5 +443,4 @@ describe("FileSystem", () => {
       }).pipe(provide(directory)),
     ),
   )
-
 })

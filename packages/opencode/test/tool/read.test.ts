@@ -254,7 +254,6 @@ describe("tool.read external_directory permission", () => {
       expect(ext).toBeUndefined()
     }),
   )
-
 })
 
 describe("tool.read env file permissions", () => {

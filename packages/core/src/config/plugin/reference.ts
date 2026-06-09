@@ -30,7 +30,9 @@ export const Plugin = {
           local(entry)
             ? new Reference.LocalSource({
                 type: "local",
-                path: AbsolutePath.make(localPath(directory, global.home, typeof entry === "string" ? entry : entry.path)),
+                path: AbsolutePath.make(
+                  localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
+                ),
               })
             : new Reference.GitSource({
                 type: "git",

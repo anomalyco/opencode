@@ -12317,6 +12317,9 @@
             "$ref": "#/components/schemas/EventPermissionV2Replied"
           },
           {
+            "$ref": "#/components/schemas/EventReferenceUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventFileWatcherUpdated"
           },
           {
@@ -16254,6 +16257,25 @@
                     },
                     "required": ["sessionID", "requestID", "reply"],
                     "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["reference.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {}
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -27668,6 +27690,25 @@
             },
             "required": ["sessionID", "requestID", "reply"],
             "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventReferenceUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["reference.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": ["id", "type", "properties"],

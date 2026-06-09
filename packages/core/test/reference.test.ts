@@ -44,7 +44,11 @@ describe("Reference", () => {
       yield* update((editor) => editor.add("sdk", source))
 
       expect(yield* references.list()).toEqual([
-        new Reference.Info({ name: "sdk", path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository)), source }),
+        new Reference.Info({
+          name: "sdk",
+          path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository)),
+          source,
+        }),
       ])
     }).pipe(
       Effect.scoped,

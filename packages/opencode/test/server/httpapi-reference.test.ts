@@ -32,23 +32,23 @@ describe("reference HttpApi", () => {
     const body = await response.json()
     expect(body).toMatchObject({ location: { directory: tmp.path } })
     expect(body.data).toEqual([
-        {
-          name: "docs",
+      {
+        name: "docs",
+        path: path.join(tmp.path, "docs"),
+        source: {
+          type: "local",
           path: path.join(tmp.path, "docs"),
-          source: {
-            type: "local",
-            path: path.join(tmp.path, "docs"),
-          },
         },
-        {
-          name: "effect",
-          path: path.join(Global.Path.repos, "github.com", "Effect-TS", "effect"),
-          source: {
-            type: "git",
-            repository: "Effect-TS/effect",
-            branch: "main",
-          },
+      },
+      {
+        name: "effect",
+        path: path.join(Global.Path.repos, "github.com", "Effect-TS", "effect"),
+        source: {
+          type: "git",
+          repository: "Effect-TS/effect",
+          branch: "main",
         },
-      ])
+      },
+    ])
   })
 })

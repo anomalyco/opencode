@@ -627,6 +627,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const locationLayer = layer.pipe(
-  Layer.provide(Ripgrep.defaultLayer),
-)
+export const locationLayer = layer.pipe(Layer.provide(Ripgrep.defaultLayer))

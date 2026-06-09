@@ -203,5 +203,4 @@ describe("tool.grep", () => {
       expect(requests.find((req) => req.permission === "external_directory")).toBeUndefined()
     }),
   )
-
 })
