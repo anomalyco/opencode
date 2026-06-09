@@ -181,6 +181,7 @@ function note(name: string) {
     "  - seeds ~/.config/securecode/securecode.json (Acompany Qwen3.6 endpoint template)",
     "  - seeds ~/.config/securecode/tui.json (selects the bundled `securecode` theme)",
     "  - seeds ~/.config/securecode/themes/securecode.json (Acompany-branded TUI colors)",
+    "  - seeds ~/.config/securecode/skills/securecode-manual/ (in-binary user manual the agent can look up)",
     "  Existing files are preserved.",
     "",
     "Notes:",
