@@ -5,7 +5,7 @@ import { useRegisterSW } from "virtual:pwa-register/solid"
 // Pre-compiled DOM templates — avoids JSX so this file works in bun test
 // (bun test runner does not apply babel-preset-solid to tsx files).
 const _banner = template(
-  `<div role="status" aria-label="App update available" class="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-neutral-100 shadow-lg"><span>A new version is available.</span><button type="button" class="rounded bg-neutral-700 px-2 py-1 text-xs font-medium hover:bg-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-500">Reload</button><button type="button" class="rounded px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-neutral-500">Dismiss</button></div>`,
+  `<div role="status" aria-live="polite" aria-label="App update available" class="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-neutral-100 shadow-lg"><span>A new version is available.</span><button type="button" class="rounded bg-neutral-700 px-2 py-1 text-xs font-medium hover:bg-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-500">Reload</button><button type="button" class="rounded px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-neutral-500">Dismiss</button></div>`,
 )
 
 export function PwaUpdatePrompt() {
