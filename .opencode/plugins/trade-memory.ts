@@ -422,8 +422,12 @@ export default (async () => {
                   .all(limit)
             const rows = Array.isArray(result) ? result : result.rows
             if (!rows.length) {
-              if (Array.isArray(result)) return args.query?.trim() ? `no memory note hits for: ${args.query}` : "no memory notes stored"
-              return result.warning ? `${result.warning}\nno memory note hits for: ${args.query}` : `no memory note hits for: ${args.query}`
+              if (Array.isArray(result)) {
+                const message = args.query?.trim() ? `no memory note hits for: ${args.query}` : "no memory notes stored"
+                return [`index_db: ${indexDbPath}`, message].join("\n")
+              }
+              const message = result.warning ? `${result.warning}\nno memory note hits for: ${args.query}` : `no memory note hits for: ${args.query}`
+              return [`index_db: ${indexDbPath}`, message].join("\n")
             }
             const body = rows
               .map((row, index) => {
@@ -440,7 +444,8 @@ export default (async () => {
                 ].join("\n")
               })
               .join("\n\n")
-            return !Array.isArray(result) && result.warning ? `${result.warning}\n${body}` : body
+            const message = !Array.isArray(result) && result.warning ? `${result.warning}\n${body}` : body
+            return [`index_db: ${indexDbPath}`, message].join("\n")
           } finally {
             indexDb.close(false)
           }
