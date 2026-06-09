@@ -1366,10 +1366,18 @@ export function Prompt(props: PromptProps) {
                 setCursorVersion((value) => value + 1)
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
-              onKeyDown={(e: { preventDefault(): void }) => {
+              onKeyDown={(e: KeyEvent) => {
                 if (props.disabled) {
                   e.preventDefault()
                   return
+                }
+                if (e.name === "end") {
+                  e.preventDefault()
+                  input.gotoBufferEnd()
+                }
+                if (e.name === "home") {
+                  e.preventDefault()
+                  input.cursorOffset = 0
                 }
               }}
               onSubmit={() => {
