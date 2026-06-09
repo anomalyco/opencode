@@ -73,6 +73,7 @@ import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
@@ -247,7 +248,7 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
-  const diffs = createMemo(() => (params.id ? list(sync().data.session_diff[params.id]) : []))
+  const diffs = createMemo(() => (params.id ? list(sync().data.session_diff[params.id]) : []), [], { equals: same })
   const canReview = createMemo(() => !!sync().project)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
@@ -291,11 +292,15 @@ export default function Page() {
 
   createEffect(
     on(
-      () => ({ dir: sdk().directory, id: params.id }),
-      (next, prev) => {
+      // Use a primitive string key instead of creating a new object on every
+      // evaluation. SolidJS on() uses === comparison, so a string avoids
+      // the always-different-reference problem that objects have.
+      () => `${params.dir}\0${params.id ?? ""}`,
+      (_next, prev) => {
         if (!prev) return
-        if (next.dir === prev.dir && next.id === prev.id) return
-        if (prev.id && !next.id) local.session.reset()
+        // prev had a session ID (non-empty after the separator) and now there's none
+        const prevHadId = prev.indexOf("\0") < prev.length - 1
+        if (prevHadId && !params.id) local.session.reset()
       },
       { defer: true },
     ),
