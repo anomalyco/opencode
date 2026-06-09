@@ -2,7 +2,7 @@ import { createTradeMemoryService } from "./service"
 import { startTradeMemoryHttpServer } from "./http"
 import { McpServer } from "../../packages/opencode/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js"
 import { StdioServerTransport } from "../../packages/opencode/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js"
-import * as z from "../../packages/opencode/node_modules/zod/v4"
+import { z } from "../../packages/opencode/node_modules/zod/v4"
 
 const service = createTradeMemoryService()
 const args = new Set(process.argv.slice(2))

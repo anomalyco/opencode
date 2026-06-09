@@ -9,6 +9,7 @@ export function createTradeHandoffBridgeHooks(
   let child: { kill(signal?: number | string): void; exited: Promise<number>; exitCode: number | null } | undefined
   let starting: Promise<boolean> | undefined
   let lastWarning = "trade memory handoff unavailable"
+  const pendingSessions = new Set<string>()
 
   const ensureService = () => {
     if (starting) return starting
@@ -43,11 +44,12 @@ export function createTradeHandoffBridgeHooks(
       const event = readModelSwitchedEvent(input.event)
       if (!event) return
       if (!event.sessionID) return
+      pendingSessions.add(event.sessionID)
       if (!(await ensureService())) return
       await postJson("/handoff/model-switched", {
         session_id: event.sessionID,
         provider_id: event.model?.providerID,
-        model_id: event.model?.modelID,
+        model_id: event.model?.id,
       }).catch(() => undefined)
     },
     "experimental.chat.system.transform": async (input, output) => {
@@ -56,12 +58,18 @@ export function createTradeHandoffBridgeHooks(
         injectWarning(output.system)
         return
       }
+      const shouldSync = pendingSessions.has(input.sessionID)
+      if (shouldSync) {
+        const synced = await postJson("/sync", {}).then(() => true).catch(() => false)
+        if (!synced) output.system.push("trade memory handoff may be stale")
+      }
       const result = await postJson("/handoff/context", {
         session_id: input.sessionID,
         model_id: input.model.id,
       }).catch(() => undefined)
       const block = typeof result?.block === "string" ? result.block.trim() : ""
       if (block) {
+        pendingSessions.delete(input.sessionID)
         output.system.push(block)
         return
       }
@@ -88,7 +96,10 @@ export function createTradeHandoffBridgeHooks(
 
   async function isHealthy() {
     try {
-      const response = await fetch(new URL("/health", serviceUrl()), { signal: AbortSignal.timeout(timeoutMs()) })
+      const response = await fetch(new URL("/health", serviceUrl()), {
+        headers: serviceHeaders(),
+        signal: AbortSignal.timeout(timeoutMs()),
+      })
       return response.ok
     } catch {
       return false
@@ -98,7 +109,7 @@ export function createTradeHandoffBridgeHooks(
   async function postJson(pathname: string, body: Record<string, unknown>) {
     const response = await fetch(new URL(pathname, serviceUrl()), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: serviceHeaders({ "content-type": "application/json" }),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs()),
     })
@@ -124,7 +135,7 @@ export function parseServiceCommand(input: string | undefined) {
   return value.split(/\s+/).filter(Boolean)
 }
 
-function readModelSwitchedEvent(input: object): { sessionID?: string; model?: { providerID?: string; modelID?: string } } | undefined {
+export function readModelSwitchedEvent(input: object): { sessionID?: string; model?: { providerID?: string; id?: string } } | undefined {
   const type = Reflect.get(input, "type")
   if (type !== "session.next.model.switched") return undefined
   const properties = Reflect.get(input, "properties")
@@ -136,9 +147,18 @@ function readModelSwitchedEvent(input: object): { sessionID?: string; model?: { 
       model && typeof model === "object"
         ? {
             providerID: typeof Reflect.get(model, "providerID") === "string" ? String(Reflect.get(model, "providerID")) : undefined,
-            modelID: typeof Reflect.get(model, "modelID") === "string" ? String(Reflect.get(model, "modelID")) : undefined,
+            id: typeof Reflect.get(model, "id") === "string" ? String(Reflect.get(model, "id")) : undefined,
           }
         : undefined,
+  }
+}
+
+function serviceHeaders(headers?: Record<string, string>) {
+  const token = process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN?.trim()
+  if (!token) return headers ?? {}
+  return {
+    ...headers,
+    authorization: `Bearer ${token}`,
   }
 }
 
