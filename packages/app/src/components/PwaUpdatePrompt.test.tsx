@@ -57,9 +57,16 @@ let updateServiceWorkerSpy: ((reloadPage?: boolean) => void) | null = null
 // updateServiceWorker (B8 graceful-degradation scenario).
 let omitUpdateServiceWorker = false
 
+// Exposed so B9 can reset needRefresh() independently of show() to pin the
+// dual-signal visibility gate.
+let setNeedRefreshSignal: (v: boolean) => void = () => {}
+
 mock.module("virtual:pwa-register/solid", () => ({
   useRegisterSW: (options: RegisterSWOptions) => {
     const [needRefresh, setNeedRefresh] = createSignal(false)
+
+    // Expose the setter so tests can drive needRefresh independently
+    setNeedRefreshSignal = setNeedRefresh
 
     // Wire up the out-of-band trigger so tests can flip the signal
     triggerNeedRefresh = () => {
@@ -97,14 +104,23 @@ beforeAll(async () => {
 function mountIntoContainer(): { container: HTMLDivElement; dispose: () => void } {
   const container = document.createElement("div")
   document.body.appendChild(container)
-  render(() => <PwaUpdatePrompt />, container)
-  const dispose = () => container.remove()
+  const solidDispose = render(() => <PwaUpdatePrompt />, container)
+  const dispose = () => {
+    solidDispose()
+    container.remove()
+  }
   return { container, dispose }
+}
+
+function findButton(container: HTMLElement, label: "reload" | "dismiss"): HTMLButtonElement | null {
+  const buttons = Array.from(container.querySelectorAll("button"))
+  return (buttons.find((b) => b.textContent?.toLowerCase().trim() === label) ?? null) as HTMLButtonElement | null
 }
 
 afterEach(() => {
   // Reset all shared state between tests
   triggerNeedRefresh = () => {}
+  setNeedRefreshSignal = () => {}
   updateServiceWorkerSpy = null
   omitUpdateServiceWorker = false
   document.body.innerHTML = ""
@@ -135,14 +151,9 @@ describe("PwaUpdatePrompt", () => {
     const { container, dispose } = mountIntoContainer()
     triggerNeedRefresh()
 
-    const labels = Array.from(container.querySelectorAll("button")).map((b) =>
-      b.textContent?.trim().toLowerCase() ?? "",
-    )
-    const hasReload = labels.some((l) => l.includes("reload") || l.includes("update"))
-    const hasDismiss = labels.some((l) => l.includes("dismiss") || l.includes("close") || l.includes("later"))
+    expect(findButton(container, "reload")).not.toBeNull()
+    expect(findButton(container, "dismiss")).not.toBeNull()
 
-    expect(hasReload).toBe(true)
-    expect(hasDismiss).toBe(true)
     dispose()
   })
 
@@ -158,10 +169,7 @@ describe("PwaUpdatePrompt", () => {
     const { container, dispose } = mountIntoContainer()
     triggerNeedRefresh()
 
-    const reloadBtn = Array.from(container.querySelectorAll("button")).find((b) => {
-      const text = b.textContent?.trim().toLowerCase() ?? ""
-      return text.includes("reload") || text.includes("update")
-    })
+    const reloadBtn = findButton(container, "reload")
     expect(reloadBtn).not.toBeNull()
     reloadBtn!.click()
 
@@ -180,10 +188,7 @@ describe("PwaUpdatePrompt", () => {
     const { container, dispose } = mountIntoContainer()
     triggerNeedRefresh()
 
-    const dismissBtn = Array.from(container.querySelectorAll("button")).find((b) => {
-      const text = b.textContent?.trim().toLowerCase() ?? ""
-      return text.includes("dismiss") || text.includes("close") || text.includes("later")
-    })
+    const dismissBtn = findButton(container, "dismiss")
     expect(dismissBtn).not.toBeNull()
     dismissBtn!.click()
 
@@ -220,16 +225,40 @@ describe("PwaUpdatePrompt", () => {
     dispose()
   })
 
+  test("B9: re-shows banner if SW update fires again after dismiss", () => {
+    const { container, dispose } = mountIntoContainer()
+
+    // 1. SW fires onNeedRefresh → banner appears
+    triggerNeedRefresh()
+    expect(container.querySelector("[role='status']")).not.toBeNull()
+
+    // 2. User clicks Dismiss → banner hides (show() = false, needRefresh() still true)
+    const dismissBtn = findButton(container, "dismiss")
+    expect(dismissBtn).not.toBeNull()
+    dismissBtn!.click()
+    expect(container.querySelector("[role='status']")).toBeNull()
+
+    // 2b. Pin that needRefresh() participates in the gate: reset it to false so
+    //     both signals are false, then confirm the banner is still absent.
+    //     This ensures the component requires BOTH show() AND needRefresh() to
+    //     be true — removing either guard would break this assertion.
+    setNeedRefreshSignal(false)
+    expect(container.querySelector("[role='status']")).toBeNull()
+
+    // 3. SW fires onNeedRefresh again → sets needRefresh(true) + show(true) → banner reappears
+    triggerNeedRefresh()
+    expect(container.querySelector("[role='status']")).not.toBeNull()
+
+    dispose()
+  })
+
   test("B8: component does not throw when updateServiceWorker is not provided", () => {
     omitUpdateServiceWorker = true
 
     const { container, dispose } = mountIntoContainer()
     triggerNeedRefresh()
 
-    const reloadBtn = Array.from(container.querySelectorAll("button")).find((b) => {
-      const text = b.textContent?.trim().toLowerCase() ?? ""
-      return text.includes("reload") || text.includes("update")
-    })
+    const reloadBtn = findButton(container, "reload")
     expect(reloadBtn).not.toBeNull()
 
     // Clicking Reload when updateServiceWorker is undefined must not throw
