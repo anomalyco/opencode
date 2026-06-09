@@ -148,7 +148,7 @@ export const layer = Layer.effect(
             `--glob=${input.pattern}`,
             ".",
           ],
-          parse: (line) => Effect.succeed(line.replace(/^\.\//, "")),
+          parse: (line) => Effect.succeed(line.replace(/^\.[\\/]/, "")),
         }).pipe(Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause)))),
       grep: (input) =>
         run<Match>({
@@ -178,7 +178,7 @@ export const layer = Layer.effect(
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
                   Effect.map((match) => ({
                     ...match.data,
-                    path: { text: match.data.path.text.replace(/^\.\//, "") },
+                    path: { text: match.data.path.text.replace(/^\.[\\/]/, "") },
                     submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
                   })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
