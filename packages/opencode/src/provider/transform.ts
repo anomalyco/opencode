@@ -409,6 +409,24 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
   })
 }
 
+function mapProviderOptions(
+  msgs: ModelMessage[],
+  transform: (options: Record<string, any> | undefined) => Record<string, any> | undefined,
+) {
+  return msgs.map((msg) => {
+    if (!Array.isArray(msg.content)) return { ...msg, providerOptions: transform(msg.providerOptions) }
+    return {
+      ...msg,
+      providerOptions: transform(msg.providerOptions),
+      content: msg.content.map((part) =>
+        part.type === "tool-approval-request" || part.type === "tool-approval-response"
+          ? part
+          : { ...part, providerOptions: transform(part.providerOptions) },
+      ),
+    } as typeof msg
+  })
+}
+
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
@@ -438,18 +456,20 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       return result
     }
 
-    msgs = msgs.map((msg) => {
-      if (!Array.isArray(msg.content)) return { ...msg, providerOptions: remap(msg.providerOptions) }
-      return {
-        ...msg,
-        providerOptions: remap(msg.providerOptions),
-        content: msg.content.map((part) => {
-          if (part.type === "tool-approval-request" || part.type === "tool-approval-response") {
-            return { ...part }
-          }
-          return { ...part, providerOptions: remap(part.providerOptions) }
-        }),
-      } as typeof msg
+    msgs = mapProviderOptions(msgs, remap)
+  }
+
+  // Strip Responses item IDs before serialization, following Codex and keeping signed request bodies immutable.
+  if (
+    options.store !== true &&
+    key &&
+    ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(model.api.npm)
+  ) {
+    msgs = mapProviderOptions(msgs, (options) => {
+      if (!options?.[key] || !("itemId" in options[key])) return options
+      const metadata = { ...options[key] }
+      delete metadata.itemId
+      return { ...options, [key]: metadata }
     })
   }
 
@@ -641,6 +661,15 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
+  if (
+    model.api.id.toLowerCase().includes("minimax-m3") &&
+    ["@ai-sdk/anthropic", "@ai-sdk/openai-compatible"].includes(model.api.npm)
+  ) {
+    return {
+      none: { thinking: { type: "disabled" } },
+      thinking: { thinking: { type: "adaptive" } },
+    }
+  }
   const adaptiveOpus = anthropicOpus47OrLater(model.api.id)
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   if (
@@ -674,12 +703,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
   switch (model.api.npm) {
     case "@openrouter/ai-sdk-provider":
-      if (!id.includes("gpt") && !id.includes("gemini-3") && !id.includes("claude")) return {}
       return Object.fromEntries(
-        (id.includes("gpt") ? openaiCompatibleReasoningEfforts(id) : OPENAI_EFFORTS).map((effort) => [
-          effort,
-          { reasoning: { effort } },
-        ]),
+        (model.api.id.startsWith("openai/") || id.includes("gpt")
+          ? openaiCompatibleReasoningEfforts(model.api.id)
+          : WIDELY_SUPPORTED_EFFORTS
+        ).map((effort) => [effort, { reasoning: { effort } }]),
       )
 
     case "ai-gateway-provider": {
@@ -1076,8 +1104,13 @@ export function options(input: {
     }
   }
 
-  // Enable thinking by default for kimi models using anthropic SDK
   const modelId = input.model.api.id.toLowerCase()
+  // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
+  if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
+    result["thinking"] = { type: "adaptive" }
+  }
+
+  // Enable thinking by default for kimi models using anthropic SDK
   if (
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
     (modelId.includes("k2p") || modelId.includes("kimi-k2.") || modelId.includes("kimi-k2p"))
@@ -1168,6 +1201,9 @@ export function smallOptions(model: Provider.Model) {
     return mergeDeep(base, small)
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
+    if (model.providerID === "openrouter" && small.reasoning?.effort === "low") {
+      return { reasoning: { effort: "none" } }
+    }
     if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }

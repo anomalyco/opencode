@@ -10,11 +10,8 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { CrossSpawnSpawner } from "../cross-spawn-spawner"
 import { Global } from "../global"
 import { NonNegativeInt } from "../schema"
-import * as Log from "../util/log"
-import { sanitizedProcessEnv } from "../util/opencode-process"
 import { which } from "../util/which"
 
-const log = Log.create({ service: "ripgrep" })
 const VERSION = "15.1.0"
 const PLATFORM = {
   "arm64-darwin": { platform: "aarch64-apple-darwin", extension: "tar.gz" },
@@ -146,7 +143,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ri
 export const use = serviceUse(Service)
 
 function env() {
-  const env = sanitizedProcessEnv()
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
   delete env.RIPGREP_CONFIG_PATH
   return env
 }
@@ -307,7 +306,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | ChildProcessSpa
           const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
           const archive = path.join(Global.Path.bin, filename)
 
-          log.info("downloading ripgrep", { url })
+          yield* Effect.logInfo("downloading ripgrep", { url })
           yield* fs.ensureDir(Global.Path.bin).pipe(Effect.orDie)
 
           const bytes = yield* HttpClientRequest.get(url).pipe(
@@ -418,7 +417,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | ChildProcessSpa
       })
 
       const tree: Interface["tree"] = Effect.fn("Ripgrep.tree")(function* (input: TreeInput) {
-        log.info("tree", input)
+        yield* Effect.logInfo("tree", input)
         const list = Array.from(yield* files({ cwd: input.cwd, signal: input.signal }).pipe(Stream.runCollect))
 
         interface Node {

@@ -4,14 +4,11 @@ import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Search } from "@opencode-ai/core/filesystem/search"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Log } from "@opencode-ai/core/util/log"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Effect, Layer } from "effect"
 import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-
-const log = Log.create({ service: "server.file" })
 
 export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handlers) =>
   Effect.gen(function* () {
@@ -42,7 +39,7 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       // to the ripgrep-backed FileSystem.find when fff is unavailable.
       const fff = yield* search.file({ cwd: directory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
       if (fff !== undefined) {
-        log.info("find file", {
+        yield* Effect.logInfo("find file", {
           engine: "fff",
           query: ctx.query.query,
           kind,
@@ -62,7 +59,7 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
           }),
         ),
       )).map((item) => item.path)
-      log.info("find file", {
+      yield* Effect.logInfo("find file", {
         engine: "ripgrep",
         query: ctx.query.query,
         kind,

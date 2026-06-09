@@ -4,13 +4,11 @@ import type { PlatformError } from "effect/PlatformError"
 import { FSUtil } from "../fs-util"
 import { Glob } from "../util/glob"
 import { Global } from "../global"
-import * as Log from "../util/log"
 import { serviceUse } from "../effect/service-use"
 import { makeRuntime } from "../effect/runtime"
 import { Fff } from "#fff"
 import { Ripgrep } from "./ripgrep"
 
-const log = Log.create({ service: "file.search" })
 const root = path.join(Global.Path.cache, "fff")
 
 export type Item = Ripgrep.Item
@@ -220,12 +218,14 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
         if (!scanned.ok || !scanned.value) {
           yield* fffSync("destroy picker", () => pick.destroy()).pipe(Effect.ignore)
           state.pick.delete(dir)
-          log.warn("fff scan not ready", { dir })
+          yield* Effect.logWarning("fff scan not ready", { dir })
           return yield* Effect.fail(new Error(scanned.ok ? "fff scan timed out" : scanned.error))
         }
 
         const git = yield* fffSync("refresh git status", () => pick.refreshGitStatus())
-        if (!git.ok) log.warn("fff git refresh failed", { dir, error: git.error })
+        if (!git.ok) {
+          yield* Effect.logWarning("fff git refresh failed", { dir, error: git.error })
+        }
       })
 
     // Create (or return) the picker for a directory. Creation is synchronous
@@ -244,10 +244,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       if (pending) return yield* Deferred.await(pending)
 
       const available = yield* fffSync("check availability", () => Fff.available()).pipe(
-        Effect.catch((error) => {
-          log.warn("fff availability check failed", { error })
-          return Effect.succeed(false)
-        }),
+        Effect.catch((error) => Effect.logWarning("fff availability check failed", { error }).pipe(Effect.as(false))),
       )
       if (!available) return undefined
 
@@ -272,7 +269,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
           }),
         )
         if (!made.ok) {
-          log.warn("fff init failed", { dir, error: made.error })
+          yield* Effect.logWarning("fff init failed", { dir, error: made.error })
           const err = new Error(made.error)
           yield* Deferred.fail(gate, err)
           return yield* Effect.fail(err)
@@ -355,14 +352,15 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
           pageSize: limit,
         }),
       ).pipe(
-        Effect.catch((error) => {
-          log.warn(`fff ${kind} search failed`, { dir, query, error })
-          return Effect.succeed<Fff.Result<string[]> | undefined>(undefined)
-        }),
+        Effect.catch((error) =>
+          Effect.logWarning(`fff ${kind} search failed`, { dir, query, error }).pipe(
+            Effect.as<Fff.Result<string[]> | undefined>(undefined),
+          ),
+        ),
       )
       if (!fffResult) return undefined
       if (!fffResult.ok) {
-        log.warn(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
+        yield* Effect.logWarning(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
         return undefined
       }
 
@@ -393,14 +391,15 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
           timeBudgetMs: 1_500,
         }),
       ).pipe(
-        Effect.catch((error) => {
-          log.warn("fff grep failed", { dir, pattern: input.pattern, error })
-          return Effect.succeed<Fff.Result<Fff.Grep> | undefined>(undefined)
-        }),
+        Effect.catch((error) =>
+          Effect.logWarning("fff grep failed", { dir, pattern: input.pattern, error }).pipe(
+            Effect.as<Fff.Result<Fff.Grep> | undefined>(undefined),
+          ),
+        ),
       )
       if (!fffGrep) return yield* rip(input)
       if (!fffGrep.ok) {
-        log.warn("fff grep failed", { dir, pattern: input.pattern, error: fffGrep.error })
+        yield* Effect.logWarning("fff grep failed", { dir, pattern: input.pattern, error: fffGrep.error })
         return yield* rip(input)
       }
 
@@ -432,10 +431,11 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             pageSize: limit,
           }),
         ).pipe(
-          Effect.catch((error) => {
-            log.warn("fff glob failed", { dir, pattern: input.pattern, error })
-            return Effect.succeed<Fff.Result<Fff.Search> | undefined>(undefined)
-          }),
+          Effect.catch((error) =>
+            Effect.logWarning("fff glob failed", { dir, pattern: input.pattern, error }).pipe(
+              Effect.as<Fff.Result<Fff.Search> | undefined>(undefined),
+            ),
+          ),
         )
 
         if (fffGlob?.ok) {
@@ -453,7 +453,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             truncated: fffGlob.value.totalMatched > rows.length,
           }
         } else if (fffGlob) {
-          log.warn("fff glob failed", { dir, pattern: input.pattern, error: fffGlob.error })
+          yield* Effect.logWarning("fff glob failed", { dir, pattern: input.pattern, error: fffGlob.error })
           // fall through to the fallback
         }
       }
@@ -500,13 +500,16 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       if (!entry) return
 
       const out = yield* fffSync("track query", () => entry.pick.trackQuery(row.text, file)).pipe(
-        Effect.catch((error) => {
-          log.warn("fff track query failed", { dir: row.dir, query: row.text, file, error })
-          return Effect.succeed<Fff.Result<boolean> | undefined>(undefined)
-        }),
+        Effect.catch((error) =>
+          Effect.logWarning("fff track query failed", { dir: row.dir, query: row.text, file, error }).pipe(
+            Effect.as<Fff.Result<boolean> | undefined>(undefined),
+          ),
+        ),
       )
       if (!out) return
-      if (!out.ok) log.warn("fff track query failed", { dir: row.dir, query: row.text, file, error: out.error })
+      if (!out.ok) {
+        yield* Effect.logWarning("fff track query failed", { dir: row.dir, query: row.text, file, error: out.error })
+      }
     })
 
     return Service.of({ files, tree, search, file, glob, open, warm, release })
