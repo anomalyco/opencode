@@ -284,6 +284,12 @@ export const layer = Layer.effect(
       const gitignore = path.join(dir, ".gitignore")
       const hasIgnore = yield* fs.existsSafe(gitignore)
       if (!hasIgnore) {
+        yield* fs.makeDirectory(dir, { recursive: true }).pipe(
+          Effect.catchIf(
+            (e) => e.reason._tag === "PermissionDenied",
+            () => Effect.void,
+          ),
+        )
         yield* fs
           .writeFileString(
             gitignore,
