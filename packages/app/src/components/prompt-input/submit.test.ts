@@ -105,6 +105,16 @@ beforeAll(async () => {
     }),
   }))
 
+  mock.module("@/context/server", () => ({
+    useServer: () => ({ key: "server-key" }),
+  }))
+
+  mock.module("@/context/tabs", () => ({
+    useTabs: () => ({
+      promoteDraft: () => undefined,
+    }),
+  }))
+
   mock.module("@/context/prompt", () => ({
     usePrompt: () => ({
       current: () => promptValue,
