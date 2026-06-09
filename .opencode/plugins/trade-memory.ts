@@ -82,6 +82,7 @@ export default (async () => {
             fullResync: args.full_resync,
           })
           return [
+            `sync_run: ${result.syncRunID}`,
             `synced: ${result.count} messages`,
             `sync_mode: ${result.fullResync ? "full" : "incremental"}`,
             `source_mode: ${result.sourceMode}`,

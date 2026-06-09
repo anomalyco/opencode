@@ -1,7 +1,8 @@
 import { Database } from "bun:sqlite"
-import { MemoryNoteRow, SearchResult } from "./types"
+import type { MemoryNoteRow, SearchResult } from "./types"
 
 const SEARCH_WARNING = "warning: FTS unavailable, using LIKE fallback"
+const SEARCH_WARNING_INVALID_QUERY = "warning: invalid FTS query, using LIKE fallback"
 
 export function runConversationSearch(db: Database, query: string, limit: number) {
   try {
@@ -29,7 +30,7 @@ export function runConversationSearch(db: Database, query: string, limit: number
       created_at: number
       snippet: string
     }>
-  } catch {
+  } catch (error) {
     return {
       rows: db
         .query<
@@ -43,10 +44,10 @@ export function runConversationSearch(db: Database, query: string, limit: number
           },
           [string, number]
         >(
-          "select message_id, session_id, seq, role, created_at, substr(text, 1, 280) as snippet from conversation_index where stale = 0 and text like ? order by created_at desc limit ?",
+          "select message_id, session_id, seq, role, created_at, substr(text, 1, 280) as snippet from conversation_index where stale = 0 and text like ? escape '\\' order by created_at desc limit ?",
         )
-        .all(`%${query}%`, limit),
-      warning: SEARCH_WARNING,
+        .all(`%${escapeLikePattern(query)}%`, limit),
+      warning: describeFtsFallback(error),
     } satisfies SearchResult<{
       message_id: string
       session_id: string
@@ -67,16 +68,26 @@ export function runMemorySearch(db: Database, query: string, limit: number) {
         )
         .all(query, limit),
     } satisfies SearchResult<MemoryNoteRow>
-  } catch {
+  } catch (error) {
     return {
       rows: db
         .query<MemoryNoteRow, [string, string, number]>(
-          "select id, title, body, memory_type, tags, importance, status, scope, source_session_id, source_message_ids, created_at, updated_at from memory_note where title like ? or body like ? order by updated_at desc limit ?",
+          "select id, title, body, memory_type, tags, importance, status, scope, source_session_id, source_message_ids, created_at, updated_at from memory_note where title like ? escape '\\' or body like ? escape '\\' order by updated_at desc limit ?",
         )
-        .all(`%${query}%`, `%${query}%`, limit),
-      warning: SEARCH_WARNING,
+        .all(`%${escapeLikePattern(query)}%`, `%${escapeLikePattern(query)}%`, limit),
+      warning: describeFtsFallback(error),
     } satisfies SearchResult<MemoryNoteRow>
   }
+}
+
+export function escapeLikePattern(input: string) {
+  return input.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")
+}
+
+export function describeFtsFallback(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : ""
+  if (message.includes("fts") && (message.includes("no such module") || message.includes("no such table"))) return SEARCH_WARNING
+  return SEARCH_WARNING_INVALID_QUERY
 }
 
 export function decodeStringArray(input: string) {

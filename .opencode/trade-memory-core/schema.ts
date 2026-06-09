@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite"
 
 const SOURCE_SIGNATURE_SESSION_MESSAGE = "session_message:v1:id,session_id,type,seq,time_created,data"
 const SOURCE_SIGNATURE_MESSAGE_PART = "message_part:v1:message(id,session_id,time_created,data)+part(message_id,time_created,data)"
+const MEMORY_SCHEMA_VERSION = "2"
 
 export function detectSourceMode(db: Database) {
   if (hasSessionMessageContent(db)) return "session_message" as const
@@ -92,9 +93,61 @@ export function ensureIndexSchema(db: Database) {
     end;
 
     create index if not exists memory_note_updated_idx on memory_note(updated_at);
+
+    create table if not exists sync_run (
+      id text primary key,
+      started_at integer not null,
+      finished_at integer,
+      source_db_path text not null,
+      index_db_path text not null,
+      mode text not null,
+      source_mode text,
+      count integer not null default 0,
+      error text
+    );
+
+    create index if not exists sync_run_started_idx on sync_run(started_at);
+
+    create table if not exists memory_pin (
+      id text primary key,
+      note_id text not null,
+      priority integer not null,
+      always_include integer not null default 1,
+      reason text not null,
+      created_at integer not null,
+      updated_at integer not null
+    );
+
+    create index if not exists memory_pin_note_idx on memory_pin(note_id);
+    create index if not exists memory_pin_priority_idx on memory_pin(priority, updated_at);
+
+    create table if not exists handoff_state (
+      session_id text primary key,
+      last_provider_id text,
+      last_model_id text,
+      pending_provider_id text,
+      pending_model_id text,
+      pending_since integer,
+      last_injected_at integer,
+      last_event_type text,
+      updated_at integer not null
+    );
+
+    create table if not exists handoff_log (
+      id text primary key,
+      session_id text not null,
+      provider_id text,
+      model_id text,
+      event_type text not null,
+      content_hash text,
+      created_at integer not null
+    );
+
+    create index if not exists handoff_log_session_created_idx on handoff_log(session_id, created_at);
   `)
   const columns = db.query<{ name: string }, []>("pragma table_info(conversation_index)").all().map((row) => row.name)
   if (!columns.includes("stale")) db.exec("alter table conversation_index add column stale integer not null default 0")
+  upsertMeta(db, "memory_schema_version", MEMORY_SCHEMA_VERSION)
   verifySourceSignature(db)
 }
 

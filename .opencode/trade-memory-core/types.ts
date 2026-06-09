@@ -59,6 +59,7 @@ export type SearchResult<Row> = {
 }
 
 export type SyncReport = {
+  syncRunID: string
   count: number
   fullResync: boolean
   sourceDbPath: string

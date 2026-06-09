@@ -15,6 +15,8 @@ import {
 export function syncTradeMemoryNow(args: { sourceDbPath?: string; indexDbPath?: string; fullResync?: boolean }): SyncReport {
   const sourceDbPath = resolveSourceDbPath(args.sourceDbPath ?? process.env.OPENCODE_DB)
   const indexDbPath = resolveIndexDbPath(args.indexDbPath)
+  const syncRunID = crypto.randomUUID()
+  const startedAt = Date.now()
   let sourceDb
   let indexDb
 
@@ -25,6 +27,11 @@ export function syncTradeMemoryNow(args: { sourceDbPath?: string; indexDbPath?: 
     ensureIndexSchema(indexDb)
     const syncedAt = Date.now()
     const fullResync = args.fullResync ?? shouldFullResync(indexDb, sourceDbPath)
+    indexDb
+      .query(
+        "insert into sync_run (id, started_at, source_db_path, index_db_path, mode, source_mode, count) values (?, ?, ?, ?, ?, ?, 0)",
+      )
+      .run(syncRunID, startedAt, sourceDbPath, indexDbPath, fullResync ? "full" : "incremental", sourceMode)
     const lastCursor = fullResync ? undefined : readSyncCursor(indexDb, sourceDbPath)
     const insert = indexDb.query(
       "insert into conversation_index (message_id, session_id, seq, role, created_at, text, source_checksum, stale, synced_at) values (?, ?, ?, ?, ?, ?, ?, 0, ?) on conflict(message_id) do update set session_id = excluded.session_id, seq = excluded.seq, role = excluded.role, created_at = excluded.created_at, text = excluded.text, source_checksum = excluded.source_checksum, stale = 0, synced_at = excluded.synced_at",
@@ -50,15 +57,38 @@ export function syncTradeMemoryNow(args: { sourceDbPath?: string; indexDbPath?: 
         upsertMeta(indexDb, "last_cursor_created_at", String(cursor.createdAt))
         upsertMeta(indexDb, "last_cursor_message_id", cursor.messageID)
       }
+      indexDb.query("update sync_run set finished_at = ?, count = ? where id = ?").run(Date.now(), count.value, syncRunID)
     })()
 
     return {
+      syncRunID,
       count: count.value,
       fullResync,
       sourceDbPath,
       indexDbPath,
       sourceMode,
     }
+  } catch (error) {
+    if (indexDb) {
+      try {
+        ensureIndexSchema(indexDb)
+        indexDb
+          .query(
+            "insert into sync_run (id, started_at, finished_at, source_db_path, index_db_path, mode, count, error) values (?, ?, ?, ?, ?, ?, 0, ?) on conflict(id) do update set finished_at = excluded.finished_at, error = excluded.error",
+          )
+          .run(
+            syncRunID,
+            startedAt,
+            Date.now(),
+            sourceDbPath,
+            indexDbPath,
+            args.fullResync ? "full" : "incremental",
+            error instanceof Error ? error.message : String(error),
+          )
+      } catch {
+      }
+    }
+    throw error
   } finally {
     sourceDb?.close(false)
     indexDb?.close(false)
