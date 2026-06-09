@@ -306,10 +306,18 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       })
   })
 
-  const items = async (value: string) => {
-    const results = await directories(value)
-    const directoryRows = results.map((absolute) => toRow(absolute, home(), "folders"))
-    return uniqueRows([...recentProjects(), ...directoryRows])
+  // Synchronously access start() to enable SolidJS reactivity tracking.
+  // This ensures the List component re-fetches when start() changes (e.g., when the path query
+  // finishes loading or when switching between directories).
+  // Without this, the dialog would show home directory if start() was temporarily falsy during
+  // initial render, and would never update even after start() resolves to the correct value.
+  const items = (value: string) => {
+    const s = start()
+    if (!s) return []
+    return directories(value).then((results) => {
+      const directoryRows = results.map((absolute) => toRow(absolute, home(), "folders"))
+      return uniqueRows([...recentProjects(), ...directoryRows])
+    })
   }
 
   function resolve(absolute: string) {
