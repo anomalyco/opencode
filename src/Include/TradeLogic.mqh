@@ -12,6 +12,8 @@ private:
    int      m_lookback_bars;
    int      m_atr_period;
    double   m_atr_min;
+   double   m_sl_atr_multiplier;
+   double   m_tp_atr_multiplier;
    int      m_ema_period;
    bool     m_use_h1_ema_filter;
    int      m_session_start_hour;
@@ -26,6 +28,8 @@ public:
    CBreakoutSignal_XAUUSD() : m_lookback_bars(10),
                               m_atr_period(14),
                                 m_atr_min(1.5),
+                              m_sl_atr_multiplier(1.5),
+                              m_tp_atr_multiplier(3.0),
                               m_ema_period(200),
                               m_use_h1_ema_filter(true),
                               m_session_start_hour(12),
@@ -48,6 +52,40 @@ public:
    void SetUseH1EMAFilter(bool enabled)
       {
       m_use_h1_ema_filter = enabled;
+      }
+
+   void SetLookbackBars(int bars)
+      {
+      if(bars > 1)
+         m_lookback_bars = bars;
+      }
+
+   void SetATRMin(double atr_min)
+      {
+      if(atr_min >= 0.0)
+         m_atr_min = atr_min;
+      }
+
+   void SetStopLossATRMultiplier(double multiplier)
+      {
+      if(multiplier > 0.0)
+         m_sl_atr_multiplier = multiplier;
+      }
+
+   void SetTakeProfitATRMultiplier(double multiplier)
+      {
+      if(multiplier > 0.0)
+         m_tp_atr_multiplier = multiplier;
+      }
+
+   void SetSessionHours(int start_hour, int end_hour)
+      {
+      if(start_hour < 0 || start_hour > 23)
+         return;
+      if(end_hour <= start_hour || end_hour > 24)
+         return;
+      m_session_start_hour = start_hour;
+      m_session_end_hour = end_hour;
       }
     
    double Evaluate()
@@ -99,8 +137,8 @@ public:
       if(signal > 0.7 && m_last_direction == 1 && atr >= m_atr_min)
         {
          entry = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-         sl = entry - atr * 1.5;
-         tp = entry + atr * 3.0;
+         sl = entry - atr * m_sl_atr_multiplier;
+         tp = entry + atr * m_tp_atr_multiplier;
          m_last_processed_m15_bar_time = GetLastClosedM15BarTime();
          m_buy_taken_this_session = true;
          return true;
@@ -109,8 +147,8 @@ public:
       if(signal < -0.7 && m_last_direction == -1 && atr >= m_atr_min)
         {
          entry = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-         sl = entry + atr * 1.5;
-         tp = entry - atr * 3.0;
+         sl = entry + atr * m_sl_atr_multiplier;
+         tp = entry - atr * m_tp_atr_multiplier;
          m_last_processed_m15_bar_time = GetLastClosedM15BarTime();
          m_sell_taken_this_session = true;
          return true;

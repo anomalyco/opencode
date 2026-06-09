@@ -9,6 +9,14 @@
 #include "Include/RiskManagement.mqh"
 #include "Include/DataFeed.mqh"
 
+input bool   InpUseH1EMAFilter = false;
+input int    InpBreakoutLookbackBars = 10;
+input double InpBreakoutATRMin = 1.5;
+input double InpStopLossATRMultiplier = 1.5;
+input double InpTakeProfitATRMultiplier = 3.0;
+input int    InpSessionStartHour = 12;
+input int    InpSessionEndHour = 24;
+
 //+------------------------------------------------------------------+
 //| CExpertAdvisor class                                              |
 //+------------------------------------------------------------------+
@@ -31,8 +39,13 @@ public:
     int OnInit()
       {
        m_sig_breakout.Init();
-       m_sig_breakout.SetUseH1EMAFilter(false);
-       
+        m_sig_breakout.SetUseH1EMAFilter(InpUseH1EMAFilter);
+        m_sig_breakout.SetLookbackBars(InpBreakoutLookbackBars);
+        m_sig_breakout.SetATRMin(InpBreakoutATRMin);
+        m_sig_breakout.SetStopLossATRMultiplier(InpStopLossATRMultiplier);
+        m_sig_breakout.SetTakeProfitATRMultiplier(InpTakeProfitATRMultiplier);
+        m_sig_breakout.SetSessionHours(InpSessionStartHour, InpSessionEndHour);
+        
        m_risk.SetGlobalDDLimit(-0.25);
       m_risk.SetMonthlyDDLimit(-0.20);
       m_risk.SetDailyDDLimit(-0.03);
