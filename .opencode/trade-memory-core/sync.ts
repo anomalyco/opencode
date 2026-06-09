@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite"
 import { openDatabase, resolveIndexDbPath, resolveSourceDbPath } from "./db"
 import { redactSecrets } from "./redaction"
 import { detectSourceMode, ensureIndexSchema, readSyncCursor, shouldFullResync, SourceSignature, upsertMeta } from "./schema"
-import {
+import type {
   ConversationRow,
   LegacyMessageRow,
   LegacyPartRow,
@@ -17,12 +17,10 @@ export function syncTradeMemoryNow(args: { sourceDbPath?: string; indexDbPath?: 
   const indexDbPath = resolveIndexDbPath(args.indexDbPath)
   const syncRunID = crypto.randomUUID()
   const startedAt = Date.now()
-  let sourceDb
-  let indexDb
+  const sourceDb = openDatabase(sourceDbPath, true)
+  const indexDb = openDatabase(indexDbPath, false)
 
   try {
-    sourceDb = openDatabase(sourceDbPath, true)
-    indexDb = openDatabase(indexDbPath, false)
     const sourceMode = detectSourceMode(sourceDb)
     ensureIndexSchema(indexDb)
     const syncedAt = Date.now()
@@ -69,38 +67,35 @@ export function syncTradeMemoryNow(args: { sourceDbPath?: string; indexDbPath?: 
       sourceMode,
     }
   } catch (error) {
-    if (indexDb) {
-      try {
-        ensureIndexSchema(indexDb)
-        indexDb
-          .query(
-            "insert into sync_run (id, started_at, finished_at, source_db_path, index_db_path, mode, count, error) values (?, ?, ?, ?, ?, ?, 0, ?) on conflict(id) do update set finished_at = excluded.finished_at, error = excluded.error",
-          )
-          .run(
-            syncRunID,
-            startedAt,
-            Date.now(),
-            sourceDbPath,
-            indexDbPath,
-            args.fullResync ? "full" : "incremental",
-            error instanceof Error ? error.message : String(error),
-          )
-      } catch {
-      }
+    try {
+      ensureIndexSchema(indexDb)
+      indexDb
+        .query(
+          "insert into sync_run (id, started_at, finished_at, source_db_path, index_db_path, mode, count, error) values (?, ?, ?, ?, ?, ?, 0, ?) on conflict(id) do update set finished_at = excluded.finished_at, error = excluded.error",
+        )
+        .run(
+          syncRunID,
+          startedAt,
+          Date.now(),
+          sourceDbPath,
+          indexDbPath,
+          args.fullResync ? "full" : "incremental",
+          error instanceof Error ? error.message : String(error),
+        )
+    } catch {
     }
     throw error
   } finally {
-    sourceDb?.close(false)
-    indexDb?.close(false)
+    sourceDb.close(false)
+    indexDb.close(false)
   }
 }
 
 export function openTradeConversationSource(args: { sourceDbPath?: string; messageID: string }) {
   const sourceDbPath = resolveSourceDbPath(args.sourceDbPath ?? process.env.OPENCODE_DB)
-  let sourceDb
+  const sourceDb = openDatabase(sourceDbPath, true)
 
   try {
-    sourceDb = openDatabase(sourceDbPath, true)
     const sourceMode = detectSourceMode(sourceDb)
     if (sourceMode === "session_message") {
       const row = readSessionMessageSource(sourceDb, args.messageID)
@@ -111,7 +106,7 @@ export function openTradeConversationSource(args: { sourceDbPath?: string; messa
         kind: "found" as const,
         sourceDbPath,
         source: {
-          role: row.type,
+          role: row.type === "user" ? "user" : "assistant",
           sessionID: row.session_id,
           messageID: row.id,
           seq: row.seq,
@@ -135,7 +130,7 @@ export function openTradeConversationSource(args: { sourceDbPath?: string; messa
       } satisfies TradeConversationSource,
     }
   } finally {
-    sourceDb?.close(false)
+    sourceDb.close(false)
   }
 }
 

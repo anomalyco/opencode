@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite"
 import { redactSecrets } from "./redaction"
 import { runMemorySearch } from "./search"
-import { MemoryNoteRow, NoteStatus } from "./types"
+import type { MemoryNoteRow, NoteStatus } from "./types"
 
 export type StoreMemoryNoteInput = {
   title: string
