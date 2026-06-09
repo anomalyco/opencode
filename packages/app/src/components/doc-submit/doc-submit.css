@@ -130,6 +130,87 @@
   font-weight: 700;
 }
 
+/* Question + agreed answer preview, shown above the ring so everyone sees what is being sent. */
+.ds-preview {
+  width: 100%;
+  max-width: var(--ds-ring-size);
+  max-height: 30vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 2px;
+}
+
+.ds-preview-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  text-align: left;
+}
+
+.ds-preview-idx {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.ds-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ds-preview-q {
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.ds-preview-answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ds-preview-a {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--ds-mint);
+  color: #0d0d11;
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.ds-preview-a--empty {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
 .ds-pending-list {
   margin-top: 10px;
   display: flex;

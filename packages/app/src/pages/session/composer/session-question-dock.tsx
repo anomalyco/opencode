@@ -243,6 +243,15 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const sending = createMemo(() => pendingSend() || approval()?.status === "pending")
 
+  // What the consent dialog shows: each question + the answer being agreed on (empty for a dismiss
+  // vote). Built from the shared draft, which is frozen while a vote is in flight — so it matches
+  // exactly what will be sent, and every participant sees the same thing.
+  const previewItems = () =>
+    questions().map((q, i) => ({
+      question: q.question,
+      answers: voteKind() === "question-dismiss" ? [] : (draft.answers[i] ?? []),
+    }))
+
   const closeApproval = () => {
     dialog.close()
     approvalID = undefined
@@ -274,6 +283,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
           state={approval}
           actorID={a.actorID}
           kind={voteKind()}
+          preview={previewItems}
           approve={() => {
             const current = approval()
             if (!current) return

@@ -12,13 +12,49 @@ import "./doc-submit.css"
 // What the vote will do once approved — drives the dialog copy.
 export type DocSubmitKind = "doc" | "question-send" | "question-dismiss"
 
+// For question votes: the question(s) and the answer(s) being agreed on, shown so everyone sees
+// exactly what is about to be sent (or which question is being dismissed).
+export type DocSubmitPreviewItem = { question: string; answers: string[] }
+
 type Props = {
   state: Accessor<DocSubmitState | undefined>
   actorID: string
   kind?: DocSubmitKind
+  preview?: () => DocSubmitPreviewItem[]
   approve: () => void
   cancel: () => void
   close: () => void
+}
+
+function Preview(props: { items: () => DocSubmitPreviewItem[]; dismiss?: boolean }) {
+  return (
+    <Show when={props.items().length > 0}>
+      <div class="ds-preview" data-multi={props.items().length > 1}>
+        <For each={props.items()}>
+          {(item, i) => (
+            <div class="ds-preview-item">
+              <Show when={props.items().length > 1}>
+                <span class="ds-preview-idx">{i() + 1}</span>
+              </Show>
+              <div class="ds-preview-body">
+                <div class="ds-preview-q">{item.question}</div>
+                <Show when={!props.dismiss}>
+                  <Show
+                    when={item.answers.length > 0}
+                    fallback={<div class="ds-preview-a ds-preview-a--empty">미선택</div>}
+                  >
+                    <div class="ds-preview-answers">
+                      <For each={item.answers}>{(answer) => <span class="ds-preview-a">{answer}</span>}</For>
+                    </div>
+                  </Show>
+                </Show>
+              </div>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  )
 }
 
 function headline(kind: DocSubmitKind | undefined) {
@@ -50,6 +86,7 @@ function IconBolt() {
 function VotingBody(props: {
   state: DocSubmitState
   kind?: DocSubmitKind
+  preview?: () => DocSubmitPreviewItem[]
   approve: () => void
   cancel: () => void
 }) {
@@ -64,6 +101,7 @@ function VotingBody(props: {
 
   return (
     <>
+      <Show when={props.preview}>{(items) => <Preview items={items()} dismiss={props.kind === "question-dismiss"} />}</Show>
       <div class="ds-ring-stage">
         <MatchAcceptRing remaining={remaining()} total={total()} />
         <div class="ds-ring-inner">
@@ -101,11 +139,16 @@ function VotingBody(props: {
   )
 }
 
-function WaitingBody(props: { state: DocSubmitState }) {
+function WaitingBody(props: {
+  state: DocSubmitState
+  kind?: DocSubmitKind
+  preview?: () => DocSubmitPreviewItem[]
+}) {
   const pending = createMemo(() => props.state.actors.filter((item) => item.status === "pending"))
 
   return (
     <>
+      <Show when={props.preview}>{(items) => <Preview items={items()} dismiss={props.kind === "question-dismiss"} />}</Show>
       <div class="ds-ring-stage">
         <MatchAcceptRing full total={props.state.timeoutMs / 1000} />
         <div class="ds-ring-inner">
@@ -248,11 +291,17 @@ export function DialogDocSubmit(props: Props) {
                   when={pending() && approved()}
                   fallback={
                     <Show when={pending() && !approved()}>
-                      <VotingBody state={current()} kind={props.kind} approve={props.approve} cancel={props.cancel} />
+                      <VotingBody
+                        state={current()}
+                        kind={props.kind}
+                        preview={props.preview}
+                        approve={props.approve}
+                        cancel={props.cancel}
+                      />
                     </Show>
                   }
                 >
-                  <WaitingBody state={current()} />
+                  <WaitingBody state={current()} kind={props.kind} preview={props.preview} />
                 </Show>
               }
             >
