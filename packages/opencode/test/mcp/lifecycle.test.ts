@@ -7,8 +7,11 @@ import { testEffect } from "../lib/effect"
 
 // Per-client state for controlling mock behavior
 interface MockClientState {
+  capabilities: { tools?: object; prompts?: object; resources?: object }
   tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
+  listPromptsCalls: number
+  listResourcesCalls: number
   requestCalls: number
   listToolsShouldFail: boolean
   listToolsError: string
@@ -35,8 +38,11 @@ function getOrCreateClientState(name?: string): MockClientState {
   let state = clientStates.get(key)
   if (!state) {
     state = {
+      capabilities: { tools: {}, prompts: {}, resources: {} },
       tools: [{ name: "test_tool", description: "A test tool", inputSchema: { type: "object", properties: {} } }],
       listToolsCalls: 0,
+      listPromptsCalls: 0,
+      listResourcesCalls: 0,
       requestCalls: 0,
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
@@ -133,6 +139,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       this._state?.notificationHandlers.set(schema, handler)
     }
 
+    getServerCapabilities() {
+      return this._state?.capabilities
+    }
+
     async listTools() {
       if (this._state) this._state.listToolsCalls++
       if (this._state?.listToolsShouldFail) {
@@ -148,6 +158,7 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     }
 
     async listPrompts() {
+      if (this._state) this._state.listPromptsCalls++
       if (this._state?.listPromptsShouldFail) {
         throw new Error("listPrompts failed")
       }
@@ -155,6 +166,7 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     }
 
     async listResources() {
+      if (this._state) this._state.listResourcesCalls++
       if (this._state?.listResourcesShouldFail) {
         throw new Error("listResources failed")
       }
@@ -596,6 +608,84 @@ it.instance(
       },
     },
   },
+)
+
+it.instance(
+  "resource-only servers connect without listing tools",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "resource-only-server"
+        const serverState = getOrCreateClientState("resource-only-server")
+        serverState.capabilities = { resources: {} }
+        serverState.resources = [{ name: "docs", uri: "docs://readme" }]
+
+        const result = yield* mcp.add("resource-only-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(statusName(result.status, "resource-only-server")).toBe("connected")
+        expect(serverState.listToolsCalls).toBe(0)
+        expect(Object.keys(yield* mcp.tools())).toHaveLength(0)
+        expect(Object.keys(yield* mcp.resources())).toEqual(["resource-only-server:docs"])
+        expect(serverState.listResourcesCalls).toBe(1)
+        expect(serverState.listPromptsCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "prompt-only servers connect without listing tools",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "prompt-only-server"
+        const serverState = getOrCreateClientState("prompt-only-server")
+        serverState.capabilities = { prompts: {} }
+        serverState.prompts = [{ name: "review" }]
+
+        const result = yield* mcp.add("prompt-only-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(statusName(result.status, "prompt-only-server")).toBe("connected")
+        expect(serverState.listToolsCalls).toBe(0)
+        expect(Object.keys(yield* mcp.tools())).toHaveLength(0)
+        expect(Object.keys(yield* mcp.prompts())).toEqual(["prompt-only-server:review"])
+        expect(serverState.listPromptsCalls).toBe(1)
+        expect(serverState.listResourcesCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "tools-only servers skip optional prompt and resource discovery",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "tools-only-server"
+        const serverState = getOrCreateClientState("tools-only-server")
+        serverState.capabilities = { tools: {} }
+
+        const result = yield* mcp.add("tools-only-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(statusName(result.status, "tools-only-server")).toBe("connected")
+        expect(serverState.listToolsCalls).toBe(1)
+        expect(Object.keys(yield* mcp.tools())).toEqual(["tools-only-server_test_tool"])
+        expect(yield* mcp.prompts()).toEqual({})
+        expect(yield* mcp.resources()).toEqual({})
+        expect(serverState.listPromptsCalls).toBe(0)
+        expect(serverState.listResourcesCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
 )
 
 it.instance(

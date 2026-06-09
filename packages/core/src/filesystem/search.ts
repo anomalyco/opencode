@@ -4,13 +4,11 @@ import type { PlatformError } from "effect/PlatformError"
 import { FSUtil } from "../fs-util"
 import { Glob } from "../util/glob"
 import { Global } from "../global"
-import * as Log from "../util/log"
 import { serviceUse } from "../effect/service-use"
 import { makeRuntime } from "../effect/runtime"
 import { Fff } from "#fff"
 import { Ripgrep } from "./ripgrep"
 
-const log = Log.create({ service: "file.search" })
 const root = path.join(Global.Path.cache, "fff")
 
 export type Item = Ripgrep.Item
@@ -133,22 +131,17 @@ function item(hit: Fff.Hit): Item {
   }
 }
 
-function collectPaths<T>(
-  out: { items: T[]; scores: Array<{ total: number }> },
-  toPath: (item: T) => string,
-  opts?: { includeZeroScore?: boolean },
-): string[] {
-  return Array.from(
-    new Set(
-      out.items.flatMap((item, idx): string[] => {
-        const score = out.scores[idx]
-        if (!score || (!opts?.includeZeroScore && score.total <= 0)) return []
-        const text = toPath(item)
-        if (!text) return []
-        return [text]
-      }),
-    ),
+function collectPaths<T>(items: T[], scores: Array<{ total: number }>, toPath: (item: T) => string): string[] {
+  const rows = items.flatMap((item, index): Array<{ text: string; score: number }> => {
+    const text = toPath(item)
+    if (!text) return []
+    return [{ text, score: scores[index]?.total ?? 0 }]
+  })
+  rows.sort(
+    (a, b) => b.score - a.score || a.text.length - b.text.length || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
   )
+
+  return Array.from(new Set(rows.map((item) => item.text)))
 }
 
 function searchFff(
@@ -162,7 +155,7 @@ function searchFff(
     if (!out.ok) return out
     return {
       ok: true,
-      value: collectPaths(out.value, (entry) => normalize(entry.relativePath), { includeZeroScore: !query }),
+      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
     }
   }
   if (kind === "all") {
@@ -170,14 +163,14 @@ function searchFff(
     if (!out.ok) return out
     return {
       ok: true,
-      value: collectPaths(out.value, (entry) => normalize(entry.item.relativePath), { includeZeroScore: !query }),
+      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.item.relativePath)),
     }
   }
   const out = pick.fileSearch(query, opts)
   if (!out.ok) return out
   return {
     ok: true,
-    value: collectPaths(out.value, (entry) => normalize(entry.relativePath), { includeZeroScore: !query }),
+    value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
   }
 }
 
@@ -225,25 +218,23 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
         if (!scanned.ok || !scanned.value) {
           yield* fffSync("destroy picker", () => pick.destroy()).pipe(Effect.ignore)
           state.pick.delete(dir)
-          log.warn("fff scan not ready", { dir })
+          yield* Effect.logWarning("fff scan not ready", { dir })
           return yield* Effect.fail(new Error(scanned.ok ? "fff scan timed out" : scanned.error))
         }
 
         const git = yield* fffSync("refresh git status", () => pick.refreshGitStatus())
-        if (!git.ok) log.warn("fff git refresh failed", { dir, error: git.error })
+        if (!git.ok) {
+          yield* Effect.logWarning("fff git refresh failed", { dir, error: git.error })
+        }
       })
 
     // Create (or return) the picker for a directory. Creation is synchronous
     // and does not await the scan; the native background scan starts as soon as
     // the picker exists. The `wait` gate dedupes concurrent creation.
     const acquire = Effect.fn("Search.acquire")(function* (cwd: string) {
-      const available = yield* fffSync("check availability", () => Fff.available()).pipe(
-        Effect.catch((error) => {
-          log.warn("fff availability check failed", { error })
-          return Effect.succeed(false)
-        }),
-      )
-      if (!available) return undefined
+      // The opencode test runtime owns an isolated XDG tree that Windows must
+      // remove before process exit, so use ripgrep instead of native FFF there.
+      if (process.env.OPENCODE_TEST_HOME) return undefined
 
       const dir = FSUtil.resolve(cwd)
       const existing = state.pick.get(dir)
@@ -251,6 +242,11 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
 
       const pending = state.wait.get(dir)
       if (pending) return yield* Deferred.await(pending)
+
+      const available = yield* fffSync("check availability", () => Fff.available()).pipe(
+        Effect.catch((error) => Effect.logWarning("fff availability check failed", { error }).pipe(Effect.as(false))),
+      )
+      if (!available) return undefined
 
       const gate = yield* Deferred.make<Picker, Error>()
       state.wait.set(dir, gate)
@@ -262,10 +258,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             basePath: dir,
             frecencyDbPath: path.join(root, `${id}.frecency.mdb`),
             historyDbPath: path.join(root, `${id}.history.mdb`),
-            // fff uses a bit different log version, also with spans so keep
-            // them in the same folder for debuggability
-            logFilePath: path.join(Global.Path.log, "fff.log"),
-            logLevel: Log.getLevel().toLowerCase() as Lowercase<Log.Level>,
             aiMode: true,
             // only the first toolcall picker can accumulate resources to index
             // home directory, if the user specifically opened opencode at the
@@ -277,7 +269,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
           }),
         )
         if (!made.ok) {
-          log.warn("fff init failed", { dir, error: made.error })
+          yield* Effect.logWarning("fff init failed", { dir, error: made.error })
           const err = new Error(made.error)
           yield* Deferred.fail(gate, err)
           return yield* Effect.fail(err)
@@ -349,26 +341,26 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       const query = input.query.trim()
       const kind = input.kind ?? "file"
 
-      const pick = yield* picker(input.cwd)
-      if (!pick) return undefined
-
+      const entry = yield* acquire(input.cwd).pipe(Effect.catch(() => Effect.succeed<Picker | undefined>(undefined)))
+      if (!entry) return undefined
       const dir = FSUtil.resolve(input.cwd)
       const limit = input.limit ?? 100
       const fffResult = yield* fffSync(`${kind} search`, () =>
-        searchFff(pick, kind, query, {
+        searchFff(entry.pick, kind, query, {
           pageIndex: 0,
           currentFile: input.current, // supports both relative and absolute (relative preferred)
           pageSize: limit,
         }),
       ).pipe(
-        Effect.catch((error) => {
-          log.warn(`fff ${kind} search failed`, { dir, query, error })
-          return Effect.succeed<Fff.Result<string[]> | undefined>(undefined)
-        }),
+        Effect.catch((error) =>
+          Effect.logWarning(`fff ${kind} search failed`, { dir, query, error }).pipe(
+            Effect.as<Fff.Result<string[]> | undefined>(undefined),
+          ),
+        ),
       )
       if (!fffResult) return undefined
       if (!fffResult.ok) {
-        log.warn(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
+        yield* Effect.logWarning(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
         return undefined
       }
 
@@ -399,14 +391,15 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
           timeBudgetMs: 1_500,
         }),
       ).pipe(
-        Effect.catch((error) => {
-          log.warn("fff grep failed", { dir, pattern: input.pattern, error })
-          return Effect.succeed<Fff.Result<Fff.Grep> | undefined>(undefined)
-        }),
+        Effect.catch((error) =>
+          Effect.logWarning("fff grep failed", { dir, pattern: input.pattern, error }).pipe(
+            Effect.as<Fff.Result<Fff.Grep> | undefined>(undefined),
+          ),
+        ),
       )
       if (!fffGrep) return yield* rip(input)
       if (!fffGrep.ok) {
-        log.warn("fff grep failed", { dir, pattern: input.pattern, error: fffGrep.error })
+        yield* Effect.logWarning("fff grep failed", { dir, pattern: input.pattern, error: fffGrep.error })
         return yield* rip(input)
       }
 
@@ -438,10 +431,11 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             pageSize: limit,
           }),
         ).pipe(
-          Effect.catch((error) => {
-            log.warn("fff glob failed", { dir, pattern: input.pattern, error })
-            return Effect.succeed<Fff.Result<Fff.Search> | undefined>(undefined)
-          }),
+          Effect.catch((error) =>
+            Effect.logWarning("fff glob failed", { dir, pattern: input.pattern, error }).pipe(
+              Effect.as<Fff.Result<Fff.Search> | undefined>(undefined),
+            ),
+          ),
         )
 
         if (fffGlob?.ok) {
@@ -459,7 +453,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             truncated: fffGlob.value.totalMatched > rows.length,
           }
         } else if (fffGlob) {
-          log.warn("fff glob failed", { dir, pattern: input.pattern, error: fffGlob.error })
+          yield* Effect.logWarning("fff glob failed", { dir, pattern: input.pattern, error: fffGlob.error })
           // fall through to the fallback
         }
       }
@@ -506,13 +500,16 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       if (!entry) return
 
       const out = yield* fffSync("track query", () => entry.pick.trackQuery(row.text, file)).pipe(
-        Effect.catch((error) => {
-          log.warn("fff track query failed", { dir: row.dir, query: row.text, file, error })
-          return Effect.succeed<Fff.Result<boolean> | undefined>(undefined)
-        }),
+        Effect.catch((error) =>
+          Effect.logWarning("fff track query failed", { dir: row.dir, query: row.text, file, error }).pipe(
+            Effect.as<Fff.Result<boolean> | undefined>(undefined),
+          ),
+        ),
       )
       if (!out) return
-      if (!out.ok) log.warn("fff track query failed", { dir: row.dir, query: row.text, file, error: out.error })
+      if (!out.ok) {
+        yield* Effect.logWarning("fff track query failed", { dir: row.dir, query: row.text, file, error: out.error })
+      }
     })
 
     return Service.of({ files, tree, search, file, glob, open, warm, release })

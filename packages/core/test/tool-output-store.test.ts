@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@opencode-ai/core/config"
@@ -43,35 +43,7 @@ const withStore = <A, E, R>(
 const it = testEffect(Layer.empty)
 
 describe("ToolOutputStore", () => {
-  it.live("returns under-limit text unchanged without writing a file", () =>
-    withStore(({ store }) =>
-      Effect.gen(function* () {
-        expect(yield* store.truncate({ sessionID, toolCallID: "call-short", content: "one\ntwo" })).toEqual({
-          content: "one\ntwo",
-          truncated: false,
-        })
-      }),
-    ),
-  )
-
-  it.live("stores full output at an absolute managed path", () =>
-    withStore(({ root, store, fs }) =>
-      Effect.gen(function* () {
-        const content = "HEAD-" + "x".repeat(500) + "-TAIL"
-        const result = yield* store.truncate({ sessionID, toolCallID: "call-large", content, maxBytes: 300 })
-        expect(result.truncated).toBe(true)
-        if (!result.truncated) throw new Error("expected truncation")
-        expect(path.isAbsolute(result.outputPath)).toBe(true)
-        expect(result.outputPath).toStartWith(path.join(root, "tool-output", "tool_"))
-        expect(result.content).toContain(result.outputPath)
-        expect(result.content).toContain("HEAD-")
-        expect(result.content).toContain("-TAIL")
-        expect(yield* fs.readFileString(result.outputPath)).toBe(content)
-      }),
-    ),
-  )
-
-  it.live("bounds aggregate text blocks with one managed file", () =>
+  it.live("bounds the provider-facing text channel with one managed file", () =>
     withStore(({ store, fs }) =>
       Effect.gen(function* () {
         const first = "HEAD-" + "x".repeat(30_000)
@@ -89,7 +61,7 @@ describe("ToolOutputStore", () => {
         })
         expect(result.output.structured).toEqual({ kind: "report" })
         expect(result.outputPaths).toHaveLength(1)
-        expect(yield* fs.readFileString(result.outputPaths[0]!)).toBe(`${first}\n\n${second}`)
+        expect(yield* fs.readFileString(result.outputPaths[0])).toBe(first + second)
         if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
         expect(Buffer.byteLength(result.output.content[0].text)).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
       }),
@@ -101,27 +73,138 @@ describe("ToolOutputStore", () => {
       Effect.gen(function* () {
         const structured = { text: "x".repeat(ToolOutputStore.MAX_BYTES) }
         const result = yield* store.bound({ sessionID, toolCallID: "call-json", output: { structured, content: [] } })
-        expect(result.output.structured).toBe(structured)
+        expect(result.output.structured).toEqual(structured)
         expect(result.outputPaths).toHaveLength(1)
-        expect(yield* fs.readFileString(result.outputPaths[0]!)).toBe(JSON.stringify(structured))
+        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(structured)
+        expect(result.output.content).toHaveLength(1)
       }),
     ),
   )
 
-  it.live("degrades to lossy bounded output when writing fails", () =>
+  it.live("preserves native media and structured metadata without applying a settlement media limit", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const data = "a".repeat(6 * 1024 * 1024)
+        const result = yield* store.bound({
+          sessionID,
+          toolCallID: "call-file",
+          output: {
+            structured: { caption: "pixel" },
+            content: [{ type: "file", source: { type: "data", data }, mime: "image/png", name: "pixel.png" }],
+          },
+        })
+        expect(result.outputPaths).toEqual([])
+        expect(result.output.structured).toEqual({ caption: "pixel" })
+        expect(result.output.content).toHaveLength(1)
+        expect(result.output.content[0]).toEqual({
+          type: "file",
+          source: { type: "data", data },
+          mime: "image/png",
+          name: "pixel.png",
+        })
+      }),
+    ),
+  )
+
+  it.live("preserves structured metadata and native media when bounding text", () =>
+    withStore(({ store, fs }) =>
+      Effect.gen(function* () {
+        const text = "x".repeat(ToolOutputStore.MAX_BYTES + 1)
+        const media = {
+          type: "file" as const,
+          source: { type: "data" as const, data: "aGVsbG8=" },
+          mime: "image/png",
+          name: "pixel.png",
+        }
+        const result = yield* store.bound({
+          sessionID,
+          toolCallID: "call-text-and-media",
+          output: { structured: { caption: "pixel" }, content: [{ type: "text", text }, media] },
+        })
+
+        expect(result.output.structured).toEqual({ caption: "pixel" })
+        expect(result.output.content[1]).toEqual(media)
+        expect(yield* fs.readFileString(result.outputPaths[0])).toBe(text)
+      }),
+    ),
+  )
+
+  it.live("does not double-count structured data duplicated in projected text", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const text = "x".repeat(30_000)
+        const output = { structured: { output: text }, content: [{ type: "text" as const, text }] }
+        expect(yield* store.bound({ sessionID, toolCallID: "call-duplicated", output })).toEqual({
+          output,
+          outputPaths: [],
+        })
+      }),
+    ),
+  )
+
+  it.live("fails oversized settlement when complete retention cannot be written", () =>
     withStore(({ root, store, fs }) =>
       Effect.gen(function* () {
         yield* fs.writeFileString(path.join(root, "tool-output"), "not a directory")
-        const result = yield* store.bound({
-          sessionID,
-          toolCallID: "call-lossy",
-          output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
-        })
-        expect(result.outputPaths).toEqual([])
-        if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
-        expect(result.output.content[0].text).toContain("could not be retained")
+        const exit = yield* store
+          .bound({
+            sessionID,
+            toolCallID: "call-lossy",
+            output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
+          })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit))
+          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.StorageError")
       }),
     ),
+  )
+
+  it.live("does not encode ignored structured metadata when projected content exists", () =>
+    withStore(({ store }) =>
+      Effect.gen(function* () {
+        const output = { structured: { value: 1n }, content: [{ type: "text" as const, text: "readable text" }] }
+        expect(yield* store.bound({ sessionID, toolCallID: "call-unencodable", output })).toEqual({
+          output,
+          outputPaths: [],
+        })
+      }),
+    ),
+  )
+
+  it.live("preserves interruption while retaining complete output", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() => tmpdir())
+      const blockedFilesystem = Layer.effect(
+        FSUtil.Service,
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          return FSUtil.Service.of({
+            ...fs,
+            ensureDir: () => Effect.void,
+            writeFileString: () => Effect.never,
+          })
+        }),
+      ).pipe(Layer.provide(FSUtil.defaultLayer))
+      const store = ToolOutputStore.layer.pipe(
+        Layer.provide(blockedFilesystem),
+        Layer.provide(Global.layerWith({ data: root.path })),
+      )
+      const exit = yield* Effect.gen(function* () {
+        const service = yield* ToolOutputStore.Service
+        const fiber = yield* service
+          .bound({
+            sessionID,
+            toolCallID: "call-interrupted",
+            output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
+          })
+          .pipe(Effect.forkChild)
+        yield* Fiber.interrupt(fiber)
+        return yield* Fiber.await(fiber)
+      }).pipe(Effect.provide(store))
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true)
+      yield* Effect.promise(() => root[Symbol.asyncDispose]())
+    }),
   )
 
   it.live("honors configured limits", () =>
@@ -129,9 +212,12 @@ describe("ToolOutputStore", () => {
       ({ store }) =>
         Effect.gen(function* () {
           expect(yield* store.limits()).toEqual({ maxLines: 2, maxBytes: 1_000 })
-          expect(
-            (yield* store.truncate({ sessionID, toolCallID: "call-config", content: "one\ntwo\nthree" })).truncated,
-          ).toBe(true)
+          const result = yield* store.bound({
+            sessionID,
+            toolCallID: "call-config",
+            output: { structured: {}, content: [{ type: "text", text: "one\ntwo\nthree" }] },
+          })
+          expect(result.outputPaths).toHaveLength(1)
         }),
       new Config.Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
     ),
@@ -140,9 +226,12 @@ describe("ToolOutputStore", () => {
   it.live("cleans expired managed files and preserves unrelated files", () =>
     withStore(({ root, store, fs }) =>
       Effect.gen(function* () {
-        const old = yield* store.write({ sessionID, toolCallID: "old", content: "old" })
-        const recent = yield* store.write({ sessionID, toolCallID: "recent", content: "recent" })
+        const old = path.join(root, "tool-output", "tool_old")
+        const recent = path.join(root, "tool-output", "tool_recent")
         const unrelated = path.join(root, "tool-output", "keep.txt")
+        yield* fs.ensureDir(path.join(root, "tool-output"))
+        yield* fs.writeFileString(old, "old")
+        yield* fs.writeFileString(recent, "recent")
         yield* fs.writeFileString(unrelated, "keep")
         const expired = new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000)
         yield* fs.utimes(old, expired, expired)

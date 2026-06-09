@@ -111,6 +111,23 @@ function reasoning(text: string, phase: StreamCommit["phase"] = "progress"): Str
   }
 }
 
+test("turn summary starts at the left edge", async () => {
+  const out = await setup()
+
+  try {
+    await out.scrollback.writeTurnSummary({ agent: "Build", model: "Little Frank", duration: "2.2s" })
+
+    const commits = claim(out.renderer)
+    try {
+      expect(renderRows(commits.at(-1)!)[0]).toBe("▣ Build · Little Frank · 2.2s")
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
 test("theme swaps restyle active reasoning without resetting the stream", async () => {
   const previousSyntax = SyntaxStyle.fromStyles({ default: { fg: "#123456" } })
   const nextSyntax = SyntaxStyle.fromStyles({ default: { fg: "#abcdef" } })

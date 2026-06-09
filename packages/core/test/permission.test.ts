@@ -161,6 +161,21 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("allows managed output reads without granting external directory access", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "*", resource: "*", effect: "deny" },
+        { action: "read", resource: "*", effect: "allow" },
+      ])
+      const service = yield* PermissionV2.Service
+
+      expect(yield* service.ask(assertion({ resources: ["tool_123"] }))).toMatchObject({ effect: "allow" })
+      expect(
+        yield* service.ask(assertion({ action: "external_directory", resources: ["/tmp/tool-output/*"] })),
+      ).toMatchObject({ effect: "deny" })
+    }),
+  )
+
   it.effect("uses build permissions when the Session agent is omitted", () =>
     Effect.gen(function* () {
       yield* setup()
