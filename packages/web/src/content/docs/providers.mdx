@@ -1866,11 +1866,11 @@ In this example:
 - `model` is the main chat model; `small_model` is the model opencode uses for titles, summarization, and compaction. Pointing both at the same QVAC alias is supported; if you want those utility calls to avoid waiting behind a long chat response, add a second lighter model alias and point `small_model` at it.
 
 :::note
-QVAC's LLM `ctx_size` defaults to 1024 tokens — too small for an agent's tool definitions and system prompt. Set it explicitly in `qvac.config.json`, and set `reasoning_budget: 0` for reasoning-tuned models such as Qwen3 if you want to suppress `<think>` blocks that opencode would otherwise render verbatim.
+QVAC's LLM `ctx_size` defaults to 1024 tokens — too small for an agent's tool definitions and system prompt. Set it explicitly in `qvac.config.json`, and set `reasoning_budget: 0` for reasoning-tuned models such as Qwen3.5 if you want to suppress `<think>` blocks that opencode would otherwise render verbatim.
 :::
 
 :::tip
-Local tool-calling quality is bounded by the model. Small Qwen3 Instruct models are a fast, low-footprint starting point but won't reliably **invoke tools**; for real agent workflows, use a larger agent-tuned model such as `gpt-oss-20b`.
+Local tool-calling quality is bounded by the model. Small Qwen3.5 models are a fast, low-footprint starting point but won't reliably **invoke tools**; for real agent workflows, use a larger agent-tuned model such as `gpt-oss-20b`.
 :::
 
 ---
