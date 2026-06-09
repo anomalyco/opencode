@@ -26,6 +26,7 @@ export const FindTextQuery = Schema.Struct({
 export const FindFileQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   query: Schema.String,
+  directory: Schema.optional(Schema.String),
   dirs: Schema.optional(Schema.Literals(["true", "false"])),
   type: Schema.optional(Schema.Literals(["file", "directory"])),
   limit: Schema.optional(

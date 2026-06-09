@@ -29,21 +29,29 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     })
 
     const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
-      query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
+      query: { query: string; directory?: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
     }) {
-      const directory = (yield* InstanceState.context).directory
+      const instanceDirectory = (yield* InstanceState.context).directory
+      // Use query directory if provided, otherwise use instance directory (backward compatible)
+      const searchDirectory = ctx.query.directory
+        ? path.resolve(instanceDirectory, ctx.query.directory)
+        : instanceDirectory
+      // Security: ensure searchDirectory is within instanceDirectory
+      if (!searchDirectory.startsWith(instanceDirectory)) {
+        return yield* Effect.die(new Error("Directory escapes the instance root"))
+      }
       const limit = ctx.query.limit ?? 10
       const kind = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : "all")
       const started = performance.now()
       // Prefer fff (frecency + fuzzy ranking) and trust its ordering. Fall back
       // to the ripgrep-backed FileSystem.find when fff is unavailable.
-      const fff = yield* search.file({ cwd: directory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
+      const fff = yield* search.file({ cwd: searchDirectory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
       if (fff !== undefined) {
         yield* Effect.logInfo("find file", {
           engine: "fff",
           query: ctx.query.query,
           kind,
-          directory,
+          directory: searchDirectory,
           limit,
           results: fff.length,
           duration: Math.round(performance.now() - started),
@@ -63,7 +71,7 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
         engine: "ripgrep",
         query: ctx.query.query,
         kind,
-        directory,
+        directory: searchDirectory,
         limit,
         results: fallback.length,
         duration: Math.round(performance.now() - started),
