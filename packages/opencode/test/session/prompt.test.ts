@@ -50,8 +50,6 @@ import { Truncate } from "@/tool/truncate"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Search } from "@opencode-ai/core/filesystem/search"
 import { Format } from "../../src/format"
-import { Reference } from "../../src/reference/reference"
-import { RepositoryCache } from "../../src/reference/repository-cache"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
@@ -191,9 +189,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provide(Skill.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(RepositoryCache.defaultLayer),
     Layer.provide(Git.defaultLayer),
-    Layer.provide(Reference.defaultLayer),
     Layer.provide(Search.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
@@ -219,7 +215,6 @@ function makePrompt(input?: { processor?: "blocking" }) {
   return SessionPrompt.layer.pipe(
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(Image.defaultLayer),
-    Layer.provide(Reference.defaultLayer),
     Layer.provide(summary),
     Layer.provideMerge(run),
     Layer.provideMerge(compact),
@@ -2019,92 +2014,6 @@ noLLMServer.instance(
       yield* sessions.remove(session.id)
     }),
   { config: cfg },
-)
-
-noLLMServer.instance(
-  "resolves configured reference mentions to one root directory attachment",
-  () =>
-    Effect.gen(function* () {
-      const { directory: dir } = yield* TestInstance
-      const docs = path.join(dir, "external-docs")
-      yield* ensureDir(path.join(docs, "guide"))
-      yield* ensureDir(path.join(dir, "docs"))
-      yield* writeText(path.join(docs, "README.md"), "reference readme")
-      yield* writeText(path.join(docs, "guide", "intro.md"), "reference intro")
-      yield* writeText(path.join(dir, "docs", "README.md"), "workspace readme")
-
-      const prompt = yield* SessionPrompt.Service
-      const parts = yield* prompt.resolvePromptParts(
-        "Use @docs and @docs/README.md and @docs/guide and @docs/missing.md and @docs/README.md and @build",
-      )
-      const files = parts.filter((part): part is SessionV1.FilePartInput => part.type === "file")
-      const agents = parts.filter((part): part is SessionV1.AgentPartInput => part.type === "agent")
-      const text = parts.find((part): part is SessionV1.TextPartInput => part.type === "text" && !part.synthetic)
-
-      expect(text?.text).toContain("@docs")
-      expect(files).toHaveLength(1)
-      expect(files[0]).toMatchObject({
-        filename: "docs",
-        mime: "application/x-directory",
-        source: { type: "file", path: "docs", text: { value: "@docs" } },
-      })
-      expect(fileURLToPath(files[0].url)).toBe(docs)
-      expect(agents.map((agent) => agent.name)).toEqual(["build"])
-    }),
-  {
-    config: {
-      ...cfg,
-      reference: {
-        docs: "./external-docs",
-      },
-    },
-  },
-)
-
-noLLMServer.instance(
-  "stores raw reference mentions alongside directory attachments",
-  () =>
-    Effect.gen(function* () {
-      const { directory: dir } = yield* TestInstance
-      const docs = path.join(dir, "external-docs")
-      yield* ensureDir(docs)
-
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const session = yield* sessions.create({})
-      const message = yield* prompt.prompt({
-        sessionID: session.id,
-        noReply: true,
-        parts: [{ type: "text", text: "Use @docs for context" }],
-      })
-
-      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
-      const synthetic = stored.parts.filter(
-        (part): part is SessionV1.TextPart => part.type === "text" && part.synthetic === true,
-      )
-      const files = stored.parts.filter((part): part is SessionV1.FilePart => part.type === "file")
-      const text = stored.parts.find((part): part is SessionV1.TextPart => part.type === "text" && !part.synthetic)
-
-      expect(text?.text).toBe("Use @docs for context")
-      expect(synthetic.some((part) => part.text.includes(JSON.stringify({ filePath: docs })))).toBe(true)
-      expect(files).toHaveLength(1)
-      expect(files[0]).toMatchObject({
-        filename: "docs",
-        mime: "application/x-directory",
-        source: { type: "file", path: "docs", text: { value: "@docs", start: 4, end: 9 } },
-      })
-      expect(fileURLToPath(files[0].url)).toBe(docs)
-
-      yield* sessions.remove(session.id)
-    }),
-  {
-    config: {
-      ...cfg,
-      reference: {
-        docs: "./external-docs",
-      },
-    },
-  },
 )
 
 // Special characters in filenames

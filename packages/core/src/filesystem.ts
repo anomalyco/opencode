@@ -9,7 +9,6 @@ import { EventV2 } from "./event"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { Location } from "./location"
-import { ProjectReference } from "./project-reference"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 import { Protected } from "./filesystem/protected"
 import { Ripgrep } from "./filesystem/ripgrep"
@@ -17,7 +16,6 @@ import { ToolOutputStore } from "./tool-output-store"
 
 export const ReadInput = Schema.Struct({
   path: Schema.String,
-  reference: Schema.NonEmptyString.pipe(Schema.optional),
 })
 export type ReadInput = typeof ReadInput.Type
 
@@ -134,7 +132,6 @@ export class ReadPath extends Schema.Class<ReadPath>("FileSystem.ReadPath")({
 
 export const ListInput = Schema.Struct({
   path: Schema.String.pipe(Schema.optional),
-  reference: Schema.NonEmptyString.pipe(Schema.optional),
 })
 export type ListInput = typeof ListInput.Type
 
@@ -158,7 +155,6 @@ export class RootTarget extends Schema.Class<RootTarget>("FileSystem.RootTarget"
   real: Schema.String,
   root: Schema.String,
   resource: Schema.String,
-  reference: Schema.NonEmptyString.pipe(Schema.optional),
   type: Schema.Literals(["file", "directory"]),
 }) {}
 
@@ -239,7 +235,6 @@ export const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const global = yield* Effect.serviceOption(Global.Service)
-    const references = yield* ProjectReference.Service
     const ripgrep = yield* Ripgrep.Service
     const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
     const ignored = ignore()
@@ -251,21 +246,12 @@ export const layer = Layer.effect(
       .readFileString(path.join(location.project.directory, ".ignore"))
       .pipe(Effect.catch(() => Effect.succeed("")))
     if (ignorefile) ignored.add(ignorefile)
-    const select = Effect.fnUntraced(function* (reference?: string) {
-      if (!reference) return { directory: location.directory, root }
-      const resolved = yield* references.get(reference)
-      if (!resolved) return yield* Effect.die(new Error(`Unknown project reference: ${reference}`))
-      if (resolved.kind === "invalid") return yield* Effect.die(new Error(resolved.message))
-      if (resolved.kind === "git") yield* references.ensurePath(resolved.path).pipe(Effect.orDie)
-      return { directory: resolved.path, root: yield* fs.realPath(resolved.path).pipe(Effect.orDie) }
-    })
-    const resolve = Effect.fnUntraced(function* (input?: string, reference?: string) {
+    const resolve = Effect.fnUntraced(function* (input?: string) {
       const managed = path.join(
         Option.match(global, { onNone: () => Global.Path.data, onSome: (value) => value.data }),
         ToolOutputStore.MANAGED_DIRECTORY,
       )
       if (input && path.isAbsolute(input)) {
-        if (reference) return yield* Effect.die(new Error("Absolute paths cannot use a project reference"))
         if (path.dirname(input) !== managed || !path.basename(input).startsWith("tool_"))
           return yield* Effect.die(new Error("Absolute path is not managed tool output"))
         const real = yield* fs.realPath(input).pipe(Effect.orDie)
@@ -274,9 +260,9 @@ export const layer = Layer.effect(
           return yield* Effect.die(new Error("Path escapes managed tool output"))
         return { absolute: input, real, directory: managed, root: managedRoot }
       }
-      const selected = yield* select(reference)
-      const absolute = path.resolve(selected.directory, input ?? ".")
-      if (!FSUtil.contains(selected.directory, absolute))
+      const selected = { directory: location.directory, root }
+      const absolute = path.resolve(location.directory, input ?? ".")
+      if (!FSUtil.contains(location.directory, absolute))
         return yield* Effect.die(new Error("Path escapes the location"))
       const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
       if (!FSUtil.contains(selected.root, real)) return yield* Effect.die(new Error("Path escapes the location"))
@@ -335,24 +321,24 @@ export const layer = Layer.effect(
     })
 
     const resolveReadPath = Effect.fn("FileSystem.resolveReadPath")(function* (input: ReadInput) {
-      const target = yield* resolve(input.path, input.reference)
+      const target = yield* resolve(input.path)
       const info = yield* fs.stat(target.real).pipe(Effect.orDie)
       const type = info.type === "File" ? "file" : info.type === "Directory" ? "directory" : undefined
       if (!type) return yield* Effect.die(new Error("Path is not a file or directory"))
       const relative = path.relative(target.root, target.real).replaceAll("\\", "/") || "."
       return new ReadPath({
         type,
-        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
+        resource: relative,
       })
     })
     const resolveFile = Effect.fnUntraced(function* (input: ReadInput) {
-      const target = yield* resolve(input.path, input.reference)
+      const target = yield* resolve(input.path)
       const info = yield* fs.stat(target.real).pipe(Effect.orDie)
       if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
       const relative = path.relative(target.root, target.real).replaceAll("\\", "/") || "."
       return {
         real: target.real,
-        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
+        resource: relative,
       }
     })
     const content = (target: { readonly real: string }, bytes: Uint8Array) =>
@@ -510,25 +496,24 @@ export const layer = Layer.effect(
       )
     })
     const resolveList = Effect.fn("FileSystem.resolveList")(function* (input: ListInput = {}) {
-      const directory = yield* resolve(input.path, input.reference)
+      const directory = yield* resolve(input.path)
       const info = yield* fs.stat(directory.real).pipe(Effect.orDie)
       if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
       const relative = path.relative(directory.root, directory.real).replaceAll("\\", "/") || "."
       return new ListTarget({
         ...directory,
-        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
+        resource: relative,
       })
     })
     const resolveRoot = Effect.fn("FileSystem.resolveRoot")(function* (input: ListInput = {}) {
-      const target = yield* resolve(input.path, input.reference)
+      const target = yield* resolve(input.path)
       const info = yield* fs.stat(target.real).pipe(Effect.orDie)
       const type = info.type === "File" ? "file" : info.type === "Directory" ? "directory" : undefined
       if (!type) return yield* Effect.die(new Error("Path is not a file or directory"))
       const relative = path.relative(target.root, target.real).replaceAll("\\", "/") || "."
       return new RootTarget({
         ...target,
-        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
-        reference: input.reference,
+        resource: relative,
         type,
       })
     })
@@ -644,5 +629,4 @@ export const layer = Layer.effect(
 
 export const locationLayer = layer.pipe(
   Layer.provide(Ripgrep.defaultLayer),
-  Layer.provideMerge(ProjectReference.locationLayer),
 )

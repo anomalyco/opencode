@@ -7,25 +7,14 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
-import { ProjectReference } from "@opencode-ai/core/project-reference"
-import { Repository } from "@opencode-ai/core/repository"
 import { Global } from "@opencode-ai/core/global"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-const inertReferences = ProjectReference.Service.of({
-  list: () => Effect.succeed([]),
-  get: () => Effect.succeed(undefined),
-  resolveMention: () => Effect.succeed(undefined),
-  ensurePath: () => Effect.void,
-  containsManagedPath: () => Effect.succeed(false),
-})
-
 function provide(
   directory: string,
-  references = inertReferences,
   filesystem = FSUtil.defaultLayer,
   data = Global.Path.data,
 ) {
@@ -36,7 +25,6 @@ function provide(
           filesystem,
           Ripgrep.defaultLayer,
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-          Layer.succeed(ProjectReference.Service, references),
           Global.layerWith({ data }),
         ),
       ),
@@ -69,7 +57,7 @@ describe("FileSystem", () => {
         expect((yield* service.resolveRoot({ path: output })).real).toBe(output)
         expect(yield* Effect.exit(service.read({ path: unrelated }))).toMatchObject({ _tag: "Failure" })
         expect(yield* Effect.exit(service.read({ path: managed }))).toMatchObject({ _tag: "Failure" })
-      }).pipe(provide(worktree, inertReferences, FSUtil.defaultLayer, data))
+      }).pipe(provide(worktree, FSUtil.defaultLayer, data))
     }),
   )
 
@@ -258,7 +246,7 @@ describe("FileSystem", () => {
         }
         yield* Effect.promise(() => fs.rename(text, text + ".moved"))
         yield* Effect.promise(() => fs.rename(binary, binary + ".moved"))
-      }).pipe(provide(directory, inertReferences, filesystem))
+      }).pipe(provide(directory, filesystem))
     }),
   )
 
@@ -344,7 +332,7 @@ describe("FileSystem", () => {
           next: 3,
         })
         expect(realPaths.filter((target) => target !== directory)).toEqual([path.join(directory, "alpha.txt")])
-      }).pipe(provide(directory, inertReferences, filesystem))
+      }).pipe(provide(directory, filesystem))
     }),
   )
 
@@ -380,7 +368,7 @@ describe("FileSystem", () => {
 
         expect((yield* service.listPage({ limit: 32 })).entries).toHaveLength(32)
         expect(maximum).toBe(16)
-      }).pipe(provide(directory, inertReferences, filesystem))
+      }).pipe(provide(directory, filesystem))
     }),
   )
 
@@ -402,9 +390,8 @@ describe("FileSystem", () => {
     ),
   )
 
-  test("rejects empty list aliases and page limits over 2000", () => {
+  test("rejects page limits over 2000", () => {
     const decode = Schema.decodeUnknownSync(FileSystem.ListPageInput)
-    expect(() => decode({ reference: "" })).toThrow()
     expect(() => decode({ limit: 2_001 })).toThrow()
   })
 
@@ -461,125 +448,4 @@ describe("FileSystem", () => {
     ),
   )
 
-  it.live("reads and lists paths relative to a local project reference", () =>
-    withTmp((directory) => {
-      const docs = path.join(directory, "docs")
-      return Effect.gen(function* () {
-        yield* Effect.promise(async () => {
-          await fs.mkdir(docs)
-          await fs.writeFile(path.join(docs, "README.md"), "docs")
-        })
-        const service = yield* FileSystem.Service
-
-        expect(yield* service.read({ reference: "docs", path: RelativePath.make("README.md") })).toMatchObject({
-          type: "text",
-          content: "docs",
-        })
-        expect(yield* service.list({ reference: "docs" })).toMatchObject([{ path: "README.md", type: "file" }])
-      }).pipe(provide(directory, references({ docs: { name: "docs", kind: "local", path: docs } })))
-    }),
-  )
-
-  it.live("materializes Git references before filesystem access", () =>
-    withTmp((directory) => {
-      const docs = path.join(directory, "docs")
-      const ensured: string[] = []
-      return Effect.gen(function* () {
-        yield* Effect.promise(async () => {
-          await fs.mkdir(docs)
-          await fs.writeFile(path.join(docs, "README.md"), "docs")
-        })
-        expect(
-          yield* (yield* FileSystem.Service).read({ reference: "sdk", path: RelativePath.make("README.md") }),
-        ).toMatchObject({ content: "docs" })
-        expect(ensured).toEqual([docs])
-      }).pipe(
-        provide(
-          directory,
-          references(
-            {
-              sdk: {
-                name: "sdk",
-                kind: "git",
-                repository: "owner/repo",
-                reference: Repository.parseRemote("owner/repo"),
-                path: docs,
-              },
-            },
-            (target) => Effect.sync(() => ensured.push(target ?? "")),
-          ),
-        ),
-      )
-    }),
-  )
-
-  it.live("rejects unknown, invalid, and escaping project reference paths", () =>
-    withTmp((directory) => {
-      const docs = path.join(directory, "docs")
-      return Effect.gen(function* () {
-        yield* Effect.promise(() => fs.mkdir(docs))
-        const service = yield* FileSystem.Service
-        expect(Exit.isFailure(yield* service.list({ reference: "unknown" }).pipe(Effect.exit))).toBe(true)
-        expect(Exit.isFailure(yield* service.list({ reference: "invalid" }).pipe(Effect.exit))).toBe(true)
-        expect(
-          Exit.isFailure(
-            yield* service.read({ reference: "docs", path: RelativePath.make("../outside") }).pipe(Effect.exit),
-          ),
-        ).toBe(true)
-      }).pipe(
-        provide(
-          directory,
-          references({
-            docs: { name: "docs", kind: "local", path: docs },
-            invalid: { name: "invalid", kind: "invalid", message: "invalid reference" },
-          }),
-        ),
-      )
-    }),
-  )
-
-  it.live("rejects aliases when project references are disabled", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        expect(Exit.isFailure(yield* (yield* FileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit))).toBe(
-          true,
-        )
-      }).pipe(provide(directory)),
-    ),
-  )
-
-  it.live("rejects symlink escapes from project references", () =>
-    withTmp((directory) => {
-      const docs = path.join(directory, "docs")
-      const outside = path.join(directory, "outside.txt")
-      return Effect.gen(function* () {
-        if (process.platform === "win32") return
-        yield* Effect.promise(async () => {
-          await fs.mkdir(docs)
-          await fs.writeFile(outside, "outside")
-          await fs.symlink(outside, path.join(docs, "link.txt"))
-        })
-        expect(
-          Exit.isFailure(
-            yield* (yield* FileSystem.Service)
-              .read({ reference: "docs", path: RelativePath.make("link.txt") })
-              .pipe(Effect.exit),
-          ),
-        ).toBe(true)
-      }).pipe(provide(directory, references({ docs: { name: "docs", kind: "local", path: docs } })))
-    }),
-  )
 })
-
-function references(
-  entries: Record<string, ProjectReference.Resolved>,
-  ensurePath: ProjectReference.Interface["ensurePath"] = () => Effect.void,
-) {
-  return ProjectReference.Service.of({
-    list: () => Effect.succeed(Object.values(entries)),
-    get: (name) => Effect.succeed(entries[name]),
-    resolveMention: () => Effect.succeed(undefined),
-    ensurePath,
-    containsManagedPath: () => Effect.succeed(false),
-  })
-}

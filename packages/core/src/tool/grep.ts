@@ -18,9 +18,6 @@ export const Input = Schema.Struct({
   path: LocationSearch.GrepInput.fields.path.annotate({
     description: "Relative file or directory to search. Defaults to the active Location.",
   }),
-  reference: LocationSearch.GrepInput.fields.reference.annotate({
-    description: "Named project reference to search instead of the active Location",
-  }),
   include: LocationSearch.GrepInput.fields.include.annotate({
     description: 'File glob to include in the search (for example, "*.js" or "*.{ts,tsx}")',
   }),
@@ -56,8 +53,6 @@ export const toModelOutput = (output: Output) => {
 /**
  * Location-scoped grep leaf. FileSystem supplies canonical permission metadata;
  * LocationSearch resolves the current root and owns containment and ripgrep execution.
- *
- * TODO: Revisit root-specific search permission resources if named-reference policy needs independent allow/deny rules.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -70,7 +65,7 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description:
-            "Search file contents by regular expression within the active Location, a named project reference, or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
+            "Search file contents by regular expression within the active Location or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
           input: Input,
           output: LocationSearch.GrepResult,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
@@ -83,7 +78,6 @@ export const layer = Layer.effectDiscard(
                 save: ["*"],
                 metadata: {
                   root: root.resource,
-                  reference: input.reference,
                   path: input.path,
                   include: input.include,
                   limit: input.limit,

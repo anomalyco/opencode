@@ -12,21 +12,12 @@ import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Reference } from "@/reference/reference"
-import { RepositoryCache } from "@/reference/repository-cache"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
 import { Filesystem } from "@/util/filesystem"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
-
-const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  Reference.layer.pipe(
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(RepositoryCache.defaultLayer),
-    Layer.provide(RuntimeFlags.layer(flags)),
-  )
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
@@ -36,11 +27,9 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Truncate.defaultLayer,
     Agent.defaultLayer,
     Git.defaultLayer,
-    referenceLayer(flags),
   )
 
 const it = testEffect(toolLayer())
-const references = testEffect(toolLayer({ experimentalReferences: true }))
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 
 const ctx = {
@@ -145,44 +134,4 @@ describe("tool.glob", () => {
     }),
   )
 
-  references.instance(
-    "does not ask for external_directory permission inside configured git references",
-    () =>
-      Effect.gen(function* () {
-        yield* TestInstance
-        const fs = yield* FSUtil.Service
-        const cache = path.join(Global.Path.repos, "github.com", "opencode-glob-reference", "repo")
-        yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
-        yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
-
-        const source = yield* tmpdirScoped({ git: true })
-        const remoteRoot = yield* tmpdirScoped()
-        const remoteDir = path.join(remoteRoot, "opencode-glob-reference")
-        const remoteRepo = path.join(remoteDir, "repo.git")
-        yield* fs.writeWithDirs(path.join(source, "src", "index.ts"), "export const value = 1\n")
-        yield* git(source, ["add", "."])
-        yield* git(source, ["commit", "-m", "add source"])
-        yield* fs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
-        yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
-
-        const { items, next } = asks()
-        const info = yield* GlobTool
-        const glob = yield* info.init()
-        const result = yield* githubBase(
-          `file://${remoteRoot}/`,
-          glob.execute({ pattern: "*.ts", path: path.join(cache, "src") }, next),
-        )
-
-        expect(result.metadata.count).toBe(1)
-        expect(full(result.output)).toContain(full(path.join(cache, "src", "index.ts")))
-        expect(items.find((item) => item.permission === "external_directory")).toBeUndefined()
-      }),
-    {
-      config: {
-        reference: {
-          docs: "opencode-glob-reference/repo",
-        },
-      },
-    },
-  )
 })

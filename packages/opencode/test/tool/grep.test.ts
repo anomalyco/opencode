@@ -14,21 +14,12 @@ import { Agent } from "../../src/agent/agent"
 import { Search } from "@opencode-ai/core/filesystem/search"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
-import { Reference } from "@/reference/reference"
-import { RepositoryCache } from "@/reference/repository-cache"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
 import { Filesystem } from "@/util/filesystem"
-
-const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  Reference.layer.pipe(
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(RepositoryCache.defaultLayer),
-    Layer.provide(RuntimeFlags.layer(flags)),
-  )
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
@@ -38,11 +29,9 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Truncate.defaultLayer,
     Agent.defaultLayer,
     Git.defaultLayer,
-    referenceLayer(flags),
   )
 
 const it = testEffect(toolLayer())
-const references = testEffect(toolLayer({ experimentalReferences: true }))
 const rooted = testEffect(Layer.mergeAll(toolLayer(), testInstanceStoreLayer))
 
 const ctx = {
@@ -215,52 +204,4 @@ describe("tool.grep", () => {
     }),
   )
 
-  references.instance(
-    "does not ask for external_directory permission inside configured git references",
-    () =>
-      Effect.gen(function* () {
-        yield* TestInstance
-        const appfs = yield* FSUtil.Service
-        const cache = path.join(Global.Path.repos, "github.com", "opencode-grep-reference", "repo")
-        yield* appfs.remove(cache, { recursive: true }).pipe(Effect.ignore)
-        yield* Effect.addFinalizer(() => appfs.remove(cache, { recursive: true }).pipe(Effect.ignore))
-
-        const source = yield* tmpdirScoped({ git: true })
-        const remoteRoot = yield* tmpdirScoped()
-        const remoteDir = path.join(remoteRoot, "opencode-grep-reference")
-        const remoteRepo = path.join(remoteDir, "repo.git")
-        yield* appfs.writeWithDirs(path.join(source, "src", "notes.md"), "needle\n")
-        yield* git(source, ["add", "."])
-        yield* git(source, ["commit", "-m", "add notes"])
-        yield* appfs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
-        yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
-
-        const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-        const next: Tool.Context = {
-          ...ctx,
-          ask: (req) =>
-            Effect.sync(() => {
-              requests.push(req)
-            }),
-        }
-
-        const info = yield* GrepTool
-        const grep = yield* info.init()
-        const result = yield* githubBase(
-          `file://${remoteRoot}/`,
-          grep.execute({ pattern: "needle", path: path.join(cache, "src"), include: "*.md" }, next),
-        )
-
-        expect(result.metadata.matches).toBe(1)
-        expect(full(result.output)).toContain(full(path.join(cache, "src", "notes.md")))
-        expect(requests.find((req) => req.permission === "external_directory")).toBeUndefined()
-      }),
-    {
-      config: {
-        reference: {
-          docs: "opencode-grep-reference/repo",
-        },
-      },
-    },
-  )
 })
