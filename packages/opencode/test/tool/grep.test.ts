@@ -135,6 +135,25 @@ describe("tool.grep", () => {
     }),
   )
 
+  it.instance("does not report an unknown total when results are truncated", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() =>
+        Promise.all(
+          Array.from({ length: 101 }, (_, index) =>
+            Bun.write(path.join(test.directory, `match-${index}.txt`), "needle"),
+          ),
+        ),
+      )
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const result = yield* grep.execute({ pattern: "needle", path: test.directory, include: "*.txt" }, ctx)
+
+      expect(result.output).toContain("(Results truncated. Consider using a more specific path or pattern.)")
+      expect(result.output).not.toMatch(/showing \d+ of \d+ matches/)
+    }),
+  )
+
   it.instance("supports exact file paths", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

@@ -129,4 +129,4 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-export const layer = Layer.unwrap(Effect.sync(() => (process.versions.bun ? fffLayer : ripgrepLayer)))
+export const layer = Layer.unwrap(Effect.sync(() => (Fff.available() ? fffLayer : ripgrepLayer)))

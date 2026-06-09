@@ -144,9 +144,8 @@ export const layer = Layer.effect(
             "--no-config",
             "--files",
             "--glob=!.git/*", // TODO: Review .git exclusion policy before leaf tool exposure.
+            "--hidden",
             `--glob=${input.pattern}`,
-            "--glob=!.*",
-            "--glob=!**/.*",
             ".",
           ],
           parse: (line) => Effect.succeed(line.replace(/^\.\//, "")),
@@ -157,11 +156,10 @@ export const layer = Layer.effect(
           args: [
             "--no-config",
             "--json",
+            "--hidden",
             "--glob=!.git/*", // TODO: Review .git exclusion policy before leaf tool exposure.
             "--no-messages",
             ...(input.include ? [`--glob=${input.include}`] : []),
-            "--glob=!.*",
-            "--glob=!**/.*",
             "--",
             input.pattern,
             input.file ?? ".",
@@ -180,6 +178,7 @@ export const layer = Layer.effect(
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
                   Effect.map((match) => ({
                     ...match.data,
+                    path: { text: match.data.path.text.replace(/^\.\//, "") },
                     submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
                   })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),

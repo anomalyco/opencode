@@ -97,9 +97,7 @@ export const GrepTool = Tool.define(
 
           if (truncated) {
             output.push("")
-            output.push(
-              `(Results truncated: showing ${limit} of ${total} matches (${total - limit} hidden). Consider using a more specific path or pattern.)`,
-            )
+            output.push("(Results truncated. Consider using a more specific path or pattern.)")
           }
 
           return {

@@ -53,6 +53,8 @@ export class Match extends Schema.Class<Match>("Search.Match")({
 }) {}
 
 export class Error extends Schema.TaggedErrorClass<Error>()("Search.Error", {
+  /** Human-readable backend failure. */
+  message: Schema.String,
   /** Underlying search backend failure. */
   cause: Schema.Defect,
 }) {}
@@ -82,7 +84,10 @@ export const ripgrepLayer = Layer.effect(
               })
             }),
           ),
-          Effect.mapError((cause) => new Error({ cause })),
+          Effect.mapError(
+            (cause) =>
+              new Error({ cause, message: cause instanceof globalThis.Error ? cause.message : String(cause) }),
+          ),
         ),
       grep: (input) =>
         ripgrep
@@ -114,7 +119,10 @@ export const ripgrepLayer = Layer.effect(
                   }),
               ),
             ),
-            Effect.mapError((cause) => new Error({ cause })),
+            Effect.mapError(
+              (cause) =>
+                new Error({ cause, message: cause instanceof globalThis.Error ? cause.message : String(cause) }),
+            ),
           ),
     })
   }),
@@ -136,16 +144,21 @@ export const fffLayer = Layer.effect(
       if (existing) return existing
       const result = yield* Effect.try({
         try: () => Fff.create({ basePath: root, aiMode: true }),
-        catch: (cause) => new Error({ cause }),
+        catch: (cause) =>
+          new Error({ cause, message: cause instanceof globalThis.Error ? cause.message : String(cause) }),
       })
-      if (!result.ok) return yield* new Error({ cause: result.error })
+      if (!result.ok) return yield* new Error({ cause: result.error, message: result.error })
       const scanned = yield* Effect.tryPromise({
         try: () => result.value.waitForScan(5_000),
-        catch: (cause) => new Error({ cause }),
+        catch: (cause) =>
+          new Error({ cause, message: cause instanceof globalThis.Error ? cause.message : String(cause) }),
       })
       if (!scanned.ok || !scanned.value) {
         result.value.destroy()
-        return yield* new Error({ cause: scanned.ok ? "fff scan timed out" : scanned.error })
+        return yield* new Error({
+          cause: scanned.ok ? "fff scan timed out" : scanned.error,
+          message: scanned.ok ? "fff scan timed out" : scanned.error,
+        })
       }
       pickers.set(root, result.value)
       return result.value
@@ -157,10 +170,13 @@ export const fffLayer = Layer.effect(
           Effect.flatMap((picker) => {
             return Effect.try({
               try: () => picker.glob(input.pattern.replaceAll("\\", "/"), { pageIndex: 0, pageSize: input.limit }),
-              catch: (cause) => new Error({ cause }),
+              catch: (cause) =>
+                new Error({ cause, message: cause instanceof globalThis.Error ? cause.message : String(cause) }),
             }).pipe(
               Effect.flatMap((result) =>
-                result.ok ? Effect.succeed(result.value.items) : Effect.fail(new Error({ cause: result.error })),
+                result.ok
+                  ? Effect.succeed(result.value.items)
+                  : Effect.fail(new Error({ cause: result.error, message: result.error })),
               ),
             )
           }),
@@ -186,12 +202,15 @@ export const fffLayer = Layer.effect(
                   pageSize: input.limit,
                   timeBudgetMs: 1_500,
                 }),
-              catch: (cause) => new Error({ cause }),
+              catch: (cause) =>
+                new Error({ cause, message: cause instanceof globalThis.Error ? cause.message : String(cause) }),
             }).pipe(
               Effect.flatMap((result) => {
-                if (!result.ok) return Effect.fail(new Error({ cause: result.error }))
+                if (!result.ok) return Effect.fail(new Error({ cause: result.error, message: result.error }))
                 if (result.value.regexFallbackError)
-                  return Effect.fail(new Error({ cause: result.value.regexFallbackError }))
+                  return Effect.fail(
+                    new Error({ cause: result.value.regexFallbackError, message: result.value.regexFallbackError }),
+                  )
                 return Effect.succeed(result.value.items)
               }),
             )
