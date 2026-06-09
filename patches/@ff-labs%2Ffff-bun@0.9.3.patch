@@ -2,15 +2,16 @@ diff --git a/src/download.ts b/src/download.ts
 index 3454256..6dca25a 100644
 --- a/src/download.ts
 +++ b/src/download.ts
-@@ -7,7 +7,6 @@
+@@ -7,7 +7,7 @@
   */
  
++declare const FFF_LIBC: "gnu" | "musl";
  import { existsSync } from "node:fs";
 -import { createRequire } from "node:module";
  import { dirname, join } from "node:path";
  import { fileURLToPath } from "node:url";
  import { getLibFilename, getNpmPackageName } from "./platform";
-@@ -54,14 +53,14 @@ export function binaryExists(): boolean {
+@@ -54,14 +54,10 @@ export function binaryExists(): boolean {
   * in the same directory.
   */
  function resolveFromNpmPackage(): string | null {
@@ -22,13 +23,9 @@ index 3454256..6dca25a 100644
 -    const packageJsonPath = require.resolve(`${packageName}/package.json`);
 -    const packageDir = dirname(packageJsonPath);
 -    const binaryPath = join(packageDir, getLibFilename());
-+    const binaryPath = process.platform === "win32"
-+      ? require(`../../../../../@ff-labs+fff-bin-win32-${process.arch}@0.9.3/node_modules/@ff-labs/fff-bin-win32-${process.arch}/fff_c.dll`)
-+      : process.platform === "darwin"
-+        ? require(`../../../../../@ff-labs+fff-bin-darwin-${process.arch}@0.9.3/node_modules/@ff-labs/fff-bin-darwin-${process.arch}/libfff_c.dylib`)
-+        : getNpmPackageName().endsWith("musl")
-+          ? require(`../../../../../@ff-labs+fff-bin-linux-${process.arch}-musl@0.9.3/node_modules/@ff-labs/fff-bin-linux-${process.arch}-musl/libfff_c.so`)
-+          : require(`../../../../../@ff-labs+fff-bin-linux-${process.arch}-gnu@0.9.3/node_modules/@ff-labs/fff-bin-linux-${process.arch}-gnu/libfff_c.so`);
++    const binaryPath = require(
++      `@ff-labs/fff-bin-${process.platform === "linux" ? `linux-${process.arch}-${typeof FFF_LIBC === "string" ? FFF_LIBC : getNpmPackageName().endsWith("musl") ? "musl" : "gnu"}` : `${process.platform}-${process.arch}`}/${process.platform === "win32" ? "fff_c.dll" : process.platform === "darwin" ? "libfff_c.dylib" : "libfff_c.so"}`,
++    );
  
      if (existsSync(binaryPath)) {
        return binaryPath;
