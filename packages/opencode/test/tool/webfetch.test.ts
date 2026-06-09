@@ -3,10 +3,11 @@ import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
-import { WebFetchTool } from "../../src/tool/webfetch"
+import { selectWebFetchProvider, WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect } from "../lib/effect"
+import { failureMessage, withEnv, withIflowServer } from "./iflow-test-util"
 
 const it = testEffect(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer))
 
@@ -38,6 +39,71 @@ const exec = Effect.fn("WebFetchToolTest.exec")(function* (args: Tool.InferParam
 })
 
 describe("tool.webfetch", () => {
+  it.instance("selects default provider unless iFlow is explicitly configured", () =>
+    Effect.sync(() => {
+      const original = process.env.OPENCODE_WEBFETCH_PROVIDER
+      delete process.env.OPENCODE_WEBFETCH_PROVIDER
+      try {
+        expect(selectWebFetchProvider()).toBe("default")
+        process.env.OPENCODE_WEBFETCH_PROVIDER = "iflow"
+        expect(selectWebFetchProvider()).toBe("iflow")
+      } finally {
+        if (original === undefined) delete process.env.OPENCODE_WEBFETCH_PROVIDER
+        else process.env.OPENCODE_WEBFETCH_PROVIDER = original
+      }
+    }),
+  )
+
+  it.instance("requires IFLOW_API_KEY when iFlow provider is explicitly configured", () =>
+    withEnv(
+      { OPENCODE_WEBFETCH_PROVIDER: "iflow", IFLOW_API_KEY: undefined, IFLOW_BASE_URL: "https://example.com" },
+      Effect.gen(function* () {
+        const message = yield* failureMessage(exec({ url: "https://example.com/docs", format: "markdown" }))
+        expect(message).toContain("IFLOW_API_KEY is required when OPENCODE_WEBFETCH_PROVIDER=iflow.")
+      }),
+    ),
+  )
+
+  it.instance("calls iFlow webFetch when iFlow provider is explicitly configured", () =>
+    Effect.gen(function* () {
+      let called = false
+
+      const result = yield* withIflowServer(
+        async (request) => {
+          called = true
+          expect(new URL(request.url).pathname).toBe("/api/search/webFetch")
+          const body = (await request.json()) as Record<string, unknown>
+          expect(body.url).toBe("https://example.com/docs")
+          return new Response(
+            JSON.stringify({
+              success: true,
+              data: {
+                title: "Fetched Page",
+                url: "https://example.com/docs",
+                content: "Fetched through iFlow",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          )
+        },
+        (url) =>
+          withEnv(
+            {
+              OPENCODE_WEBFETCH_PROVIDER: "iflow",
+              IFLOW_API_KEY: "mock-credential",
+              IFLOW_BASE_URL: url.toString(),
+            },
+            exec({ url: "https://example.com/docs", format: "markdown" }),
+          ),
+      )
+
+      expect(called).toBe(true)
+      expect(result.metadata.provider).toBe("iflow")
+      expect(result.output).toContain("Title: Fetched Page")
+      expect(result.output).toContain("Content:\nFetched through iFlow")
+    }),
+  )
+
   it.instance("returns image responses as file attachments", () =>
     Effect.gen(function* () {
       const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])

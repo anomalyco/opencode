@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import * as Tool from "./tool"
+import * as IflowFetch from "./iflow-fetch"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
@@ -9,6 +10,15 @@ import { isImageAttachment } from "@/util/media"
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
+
+export type WebFetchProvider = "default" | "iflow"
+type WebFetchMetadata = { provider?: "iflow" }
+
+export function selectWebFetchProvider(): WebFetchProvider {
+  return process.env.OPENCODE_WEBFETCH_PROVIDER === "iflow" ? "iflow" : "default"
+}
+
+const emptyMetadata = (): WebFetchMetadata => ({})
 
 export const Parameters = Schema.Struct({
   url: Schema.String.annotate({ description: "The URL to fetch content from" }),
@@ -36,6 +46,8 @@ export const WebFetchTool = Tool.define(
             throw new Error("URL must start with http:// or https://")
           }
 
+          const provider = selectWebFetchProvider()
+
           yield* ctx.ask({
             permission: "webfetch",
             patterns: [params.url],
@@ -44,8 +56,18 @@ export const WebFetchTool = Tool.define(
               url: params.url,
               format: params.format,
               timeout: params.timeout,
+              ...(provider === "iflow" ? { provider } : {}),
             },
           })
+
+          if (provider === "iflow") {
+            const output = yield* IflowFetch.fetch(http, { url: params.url })
+            return {
+              output,
+              title: `iFlow Web Fetch: ${params.url}`,
+              metadata: { provider },
+            }
+          }
 
           const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
 
@@ -112,7 +134,7 @@ export const WebFetchTool = Tool.define(
             return {
               title,
               output: "Image fetched successfully",
-              metadata: {},
+              metadata: emptyMetadata(),
               attachments: [
                 {
                   type: "file" as const,
@@ -133,22 +155,22 @@ export const WebFetchTool = Tool.define(
                 return {
                   output: markdown,
                   title,
-                  metadata: {},
+                  metadata: emptyMetadata(),
                 }
               }
-              return { output: content, title, metadata: {} }
+              return { output: content, title, metadata: emptyMetadata() }
 
             case "text":
               if (contentType.includes("text/html")) {
-                return { output: extractTextFromHTML(content), title, metadata: {} }
+                return { output: extractTextFromHTML(content), title, metadata: emptyMetadata() }
               }
-              return { output: content, title, metadata: {} }
+              return { output: content, title, metadata: emptyMetadata() }
 
             case "html":
-              return { output: content, title, metadata: {} }
+              return { output: content, title, metadata: emptyMetadata() }
 
             default:
-              return { output: content, title, metadata: {} }
+              return { output: content, title, metadata: emptyMetadata() }
           }
         }).pipe(Effect.orDie),
     }

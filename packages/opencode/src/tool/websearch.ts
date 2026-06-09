@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import * as Tool from "./tool"
 import * as McpWebSearch from "./mcp-websearch"
+import * as IflowSearch from "./iflow-search"
 import DESCRIPTION from "./websearch.txt"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -24,12 +25,12 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-const WebSearchProviderSchema = Schema.Literals(["exa", "parallel"])
+const WebSearchProviderSchema = Schema.Literals(["exa", "parallel", "iflow"])
 export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchema>
 
 export function selectWebSearchProvider(sessionID: string, flags = { exa: false, parallel: false }): WebSearchProvider {
   const override = process.env.OPENCODE_WEBSEARCH_PROVIDER
-  if (override === "exa" || override === "parallel") return override
+  if (override === "exa" || override === "parallel" || override === "iflow") return override
   if (flags.parallel) return "parallel"
   if (flags.exa) return "exa"
 
@@ -37,6 +38,7 @@ export function selectWebSearchProvider(sessionID: string, flags = { exa: false,
 }
 
 export function webSearchProviderLabel(provider: unknown) {
+  if (provider === "iflow") return "iFlow Search"
   if (provider === "parallel") return "Parallel Web Search"
   if (provider === "exa") return "Exa Web Search"
   return "Web Search"
@@ -63,6 +65,13 @@ function callProvider(
   params: Schema.Schema.Type<typeof Parameters>,
   ctx: Tool.Context,
 ) {
+  if (provider === "iflow") {
+    return IflowSearch.search(http, {
+      query: params.query,
+      count: params.numResults,
+    })
+  }
+
   if (provider === "parallel") {
     return McpWebSearch.call(
       http,

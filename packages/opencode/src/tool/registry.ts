@@ -52,8 +52,17 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
-export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
-  return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
+export function webSearchEnabled(
+  providerID: ProviderV2.ID,
+  flags: { exa?: boolean; parallel?: boolean; iflow?: boolean } = {},
+) {
+  return (
+    providerID === ProviderV2.ID.opencode ||
+    flags.exa ||
+    flags.parallel ||
+    flags.iflow ||
+    process.env.OPENCODE_WEBSEARCH_PROVIDER === "iflow"
+  )
 }
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
@@ -290,7 +299,11 @@ export const layer: Layer.Layer<
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
-          return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
+          return webSearchEnabled(input.providerID, {
+            exa: flags.enableExa,
+            parallel: flags.enableParallel,
+            iflow: flags.enableIflow,
+          })
         }
 
         const usePatch =
