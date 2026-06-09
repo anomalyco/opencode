@@ -32,6 +32,7 @@ type SpawnLocalServerOptions = {
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
+  onUnexpectedExit?: (code: number) => void
 }
 
 export function getDefaultServerUrl(): string | null {
@@ -84,7 +85,14 @@ export async function spawnLocalServer(
     stdio: "pipe",
   })
   let exited = false
+  let expectedExit = false
+  let ready = false
   const exit = defer<number>()
+
+  const onRuntimeMessage = (message: SidecarMessage) => {
+    if (message.type !== "error") return
+    options.onStderr?.(`sidecar error: ${formatSidecarError(message.error)}`)
+  }
 
   const onProcessGone = (_event: unknown, details: Details) => {
     if (details.type !== "Utility" || details.name !== SIDECAR_SERVICE_NAME) return
@@ -92,10 +100,13 @@ export async function spawnLocalServer(
   }
 
   app.on("child-process-gone", onProcessGone)
+  child.on("message", onRuntimeMessage)
   child.once("exit", (code) => {
     exited = true
     app.off("child-process-gone", onProcessGone)
+    child.off("message", onRuntimeMessage)
     options.onExit?.(code)
+    if (ready && !expectedExit) options.onUnexpectedExit?.(code)
     exit.resolve(code)
   })
   child.on("error", (error) => options.onStderr?.(`utility process error: ${serializeError(error).message}`))
@@ -130,6 +141,7 @@ export async function spawnLocalServer(
       if (message.type === "ready") {
         if (done) return
         done = true
+        ready = true
         cleanup()
         resolve()
         return
@@ -191,6 +203,7 @@ export async function spawnLocalServer(
       stop: () => {
         if (stopping) return stopping
         if (exited) return Promise.resolve()
+        expectedExit = true
         child.postMessage({ type: "stop" })
         stopping = Promise.race([
           exit.promise.then(() => undefined),
@@ -238,6 +251,10 @@ function delay(ms: number) {
 function serializeError(error: unknown) {
   if (error instanceof Error) return { message: error.message, stack: error.stack }
   return { message: String(error) }
+}
+
+function formatSidecarError(error: { message: string; stack?: string }) {
+  return error.stack ?? error.message
 }
 
 function defer<T>() {

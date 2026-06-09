@@ -56,6 +56,8 @@ const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 let logger: ReturnType<typeof initLogging>
 let mainWindow: BrowserWindow | null = null
 let server: SidecarListener | null = null
+let isQuitting = false
+let sidecarGeneration = 0
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
@@ -64,11 +66,17 @@ const pendingDeepLinks: string[] = []
 
 function useEnvProxy() {
   try {
-    // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
-    ;(http as any).setGlobalProxyFromEnv()
+    callSetGlobalProxyFromEnv(http)
   } catch (error) {
     logger.warn("failed to load proxy environment", error)
   }
+}
+
+function callSetGlobalProxyFromEnv(nodeHttp: object) {
+  // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
+  const setGlobalProxyFromEnv: unknown = Reflect.get(nodeHttp, "setGlobalProxyFromEnv")
+  if (typeof setGlobalProxyFromEnv !== "function") return
+  setGlobalProxyFromEnv.call(nodeHttp)
 }
 
 function emitDeepLinks(urls: string[]) {
@@ -126,7 +134,7 @@ const main = Effect.gen(function* () {
 
   const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
   const onboardingTestRoot = ((): string | undefined => {
-    if (!TEST_ONBOARDING) return
+    if (!TEST_ONBOARDING) return undefined
 
     const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
     rmSync(root, { recursive: true, force: true })
@@ -195,10 +203,12 @@ const main = Effect.gen(function* () {
   })
 
   app.on("before-quit", () => {
+    isQuitting = true
     void killBackends()
   })
 
   app.on("will-quit", () => {
+    isQuitting = true
     void killBackends()
   })
 
@@ -211,6 +221,7 @@ const main = Effect.gen(function* () {
   })
 
   setRelaunchHandler(() => {
+    isQuitting = true
     void killBackends().finally(() => {
       app.relaunch()
       app.exit(0)
@@ -219,6 +230,7 @@ const main = Effect.gen(function* () {
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
+      isQuitting = true
       void killBackends().finally(() => app.exit(0))
     })
   }
@@ -328,6 +340,7 @@ const main = Effect.gen(function* () {
 
   let reloading = Promise.resolve()
   const startSidecar = async (mode: "startup" | "reload", migrateDatabase: boolean) => {
+    const generation = ++sidecarGeneration
     await killSidecar()
     logger.log("sidecar connection started", { url })
 
@@ -342,6 +355,13 @@ const main = Effect.gen(function* () {
       onStdout: (message) => writeLog("server", "stdout", { message }),
       onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
       onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
+      onUnexpectedExit: (code) => {
+        if (isQuitting || generation !== sidecarGeneration) return
+        writeLog("utility", "sidecar unexpected exit", { code }, "error")
+        void queueBackendReload(`sidecar exited with code ${code}`).catch((error) => {
+          logger.error("sidecar restart failed", error)
+        })
+      },
     })
     server = listener
     if (mode === "startup") {
@@ -359,13 +379,19 @@ const main = Effect.gen(function* () {
     logger.log("loading task finished")
   }
 
-  reloadBackend = () => {
-    reloading = reloading.then(async () => {
+  const queueBackendReload = (reason: string) => {
+    const restart = reloading.catch(() => {}).then(async () => {
+      logger.warn("restarting sidecar", { reason })
       setInitStep({ phase: "server_waiting" })
       await startSidecar("reload", false)
       setInitStep({ phase: "done" })
     })
-    return reloading
+    reloading = restart.catch(() => {})
+    return restart
+  }
+
+  reloadBackend = () => {
+    return queueBackendReload("manual reload")
   }
 
   const loadingTask = yield* Effect.gen(function* () {

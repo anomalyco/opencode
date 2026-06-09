@@ -21,6 +21,7 @@ declare module "virtual:opencode-server" {
   export namespace Database {
     export const getPath: typeof import("../../../opencode/dist/types/src/node").Database.getPath
     export const Client: typeof import("../../../opencode/dist/types/src/node").Database.Client
+    export const defaultLayer: import("effect").Layer.Layer<unknown, unknown, never>
   }
   export namespace JsonMigration {
     export type Progress = import("../../../opencode/dist/types/src/node").JsonMigration.Progress

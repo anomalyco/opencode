@@ -1,10 +1,6 @@
-import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import * as http from "node:http"
 import * as tls from "node:tls"
-
-type NodeHttpWithEnvProxy = typeof http & {
-  setGlobalProxyFromEnv: () => void
-}
+import { Effect, Layer } from "effect"
 
 type NodeTlsWithSystemCertificates = typeof tls & {
   getCACertificates: (type: "default" | "system") => string[]
@@ -40,6 +36,15 @@ type Listener = {
 
 const parentPort = getParentPort()
 let listener: Listener | undefined
+let fatalReported = false
+
+process.on("unhandledRejection", (error) => {
+  reportFatal("unhandledRejection", error)
+})
+
+process.on("uncaughtException", (error) => {
+  reportFatal("uncaughtException", error)
+})
 
 parentPort.on("message", (event) => {
   const command = parseCommand(event.data)
@@ -57,21 +62,12 @@ async function start(command: StartCommand) {
     ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
-    const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
+    const { Database, Log, Server } = await import("virtual:opencode-server")
     await Log.init({ level: "WARN" })
 
     if (command.needsMigration) {
-      await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
-        progress: (event: { current: number; total: number }) => {
-          parentPort.postMessage({
-            type: "sqlite",
-            progress: {
-              type: "InProgress",
-              value: event.total === 0 ? 100 : Math.round((event.current / event.total) * 100),
-            },
-          })
-        },
-      })
+      parentPort.postMessage({ type: "sqlite", progress: { type: "InProgress", value: 0 } })
+      await Effect.runPromise(Effect.scoped(Layer.build(Database.defaultLayer)))
       parentPort.postMessage({ type: "sqlite", progress: { type: "Done" } })
     }
 
@@ -141,22 +137,29 @@ function useSystemCertificates() {
 
 function useEnvProxy() {
   try {
-    ;(http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv()
+    callSetGlobalProxyFromEnv(http)
   } catch (error) {
     console.warn("failed to load proxy environment", error)
   }
 }
 
+function callSetGlobalProxyFromEnv(nodeHttp: object) {
+  // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
+  const setGlobalProxyFromEnv: unknown = Reflect.get(nodeHttp, "setGlobalProxyFromEnv")
+  if (typeof setGlobalProxyFromEnv !== "function") return
+  setGlobalProxyFromEnv.call(nodeHttp)
+}
+
 function parseCommand(value: unknown): SidecarCommand | undefined {
-  if (!value || typeof value !== "object") return
+  if (!value || typeof value !== "object") return undefined
   const command = value as Partial<StartCommand | StopCommand>
   if (command.type === "stop") return { type: "stop" }
-  if (command.type !== "start") return
-  if (typeof command.hostname !== "string") return
-  if (typeof command.port !== "number") return
-  if (typeof command.password !== "string") return
-  if (typeof command.userDataPath !== "string") return
-  if (typeof command.needsMigration !== "boolean") return
+  if (command.type !== "start") return undefined
+  if (typeof command.hostname !== "string") return undefined
+  if (typeof command.port !== "number") return undefined
+  if (typeof command.password !== "string") return undefined
+  if (typeof command.userDataPath !== "string") return undefined
+  if (typeof command.needsMigration !== "boolean") return undefined
   return {
     type: "start",
     hostname: command.hostname,
@@ -176,4 +179,19 @@ function getParentPort() {
   const port = process.parentPort as ParentPort | undefined
   if (!port) throw new Error("Sidecar parent port unavailable")
   return port
+}
+
+function reportFatal(type: "uncaughtException" | "unhandledRejection", error: unknown) {
+  if (fatalReported) return
+  fatalReported = true
+  const serialized = serializeError(error)
+  const message = `sidecar ${type}: ${serialized.stack ?? serialized.message}`
+  const fatalError = serialized.stack ? { message, stack: serialized.stack } : { message }
+  try {
+    parentPort.postMessage({ type: "error", error: fatalError })
+  } catch {
+    // Preserve the fatal path even if the Electron message port is already gone.
+  }
+  console.error(message)
+  setImmediate(() => process.exit(1))
 }
