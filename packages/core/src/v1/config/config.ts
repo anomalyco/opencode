@@ -45,9 +45,6 @@ export const Info = Schema.Struct({
   reference: Schema.optional(ConfigReferenceV1.Info).annotate({
     description: "Named git or local directory references",
   }),
-  references: Schema.optional(ConfigReferenceV1.Info).annotate({
-    description: "Named git or local directory references",
-  }),
   watcher: Schema.optional(Schema.Struct({ ignore: Schema.optional(Schema.mutable(Schema.Array(Schema.String))) })),
   snapshot: Schema.optional(Schema.Boolean).annotate({
     description:
