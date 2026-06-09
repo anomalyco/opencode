@@ -43,12 +43,10 @@ const filesystem = Layer.succeed(
       Effect.sync(() => {
         resolutions.push(input)
         const relative = input.path ?? RelativePath.make(".")
-        const resource = input.reference === undefined ? relative : `${input.reference}:${relative}`
         return new FileSystem.RootTarget({
           real: `/project/${relative}`,
           root: "/project",
-          resource,
-          reference: input.reference,
+          resource: relative,
           type: "directory",
         })
       }),
@@ -122,10 +120,10 @@ describe("GlobTool", () => {
           action: "glob",
           resources: ["**/*.ts"],
           save: ["*"],
-          metadata: { root: "src", reference: undefined, path: "src", limit: 12 },
+          metadata: { root: "src", path: "src", limit: 12 },
         },
       ])
-      expect(resolutions).toEqual([{ path: RelativePath.make("src"), reference: undefined }])
+      expect(resolutions).toEqual([{ path: RelativePath.make("src") }])
       expect(searches).toEqual([{ pattern: "**/*.ts", path: RelativePath.make("src"), limit: 12 }])
     }),
   )
@@ -166,39 +164,6 @@ describe("GlobTool", () => {
           content: [{ type: "text", text: "src/index.ts" }],
         },
       })
-    }),
-  )
-
-  it.effect("searches named references with root and reference metadata", () =>
-    Effect.gen(function* () {
-      reset()
-      result = new LocationSearch.FilesResult({
-        items: [
-          new LocationSearch.File({
-            path: RelativePath.make("guide.md"),
-            canonical: "/project/docs/guide.md",
-            resource: "docs:guide.md",
-            mtime: 1,
-          }),
-        ],
-        truncated: false,
-        partial: false,
-      })
-
-      expect(yield* executeTool(yield* ToolRegistry.Service, call({ pattern: "*.md", reference: "docs" }))).toEqual({
-        type: "text",
-        value: "docs:guide.md",
-      })
-      expect(assertions).toMatchObject([
-        {
-          sessionID,
-          action: "glob",
-          resources: ["*.md"],
-          save: ["*"],
-          metadata: { root: "docs:.", reference: "docs", path: undefined, limit: undefined },
-        },
-      ])
-      expect(searches).toEqual([{ pattern: "*.md", reference: "docs" }])
     }),
   )
 

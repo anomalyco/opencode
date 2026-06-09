@@ -6,7 +6,6 @@ import { Search } from "@opencode-ai/core/filesystem/search"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
-import { Reference } from "@/reference/reference"
 
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "The glob pattern to match files against" }),
@@ -19,7 +18,6 @@ export const GlobTool = Tool.define(
   "glob",
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const reference = yield* Reference.Service
     const searchSvc = yield* Search.Service
 
     return {
@@ -40,13 +38,12 @@ export const GlobTool = Tool.define(
 
           let search = params.path ?? ins.directory
           search = path.isAbsolute(search) ? search : path.resolve(ins.directory, search)
-          yield* reference.ensure(search)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (info?.type === "File") {
             throw new Error(`glob path must be a directory: ${search}`)
           }
           yield* assertExternalDirectoryEffect(ctx, search, {
-            bypass: yield* reference.contains(search),
+            bypass: false,
             kind: "directory",
           })
 

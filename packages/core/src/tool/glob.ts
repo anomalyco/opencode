@@ -15,9 +15,6 @@ export const Input = Schema.Struct({
   path: LocationSearch.FilesInput.fields.path.annotate({
     description: "Relative directory to search. Defaults to the active Location.",
   }),
-  reference: LocationSearch.FilesInput.fields.reference.annotate({
-    description: "Named project reference to search instead of the active Location",
-  }),
   limit: LocationSearch.FilesInput.fields.limit.annotate({
     description: `Maximum results to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})`,
   }),
@@ -41,8 +38,6 @@ export const toModelOutput = (output: ModelOutput) => {
 /**
  * Location-scoped glob leaf. FileSystem supplies canonical permission metadata;
  * LocationSearch resolves the current root and owns containment and traversal.
- *
- * TODO: Revisit root-specific search permission resources if named-reference policy needs independent allow/deny rules.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -55,20 +50,19 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description:
-            "Find files by glob pattern within the active Location or a named project reference. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
+            "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
           input: Input,
           output: LocationSearch.FilesResult,
           toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
           execute: (input, context) =>
             Effect.gen(function* () {
-              const root = yield* filesystem.resolveRoot({ path: input.path, reference: input.reference })
+              const root = yield* filesystem.resolveRoot({ path: input.path })
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
                 save: ["*"],
                 metadata: {
                   root: root.resource,
-                  reference: input.reference,
                   path: input.path,
                   limit: input.limit,
                 },

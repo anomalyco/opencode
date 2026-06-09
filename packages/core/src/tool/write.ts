@@ -2,8 +2,7 @@
  * Model-facing V2 file-write leaf. Relative paths resolve within the active
  * Location. Absolute paths inside that Location are accepted, while explicit
  * absolute external paths retain mutation capability through a separate
- * external_directory approval before edit approval. Named project references
- * are read-oriented and deliberately are not accepted by mutation tools.
+ * external_directory approval before edit approval.
  */
 export * as WriteTool from "./write"
 
@@ -21,7 +20,7 @@ export const name = "write"
 export const Input = Schema.Struct({
   path: Schema.String.annotate({
     description:
-      "File path to write. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval. Named project references are read-oriented and are not accepted.",
+      "File path to write. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
   }),
   content: Schema.String.annotate({ description: "Content to write to the file" }),
 })
@@ -55,7 +54,7 @@ export const layer = Layer.effectDiscard(
         [name]: Tool.withPermission(
           Tool.make({
             description:
-              "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval. Named project references are read-oriented and are not accepted.",
+              "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
             input: Input,
             output: Output,
             toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],

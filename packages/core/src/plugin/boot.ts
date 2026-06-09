@@ -9,6 +9,7 @@ import { Config } from "../config"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { ConfigCommandPlugin } from "../config/plugin/command"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
+import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { EventV2 } from "../event"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
@@ -25,6 +26,7 @@ import { EnvPlugin } from "./env"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
 import { SkillV2 } from "../skill"
+import { Reference } from "../reference"
 
 type Plugin = {
   id: PluginV2.ID
@@ -42,6 +44,7 @@ type Plugin = {
     | Config.Service
     | ModelsDev.Service
     | SkillV2.Service
+    | Reference.Service
   >
 }
 
@@ -67,6 +70,7 @@ export const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const skill = yield* SkillV2.Service
+    const references = yield* Reference.Service
     const done = yield* Deferred.make<void>()
 
     const add = Effect.fn("PluginBoot.add")(function* (input: Plugin) {
@@ -85,6 +89,7 @@ export const layer = Layer.effect(
           Effect.provideService(FSUtil.Service, fs),
           Effect.provideService(Global.Service, global),
           Effect.provideService(SkillV2.Service, skill),
+          Effect.provideService(Reference.Service, references),
           Effect.provideService(PluginV2.Service, plugin),
         ),
       })
@@ -104,6 +109,7 @@ export const layer = Layer.effect(
       yield* add(ConfigAgentPlugin.Plugin)
       yield* add(ConfigCommandPlugin.Plugin)
       yield* add(ConfigSkillPlugin.Plugin)
+      yield* add(ConfigReferencePlugin.Plugin)
     }).pipe(Effect.withSpan("PluginBoot.boot"))
 
     yield* boot.pipe(
@@ -124,4 +130,5 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(Config.locationLayer),
   Layer.provideMerge(AgentV2.locationLayer),
   Layer.provideMerge(SkillV2.locationLayer),
+  Layer.provideMerge(Reference.locationLayer),
 )

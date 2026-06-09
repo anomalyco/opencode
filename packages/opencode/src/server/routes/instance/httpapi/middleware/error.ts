@@ -1,4 +1,5 @@
 import { NamedError } from "@opencode-ai/core/util/error"
+import { ConfigErrorV1 } from "@opencode-ai/core/v1/config/error"
 import { Cause, Effect } from "effect"
 import { HttpRouter, HttpServerError, HttpServerRespondable, HttpServerResponse } from "effect/unstable/http"
 
@@ -15,6 +16,15 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
       if (!defect) return Effect.failCause(cause)
 
       const error = defect.defect
+      if (
+        ConfigErrorV1.JsonError.isInstance(error) ||
+        ConfigErrorV1.InvalidError.isInstance(error) ||
+        ConfigErrorV1.FrontmatterError.isInstance(error) ||
+        ConfigErrorV1.DirectoryTypoError.isInstance(error)
+      ) {
+        return Effect.succeed(HttpServerResponse.jsonUnsafe(error.toObject(), { status: 400 }))
+      }
+
       const ref = `err_${crypto.randomUUID().slice(0, 8)}`
 
       return Effect.logError("failed", { ref, error, cause: Cause.pretty(cause) }).pipe(

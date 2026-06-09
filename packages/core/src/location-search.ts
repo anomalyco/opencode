@@ -9,8 +9,7 @@ import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 
 /**
  * Location-scoped raw search substrate. Search authority is selected only by
- * FileSystem, preserving Location-relative paths and named read
- * references. Model formatting, leaf-tool permissions, and HTTP transport stay
+ * FileSystem, preserving Location-relative paths. Model formatting, leaf-tool permissions, and HTTP transport stay
  * outside this service so future GlobTool, GrepTool, and HTTP consumers can
  * share the same bounded filesystem behavior.
  *
@@ -106,7 +105,7 @@ export const layer = Layer.effect(
       return {
         path: RelativePath.make(relative),
         canonical,
-        resource: root.reference === undefined ? relative : `${root.reference}:${relative}`,
+        resource: relative,
         mtime: info.mtime.pipe(
           Option.map((date) => date.getTime()),
           Option.getOrElse(() => 0),
