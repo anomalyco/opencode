@@ -162,8 +162,13 @@ export const layer = Layer.effect(
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
-            catch: (err) => {},
-          }).pipe(Effect.option)
+            catch: errorMessage,
+          }).pipe(
+            Effect.tapError((error) =>
+              Effect.logError("failed to load internal plugin", { name: plugin.name, error }),
+            ),
+            Effect.option,
+          )
           if (init._tag === "Some") hooks.push(init.value)
         }
 
@@ -217,6 +222,7 @@ export const layer = Layer.effect(
               return message
             },
           }).pipe(
+            Effect.tapError((error) => Effect.logError("failed to load plugin", { path: load.spec, error })),
             Effect.catch(() => {
               // TODO: make proper events for this
               // events.publish(Session.Event.Error, {
@@ -256,8 +262,11 @@ export const layer = Layer.effect(
             (hook) =>
               Effect.tryPromise({
                 try: () => Promise.resolve(hook.dispose?.()),
-                catch: (error) => {},
-              }).pipe(Effect.ignore),
+                catch: errorMessage,
+              }).pipe(
+                Effect.tapError((error) => Effect.logError("plugin dispose hook failed", { error })),
+                Effect.ignore,
+              ),
             { discard: true },
           ),
         )
