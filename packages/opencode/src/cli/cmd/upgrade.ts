@@ -3,6 +3,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { migrateLspEslintDisabled } from "../../securecode/config-migration"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -69,6 +70,8 @@ export const UpgradeCommand = {
       return
     }
     spinner.stop("Upgrade complete")
+    const migrated = await migrateLspEslintDisabled()
+    if (migrated) prompts.log.info("migrated: added lsp config (ESLint disabled) to securecode.json")
     prompts.outro("Done")
   },
 }
