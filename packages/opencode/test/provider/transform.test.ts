@@ -2498,7 +2498,7 @@ describe("ProviderTransform.options - Cohere North", () => {
       } as any,
       sessionID: "test-session-123",
     })
-    expect(result.citation_options).toEqual({ mode: "disabled" })
+    expect(result.options).toEqual({ citation_options: { mode: "disabled" } })
   })
 })
 
