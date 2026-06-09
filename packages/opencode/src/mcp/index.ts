@@ -458,6 +458,9 @@ export const layer = Layer.effect(
           : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
 
       if (!mcpClient) {
+        if (status.status !== "connected" && status.status !== "disabled") {
+          yield* Effect.logWarning("server unavailable", { key, type: mcp.type, status: status.status })
+        }
         return { status } satisfies CreateResult
       }
 
