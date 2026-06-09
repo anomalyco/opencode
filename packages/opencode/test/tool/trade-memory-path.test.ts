@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolveIndexDbPath } from "../../../../.opencode/plugins/trade-memory"
+import { resolveIndexDbPath } from "../../../../.opencode/trade-memory-core/db"
 
 describe("trade-memory path resolution", () => {
   test("uses the canonical default when path is omitted", () => {
