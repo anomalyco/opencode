@@ -1,6 +1,5 @@
 import path from "path"
 import { Effect } from "effect"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import type * as Tool from "./tool"
 import { containsPath } from "../project/instance-context"
@@ -45,5 +44,5 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
 })
 
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
-  return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options).pipe(Effect.provide(EffectLogger.layer)))
+  return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options))
 }

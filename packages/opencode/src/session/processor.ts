@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -20,7 +21,6 @@ import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
-import { Log } from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
@@ -30,12 +30,9 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { toolFileSourceFromUri, Usage, type LLMEvent } from "@opencode-ai/llm"
-import { ToolOutput } from "@opencode-ai/core/tool-output"
+import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
-const log = Log.create({ service: "session.processor" })
-
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
@@ -131,7 +128,6 @@ export const layer = Layer.effect(
       }
       const mirrorAssistant = flags.experimentalEventSystem && !input.assistantMessage.summary
       let aborted = false
-      const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -599,20 +595,21 @@ export const layer = Layer.effect(
             if (mirrorAssistant) {
               const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
               const content = [
-                ToolOutput.text({ type: "text", text: output.output }),
-                ...(output.attachments?.map((item: SessionV1.FilePart) =>
-                  ToolOutput.file({
-                    type: "file",
-                    source: toolFileSourceFromUri(item.url),
-                    mime: item.mime,
-                    name: item.filename,
-                  }),
+                { type: "text" as const, text: output.output },
+                ...(output.attachments?.map(
+                  (item: SessionV1.FilePart) =>
+                    ({
+                      type: "file",
+                      uri: item.url,
+                      mime: item.mime,
+                      name: item.filename,
+                    }) as const,
                 ) ?? []),
               ]
-              const unsupported = content.find((item) => item.type === "file" && item.source.type !== "data")
+              const unsupported = content.find((item) => item.type === "file" && !item.uri.startsWith("data:"))
               if (unsupported?.type === "file") {
                 const error = new Error(
-                  `Tool attachment source "${unsupported.source.type}" must be materialized before durable V2 settlement`,
+                  `Tool attachment URI "${unsupported.uri}" must be materialized before durable V2 settlement`,
                 )
                 yield* events.publish(SessionEvent.Tool.Failed, {
                   sessionID: ctx.sessionID,
@@ -918,7 +915,12 @@ export const layer = Layer.effect(
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
-        slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
+        yield* Effect.logError("process", {
+          "session.id": input.sessionID,
+          messageID: input.assistantMessage.id,
+          error: errorMessage(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        })
         const error = parse(e)
         yield* flushV2Fragments()
         if (SessionV1.ContextOverflowError.isInstance(error)) {
@@ -956,7 +958,10 @@ export const layer = Layer.effect(
       })
 
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
-        slog.info("process")
+        yield* Effect.logInfo("process", {
+          "session.id": input.sessionID,
+          messageID: input.assistantMessage.id,
+        })
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
@@ -1059,5 +1064,21 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(EventV2Bridge.defaultLayer),
   ),
 )
+
+export const node = LayerNode.make(layer, [
+  Session.node,
+  Config.node,
+  Snapshot.node,
+  Agent.node,
+  LLM.node,
+  Permission.node,
+  Plugin.node,
+  SessionSummary.node,
+  SessionStatus.node,
+  Image.node,
+  EventV2Bridge.node,
+  RuntimeFlags.node,
+  Database.node,
+])
 
 export * as SessionProcessor from "./processor"

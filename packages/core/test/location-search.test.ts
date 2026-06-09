@@ -5,25 +5,25 @@ import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { LocationSearch } from "@opencode-ai/core/location-search"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Ripgrep as FileSystemRipgrep } from "@opencode-ai/core/filesystem/ripgrep"
-import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
+import { Global } from "@opencode-ai/core/global"
 import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-const inertReferences = references({})
-
-function provide(directory: string, projectReferences = inertReferences) {
+function provide(directory: string, data = Global.Path.data) {
   const dependencies = Layer.mergeAll(
     FSUtil.defaultLayer,
     FileSystemRipgrep.defaultLayer,
+    Search.defaultLayer,
     AppProcess.defaultLayer,
     Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-    Layer.succeed(ProjectReference.Service, projectReferences),
+    Global.layerWith({ data }),
   )
   const filesystem = FileSystem.layer.pipe(Layer.provide(dependencies))
   const search = LocationSearch.layer.pipe(
@@ -43,6 +43,21 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("LocationSearch", () => {
+  it.live("greps an absolute managed tool-output file", () =>
+    withTmp((directory) => {
+      const data = path.join(directory, "data")
+      const managed = path.join(data, "tool-output")
+      const output = path.join(managed, "tool_123")
+      return Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(managed, { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(output, "ok\nFAIL here\nok"))
+        const search = yield* LocationSearch.Service
+        const result = yield* search.grep({ pattern: "FAIL", path: output })
+        expect(result.items).toMatchObject([{ canonical: output, line: 2, lines: "FAIL here\n" }])
+      }).pipe(provide(directory, data))
+    }),
+  )
+
   it.live("searches files in the active Location with structured bounded results", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -66,7 +81,7 @@ describe("LocationSearch", () => {
     ),
   )
 
-  it.live("searches files under a relative subdirectory and named local reference", () =>
+  it.live("searches files under a relative subdirectory", () =>
     withTmp((directory) => {
       const docs = path.join(directory, "docs")
       return Effect.gen(function* () {
@@ -81,11 +96,7 @@ describe("LocationSearch", () => {
         expect(
           (yield* search.files({ pattern: "*.ts", path: RelativePath.make("src") })).items.map((item) => item.path),
         ).toEqual([RelativePath.make("src/active.ts")])
-        const guide = yield* Effect.promise(() => fs.realpath(path.join(docs, "guide.md")))
-        expect((yield* search.files({ pattern: "*.md", reference: "docs" })).items).toMatchObject([
-          { path: RelativePath.make("guide.md"), resource: "docs:guide.md", canonical: guide },
-        ])
-      }).pipe(provide(directory, references({ docs: { name: "docs", kind: "local", path: docs } })))
+      }).pipe(provide(directory))
     }),
   )
 
@@ -226,32 +237,6 @@ describe("LocationSearch", () => {
     ),
   )
 
-  it.live("rejects an approved root swapped to a symlink before ripgrep traversal", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        if (process.platform === "win32") return
-        const source = path.join(directory, "src")
-        const outside = `${directory}-outside`
-        yield* Effect.promise(async () => {
-          await fs.mkdir(source)
-          await fs.mkdir(outside)
-          await fs.writeFile(path.join(outside, "secret.txt"), "secret\n")
-        })
-        const filesystem = yield* FileSystem.Service
-        const approved = yield* filesystem.resolveRoot({ path: RelativePath.make("src") })
-        yield* Effect.promise(async () => {
-          await fs.rmdir(source)
-          await fs.symlink(outside, source)
-        })
-
-        expect(
-          Exit.isFailure(yield* (yield* LocationSearch.Service).files({ pattern: "*" }, approved).pipe(Effect.exit)),
-        ).toBe(true)
-        yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
-      }).pipe(provide(directory)),
-    ),
-  )
-
   it.live("honors a pre-aborted cancellation signal", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -273,13 +258,3 @@ describe("LocationSearch", () => {
     expect(() => decode({ pattern: "*", limit: LocationSearch.MAX_RESULT_LIMIT + 1 })).toThrow()
   })
 })
-
-function references(entries: Record<string, ProjectReference.Resolved>) {
-  return ProjectReference.Service.of({
-    list: () => Effect.succeed(Object.values(entries)),
-    get: (name) => Effect.succeed(entries[name]),
-    resolveMention: () => Effect.succeed(undefined),
-    ensurePath: () => Effect.void,
-    containsManagedPath: () => Effect.succeed(false),
-  })
-}

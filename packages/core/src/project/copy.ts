@@ -8,6 +8,7 @@ import { FSUtil } from "../fs-util"
 import { Git } from "../git"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
+import { LayerNode } from "../effect/layer-node"
 import { Project } from "../project"
 import { ProjectDirectoryTable } from "./sql"
 import { makeStrategies } from "./copy-strategies"
@@ -34,6 +35,7 @@ export type CreateInput = typeof CreateInput.Type
 export const RemoveInput = Schema.Struct({
   projectID: Project.ID,
   directory: AbsolutePath,
+  force: Schema.Boolean,
 }).annotate({ identifier: "ProjectCopy.RemoveInput" })
 export type RemoveInput = typeof RemoveInput.Type
 
@@ -82,7 +84,10 @@ export interface Strategy {
     sourceDirectory: AbsolutePath
     directory: AbsolutePath
   }) => Effect.Effect<Copy, Git.WorktreeError | DirectoryUnavailableError>
-  readonly remove: (directory: AbsolutePath) => Effect.Effect<void, Git.WorktreeError | DirectoryUnavailableError>
+  readonly remove: (input: {
+    directory: AbsolutePath
+    force: boolean
+  }) => Effect.Effect<void, Git.WorktreeError | DirectoryUnavailableError>
   readonly list: (directory: AbsolutePath) => Effect.Effect<Copy[], Git.WorktreeError | DirectoryUnavailableError>
   readonly detect: (directory: AbsolutePath) => Effect.Effect<boolean>
 }
@@ -209,7 +214,7 @@ export const layer = Layer.effect(
       const copyDirectory = yield* canonical(input.directory)
       const id = yield* detect({ directory: copyDirectory })
       if (!id) return yield* new StrategyNotFoundError({ directory: copyDirectory })
-      yield* strategy(id).remove(copyDirectory)
+      yield* strategy(id).remove({ directory: copyDirectory, force: input.force })
       yield* changed(input.projectID, yield* removeStored(input.projectID, copyDirectory))
     })
 
@@ -271,3 +276,4 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, Git.node, EventV2.node, Database.node])

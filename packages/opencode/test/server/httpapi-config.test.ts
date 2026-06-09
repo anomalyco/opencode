@@ -1,14 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import { Server } from "../../src/server/server"
-import * as Log from "@opencode-ai/core/util/log"
 import { Effect, Fiber } from "effect"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
 import { waitGlobalBusEvent } from "./global-bus"
-
-void Log.init({ print: false })
 
 function app() {
   return Server.Default().app

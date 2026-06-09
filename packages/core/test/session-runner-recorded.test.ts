@@ -1,5 +1,5 @@
-import { NodeFileSystem } from "@effect/platform-node"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Database } from "@opencode-ai/core/database/database"
@@ -7,6 +7,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { Config } from "@opencode-ai/core/config"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -34,10 +35,15 @@ const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
-const cassette = HttpRecorder.cassetteLayer("session-runner/openai-chat-streams-text", {
-  directory: path.resolve(import.meta.dir, "fixtures/recordings"),
-  mode: process.env.RECORD === "true" ? "record" : "replay",
-}).pipe(Layer.provide(NodeFileSystem.layer))
+const cassette =
+  process.env.RECORD === "true"
+    ? HttpRecorderInternal.cassetteLayer("session-runner/openai-chat-streams-text", {
+        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
+        mode: "record",
+      })
+    : HttpRecorder.http("session-runner/openai-chat-streams-text", {
+        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
+      })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
 const permission = Layer.succeed(
@@ -64,6 +70,7 @@ const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
 const systemContext = SystemContextRegistry.layer
 const location = Location.layer({ directory: AbsolutePath.make("/project") }).pipe(Layer.provide(Project.defaultLayer))
 const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
+const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
 const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -75,6 +82,7 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(location),
   Layer.provide(agents),
   Layer.provide(skillGuidance),
+  Layer.provide(config),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -111,6 +119,7 @@ const it = testEffect(
     systemContext,
     location,
     skillGuidance,
+    config,
     runner,
     coordinator,
     execution,

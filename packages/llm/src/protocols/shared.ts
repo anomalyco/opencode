@@ -9,6 +9,7 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
+  type ToolFileContent,
   type TextPart,
   type ToolResultPart,
 } from "../schema"
@@ -186,24 +187,55 @@ export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate
 export const parseToolInput = (route: string, name: string, raw: string) =>
   parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
-/**
- * Encode a `MediaPart`'s raw bytes for inclusion in a JSON request body.
- * `data: string` is assumed to already be base64 (matches caller convention
- * across Gemini / Bedrock); `data: Uint8Array` is base64-encoded here. Used
- * by every route that supports image / document inputs.
- */
-export const mediaBytes = (part: MediaPart) =>
-  typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
+export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
+export const MAX_MEDIA_ENCODED_BYTES = 8 * 1024 * 1024
+export const MAX_MEDIA_DECODED_BYTES = 6 * 1024 * 1024
 
-export const mediaBase64 = (part: MediaPart) => {
-  if (typeof part.data !== "string" || !part.data.startsWith("data:")) return mediaBytes(part)
-  return part.data.slice(part.data.indexOf(",") + 1)
+const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+
+export interface ValidatedMedia {
+  readonly mime: string
+  readonly base64: string
+  readonly dataUrl: string
+  readonly bytes: Uint8Array
 }
 
-export const mediaDataUrl = (part: MediaPart) =>
-  typeof part.data === "string" && part.data.startsWith("data:")
-    ? part.data
-    : `data:${part.mediaType};base64,${mediaBytes(part)}`
+export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function* (
+  route: string,
+  part: MediaPart,
+  supportedMimes: ReadonlySet<string>,
+) {
+  const mime = part.mediaType.toLowerCase()
+  if (!supportedMimes.has(mime)) return yield* invalidRequest(`${route} does not support media type ${part.mediaType}`)
+
+  let base64: string
+  if (typeof part.data !== "string") {
+    if (part.data.byteLength > MAX_MEDIA_DECODED_BYTES)
+      return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
+    base64 = Buffer.from(part.data).toString("base64")
+  } else if (part.data.startsWith("data:")) {
+    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/s.exec(part.data)
+    if (!match) return yield* invalidRequest(`${route} media data URL must contain valid base64`)
+    if (match[1]!.toLowerCase() !== mime)
+      return yield* invalidRequest(`${route} media type ${part.mediaType} does not match data URL type ${match[1]}`)
+    base64 = match[2]!
+  } else {
+    base64 = part.data
+  }
+
+  if (Buffer.byteLength(base64, "utf8") > MAX_MEDIA_ENCODED_BYTES)
+    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_ENCODED_BYTES} byte encoded limit`)
+  if (!base64 || base64.length % 4 !== 0 || !base64Pattern.test(base64))
+    return yield* invalidRequest(`${route} media must contain valid base64`)
+  const bytes = Buffer.from(base64, "base64")
+  if (bytes.byteLength > MAX_MEDIA_DECODED_BYTES)
+    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
+  if (bytes.toString("base64") !== base64) return yield* invalidRequest(`${route} media must contain canonical base64`)
+  return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
+})
+
+export const validateToolFile = (route: string, part: ToolFileContent, supportedMimes: ReadonlySet<string>) =>
+  validateMedia(route, { type: "media", mediaType: part.mime, data: part.uri, filename: part.name }, supportedMimes)
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 

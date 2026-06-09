@@ -19,15 +19,17 @@ import { PermissionV2 } from "./permission"
 import { PermissionSaved } from "./permission/saved"
 import { FileSystem } from "./filesystem"
 import { Watcher } from "./filesystem/watcher"
+import { Search } from "./filesystem/search"
 import { LocationMutation } from "./location-mutation"
 import { LocationSearch } from "./location-search"
 import { FileMutation } from "./file-mutation"
-import { ProjectReference } from "./project-reference"
+import { Reference } from "./reference"
 import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
 import { SkillGuidance } from "./skill/guidance"
 import { BuiltInTools } from "./tool/builtins"
+import { Image } from "./image"
 import { ToolRegistry } from "./tool/registry"
 import { ApplicationTools } from "./tool/application-tools"
 import { ToolOutputStore } from "./tool-output-store"
@@ -46,13 +48,12 @@ import { FetchHttpClient } from "effect/unstable/http"
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const location = Location.layer(ref)
-    const permissionsAndTools = ToolRegistry.layer.pipe(Layer.provideMerge(PermissionV2.locationLayer))
     const systemContext = SystemContextBuiltIns.locationLayer
-    const services = Layer.mergeAll(
+    const base = Layer.mergeAll(
       location,
       Policy.locationLayer,
       Config.locationLayer,
-      ProjectReference.locationLayer,
+      Reference.locationLayer,
       PluginV2.locationLayer,
       Catalog.locationLayer,
       CommandV2.locationLayer,
@@ -63,22 +64,29 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Pty.locationLayer,
       SkillV2.locationLayer,
       systemContext,
-      permissionsAndTools,
       LocationMutation.locationLayer.pipe(Layer.orDie),
     ).pipe(Layer.provideMerge(location))
-    const commits = FileMutation.locationLayer.pipe(Layer.provide(services))
+    const resources = ToolOutputStore.layer.pipe(Layer.provide(base))
+    const permissionsAndTools = ToolRegistry.layer.pipe(
+      Layer.provideMerge(PermissionV2.locationLayer),
+      Layer.provide(resources),
+      Layer.provide(base),
+    )
+    const services = Layer.mergeAll(base, resources, permissionsAndTools)
+    const image = Image.layer.pipe(Layer.provide(services))
+    const mutation = FileMutation.locationLayer.pipe(Layer.provide(services))
     const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
-    const resources = ToolOutputStore.layer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
       Layer.provide(services),
-      Layer.provide(commits),
+      Layer.provide(mutation),
       Layer.provide(searches),
       Layer.provide(resources),
       Layer.provide(todos),
       Layer.provide(questions),
+      Layer.provide(image),
     )
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.defaultLayer.pipe(
@@ -86,9 +94,18 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(model),
       Layer.provide(skillGuidance),
     )
-    return Layer.mergeAll(services, commits, searches, resources, todos, questions, model, runner, builtInTools).pipe(
-      Layer.fresh,
-    )
+    return Layer.mergeAll(
+      services,
+      image,
+      mutation,
+      searches,
+      resources,
+      todos,
+      questions,
+      model,
+      runner,
+      builtInTools,
+    ).pipe(Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
   dependencies: [
@@ -108,5 +125,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
     ApplicationTools.layer,
+    Search.defaultLayer,
   ],
 }) {}

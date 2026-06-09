@@ -165,7 +165,7 @@ export const app = new sst.cloudflare.x.SolidStart("Stats", {
   domain: `stats.${domain}`,
   link: [database, EMAILOCTOPUS_API_KEY],
   environment: {
-    PUBLIC_URL: `https://${domain}/stats`,
+    PUBLIC_URL: `https://${domain}/data`,
   },
 })
 

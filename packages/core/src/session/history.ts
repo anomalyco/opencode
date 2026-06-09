@@ -12,7 +12,7 @@ const decode = Schema.decodeUnknownEffect(SessionMessage.Message)
 
 const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   return yield* db
-    .select({ seq: SessionMessageTable.seq })
+    .select()
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
     .orderBy(desc(SessionMessageTable.seq))
@@ -27,7 +27,7 @@ const messageRows = Effect.fnUntraced(function* (
   compaction: { readonly seq: number } | undefined,
   baselineSeq?: number,
 ) {
-  return yield* db
+  const rows = yield* db
     .select()
     .from(SessionMessageTable)
     .where(
@@ -49,6 +49,7 @@ const messageRows = Effect.fnUntraced(function* (
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
+  return rows
 })
 
 const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -83,9 +84,17 @@ export const loadForRunner = Effect.fn("SessionHistory.loadForRunner")(function*
   sessionID: SessionSchema.ID,
   baselineSeq: number,
 ) {
-  return yield* Effect.forEach(
-    yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID), baselineSeq),
-    decodeMessageRow,
+  return (yield* entriesForRunner(db, sessionID, baselineSeq)).map((entry) => entry.message)
+})
+
+export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  baselineSeq: number,
+) {
+  const rows = yield* messageRows(db, sessionID, yield* latestCompaction(db, sessionID), baselineSeq)
+  return yield* Effect.forEach(rows, (row) =>
+    decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
 })
 

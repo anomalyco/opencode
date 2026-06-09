@@ -10,6 +10,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { toolDefinitions } from "./lib/tool"
 import { FSUtil } from "../src/fs-util"
 import { Auth } from "../src/auth"
 import { EventV2 } from "../src/event"
@@ -17,7 +18,7 @@ import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
-import { ProjectReference } from "../src/project-reference"
+import { Reference } from "../src/reference"
 import { LocationSearch } from "../src/location-search"
 import { ToolRegistry } from "../src/tool/registry"
 import { ApplicationTools } from "../src/tool/application-tools"
@@ -50,11 +51,11 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap(([blocked, allowed]) =>
         Effect.gen(function* () {
-          yield* (yield* ApplicationTools.Service).attach({
+          yield* (yield* ApplicationTools.Service).register({
             application_context: Tool.make({
               description: "Read application context",
-              parameters: Schema.Struct({}),
-              success: Schema.Struct({ ok: Schema.Boolean }),
+              input: Schema.Struct({}),
+              output: Schema.Struct({ ok: Schema.Boolean }),
               execute: () => Effect.succeed({ ok: true }),
             }),
           })
@@ -70,14 +71,14 @@ describe("LocationServiceMap", () => {
           const update = (directory: string) =>
             Effect.gen(function* () {
               yield* PluginBoot.Service.use((boot) => boot.wait())
-              yield* ProjectReference.Service
+              yield* Reference.Service
               yield* LocationSearch.Service
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
               return {
                 providers: yield* catalog.provider.all(),
-                tools: yield* (yield* ToolRegistry.Service).definitions(),
+                tools: yield* toolDefinitions(yield* ToolRegistry.Service),
               }
             }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
 

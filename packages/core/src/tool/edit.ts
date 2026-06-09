@@ -2,24 +2,25 @@
  * Model-facing V2 exact-edit leaf. Relative paths resolve within the active
  * Location. Absolute paths inside that Location are accepted, while explicit
  * absolute external paths retain mutation capability through a separate
- * external_directory approval before edit approval. Named project references
- * are read-oriented and deliberately are not accepted by mutation tools.
+ * external_directory approval before edit approval.
  */
 export * as EditTool from "./edit"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
-import { Cause, Effect, Layer, Schema } from "effect"
+import { ToolFailure } from "@opencode-ai/llm"
+import { Effect, Layer, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
-import { ToolRegistry } from "./registry"
+import { PermissionV2 } from "../permission"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const name = "edit"
 
-export const Parameters = Schema.Struct({
+export const Input = Schema.Struct({
   path: Schema.String.annotate({
     description:
-      "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval. Named project references are read-oriented and are not accepted.",
+      "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
   }),
   oldString: Schema.String.annotate({ description: "Exact text to replace" }),
   newString: Schema.String.annotate({ description: "Replacement text, which must differ from oldString" }),
@@ -28,14 +29,14 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-export const Success = Schema.Struct({
+export const Output = Schema.Struct({
   operation: Schema.Literal("write"),
   target: Schema.String,
   resource: Schema.String,
   existed: Schema.Boolean,
   replacements: Schema.Number,
 })
-export type Success = typeof Success.Type
+export type Output = typeof Output.Type
 
 const normalizeLineEndings = (text: string) => text.replaceAll("\r\n", "\n")
 const detectLineEnding = (text: string): "\n" | "\r\n" => (text.includes("\r\n") ? "\r\n" : "\n")
@@ -68,7 +69,7 @@ const previewLines = (value: string, prefix: "+" | "-") => {
   return shown
 }
 
-export const toModelOutput = (output: Success, oldString: string, newString: string) =>
+export const toModelOutput = (output: Output, oldString: string, newString: string) =>
   [
     `Edited file successfully: ${output.resource}`,
     `Replacements: ${output.replacements}`,
@@ -77,16 +78,6 @@ export const toModelOutput = (output: Success, oldString: string, newString: str
     ...previewLines(newString, "+"),
     "```",
   ].join("\n")
-
-const definition = Tool.make({
-  description:
-    "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval. Named project references are read-oriented and are not accepted.",
-  parameters: Parameters,
-  success: Success,
-  toModelOutput: ({ parameters, output }) => [
-    toolText({ type: "text", text: toModelOutput(output, parameters.oldString, parameters.newString) }),
-  ],
-})
 
 /** Deferred V2 edit behavior and UX integrations remain visible at the model-facing seam. */
 // TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
@@ -97,81 +88,112 @@ const definition = Tool.make({
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
+    const tools = yield* Tools.Service
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
     const fs = yield* FSUtil.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        execute: ({ parameters, assertPermission }) => {
-          const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-            effect.pipe(
-              Effect.catchCause((cause) => {
-                const error = Cause.squash(cause)
-                return Effect.fail(
-                  error instanceof FileMutation.StaleContentError
-                    ? new ToolFailure({
-                        message: "File changed after permission approval. Read it again before editing.",
-                      })
-                    : new ToolFailure({ message: `Unable to edit ${parameters.path}`, error }),
+    yield* tools
+      .register({
+        [name]: Tool.withPermission(
+          Tool.make({
+            description:
+              "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
+            input: Input,
+            output: Output,
+            toModelOutput: ({ input, output }) => [
+              { type: "text", text: toModelOutput(output, input.oldString, input.newString) },
+            ],
+            execute: (input, context) => {
+              const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+                effect.pipe(
+                  Effect.mapError((error) =>
+                    error instanceof FileMutation.StaleContentError
+                      ? new ToolFailure({
+                          message: "File changed after permission approval. Read it again before editing.",
+                        })
+                      : new ToolFailure({ message: `Unable to edit ${input.path}` }),
+                  ),
                 )
-              }),
-            )
 
-          return Effect.gen(function* () {
-            if (parameters.oldString === parameters.newString) {
-              return yield* new ToolFailure({ message: "No changes to apply: oldString and newString are identical." })
-            }
-            if (parameters.oldString === "") {
-              return yield* new ToolFailure({
-                message: "oldString must not be empty. Use write to create or overwrite a file.",
+              return Effect.gen(function* () {
+                const permissionSource = {
+                  type: "tool" as const,
+                  messageID: context.assistantMessageID,
+                  callID: context.toolCallID,
+                }
+                if (input.oldString === input.newString) {
+                  return yield* new ToolFailure({
+                    message: "No changes to apply: oldString and newString are identical.",
+                  })
+                }
+                if (input.oldString === "") {
+                  return yield* new ToolFailure({
+                    message: "oldString must not be empty. Use write to create or overwrite a file.",
+                  })
+                }
+
+                const target = yield* unableToEdit(mutation.resolve({ path: input.path, kind: "file" }))
+                const external = target.externalDirectory
+                if (external) {
+                  yield* unableToEdit(
+                    permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(external),
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      source: permissionSource,
+                    }),
+                  )
+                }
+
+                yield* unableToEdit(
+                  permission.assert({
+                    action: "edit",
+                    resources: [target.resource],
+                    save: ["*"],
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source: permissionSource,
+                  }),
+                )
+                const source = decodeUtf8(yield* unableToEdit(fs.readFile(target.canonical)))
+                const ending = detectLineEnding(source.text)
+                const oldString = convertToLineEnding(input.oldString, ending)
+                const newString = convertToLineEnding(input.newString, ending)
+                const replacements = countOccurrences(source.text, oldString)
+                if (replacements === 0) {
+                  return yield* new ToolFailure({
+                    message:
+                      "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                  })
+                }
+                if (replacements > 1 && input.replaceAll !== true) {
+                  return yield* new ToolFailure({
+                    message:
+                      "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                  })
+                }
+
+                const replaced =
+                  input.replaceAll === true
+                    ? source.text.replaceAll(oldString, newString)
+                    : source.text.replace(oldString, newString)
+                const next = splitBom(replaced)
+                const result = yield* unableToEdit(
+                  files.writeIfUnchanged({
+                    target,
+                    expected: source.content,
+                    content: joinBom(next.text, source.bom || next.bom),
+                  }),
+                )
+                return { ...result, replacements } satisfies Output
               })
-            }
-
-            const plan = yield* unableToEdit(mutation.resolve({ path: parameters.path, kind: "file" }))
-            const external = plan.target.externalDirectory
-            if (external) {
-              yield* unableToEdit(assertPermission(LocationMutation.externalDirectoryPermission(external)))
-            }
-
-            yield* unableToEdit(assertPermission({ action: "edit", resources: [plan.target.resource], save: ["*"] }))
-            const readable = yield* unableToEdit(mutation.revalidate(plan))
-            const source = decodeUtf8(yield* unableToEdit(fs.readFile(readable.canonical)))
-            const ending = detectLineEnding(source.text)
-            const oldString = convertToLineEnding(parameters.oldString, ending)
-            const newString = convertToLineEnding(parameters.newString, ending)
-            const replacements = countOccurrences(source.text, oldString)
-            if (replacements === 0) {
-              return yield* new ToolFailure({
-                message:
-                  "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
-              })
-            }
-            if (replacements > 1 && parameters.replaceAll !== true) {
-              return yield* new ToolFailure({
-                message:
-                  "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
-              })
-            }
-
-            const replaced =
-              parameters.replaceAll === true
-                ? source.text.replaceAll(oldString, newString)
-                : source.text.replace(oldString, newString)
-            const next = splitBom(replaced)
-            const result = yield* unableToEdit(
-              files.writeIfUnchanged({
-                plan,
-                expected: source.content,
-                content: joinBom(next.text, source.bom || next.bom),
-              }),
-            )
-            return { ...result, replacements } satisfies Success
-          })
-        },
-      }),
-    )
+            },
+          }),
+          "edit",
+        ),
+      })
+      .pipe(Effect.orDie)
   }),
 )

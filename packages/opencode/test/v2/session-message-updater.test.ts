@@ -8,7 +8,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { ToolOutput } from "@opencode-ai/core/tool-output"
 
 test.skip("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
@@ -33,6 +32,8 @@ test.skip("step snapshots carry over to assistant messages", () => {
       },
     } satisfies SessionEvent.Event),
   )
+
+  expect(state.messages).toEqual([])
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
@@ -180,7 +181,7 @@ test.skip("tool completion stores completed timestamp", () => {
         timestamp: DateTime.makeUnsafe(4),
         callID,
         structured: {},
-        content: [ToolOutput.text({ type: "text", text: "/tmp" })],
+        content: [{ type: "text", text: "/tmp" }],
         provider: { executed: true, metadata: { fake: { status: "done" } } },
       },
     } satisfies SessionEvent.Event),
@@ -194,10 +195,11 @@ test.skip("tool completion stores completed timestamp", () => {
   expect(state.messages[0].content[0].provider).toEqual({ executed: true, metadata: { fake: { status: "done" } } })
 })
 
-test.skip("compaction events reduce to compaction message", () => {
+test("compaction events reduce to compaction message only when completed", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
   const id = EventV2.ID.create()
+  const compactionID = SessionMessage.ID.create()
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
@@ -205,12 +207,14 @@ test.skip("compaction events reduce to compaction message", () => {
       type: "session.next.compaction.started",
       data: {
         sessionID,
-        messageID: SessionMessage.ID.create(),
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(1),
         reason: "auto",
       },
     } satisfies SessionEvent.Event),
   )
+
+  expect(state.messages).toEqual([])
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
@@ -218,6 +222,7 @@ test.skip("compaction events reduce to compaction message", () => {
       type: "session.next.compaction.delta",
       data: {
         sessionID,
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(2),
         text: "hello ",
       },
@@ -230,6 +235,7 @@ test.skip("compaction events reduce to compaction message", () => {
       type: "session.next.compaction.delta",
       data: {
         sessionID,
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(3),
         text: "summary",
       },
@@ -242,20 +248,22 @@ test.skip("compaction events reduce to compaction message", () => {
       type: "session.next.compaction.ended",
       data: {
         sessionID,
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(4),
+        reason: "auto",
         text: "final summary",
-        include: "recent context",
+        recent: "recent context",
       },
     } satisfies SessionEvent.Event),
   )
 
   expect(state.messages).toHaveLength(1)
   expect(state.messages[0]).toMatchObject({
-    id,
+    id: compactionID,
     type: "compaction",
     reason: "auto",
     summary: "final summary",
-    include: "recent context",
-    time: { created: DateTime.makeUnsafe(1) },
+    recent: "recent context",
+    time: { created: DateTime.makeUnsafe(4) },
   })
 })
