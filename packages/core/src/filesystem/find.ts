@@ -34,29 +34,28 @@ export const ripgrepLayer = Layer.effect(
       directories: [] as string[],
       scan: undefined as Fiber.Fiber<void, never> | undefined,
     }
+    state.scan = yield* ripgrep.files({ cwd: location.directory, pattern: "*", limit: 100_000 }).pipe(
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          state.files = result.items.map((item) => item.replaceAll("\\", "/"))
+          state.directories = Array.from(
+            new Set(
+              state.files.flatMap((file) => {
+                const parts = file.split("/")
+                return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/") + path.sep)
+              }),
+            ),
+          )
+        }),
+      ),
+      Effect.orDie,
+      Effect.asVoid,
+      Effect.forkIn(scope),
+    )
     return Service.of({
       find: (input) =>
         Effect.gen(function* () {
-          if (!state.scan) {
-            state.scan = yield* ripgrep.files({ cwd: location.directory, pattern: "*", limit: 100_000 }).pipe(
-              Effect.tap((result) =>
-                Effect.sync(() => {
-                  state.files = result.items.map((item) => item.replaceAll("\\", "/"))
-                  state.directories = Array.from(
-                    new Set(
-                      state.files.flatMap((file) => {
-                        const parts = file.split("/")
-                        return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/") + path.sep)
-                      }),
-                    ),
-                  )
-                }),
-              ),
-              Effect.orDie,
-              Effect.asVoid,
-              Effect.forkIn(scope),
-            )
-          }
+          if (input.query) yield* Fiber.join(state.scan!)
           const items =
             input.type === "file"
               ? state.files
