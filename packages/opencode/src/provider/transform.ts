@@ -826,6 +826,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
+      if (model.api.id.toLowerCase() === "north-mini-code-1-0") {
+        return Object.fromEntries(
+          ["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]),
+        )
+      }
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
@@ -1105,6 +1110,10 @@ export function options(input: {
   }
 
   const modelId = input.model.api.id.toLowerCase()
+  if (modelId === "north-mini-code-1-0" && input.model.api.npm === "@ai-sdk/openai-compatible") {
+    result["citation_options"] = { mode: "off" }
+  }
+
   // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
   if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
     result["thinking"] = { type: "adaptive" }
