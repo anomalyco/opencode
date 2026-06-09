@@ -20,7 +20,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
-import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type OpencodeClient, type Part as SessionPart, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
@@ -629,9 +629,103 @@ export const RunCommand = effectCmd({
         // to stdout/UI. `client` is passed explicitly because attach mode may
         // rebind the SDK to the session's directory after the subscription is
         // created, and replies issued from inside the loop must use that client.
+        let flushParts: (parts?: SessionPart[]) => Promise<void> = async () => {}
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          const emitted = new Set<string>()
           let error: string | undefined
+
+          const mark = (part: SessionPart) => {
+            emitted.add(part.id)
+          }
+
+          async function handlePart(part: SessionPart) {
+            if (part.sessionID !== sessionID) return
+
+            if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
+              if (emit("tool_use", { part })) {
+                mark(part)
+                return
+              }
+              if (part.state.status === "completed") {
+                await tool(part)
+                mark(part)
+                return
+              }
+              await toolError(part)
+              UI.error(part.state.error)
+              mark(part)
+            }
+
+            if (
+              part.type === "tool" &&
+              part.tool === "task" &&
+              part.state.status === "running" &&
+              args.format !== "json"
+            ) {
+              if (toggles.get(part.id) === true) return
+              await tool(part)
+              toggles.set(part.id, true)
+            }
+
+            if (part.type === "step-start") {
+              if (emit("step_start", { part })) {
+                mark(part)
+                return
+              }
+            }
+
+            if (part.type === "step-finish") {
+              if (emit("step_finish", { part })) {
+                mark(part)
+                return
+              }
+            }
+
+            if (part.type === "text" && part.time?.end) {
+              if (emit("text", { part })) {
+                mark(part)
+                return
+              }
+              const text = part.text.trim()
+              if (!text) return
+              if (!process.stdout.isTTY) {
+                process.stdout.write(text + EOL)
+                mark(part)
+                return
+              }
+              UI.empty()
+              UI.println(text)
+              UI.empty()
+              mark(part)
+            }
+
+            if (part.type === "reasoning" && part.time?.end && thinking) {
+              if (emit("reasoning", { part })) {
+                mark(part)
+                return
+              }
+              const text = part.text.trim()
+              if (!text) return
+              const line = `Thinking: ${text}`
+              if (process.stdout.isTTY) {
+                UI.empty()
+                UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
+                UI.empty()
+                mark(part)
+                return
+              }
+              process.stdout.write(line + EOL)
+              mark(part)
+            }
+          }
+
+          flushParts = async (parts = []) => {
+            for (const part of parts) {
+              if (emitted.has(part.id)) continue
+              await handlePart(part)
+            }
+          }
 
           for await (const event of events.stream) {
             if (
@@ -648,64 +742,7 @@ export const RunCommand = effectCmd({
             }
 
             if (event.type === "message.part.updated") {
-              const part = event.properties.part
-              if (part.sessionID !== sessionID) continue
-
-              if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
-                if (emit("tool_use", { part })) continue
-                if (part.state.status === "completed") {
-                  await tool(part)
-                  continue
-                }
-                await toolError(part)
-                UI.error(part.state.error)
-              }
-
-              if (
-                part.type === "tool" &&
-                part.tool === "task" &&
-                part.state.status === "running" &&
-                args.format !== "json"
-              ) {
-                if (toggles.get(part.id) === true) continue
-                await tool(part)
-                toggles.set(part.id, true)
-              }
-
-              if (part.type === "step-start") {
-                if (emit("step_start", { part })) continue
-              }
-
-              if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
-              }
-
-              if (part.type === "text" && part.time?.end) {
-                if (emit("text", { part })) continue
-                const text = part.text.trim()
-                if (!text) continue
-                if (!process.stdout.isTTY) {
-                  process.stdout.write(text + EOL)
-                  continue
-                }
-                UI.empty()
-                UI.println(text)
-                UI.empty()
-              }
-
-              if (part.type === "reasoning" && part.time?.end && thinking) {
-                if (emit("reasoning", { part })) continue
-                const text = part.text.trim()
-                if (!text) continue
-                const line = `Thinking: ${text}`
-                if (process.stdout.isTTY) {
-                  UI.empty()
-                  UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
-                  UI.empty()
-                  continue
-                }
-                process.stdout.write(line + EOL)
-              }
+              await handlePart(event.properties.part)
             }
 
             if (event.type === "session.error") {
@@ -787,6 +824,7 @@ export const RunCommand = effectCmd({
               return
             }
             await finish()
+            if (!args.attach) await flushParts(result.data?.parts)
             return
           }
 
@@ -804,6 +842,7 @@ export const RunCommand = effectCmd({
             return
           }
           await finish()
+          if (!args.attach) await flushParts(result.data?.parts)
           return
         }
 
