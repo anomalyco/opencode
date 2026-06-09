@@ -1,0 +1,12 @@
+{
+  "default": {
+    "min_sharpe": 1.5,
+    "min_profit_factor": 1.2,
+    "max_drawdown_pct": 15.0,
+    "min_trades": 50,
+    "required_log_markers": ["RISK_V3_ORDER_CALC_PROFIT"],
+    "reject_no_money": true,
+    "reject_margin_error": true,
+    "warn_largest_lot_above": 1.0
+  }
+}

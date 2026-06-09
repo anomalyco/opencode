@@ -3,6 +3,8 @@
 //|                                  Position sizing & risk control  |
 //+------------------------------------------------------------------+
 
+#define RISK_VERSION "RISK_V3_ORDER_CALC_PROFIT"
+
 //+------------------------------------------------------------------+
 //| CRiskManager class                                                |
 //+------------------------------------------------------------------+
@@ -27,6 +29,7 @@ private:
    bool     m_global_dd_alerted;
    bool     m_monthly_dd_alerted;
    bool     m_daily_dd_alerted;
+   bool     m_risk_version_logged;
 
 public:
    CRiskManager() : m_global_dd_limit(-0.25),
@@ -37,16 +40,17 @@ public:
                      m_win_rate(0.55),
                     m_avg_win_loss_ratio(1.5),
                      m_default_sl_ticks(100),
-                     m_initial_equity(0),
-                     m_month_high_equity(0),
-                     m_day_high_equity(0),
-                     m_global_dd_alerted(false),
-                     m_monthly_dd_alerted(false),
-                     m_daily_dd_alerted(false)
-      {
-       m_last_month_reset = TimeCurrent();
-       m_last_day_reset = TimeCurrent();
-     }
+                      m_initial_equity(0),
+                      m_month_high_equity(0),
+                      m_day_high_equity(0),
+                      m_global_dd_alerted(false),
+                      m_monthly_dd_alerted(false),
+                      m_daily_dd_alerted(false),
+                      m_risk_version_logged(false)
+       {
+        m_last_month_reset = TimeCurrent();
+        m_last_day_reset = TimeCurrent();
+      }
    
    void SetGlobalDDLimit(double limit)  { m_global_dd_limit = limit; }
    void SetMonthlyDDLimit(double limit) { m_monthly_dd_limit = limit; }
@@ -57,12 +61,14 @@ public:
    void SetAvgWinLossRatio(double ratio){ m_avg_win_loss_ratio = ratio; }
    void SetDefaultSLTicks(int ticks)    { m_default_sl_ticks = ticks; }
    
-   bool IsHealthy()
-     {
-      double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-      
-      if(m_initial_equity == 0)
-        {
+    bool IsHealthy()
+      {
+       double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+       if(equity <= 0.0)
+          return false;
+       
+       if(m_initial_equity == 0)
+         {
          m_initial_equity = equity;
          m_month_high_equity = equity;
          m_day_high_equity = equity;
@@ -76,8 +82,11 @@ public:
        if(equity > m_month_high_equity) m_month_high_equity = equity;
        if(equity > m_day_high_equity)   m_day_high_equity = equity;
       
-      // Check global DD
-       double global_dd = (equity - m_initial_equity) / m_initial_equity;
+       if(m_initial_equity <= 0.0 || m_month_high_equity <= 0.0 || m_day_high_equity <= 0.0)
+          return false;
+
+       // Check global DD
+        double global_dd = (equity - m_initial_equity) / m_initial_equity;
        if(global_dd < m_global_dd_limit)
          {
          if(!m_global_dd_alerted)
@@ -115,83 +124,97 @@ public:
       return true;
      }
    
-   double CalculateLot()
-     {
-      double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-      double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-      
-      // Kelly criterion calculation
-      double kelly = (m_win_rate * m_avg_win_loss_ratio - (1 - m_win_rate) * 1.0) / 1.0;
-      kelly = MathMax(0, kelly) * m_kelly_fraction;
-      
-      // Risk per trade (1% of equity with Kelly scaling)
-      double risk_amount = equity * 0.01 * kelly;
-      
-      // Convert to lots
-      double lot_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_CONTRACT_SIZE);
-      double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-      double stop_loss_ticks = m_default_sl_ticks;
-      
-      double lot = risk_amount / (stop_loss_ticks * tick_value);
-      
-      // Normalize to broker lot step
-      double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-      double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-      double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-      
-      lot = MathFloor(lot / lot_step) * lot_step;
-      lot = MathMax(min_lot, MathMin(max_lot, lot));
-      
-      // Apply daily DD reduction
-      double daily_dd = (equity - m_day_high_equity) / m_day_high_equity;
-      if(daily_dd < -0.015)  // 1.5% daily DD
-         lot *= 0.5;         // Reduce lot by 50%
-      
-      return NormalizeDouble(lot, 2);
-     }
-
-   double CalculateLotFromSLDistance(ENUM_ORDER_TYPE type, double entry_price, double sl_distance_price)
+    double CalculateLot()
       {
-      if(sl_distance_price <= 0)
-         return 0.0;
+       PrintRiskVersionOnce();
+        double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+        if(equity <= 0.0 || m_avg_win_loss_ratio <= 0.0)
+           return 0.0;
 
-      double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-      double free_margin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
-      double risk_amount = equity * m_risk_per_trade_pct;
-      double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-      double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-      if(tick_value <= 0 || tick_size <= 0)
-         return 0.0;
+        // Kelly criterion calculation
+        double kelly = m_win_rate - ((1.0 - m_win_rate) / m_avg_win_loss_ratio);
+        kelly = MathMax(0, kelly) * m_kelly_fraction;
+        if(kelly <= 0.0)
+           return 0.0;
 
-      double loss_per_lot = (sl_distance_price / tick_size) * tick_value;
-      if(loss_per_lot <= 0)
-         return 0.0;
+       // Risk per trade (1% of equity with Kelly scaling)
+       double risk_amount = equity * 0.01 * kelly;
 
-      double lot = risk_amount / loss_per_lot;
+        double loss_per_lot = EstimateLossPerLot(ORDER_TYPE_BUY, SymbolInfoDouble(_Symbol, SYMBOL_ASK), m_default_sl_ticks * _Point);
+       if(loss_per_lot <= 0.0)
+          return 0.0;
+
+       double lot = risk_amount / loss_per_lot;
+
+       // Normalize to broker lot step
+       double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+       double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+       double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+       if(lot_step <= 0.0 || min_lot <= 0.0 || max_lot <= 0.0)
+          return 0.0;
+       
+       lot = NormalizeLotDown(lot, lot_step, max_lot);
+       if(lot < min_lot)
+          return 0.0;
+       
+       // Apply daily DD reduction
+        double daily_dd = (m_day_high_equity > 0.0) ? (equity - m_day_high_equity) / m_day_high_equity : 0.0;
+       if(daily_dd < -0.015)  // 1.5% daily DD
+          lot *= 0.5;         // Reduce lot by 50%
+
+       lot = NormalizeLotDown(lot, lot_step, max_lot);
+       if(lot < min_lot)
+          return 0.0;
+       
+              return NormalizeDouble(lot, LotDigitsFromStep(lot_step));
+      }
+
+    double CalculateLotFromSLDistance(ENUM_ORDER_TYPE type, double entry_price, double sl_distance_price)
+       {
+       PrintRiskVersionOnce();
+       if(sl_distance_price <= 0)
+          return 0.0;
+
+       if(entry_price <= 0.0)
+          return 0.0;
+
+       double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+       double free_margin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+       if(equity <= 0.0 || free_margin <= 0.0)
+          return 0.0;
+       double risk_amount = equity * m_risk_per_trade_pct;
+       double loss_per_lot = EstimateLossPerLot(type, entry_price, sl_distance_price);
+       if(loss_per_lot <= 0)
+          return 0.0;
+
+       double lot = risk_amount / loss_per_lot;
       double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-      double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-      double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-      if(lot_step <= 0 || min_lot <= 0 || max_lot <= 0)
-         return 0.0;
+       double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+       double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+       if(lot_step <= 0 || min_lot <= 0 || max_lot <= 0)
+          return 0.0;
 
-      lot = MathFloor(lot / lot_step) * lot_step;
-      lot = MathMax(min_lot, MathMin(max_lot, lot));
+       lot = NormalizeLotDown(lot, lot_step, max_lot);
+       if(lot < min_lot)
+          return 0.0;
 
-      double daily_dd = (m_day_high_equity > 0) ? (equity - m_day_high_equity) / m_day_high_equity : 0.0;
-      if(daily_dd < -0.015)
-         lot *= 0.5;
+       double daily_dd = (m_day_high_equity > 0) ? (equity - m_day_high_equity) / m_day_high_equity : 0.0;
+       if(daily_dd < -0.015)
+          lot *= 0.5;
 
-      lot = NormalizeLotSize(lot, lot_step, min_lot, max_lot);
-      if(lot < min_lot)
-         return 0.0;
+       lot = NormalizeLotDown(lot, lot_step, max_lot);
+       if(lot < min_lot)
+          return 0.0;
 
-      double margin_required = 0.0;
-      while(lot >= min_lot)
-        {
-         if(OrderCalcMargin(type, _Symbol, lot, entry_price, margin_required) && margin_required <= free_margin * 0.95)
-            return NormalizeDouble(lot, 2);
-         lot = NormalizeLotSize(lot - lot_step, lot_step, min_lot, max_lot);
-        }
+       double margin_required = 0.0;
+       while(lot >= min_lot)
+         {
+          if(OrderCalcMargin(type, _Symbol, lot, entry_price, margin_required) && margin_required <= free_margin * 0.95)
+       return NormalizeDouble(lot, LotDigitsFromStep(lot_step));
+          if(lot <= min_lot)
+             return 0.0;
+          lot = NormalizeLotDown(lot - lot_step, lot_step, max_lot);
+         }
 
       return 0.0;
       }
@@ -214,12 +237,58 @@ public:
      }
 
 private:
-   double NormalizeLotSize(double lot, double lot_step, double min_lot, double max_lot)
-     {
-      lot = MathFloor(lot / lot_step) * lot_step;
-      lot = MathMax(min_lot, MathMin(max_lot, lot));
-      return lot;
-     }
+   double NormalizeLotDown(double lot, double lot_step, double max_lot)
+      {
+       if(lot_step <= 0.0)
+          return 0.0;
+       if(lot <= 0.0)
+          return 0.0;
+       lot = MathFloor(lot / lot_step) * lot_step;
+       if(max_lot > 0.0)
+          lot = MathMin(max_lot, lot);
+       return (lot > 0.0) ? lot : 0.0;
+      }
+
+   double EstimateLossPerLot(ENUM_ORDER_TYPE type, double entry_price, double sl_distance_price)
+      {
+       if(sl_distance_price <= 0.0)
+          return 0.0;
+
+       if(entry_price <= 0.0)
+          return 0.0;
+
+       double sl_price = (type == ORDER_TYPE_BUY) ? entry_price - sl_distance_price : entry_price + sl_distance_price;
+       if(sl_price <= 0.0)
+          return 0.0;
+       double profit = 0.0;
+       if(!OrderCalcProfit(type, _Symbol, 1.0, entry_price, sl_price, profit))
+          return 0.0;
+
+       double loss = MathAbs(profit);
+       if(loss <= 0.0)
+          return 0.0;
+       return loss;
+      }
+
+   int LotDigitsFromStep(double lot_step)
+      {
+       int digits = 0;
+       double step = lot_step;
+       while(digits < 8 && MathAbs(step - MathRound(step)) > 0.00000001)
+         {
+          step *= 10.0;
+          digits++;
+         }
+       return digits;
+      }
+
+   void PrintRiskVersionOnce()
+      {
+       if(m_risk_version_logged)
+          return;
+       Print("RiskManager Version: ", RISK_VERSION);
+       m_risk_version_logged = true;
+      }
 
 public:
    bool PlaceOrder(ENUM_ORDER_TYPE type, double lot, double price, double sl, double tp)
