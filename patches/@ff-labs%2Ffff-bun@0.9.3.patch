@@ -2,18 +2,10 @@ diff --git a/src/download.ts b/src/download.ts
 index 3454256..6dca25a 100644
 --- a/src/download.ts
 +++ b/src/download.ts
-@@ -7,7 +7,6 @@
-  */
- 
+@@ -9,2 +9 @@
  import { existsSync } from "node:fs";
 -import { createRequire } from "node:module";
- import { dirname, join } from "node:path";
- import { fileURLToPath } from "node:url";
- import { getLibFilename, getNpmPackageName } from "./platform";
-@@ -54,14 +53,14 @@ export function binaryExists(): boolean {
-  * in the same directory.
-  */
- function resolveFromNpmPackage(): string | null {
+@@ -56,8 +55,8 @@ function resolveFromNpmPackage(): string | null {
 -  const packageName = getNpmPackageName();
 -
    try {
@@ -29,6 +21,3 @@ index 3454256..6dca25a 100644
 +        : getNpmPackageName().endsWith("musl")
 +          ? require(`../../../../../@ff-labs+fff-bin-linux-${process.arch}-musl@0.9.3/node_modules/@ff-labs/fff-bin-linux-${process.arch}-musl/libfff_c.so`)
 +          : require(`../../../../../@ff-labs+fff-bin-linux-${process.arch}-gnu@0.9.3/node_modules/@ff-labs/fff-bin-linux-${process.arch}-gnu/libfff_c.so`);
- 
-     if (existsSync(binaryPath)) {
-       return binaryPath;
