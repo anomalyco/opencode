@@ -3,6 +3,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { resolveThreadDirectory } from "./tui"
 import open from "open"
 import { networkInterfaces } from "os"
 
@@ -30,12 +31,23 @@ function getNetworkIPs() {
 
 export const WebCommand = effectCmd({
   command: "web",
-  builder: (yargs) => withNetworkOptions(yargs),
+  builder: (yargs) =>
+    withNetworkOptions(yargs).option("dir", {
+      type: "string",
+      describe: "directory to run in",
+    }),
   describe: "start opencode server and open web interface",
   // Server loads instances per-request via x-opencode-directory header — no
   // ambient project InstanceContext needed at startup.
   instance: false,
   handler: Effect.fn("Cli.web")(function* (args) {
+    const resolved = resolveThreadDirectory(args.dir)
+    try {
+      process.chdir(resolved)
+    } catch {
+      UI.println(UI.Style.TEXT_WARNING_BOLD + "!  Failed to change directory to " + resolved)
+      return
+    }
     const { Server } = yield* Effect.promise(() => import("../../server/server"))
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
@@ -45,6 +57,7 @@ export const WebCommand = effectCmd({
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
+    UI.println(UI.Style.TEXT_INFO_BOLD + "  Working directory: ", UI.Style.TEXT_NORMAL, process.cwd())
 
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
