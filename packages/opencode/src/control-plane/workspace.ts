@@ -586,7 +586,13 @@ export const layer = Layer.effect(
 
             if (target.type === "remote") {
               yield* syncHistory(previous, target.url, target.headers).pipe(
-                Effect.catch((error) => Effect.sync(() => {})),
+                Effect.catch((error) =>
+                  Effect.logWarning("session warp final source sync failed", {
+                    workspaceID: previous.id,
+                    sessionID: input.sessionID,
+                    error: errorData(error),
+                  }),
+                ),
               )
             } else {
               yield* prompt.cancel(input.sessionID)
@@ -739,9 +745,7 @@ export const layer = Layer.effect(
         ([type, adapter]) =>
           WorkspaceAdapterRuntime.list(adapter).pipe(
             Effect.catchCause((error) =>
-              Effect.sync(() => {
-                return []
-              }),
+              Effect.logWarning("workspace adapter list failed", { type, error }).pipe(Effect.as([])),
             ),
           ),
         { concurrency: "unbounded" },
@@ -817,7 +821,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           yield* WorkspaceAdapterRuntime.remove(info)
         }),
-        () => Effect.sync(() => {}),
+        () => Effect.logError("adapter not available when removing workspace", { type: row.type }),
       )
 
       yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run().pipe(Effect.orDie)

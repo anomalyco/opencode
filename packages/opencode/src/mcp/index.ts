@@ -215,6 +215,12 @@ function fetchFromClient<T extends { name: string }>(
       return e
     },
   }).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning(`failed to get ${label}`, {
+        clientName,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    ),
     Effect.map((items) => {
       const out: Record<string, T & { client: string }> = {}
       const sanitizedClient = sanitize(clientName)
@@ -529,6 +535,7 @@ export const layer = Layer.effect(
           ([key, mcp]) =>
             Effect.gen(function* () {
               if (!isMcpConfigured(mcp)) {
+                yield* Effect.logError("Ignoring MCP config entry without type", { key })
                 return
               }
 
@@ -679,6 +686,7 @@ export const layer = Layer.effect(
 
             const listed = s.defs[clientName]
             if (!listed) {
+              yield* Effect.logWarning("missing cached tools for connected server", { clientName })
               return
             }
 
@@ -744,6 +752,7 @@ export const layer = Layer.effect(
       const s = yield* InstanceState.get(state)
       const client = s.clients[clientName]
       if (!client) {
+        yield* Effect.logWarning(`client not found for ${label}`, { clientName })
         return undefined
       }
       return yield* Effect.tryPromise({
@@ -751,7 +760,16 @@ export const layer = Layer.effect(
         catch: (e: any) => {
           return e
         },
-      }).pipe(Effect.orElseSucceed(() => undefined))
+      }).pipe(
+        Effect.tapError((error) =>
+          Effect.logError(`failed to ${label}`, {
+            clientName,
+            ...meta,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        ),
+        Effect.orElseSucceed(() => undefined),
+      )
     })
 
     const getPrompt = Effect.fn("MCP.getPrompt")(function* (

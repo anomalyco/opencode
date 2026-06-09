@@ -113,6 +113,7 @@ const live: Layer.Layer<
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
       // and results sent back over the WebSocket.
+      const bridge = yield* EffectBridge.make()
       if (language instanceof GitLabWorkflowLanguageModel) {
         const workflowModel = language as GitLabWorkflowLanguageModel & {
           sessionID?: string
@@ -149,7 +150,6 @@ const live: Layer.Layer<
           return !match || match.action !== "ask"
         })
 
-        const bridge = yield* EffectBridge.make()
         const approvedToolsForSession = new Set<string>()
         workflowModel.approvalHandler = bridge.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
@@ -276,6 +276,19 @@ const live: Layer.Layer<
       return {
         type: "ai-sdk" as const,
         result: streamText({
+          onError(error) {
+            bridge.fork(
+              Effect.logError("stream error", {
+                providerID: input.model.providerID,
+                modelID: input.model.id,
+                "session.id": input.sessionID,
+                small: (input.small ?? false).toString(),
+                agent: input.agent.name,
+                mode: input.agent.mode,
+                error,
+              }),
+            )
+          },
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
