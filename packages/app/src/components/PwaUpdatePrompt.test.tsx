@@ -49,6 +49,7 @@ type RegisterSWOptions = {
 // Controlled by tests: overriding `currentNeedRefreshOverride` to `true`
 // makes the hook's signal start as `true` on the next mount.
 let triggerNeedRefresh: () => void = () => {}
+let triggerRegisterError: () => void = () => {}
 
 // Spy: tests assign this to detect whether updateServiceWorker was called.
 let updateServiceWorkerSpy: ((reloadPage?: boolean) => void) | null = null
@@ -72,6 +73,11 @@ mock.module("virtual:pwa-register/solid", () => ({
     triggerNeedRefresh = () => {
       setNeedRefresh(true)
       options.onNeedRefresh?.()
+    }
+
+    // Wire up the error trigger so tests can exercise onRegisterError
+    triggerRegisterError = () => {
+      options.onRegisterError?.(new Error("SW registration failed"))
     }
 
     if (omitUpdateServiceWorker) {
@@ -120,6 +126,7 @@ function findButton(container: HTMLElement, label: "reload" | "dismiss"): HTMLBu
 afterEach(() => {
   // Reset all shared state between tests
   triggerNeedRefresh = () => {}
+  triggerRegisterError = () => {}
   setNeedRefreshSignal = () => {}
   updateServiceWorkerSpy = null
   omitUpdateServiceWorker = false
@@ -247,6 +254,26 @@ describe("PwaUpdatePrompt", () => {
 
     // 3. SW fires onNeedRefresh again → sets needRefresh(true) + show(true) → banner reappears
     triggerNeedRefresh()
+    expect(container.querySelector("[role='status']")).not.toBeNull()
+
+    dispose()
+  })
+
+  test("B10: re-shows banner on SW registration error after optimistic hide", () => {
+    const { container, dispose } = mountIntoContainer()
+
+    // 1. SW fires onNeedRefresh → banner appears
+    triggerNeedRefresh()
+    expect(container.querySelector("[role='status']")).not.toBeNull()
+
+    // 2. User clicks Reload → optimistic hide (banner disappears)
+    const reloadBtn = findButton(container, "reload")
+    expect(reloadBtn).not.toBeNull()
+    reloadBtn!.click()
+    expect(container.querySelector("[role='status']")).toBeNull()
+
+    // 3. SW fires onRegisterError → onRegisterError calls setShow(true) → banner reappears
+    triggerRegisterError()
     expect(container.querySelector("[role='status']")).not.toBeNull()
 
     dispose()

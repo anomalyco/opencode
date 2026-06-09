@@ -64,7 +64,7 @@ describe("site.webmanifest", () => {
     expect(manifest.display).toBe("standalone")
   })
 
-  test("at least one icon has purpose 'any' (currently missing — fails until E5)", () => {
+  test("at least one icon has purpose 'any'", () => {
     // The `purpose` field may be a space-separated list per the spec,
     // e.g. "any maskable". We split and check each token.
     const hasAnyPurpose = manifest.icons?.some((icon) => {
@@ -74,7 +74,7 @@ describe("site.webmanifest", () => {
     expect(hasAnyPurpose).toBe(true)
   })
 
-  test("theme_color is not '#ffffff' (inconsistency fix — fails until E5)", () => {
+  test("theme_color is not '#ffffff'", () => {
     // #ffffff is visually inconsistent with the dark app shell.
     // After the fix this should match the app's primary brand/background colour.
     expect(manifest.theme_color?.toLowerCase()).not.toBe("#ffffff")
