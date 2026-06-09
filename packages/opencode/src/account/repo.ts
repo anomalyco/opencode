@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { eq } from "drizzle-orm"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Effect, Layer, Option, Schema, Context } from "effect"
@@ -166,5 +167,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
+
+export const node = LayerNode.make(layer, [Database.node])
 
 export * as AccountRepo from "./repo"

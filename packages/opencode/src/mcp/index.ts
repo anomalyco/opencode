@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -203,8 +204,15 @@ function fetchFromClient<T extends { name: string }>(
   clientName: string,
   client: Client,
   listFn: (c: Client) => Promise<T[]>,
+  label: string,
 ) {
   return Effect.tryPromise(() => listFn(client)).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning(`failed to get ${label}`, {
+        clientName,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    ),
     Effect.map((items) => {
       const out: Record<string, T & { client: string }> = {}
       const sanitizedClient = sanitize(clientName)
@@ -517,6 +525,7 @@ export const layer = Layer.effect(
           ([key, mcp]) =>
             Effect.gen(function* () {
               if (!isMcpConfigured(mcp)) {
+                yield* Effect.logError("Ignoring MCP config entry without type", { key })
                 return
               }
 
@@ -659,8 +668,10 @@ export const layer = Layer.effect(
         const mcpConfig = config[clientName]
         const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : s.config[clientName]
         const listed = s.defs[clientName]
-        if (!listed) continue
-
+        if (!listed) {
+          yield* Effect.logWarning("missing cached tools for connected server", { clientName })
+          continue
+        }
         const timeout = entry?.timeout ?? defaultTimeout
         for (const mcpTool of listed) {
           result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
@@ -669,44 +680,71 @@ export const layer = Layer.effect(
       return result
     })
 
-    function collectFromConnected<T extends { name: string }>(s: State, listFn: (c: Client) => Promise<T[]>) {
+    function collectFromConnected<T extends { name: string }>(
+      s: State,
+      listFn: (c: Client) => Promise<T[]>,
+      label: string,
+    ) {
       return Effect.forEach(
         Object.entries(s.clients).filter(([name]) => s.status[name]?.status === "connected"),
         ([clientName, client]) =>
-          fetchFromClient(clientName, client, listFn).pipe(Effect.map((items) => Object.entries(items ?? {}))),
+          fetchFromClient(clientName, client, listFn, label).pipe(Effect.map((items) => Object.entries(items ?? {}))),
         { concurrency: "unbounded" },
       ).pipe(Effect.map((results) => Object.fromEntries<T & { client: string }>(results.flat())))
     }
 
     const prompts = Effect.fn("MCP.prompts")(function* () {
       const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(s, (c) =>
-        c.getServerCapabilities()?.prompts
-          ? paginate(
-              (cursor) => c.listPrompts(cursor === undefined ? undefined : { cursor }),
-              (result) => result.prompts,
-            )
-          : Promise.resolve([]),
+      return yield* collectFromConnected(
+        s,
+        (c) =>
+          c.getServerCapabilities()?.prompts
+            ? paginate(
+                (cursor) => c.listPrompts(cursor === undefined ? undefined : { cursor }),
+                (result) => result.prompts,
+              )
+            : Promise.resolve([]),
+        "prompts",
       )
     })
 
     const resources = Effect.fn("MCP.resources")(function* () {
       const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(s, (c) =>
-        c.getServerCapabilities()?.resources
-          ? paginate(
-              (cursor) => c.listResources(cursor === undefined ? undefined : { cursor }),
-              (result) => result.resources,
-            )
-          : Promise.resolve([]),
+      return yield* collectFromConnected(
+        s,
+        (c) =>
+          c.getServerCapabilities()?.resources
+            ? paginate(
+                (cursor) => c.listResources(cursor === undefined ? undefined : { cursor }),
+                (result) => result.resources,
+              )
+            : Promise.resolve([]),
+        "resources",
       )
     })
 
-    const withClient = Effect.fnUntraced(function* <A>(clientName: string, fn: (client: MCPClient) => Promise<A>) {
+    const withClient = Effect.fnUntraced(function* <A>(
+      clientName: string,
+      fn: (client: MCPClient) => Promise<A>,
+      label: string,
+      meta?: Record<string, unknown>,
+    ) {
       const s = yield* InstanceState.get(state)
       const client = s.clients[clientName]
-      if (!client) return undefined
-      return yield* Effect.tryPromise(() => fn(client)).pipe(Effect.orElseSucceed(() => undefined))
+      if (!client) {
+        yield* Effect.logWarning(`client not found for ${label}`, { clientName })
+        return undefined
+      }
+      return yield* Effect.tryPromise(() => fn(client)).pipe(
+        Effect.tapError((error) =>
+          Effect.logError(`failed to ${label}`, {
+            clientName,
+            ...meta,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        ),
+        Effect.orElseSucceed(() => undefined),
+      )
     })
 
     const getPrompt = Effect.fn("MCP.getPrompt")(function* (
@@ -714,11 +752,15 @@ export const layer = Layer.effect(
       name: string,
       args?: Record<string, string>,
     ) {
-      return yield* withClient(clientName, (client) => client.getPrompt({ name, arguments: args }))
+      return yield* withClient(clientName, (client) => client.getPrompt({ name, arguments: args }), "getPrompt", {
+        promptName: name,
+      })
     })
 
     const readResource = Effect.fn("MCP.readResource")(function* (clientName: string, resourceUri: string) {
-      return yield* withClient(clientName, (client) => client.readResource({ uri: resourceUri }))
+      return yield* withClient(clientName, (client) => client.readResource({ uri: resourceUri }), "readResource", {
+        resourceUri,
+      })
     })
 
     const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
@@ -935,5 +977,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
 )
+
+export const node = LayerNode.make(layer, [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node])
 
 export * as MCP from "."

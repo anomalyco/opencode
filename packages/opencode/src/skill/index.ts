@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema } from "effect"
@@ -352,5 +353,14 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
       .map((skill) => `- **${skill.name}**: ${skill.description}`),
   ].join("\n")
 }
+
+export const node = LayerNode.make(layer, [
+  Discovery.node,
+  Config.node,
+  EventV2Bridge.node,
+  FSUtil.node,
+  Global.node,
+  RuntimeFlags.node,
+])
 
 export * as Skill from "."

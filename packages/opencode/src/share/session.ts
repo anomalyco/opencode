@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { Effect, Layer, Scope, Context } from "effect"
@@ -54,5 +55,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
+
+export const node = LayerNode.make(layer, [Config.node, Session.node, ShareNext.node, RuntimeFlags.node])
 
 export * as SessionShare from "./session"

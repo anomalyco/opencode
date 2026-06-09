@@ -12482,6 +12482,9 @@
             "$ref": "#/components/schemas/EventProjectUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventVcsBranchUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventQuestionAsked"
           },
           {
@@ -12498,9 +12501,6 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionCompacted"
-          },
-          {
-            "$ref": "#/components/schemas/EventVcsBranchUpdated"
           },
           {
             "$ref": "#/components/schemas/EventWorktreeReady"
@@ -17113,6 +17113,30 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["vcs.branch.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "branch": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["question.asked"]
                   },
                   "properties": {
@@ -17285,30 +17309,6 @@
                       }
                     },
                     "required": ["sessionID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["vcs.branch.updated"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "branch": {
-                        "type": "string"
-                      }
-                    },
                     "additionalProperties": false
                   }
                 },
@@ -28341,6 +28341,30 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventVcsBranchUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["vcs.branch.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventQuestionAsked": {
         "type": "object",
         "properties": {
@@ -28522,30 +28546,6 @@
               }
             },
             "required": ["sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventVcsBranchUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["vcs.branch.updated"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "branch": {
-                "type": "string"
-              }
-            },
             "additionalProperties": false
           }
         },

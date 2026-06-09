@@ -1,3 +1,5 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import type * as SDK from "@opencode-ai/sdk/v2"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"
@@ -369,5 +371,15 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Session.defaultLayer),
 )
+
+export const node = LayerNode.make(layer, [
+  Account.node,
+  EventV2Bridge.node,
+  Config.node,
+  Database.node,
+  httpClient,
+  Provider.node,
+  Session.node,
+])
 
 export * as ShareNext from "./share-next"

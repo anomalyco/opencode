@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
@@ -1947,5 +1948,15 @@ export function parseModel(model: string) {
     modelID: ModelV2.ID.make(rest.join("/")),
   }
 }
+
+export const node = LayerNode.make(layer, [
+  FSUtil.node,
+  Config.node,
+  Auth.node,
+  Env.node,
+  Plugin.node,
+  ModelsDev.node,
+  RuntimeFlags.node,
+])
 
 export * as Provider from "./provider"

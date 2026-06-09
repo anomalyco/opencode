@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionID } from "./schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
@@ -83,5 +84,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(Database.defaultLayer))
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node, Database.node])
 
 export * as Todo from "./todo"
