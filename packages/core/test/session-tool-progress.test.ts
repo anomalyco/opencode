@@ -14,7 +14,6 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable, SessionMessageTable } from "@opencode-ai/core/session/sql"
-import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
@@ -24,7 +23,7 @@ const it = testEffect(Layer.mergeAll(database, events, projector))
 const timestamp = DateTime.makeUnsafe(1)
 const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
 
-const content = (text: string) => [ToolOutput.text({ type: "text", text })]
+const content = (text: string) => [{ type: "text" as const, text }]
 
 describe("Tool.Progress", () => {
   it.effect("projects durable progress and keeps final settlements durable", () =>
@@ -50,12 +49,14 @@ describe("Tool.Progress", () => {
         })
         .run()
         .pipe(Effect.orDie)
-      const assistantMessageID = (yield* service.publish(SessionEvent.Step.Started, {
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* service.publish(SessionEvent.Step.Started, {
         sessionID,
+        assistantMessageID,
         timestamp,
         agent: "build",
         model,
-      })).id
+      })
       const readAssistant = Effect.gen(function* () {
         const row = yield* db
           .select()

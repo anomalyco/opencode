@@ -455,7 +455,7 @@ export function trackCommand(commandName: string, duration: number): void {
     logToFile(`Tracking command: ${commandName}`, { duration_ms: duration })
 
     // Get instruments from global meter
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const commandDurationHistogram = meter.createHistogram("opencode.command.duration_ms", {
       description: "Duration of CLI command execution",
       unit: "ms",
@@ -518,7 +518,7 @@ export function trackModelCall(modelId: string, inputTokens: number, outputToken
     })
 
     // Get instruments from global meter
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const tokenCounter = meter.createCounter("opencode.token.usage", {
       description: "Total tokens used in model calls",
       unit: "1",
@@ -578,7 +578,7 @@ export function trackSessionStart(userId: string): void {
     logToFile(`Tracking session start: ${userId}`)
 
     // Get instrument from global meter
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const sessionStartCounter = meter.createCounter("opencode.session.started", {
       description: "Number of sessions started",
     })
@@ -602,7 +602,7 @@ export function trackSessionEnd(userId: string, duration: number): void {
     logToFile(`Tracking session end: ${userId}`, { duration_seconds: duration })
 
     // Get instrument from global meter
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const sessionEndHistogram = meter.createHistogram("opencode.session.duration_seconds", {
       description: "Duration of sessions",
       unit: "s",
@@ -624,7 +624,7 @@ export function trackSessionEnd(userId: string, duration: number): void {
  */
 export function trackLinesOfCode(count: number, type: string, language?: string): void {
   try {
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const counter = meter.createCounter("opencode.lines_of_code.count", {
       description: "Lines of code",
       unit: "1",
@@ -644,7 +644,7 @@ export function trackLinesOfCode(count: number, type: string, language?: string)
  */
 export function trackCodeEditTool(toolName: string, language: string, applied: boolean): void {
   try {
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const counter = meter.createCounter("opencode.code_edit_tool.applied", {
       description: "Code edit tool applications",
     })
@@ -661,7 +661,7 @@ export function trackCodeEditTool(toolName: string, language: string, applied: b
  */
 export function trackCodeEditDecision(decision: string, language?: string): void {
   try {
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const counter = meter.createCounter("opencode.code_edit_tool.decision", {
       description: "Code edit tool decisions",
     })
@@ -679,7 +679,7 @@ export function trackCodeEditDecision(decision: string, language?: string): void
  */
 export function trackCommit(): void {
   try {
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const counter = meter.createCounter("opencode.commit.count", {
       description: "Commits made during session",
     })
@@ -695,7 +695,7 @@ export function trackCommit(): void {
  */
 export function trackActiveTime(seconds: number): void {
   try {
-    const meter = metrics.getMeter("opencode-anr")
+    const meter = getMeter()
     const counter = meter.createCounter("opencode.active_time.total", {
       description: "Active coding time in seconds",
       unit: "s",

@@ -3,7 +3,7 @@ export * as SessionStore from "./store"
 import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
-import { SessionContext } from "./context"
+import { SessionHistory } from "./history"
 import { MessageDecodeError } from "./error"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
@@ -13,6 +13,10 @@ import { fromRow } from "./info"
 export interface Interface {
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info | undefined>
   readonly context: (sessionID: SessionSchema.ID) => Effect.Effect<SessionMessage.Message[], MessageDecodeError>
+  readonly runnerContext: (
+    sessionID: SessionSchema.ID,
+    baselineSeq: number,
+  ) => Effect.Effect<SessionMessage.Message[], MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: SessionSchema.ID; readonly message: SessionMessage.Message } | undefined>
@@ -32,7 +36,10 @@ export const layer = Layer.effect(
         return row ? fromRow(row) : undefined
       }),
       context: Effect.fn("SessionStore.context")(function* (sessionID) {
-        return yield* SessionContext.load(db, sessionID)
+        return yield* SessionHistory.load(db, sessionID)
+      }),
+      runnerContext: Effect.fn("SessionStore.runnerContext")(function* (sessionID, baselineSeq) {
+        return yield* SessionHistory.loadForRunner(db, sessionID, baselineSeq)
       }),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* db
@@ -51,3 +58,5 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))

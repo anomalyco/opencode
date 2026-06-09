@@ -11,7 +11,6 @@
 import {
   BoxRenderable,
   type ColorInput,
-  RGBA,
   TextAttributes,
   TextRenderable,
   type ScrollbackRenderContext,
@@ -19,7 +18,7 @@ import {
   type ScrollbackWriter,
 } from "@opentui/core"
 import * as Locale from "@/util/locale"
-import { go, logo } from "@/cli/logo"
+import { go } from "@/cli/logo"
 import type { RunSplashTheme } from "./theme"
 
 export const SPLASH_TITLE_LIMIT = 50
@@ -33,6 +32,7 @@ type SplashInput = {
 type SplashWriterInput = SplashInput & {
   theme: RunSplashTheme
   showSession?: boolean
+  detail?: string
 }
 
 export type SplashMeta = {
@@ -144,28 +144,6 @@ function push(
   lines.push({ left, top, text, fg, bg, attrs })
 }
 
-function color(input: ColorInput, fallback: RGBA): RGBA {
-  if (input instanceof RGBA) {
-    return input
-  }
-
-  if (typeof input === "string") {
-    if (input === "transparent" || input === "none") {
-      return RGBA.fromValues(0, 0, 0, 0)
-    }
-
-    if (input.startsWith("#")) {
-      return RGBA.fromHex(input)
-    }
-  }
-
-  return fallback
-}
-
-function fallback(index: number, hex: string): RGBA {
-  return RGBA.fromIndex(index, RGBA.fromHex(hex))
-}
-
 function draw(
   lines: Array<{ left: number; top: number; text: string; fg: ColorInput; bg?: ColorInput; attrs?: number }>,
   row: string,
@@ -200,41 +178,37 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   const width = Math.max(1, ctx.width)
   const meta = splashMeta(input)
   const lines: Array<{ left: number; top: number; text: string; fg: ColorInput; bg?: ColorInput; attrs?: number }> = []
-  const left = color(input.theme.left, fallback(81, "#38bdf8"))
-  const right = color(input.theme.right, RGBA.defaultForeground(RGBA.fromHex("#f8fafc")))
-  const leftShadow = color(input.theme.leftShadow, fallback(238, "#334155"))
+  const left = input.theme.left
+  const right = input.theme.right
+  const leftShadow = input.theme.leftShadow
   let height = 1
 
   if (kind === "entry") {
-    const rightShadow = color(input.theme.rightShadow, fallback(240, "#475569"))
+    const mark = go.right.slice(1)
+    const top = 1
+    const body_left = (mark[0]?.length ?? 0) + 2
 
-    for (let i = 0; i < logo.left.length; i += 1) {
-      const leftText = logo.left[i] ?? ""
-      const rightText = logo.right[i] ?? ""
-
-      draw(lines, leftText, {
+    for (let i = 0; i < mark.length; i += 1) {
+      draw(lines, mark[i] ?? "", {
         left: 0,
-        top: i,
+        top: top + i,
         fg: left,
         shadow: leftShadow,
       })
-      draw(lines, rightText, {
-        left: leftText.length + 1,
-        top: i,
-        fg: right,
-        shadow: rightShadow,
-      })
     }
 
-    height = logo.left.length
-
-    if (input.showSession !== false) {
-      const top = logo.left.length + 1
-      const label = "Session".padEnd(10, " ")
-      push(lines, 0, top, label, left, undefined, TextAttributes.DIM)
-      push(lines, label.length, top, meta.title, right, undefined, TextAttributes.BOLD)
-      height = top + 1
+    push(lines, body_left, top, "OpenCode", right, undefined, TextAttributes.BOLD)
+    if (input.detail) {
+      push(
+        lines,
+        body_left,
+        top + 1,
+        Locale.truncateMiddle(input.detail, Math.max(1, width - body_left)),
+        left,
+        undefined,
+      )
     }
+    height = top + mark.length
   }
 
   if (kind === "exit") {

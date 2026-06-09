@@ -14,10 +14,11 @@ import {
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultContentPart,
+  type ToolContent,
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { isContextOverflow } from "../provider-error"
 import * as Cache from "./utils/cache"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
@@ -302,14 +303,17 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
 })
 
 const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: MediaPart) {
-  if (!part.mediaType.startsWith("image/"))
-    return yield* invalid(`Anthropic Messages user media content only supports images`)
+  const media = yield* ProviderShared.validateMedia(
+    "Anthropic Messages",
+    part,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
   return {
     type: "image" as const,
     source: {
       type: "base64" as const,
-      media_type: part.mediaType,
-      data: ProviderShared.mediaBase64(part),
+      media_type: media.mime,
+      data: media.base64,
     },
   } satisfies AnthropicImageBlock
 })
@@ -317,19 +321,22 @@ const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: Me
 // Tool results may carry structured text/images. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultContentItem")(function* (
-  item: ToolResultContentPart,
+  item: ToolContent,
 ) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
-  if (item.mediaType.startsWith("image/"))
-    return {
-      type: "image" as const,
-      source: {
-        type: "base64" as const,
-        media_type: item.mediaType,
-        data: ProviderShared.mediaBase64(item),
-      },
-    } satisfies AnthropicImageBlock
-  return yield* invalid(`Anthropic Messages tool-result media content only supports images, got ${item.mediaType}`)
+  const media = yield* ProviderShared.validateToolFile(
+    "Anthropic Messages",
+    item,
+    new Set<string>(ProviderShared.IMAGE_MIMES),
+  )
+  return {
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type: media.mime,
+      data: media.base64,
+    },
+  } satisfies AnthropicImageBlock
 })
 
 const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultContent")(function* (part: ToolResultPart) {
@@ -337,7 +344,7 @@ const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultConte
   // with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
-  const content: ReadonlyArray<ToolResultContentPart> = part.result.value
+  const content: ReadonlyArray<ToolContent> = part.result.value
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
@@ -351,38 +358,29 @@ const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
   return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted === true
 }
 
-const endsInLocalToolUse = (message: LLMRequest["messages"][number]) => {
-  const last = message.content.at(-1)
-  return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted !== true
-}
-
-const validateNativeSystemUpdate = Effect.fn("AnthropicMessages.validateNativeSystemUpdate")(function* (
-  messages: LLMRequest["messages"],
-  index: number,
-) {
+const canUseNativeSystemUpdate = (messages: LLMRequest["messages"], index: number) => {
   const previous = messages[index - 1]
   const next = messages[index + 1]
-  if (!previous)
-    return yield* invalid(
-      "Anthropic Messages chronological system updates cannot be the first message; use LLMRequest.system",
-    )
-  if (previous.role === "system")
-    return yield* invalid("Anthropic Messages chronological system updates cannot be consecutive")
-  if (endsInLocalToolUse(previous))
-    return yield* invalid(
-      "Anthropic Messages chronological system updates cannot appear between a local tool call and its tool result",
-    )
-  if (previous.role !== "user" && previous.role !== "tool" && !endsInServerToolUse(previous))
-    return yield* invalid(
-      "Anthropic Messages chronological system updates must follow a user message, tool result, or assistant server tool use",
-    )
-  if (next?.role === "system")
-    return yield* invalid("Anthropic Messages chronological system updates cannot be consecutive")
-  if (next && next.role !== "assistant")
-    return yield* invalid(
-      "Anthropic Messages chronological system updates must end the messages array or immediately precede an assistant message",
-    )
-})
+  return (
+    previous !== undefined &&
+    previous.role !== "system" &&
+    (previous.role === "user" || previous.role === "tool" || endsInServerToolUse(previous)) &&
+    next?.role !== "system" &&
+    (next === undefined || next.role === "assistant")
+  )
+}
+
+const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number) => {
+  const pending = new Set<string>()
+  for (const message of messages.slice(0, index)) {
+    for (const part of message.content) {
+      if (message.role === "assistant" && part.type === "tool-call" && part.providerExecuted !== true)
+        pending.add(part.id)
+      if (message.role === "tool" && part.type === "tool-result") pending.delete(part.id)
+    }
+  }
+  return pending.size > 0
+}
 
 const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
   message: LLMRequest["messages"][number],
@@ -407,8 +405,9 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 
   for (const [index, message] of request.messages.entries()) {
     if (message.role === "system") {
-      if (supportsNativeSystemUpdates(request)) {
-        yield* validateNativeSystemUpdate(request.messages, index)
+      if (splitsLocalToolResults(request.messages, index))
+        return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
+      if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request.messages, index)) {
         messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
         continue
       }
@@ -794,7 +793,12 @@ const providerErrorMessage = (event: AnthropicEvent): string => {
 
 const onError = (state: ParserState, event: AnthropicEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: providerErrorMessage(event) })],
+  [
+    LLMEvent.providerError({
+      message: providerErrorMessage(event),
+      classification: isContextOverflow(event.error?.message ?? "") ? "context-overflow" : undefined,
+    }),
+  ],
 ]
 
 const step = (state: ParserState, event: AnthropicEvent) => {

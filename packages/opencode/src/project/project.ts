@@ -3,7 +3,6 @@ import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
-import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
 import { which } from "@opencode-ai/core/util/which"
@@ -21,8 +20,6 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
-
-const log = Log.create({ service: "project" })
 
 const ProjectVcs = Schema.Literal("git")
 
@@ -246,13 +243,13 @@ export const layer = Layer.effect(
         )
         .pipe(
           Effect.catchCause((cause) =>
-            Effect.sync(() => log.warn("project directory persistence failed", { projectID: input.projectID, cause })),
+            Effect.logWarning("project directory persistence failed", { projectID: input.projectID, cause }),
           ),
         )
     })
 
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
-      log.info("fromDirectory", { directory })
+      yield* Effect.logInfo("fromDirectory", { directory })
 
       const data = yield* projectV2.resolve(AbsolutePath.make(directory))
       const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory

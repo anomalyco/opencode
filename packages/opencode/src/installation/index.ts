@@ -7,13 +7,10 @@ import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
 import { EventV2 } from "@opencode-ai/core/event"
-import * as Log from "@opencode-ai/core/util/log"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
-
-const log = Log.create({ service: "installation" })
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
@@ -324,7 +321,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         if (!upgradeResult || upgradeResult.code !== 0) {
           return yield* new UpgradeFailedError({ stderr: upgradeFailure(m, upgradeResult) })
         }
-        log.info("upgraded", {
+        yield* Effect.logInfo("upgraded", {
           method: m,
           target,
           stdout: upgradeResult.stdout,

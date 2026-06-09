@@ -4,15 +4,19 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { dirname } from "path"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { FSUtil } from "./fs-util"
-import { LocationMutation } from "./location-mutation"
+
+export interface Target {
+  readonly canonical: string
+  readonly resource: string
+}
 
 export interface WriteInput {
-  readonly plan: LocationMutation.Plan
+  readonly target: Target
   readonly content: string | Uint8Array
 }
 
 export interface TextWriteInput {
-  readonly plan: LocationMutation.Plan
+  readonly target: Target
   readonly content: string
 }
 
@@ -21,7 +25,7 @@ export interface ConditionalWriteInput extends WriteInput {
 }
 
 export interface RemoveInput {
-  readonly plan: LocationMutation.Plan
+  readonly target: Target
 }
 
 export class StaleContentError extends Schema.TaggedErrorClass<StaleContentError>()("FileMutation.StaleContentError", {
@@ -34,143 +38,131 @@ export class TargetExistsError extends Schema.TaggedErrorClass<TargetExistsError
 
 export interface WriteResult {
   readonly operation: "write"
-  /** Canonical target actually passed to the filesystem mutation. */
   readonly target: string
-  /** Permission resource captured during planning. */
   readonly resource: string
   readonly existed: boolean
 }
 
 export interface RemoveResult {
   readonly operation: "remove"
-  /** Canonical target actually passed to the filesystem mutation. */
   readonly target: string
-  /** Permission resource captured during planning. */
   readonly resource: string
   readonly existed: boolean
 }
 
 export interface Interface {
-  /** Create only while the planned target remains absent. */
-  readonly create: (
-    input: WriteInput,
-  ) => Effect.Effect<WriteResult, TargetExistsError | LocationMutation.RevalidationError | FSUtil.Error>
-  /** Write after immediately revalidating the planned target. */
-  readonly write: (input: WriteInput) => Effect.Effect<WriteResult, LocationMutation.RevalidationError | FSUtil.Error>
+  /** Create without replacing an existing target. */
+  readonly create: (input: WriteInput) => Effect.Effect<WriteResult, TargetExistsError | FSUtil.Error>
+  readonly write: (input: WriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
   /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
-  readonly writeTextPreservingBom: (
-    input: TextWriteInput,
-  ) => Effect.Effect<WriteResult, LocationMutation.RevalidationError | FSUtil.Error>
+  readonly writeTextPreservingBom: (input: TextWriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
   /** Commit only if an existing target still has the expected bytes. */
   readonly writeIfUnchanged: (
     input: ConditionalWriteInput,
-  ) => Effect.Effect<WriteResult, StaleContentError | LocationMutation.RevalidationError | FSUtil.Error>
-  /** Remove after immediately revalidating the planned target. */
-  readonly remove: (
-    input: RemoveInput,
-  ) => Effect.Effect<RemoveResult, LocationMutation.RevalidationError | FSUtil.Error>
+  ) => Effect.Effect<WriteResult, StaleContentError | FSUtil.Error>
+  readonly remove: (input: RemoveInput) => Effect.Effect<RemoveResult, FSUtil.Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileMutation") {}
 
 /**
- * Commit planned file changes.
- *
- *   resolve(path) -> approve -> lock target -> revalidate(plan) -> mutate
- *
- * The caller approves the plan first. This service locks the canonical target,
- * revalidates the plan immediately before the filesystem operation, then mutates.
- *
- * `writeIfUnchanged` compares and writes while holding the same in-memory lock,
- * so cooperating calls in this process cannot overwrite from the same stale
- * content. Locks apply only within this service layer and only to identical
- * canonical targets.
- *
- * Revalidation reduces the race window but is not atomic with the next
- * path-based filesystem operation. A hostile local process can still race it.
- *
- * TODO: Use descriptor-relative no-follow operations where supported to close
- * the final race.
+ * Serialize file changes by canonical target. Conditional writes compare and
+ * write under the same process-local lock so cooperating OpenCode mutations do
+ * not overwrite changes made from the same stale content.
  */
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const mutation = yield* LocationMutation.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const withTargetLock =
-      (target: string) =>
+      (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        locks.withLock(target)(Effect.uninterruptible(effect))
+        locks.withLock(target.canonical)(Effect.uninterruptible(effect))
 
-    const withValidatedTarget =
-      (plan: LocationMutation.Plan) =>
-      <A, E, R>(commit: (target: LocationMutation.Target) => Effect.Effect<A, E, R>) =>
-        withTargetLock(plan.target.canonical)(mutation.revalidate(plan).pipe(Effect.flatMap(commit)))
-
-    const writeResult = (target: LocationMutation.Target, existed = target.exists): WriteResult => ({
+    const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
       target: target.canonical,
       resource: target.resource,
       existed,
     })
 
-    const removeResult = (target: LocationMutation.Target): RemoveResult => ({
+    const removeResult = (target: Target, existed: boolean): RemoveResult => ({
       operation: "remove",
       target: target.canonical,
       resource: target.resource,
-      existed: target.exists,
+      existed,
     })
 
     const write = Effect.fn("FileMutation.write")((input: WriteInput) =>
-      withValidatedTarget(input.plan)((target) =>
+      withTargetLock(input.target)(
         Effect.gen(function* () {
-          yield* fs.writeWithDirs(target.canonical, input.content)
-          return writeResult(target)
+          const existed = yield* fs.exists(input.target.canonical)
+          yield* fs.writeWithDirs(input.target.canonical, input.content)
+          return writeResult(input.target, existed)
         }),
       ),
     )
 
     const writeTextPreservingBom = Effect.fn("FileMutation.writeTextPreservingBom")((input: TextWriteInput) =>
-      withValidatedTarget(input.plan)((target) =>
+      withTargetLock(input.target)(
         Effect.gen(function* () {
           const next = splitBom(input.content)
-          const preserveBom = target.exists && hasUtf8Bom(yield* fs.readFile(target.canonical))
-          yield* fs.writeWithDirs(target.canonical, joinBom(next.text, preserveBom || next.bom))
-          return writeResult(target)
+          const current = yield* fs
+            .readFile(input.target.canonical)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+          yield* fs.writeWithDirs(
+            input.target.canonical,
+            joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom),
+          )
+          return writeResult(input.target, current !== undefined)
         }),
       ),
     )
 
     const create = Effect.fn("FileMutation.create")((input: WriteInput) =>
-      withValidatedTarget(input.plan)((target) =>
+      withTargetLock(input.target)(
         Effect.gen(function* () {
-          if (target.exists) return yield* new TargetExistsError({ path: target.canonical })
-          yield* fs.ensureDir(dirname(target.canonical))
-          if (typeof input.content === "string")
-            yield* fs.writeFileString(target.canonical, input.content, { flag: "wx" })
-          else yield* fs.writeFile(target.canonical, input.content, { flag: "wx" })
-          return writeResult(target, false)
+          const write =
+            typeof input.content === "string"
+              ? fs.writeFileString(input.target.canonical, input.content, { flag: "wx" })
+              : fs.writeFile(input.target.canonical, input.content, { flag: "wx" })
+          yield* write.pipe(
+            Effect.catchReason("PlatformError", "NotFound", () =>
+              fs.ensureDir(dirname(input.target.canonical)).pipe(Effect.andThen(write)),
+            ),
+            Effect.catchReason("PlatformError", "AlreadyExists", () =>
+              Effect.fail(new TargetExistsError({ path: input.target.canonical })),
+            ),
+          )
+          return writeResult(input.target, false)
         }),
       ),
     )
 
     const writeIfUnchanged = Effect.fn("FileMutation.writeIfUnchanged")((input: ConditionalWriteInput) =>
-      withValidatedTarget(input.plan)((target) =>
+      withTargetLock(input.target)(
         Effect.gen(function* () {
-          const current = yield* fs.readFile(target.canonical)
-          if (!sameBytes(current, input.expected)) return yield* new StaleContentError({ path: target.canonical })
-          yield* fs.writeWithDirs(target.canonical, input.content)
-          return writeResult(target)
+          const current = yield* fs.readFile(input.target.canonical)
+          if (!sameBytes(current, input.expected)) {
+            return yield* new StaleContentError({ path: input.target.canonical })
+          }
+          yield* typeof input.content === "string"
+            ? fs.writeFileString(input.target.canonical, input.content)
+            : fs.writeFile(input.target.canonical, input.content)
+          return writeResult(input.target, true)
         }),
       ),
     )
 
     const remove = Effect.fn("FileMutation.remove")((input: RemoveInput) =>
-      withValidatedTarget(input.plan)((target) =>
+      withTargetLock(input.target)(
         Effect.gen(function* () {
-          yield* fs.remove(target.canonical)
-          return removeResult(target)
+          const existed = yield* fs.remove(input.target.canonical).pipe(
+            Effect.as(true),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
+          )
+          return removeResult(input.target, existed)
         }),
       ),
     )

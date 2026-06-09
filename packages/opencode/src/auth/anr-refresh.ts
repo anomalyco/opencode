@@ -7,9 +7,7 @@
  * Extracted into its own module to avoid circular imports from index.ts.
  */
 
-import * as Log from "@opencode-ai/core/util/log"
 
-const log = Log.create({ service: "auth.anr-refresh" })
 const BUFFER_MS = 5 * 60 * 1000 // refresh 5 minutes before expiry
 
 type RefreshFn = () => Promise<{
@@ -108,10 +106,10 @@ export async function refresh(): Promise<boolean> {
       } catch {}
     }
 
-    log.info("credentials refreshed successfully")
+    console.error("🔄 credentials refreshed successfully")
     return true
   } catch (e) {
-    log.error("credential refresh failed", { error: e instanceof Error ? e.message : e })
+    console.error("credential refresh failed:", e instanceof Error ? e.message : e)
     return false
   } finally {
     state.refreshing = false

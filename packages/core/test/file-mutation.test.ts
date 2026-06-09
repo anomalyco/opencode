@@ -16,9 +16,9 @@ function provide(directory: string, filesystem = FSUtil.defaultLayer) {
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
-  const planning = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const commits = FileMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(planning))
-  return Effect.provide(Layer.mergeAll(planning, commits))
+  const resolution = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
+  const mutation = FileMutation.layer.pipe(Layer.provide(filesystem))
+  return Effect.provide(Layer.mergeAll(resolution, mutation))
 }
 
 function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
@@ -34,11 +34,11 @@ describe("FileMutation", () => {
       Effect.gen(function* () {
         const targetPath = path.join(directory, "hello.txt")
         yield* Effect.promise(() => fs.writeFile(targetPath, "before"))
-        const plan = yield* (yield* LocationMutation.Service).resolve({ path: "hello.txt" })
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "hello.txt" })
 
-        expect(yield* (yield* FileMutation.Service).write({ plan, content: "after" })).toEqual({
+        expect(yield* (yield* FileMutation.Service).write({ target, content: "after" })).toEqual({
           operation: "write",
-          target: plan.target.canonical,
+          target: target.canonical,
           resource: "hello.txt",
           existed: true,
         })
@@ -50,12 +50,14 @@ describe("FileMutation", () => {
   it.live("writes a prospective internal file and creates parent directories", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        const plan = yield* (yield* LocationMutation.Service).resolve({ path: path.join("src", "nested", "hello.txt") })
-        const result = yield* (yield* FileMutation.Service).write({ plan, content: "hello" })
+        const target = yield* (yield* LocationMutation.Service).resolve({
+          path: path.join("src", "nested", "hello.txt"),
+        })
+        const result = yield* (yield* FileMutation.Service).write({ target, content: "hello" })
 
         expect(result).toEqual({
           operation: "write",
-          target: plan.target.canonical,
+          target: target.canonical,
           resource: "src/nested/hello.txt",
           existed: false,
         })
@@ -73,28 +75,47 @@ describe("FileMutation", () => {
         const created = yield* (yield* LocationMutation.Service).resolve({ path: "created.txt" })
         const files = yield* FileMutation.Service
 
-        yield* files.writeTextPreservingBom({ plan: preserved, content: "\uFEFFafter" })
-        yield* files.writeTextPreservingBom({ plan: created, content: "\uFEFF\uFEFF\uFEFFcreated" })
+        yield* files.writeTextPreservingBom({ target: preserved, content: "\uFEFFafter" })
+        yield* files.writeTextPreservingBom({ target: created, content: "\uFEFF\uFEFF\uFEFFcreated" })
 
         expect(yield* Effect.promise(() => fs.readFile(preservedPath, "utf8"))).toBe("\uFEFFafter")
-        expect(yield* Effect.promise(() => fs.readFile(created.target.canonical, "utf8"))).toBe("\uFEFFcreated")
+        expect(yield* Effect.promise(() => fs.readFile(created.canonical, "utf8"))).toBe("\uFEFFcreated")
       }).pipe(provide(directory)),
     ),
   )
 
-  it.live("rejects create when a prospective target appears after planning", () =>
+  it.live("rejects create when a prospective target appears after resolution", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const targetPath = path.join(directory, "appeared.txt")
-        const plan = yield* (yield* LocationMutation.Service).resolve({ path: "appeared.txt" })
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "appeared.txt" })
         yield* Effect.promise(() => fs.writeFile(targetPath, "winner"))
 
         expect(
-          yield* (yield* FileMutation.Service).create({ plan, content: "replacement" }).pipe(Effect.flip),
+          yield* (yield* FileMutation.Service).create({ target, content: "replacement" }).pipe(Effect.flip),
         ).toMatchObject({
-          _tag: "LocationMutation.RevalidationError",
+          _tag: "FileMutation.TargetExistsError",
         })
         expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("winner")
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("creates when an existing target disappears after resolution", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "removed.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "before"))
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "removed.txt" })
+        yield* Effect.promise(() => fs.rm(targetPath))
+
+        expect(yield* (yield* FileMutation.Service).create({ target, content: "after" })).toEqual({
+          operation: "write",
+          target: target.canonical,
+          resource: "removed.txt",
+          existed: false,
+        })
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("after")
       }).pipe(provide(directory)),
     ),
   )
@@ -104,12 +125,12 @@ describe("FileMutation", () => {
       Effect.gen(function* () {
         const targetPath = path.join(directory, "remove.txt")
         yield* Effect.promise(() => fs.writeFile(targetPath, "remove"))
-        const plan = yield* (yield* LocationMutation.Service).resolve({ path: "remove.txt" })
-        const result = yield* (yield* FileMutation.Service).remove({ plan })
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "remove.txt" })
+        const result = yield* (yield* FileMutation.Service).remove({ target })
 
         expect(result).toEqual({
           operation: "remove",
-          target: plan.target.canonical,
+          target: target.canonical,
           resource: "remove.txt",
           existed: true,
         })
@@ -125,18 +146,18 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("writes an explicitly planned external target", () =>
+  it.live("writes an explicitly resolved external target", () =>
     withTmp((directory) =>
       withTmp((outside) =>
         Effect.gen(function* () {
           const targetPath = path.join(outside, "external.txt")
-          const plan = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
-          const result = yield* (yield* FileMutation.Service).write({ plan, content: "external" })
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
+          const result = yield* (yield* FileMutation.Service).write({ target, content: "external" })
 
           expect(result).toEqual({
             operation: "write",
-            target: plan.target.canonical,
-            resource: plan.target.resource,
+            target: target.canonical,
+            resource: target.resource,
             existed: false,
           })
           expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("external")
@@ -145,19 +166,19 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("removes an explicitly planned external target", () =>
+  it.live("removes an explicitly resolved external target", () =>
     withTmp((directory) =>
       withTmp((outside) =>
         Effect.gen(function* () {
           const targetPath = path.join(outside, "external.txt")
           yield* Effect.promise(() => fs.writeFile(targetPath, "external"))
-          const plan = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
-          const result = yield* (yield* FileMutation.Service).remove({ plan })
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: targetPath })
+          const result = yield* (yield* FileMutation.Service).remove({ target })
 
           expect(result).toEqual({
             operation: "remove",
-            target: plan.target.canonical,
-            resource: plan.target.resource,
+            target: target.canonical,
+            resource: target.resource,
             existed: true,
           })
           expect(
@@ -173,34 +194,18 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("propagates revalidation rejection after an ancestor swap", () =>
+  it.live("reports a missing target as not removed without checking existence first", () =>
     withTmp((directory) =>
-      withTmp((outside) =>
-        Effect.gen(function* () {
-          if (process.platform === "win32") return
-          const parent = path.join(directory, "parent")
-          yield* Effect.promise(() => fs.mkdir(parent))
-          const plan = yield* (yield* LocationMutation.Service).resolve({ path: path.join("parent", "new.txt") })
-          yield* Effect.promise(async () => {
-            await fs.rmdir(parent)
-            await fs.symlink(outside, parent)
-          })
+      Effect.gen(function* () {
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "missing.txt" })
 
-          expect(
-            yield* (yield* FileMutation.Service).write({ plan, content: "escape" }).pipe(Effect.flip),
-          ).toMatchObject({
-            _tag: "LocationMutation.RevalidationError",
-          })
-          expect(
-            yield* Effect.promise(() =>
-              fs.stat(path.join(outside, "new.txt")).then(
-                () => true,
-                () => false,
-              ),
-            ),
-          ).toBe(false)
-        }).pipe(provide(directory)),
-      ),
+        expect(yield* (yield* FileMutation.Service).remove({ target })).toEqual({
+          operation: "remove",
+          target: target.canonical,
+          resource: "missing.txt",
+          existed: false,
+        })
+      }).pipe(provide(directory)),
     ),
   )
 
@@ -231,9 +236,9 @@ describe("FileMutation", () => {
           const files = yield* FileMutation.Service
           const firstPlan = yield* mutation.resolve({ path: "shared.txt" })
           const secondPlan = yield* mutation.resolve({ path: "shared.txt" })
-          const first = yield* files.write({ plan: firstPlan, content: "first" }).pipe(Effect.forkChild)
+          const first = yield* files.write({ target: firstPlan, content: "first" }).pipe(Effect.forkChild)
           yield* Deferred.await(firstStarted)
-          const second = yield* files.write({ plan: secondPlan, content: "second" }).pipe(Effect.forkChild)
+          const second = yield* files.write({ target: secondPlan, content: "second" }).pipe(Effect.forkChild)
           yield* Effect.yieldNow
           expect(yield* Deferred.isDone(secondStarted)).toBe(false)
 
@@ -269,12 +274,12 @@ describe("FileMutation", () => {
         yield* Effect.gen(function* () {
           const mutation = yield* LocationMutation.Service
           const files = yield* FileMutation.Service
-          const plan = yield* mutation.resolve({ path: "shared.txt" })
+          const target = yield* mutation.resolve({ path: "shared.txt" })
           const expected = new TextEncoder().encode("initial")
-          const first = yield* files.writeIfUnchanged({ plan, expected, content: "first" }).pipe(Effect.forkChild)
+          const first = yield* files.writeIfUnchanged({ target, expected, content: "first" }).pipe(Effect.forkChild)
           yield* Deferred.await(firstStarted)
           const second = yield* files
-            .writeIfUnchanged({ plan, expected, content: "second" })
+            .writeIfUnchanged({ target, expected, content: "second" })
             .pipe(Effect.flip, Effect.forkChild)
 
           yield* Deferred.succeed(releaseFirst, undefined)
@@ -292,13 +297,13 @@ describe("FileMutation", () => {
       Effect.gen(function* () {
         const targetPath = path.join(directory, "stale.txt")
         yield* Effect.promise(() => fs.writeFile(targetPath, "current"))
-        const plan = yield* (yield* LocationMutation.Service).resolve({ path: "stale.txt" })
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "stale.txt" })
 
         expect(
           yield* (yield* FileMutation.Service)
-            .writeIfUnchanged({ plan, expected: new TextEncoder().encode("older"), content: "replacement" })
+            .writeIfUnchanged({ target, expected: new TextEncoder().encode("older"), content: "replacement" })
             .pipe(Effect.flip),
-        ).toMatchObject({ _tag: "FileMutation.StaleContentError", path: plan.target.canonical })
+        ).toMatchObject({ _tag: "FileMutation.StaleContentError", path: target.canonical })
         expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("current")
       }).pipe(provide(directory)),
     ),
@@ -326,9 +331,9 @@ describe("FileMutation", () => {
           const files = yield* FileMutation.Service
           const firstPlan = yield* mutation.resolve({ path: "first.txt" })
           const secondPlan = yield* mutation.resolve({ path: "second.txt" })
-          const first = yield* files.write({ plan: firstPlan, content: "first" }).pipe(Effect.forkChild)
+          const first = yield* files.write({ target: firstPlan, content: "first" }).pipe(Effect.forkChild)
           yield* Deferred.await(firstStarted)
-          const second = yield* files.write({ plan: secondPlan, content: "second" }).pipe(Effect.forkChild)
+          const second = yield* files.write({ target: secondPlan, content: "second" }).pipe(Effect.forkChild)
           yield* Deferred.await(secondFinished)
           expect(yield* Effect.promise(() => fs.readFile(secondPath, "utf8"))).toBe("second")
 
@@ -341,9 +346,7 @@ describe("FileMutation", () => {
   )
 })
 
-function instrumentWrites(
-  run: (write: Effect.Effect<void, FSUtil.Error>, target: string) => Effect.Effect<void, FSUtil.Error>,
-) {
+function instrumentWrites(run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>) {
   return Layer.effect(
     FSUtil.Service,
     Effect.gen(function* () {
@@ -351,6 +354,9 @@ function instrumentWrites(
       return FSUtil.Service.of({
         ...filesystem,
         writeWithDirs: (target, content, mode) => run(filesystem.writeWithDirs(target, content, mode), target),
+        writeFile: (target, content, options) => run(filesystem.writeFile(target, content, options), target),
+        writeFileString: (target, content, options) =>
+          run(filesystem.writeFileString(target, content, options), target),
       })
     }),
   ).pipe(Layer.provide(FSUtil.defaultLayer))

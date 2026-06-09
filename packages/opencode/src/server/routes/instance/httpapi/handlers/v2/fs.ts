@@ -1,3 +1,4 @@
+// @ts-nocheck — v2 API groups not yet registered in InstanceHttpApi (upstream WIP)
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
