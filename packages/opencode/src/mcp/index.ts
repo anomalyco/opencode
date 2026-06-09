@@ -206,7 +206,10 @@ function fetchFromClient<T extends { name: string }>(
   listFn: (c: Client) => Promise<T[]>,
   label: string,
 ) {
-  return Effect.tryPromise(() => listFn(client)).pipe(
+  return Effect.tryPromise({
+    try: () => listFn(client),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+  }).pipe(
     Effect.tapError((error) =>
       Effect.logWarning(`failed to get ${label}`, {
         clientName,
@@ -735,7 +738,10 @@ export const layer = Layer.effect(
         yield* Effect.logWarning(`client not found for ${label}`, { clientName })
         return undefined
       }
-      return yield* Effect.tryPromise(() => fn(client)).pipe(
+      return yield* Effect.tryPromise({
+        try: () => fn(client),
+        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      }).pipe(
         Effect.tapError((error) =>
           Effect.logError(`failed to ${label}`, {
             clientName,
