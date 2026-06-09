@@ -5,10 +5,10 @@ import { ensureIndexSchema, readMeta } from "../trade-memory-core/schema"
 import { openTradeConversationSource, syncTradeMemoryNow } from "../trade-memory-core/sync"
 import type { MemoryNoteRow, NoteStatus } from "../trade-memory-core/types"
 
-const DEFAULT_HANDOFF_MAX_CHARS = Number(process.env.OPENCODE_TRADE_HANDOFF_MAX_CHARS ?? 6000)
-const DEFAULT_HANDOFF_PIN_LIMIT = Number(process.env.OPENCODE_TRADE_HANDOFF_MAX_PINNED_NOTES ?? 12)
-const DEFAULT_HANDOFF_NOTE_LIMIT = Number(process.env.OPENCODE_TRADE_HANDOFF_MAX_CRITICAL_NOTES ?? 10)
-const DEFAULT_HANDOFF_RECENT_LIMIT = Number(process.env.OPENCODE_TRADE_HANDOFF_RECENT_MESSAGES ?? 8)
+const DEFAULT_HANDOFF_MAX_CHARS = readPositiveEnv("OPENCODE_TRADE_HANDOFF_MAX_CHARS", 6000)
+const DEFAULT_HANDOFF_PIN_LIMIT = readPositiveEnv("OPENCODE_TRADE_HANDOFF_MAX_PINNED_NOTES", 12)
+const DEFAULT_HANDOFF_NOTE_LIMIT = readPositiveEnv("OPENCODE_TRADE_HANDOFF_MAX_CRITICAL_NOTES", 10)
+const DEFAULT_HANDOFF_RECENT_LIMIT = readPositiveEnv("OPENCODE_TRADE_HANDOFF_RECENT_MESSAGES", 8)
 const MAX_LIST_LIMIT = 50
 const NOTE_STATUSES = new Set<NoteStatus>(["active", "tentative", "deprecated"])
 
@@ -82,6 +82,8 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
             title: requireNonEmpty(input.title, "title"),
             body: requireNonEmpty(input.body, "body"),
             memory_type: requireNonEmpty(input.memory_type, "memory_type"),
+            importance: clampImportance(input.importance),
+            status: input.status ? requireStatus(input.status) : undefined,
           }),
         }
       } finally {
@@ -160,10 +162,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
       try {
         ensureIndexSchema(indexDb)
         const rows = indexDb
-          .query<
-            MemoryNoteRow & { pin_id: string; priority: number; always_include: number; reason: string },
-            [number]
-          >(
+          .query<MemoryNoteRow & { pin_id: string; priority: number; always_include: number; reason: string }, [number]>(
             "select memory_pin.id as pin_id, memory_pin.priority, memory_pin.always_include, memory_pin.reason, memory_note.id, memory_note.title, memory_note.body, memory_note.memory_type, memory_note.tags, memory_note.importance, memory_note.status, memory_note.scope, memory_note.source_session_id, memory_note.source_message_ids, memory_note.created_at, memory_note.updated_at from memory_pin join memory_note on memory_note.id = memory_pin.note_id order by memory_pin.priority desc, memory_pin.updated_at desc limit ?",
           )
           .all(clampLimit(input?.limit, 20, MAX_LIST_LIMIT))
@@ -173,25 +172,25 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
       }
     },
 
-    markModelSwitched(input: { sessionID: string; providerID?: string; modelID?: string; indexDbPath?: string }) {
+    markModelSwitched(input: { sessionID: string; providerID?: string; modelID?: string; pendingSince?: number; indexDbPath?: string }) {
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
       try {
         ensureIndexSchema(indexDb)
         const sessionID = requireNonEmpty(input.sessionID, "sessionID")
-        const now = Date.now()
+        const pendingSince = clampTimestamp(input.pendingSince) ?? Date.now()
         indexDb
           .query(
             "insert into handoff_state (session_id, pending_provider_id, pending_model_id, pending_since, last_event_type, updated_at) values (?, ?, ?, ?, ?, ?) on conflict(session_id) do update set pending_provider_id = excluded.pending_provider_id, pending_model_id = excluded.pending_model_id, pending_since = excluded.pending_since, last_event_type = excluded.last_event_type, updated_at = excluded.updated_at",
           )
-          .run(sessionID, normalizeOptionalString(input.providerID) ?? null, normalizeOptionalString(input.modelID) ?? null, now, "model-switched", now)
+          .run(sessionID, normalizeOptionalString(input.providerID) ?? null, normalizeOptionalString(input.modelID) ?? null, pendingSince, "model-switched", Date.now())
         indexDb
           .query(
             "insert into handoff_log (id, session_id, provider_id, model_id, event_type, created_at) values (?, ?, ?, ?, ?, ?)",
           )
-          .run(crypto.randomUUID(), sessionID, normalizeOptionalString(input.providerID) ?? null, normalizeOptionalString(input.modelID) ?? null, "model-switched", now)
-        return { indexDbPath, ok: true }
+          .run(crypto.randomUUID(), sessionID, normalizeOptionalString(input.providerID) ?? null, normalizeOptionalString(input.modelID) ?? null, "model-switched", pendingSince)
+        return { indexDbPath, ok: true, pendingSince }
       } finally {
         indexDb.close(false)
       }
@@ -210,11 +209,10 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
         const handoffState = indexDb
           .query<{ pending_since: number | null }, [string]>("select pending_since from handoff_state where session_id = ? limit 1")
           .get(sessionID)
+        const pendingSince = handoffState?.pending_since ?? null
+        const fresh = !pendingSince || (!!lastSyncAt && lastSyncAt >= pendingSince)
         const pinned = indexDb
-          .query<
-            MemoryNoteRow & { pin_id: string; priority: number; always_include: number; reason: string },
-            [number]
-          >(
+          .query<MemoryNoteRow & { pin_id: string; priority: number; always_include: number; reason: string }, [number]>(
             "select memory_pin.id as pin_id, memory_pin.priority, memory_pin.always_include, memory_pin.reason, memory_note.id, memory_note.title, memory_note.body, memory_note.memory_type, memory_note.tags, memory_note.importance, memory_note.status, memory_note.scope, memory_note.source_session_id, memory_note.source_message_ids, memory_note.created_at, memory_note.updated_at from memory_pin join memory_note on memory_note.id = memory_pin.note_id where memory_note.status = 'active' order by memory_pin.priority desc, memory_pin.updated_at desc limit ?",
           )
           .all(DEFAULT_HANDOFF_PIN_LIMIT)
@@ -230,9 +228,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
           .all(sessionID, DEFAULT_HANDOFF_RECENT_LIMIT)
           .reverse()
         const warnings = lastSyncAt ? [] : ["- warning: trade memory has not synced yet"]
-        if (handoffState?.pending_since && (!lastSyncAt || handoffState.pending_since > lastSyncAt)) {
-          warnings.push("- warning: trade memory may be stale for the latest model switch")
-        }
+        if (pendingSince && !fresh) warnings.push("- warning: trade memory may be stale for the latest model switch")
         const lines = buildHandoffLines({
           sessionID,
           modelID: modelID ?? "-",
@@ -246,18 +242,36 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
         })
         const block = lines.join("\n")
         const contentHash = Bun.hash(block).toString(16)
-        const now = Date.now()
-        indexDb
-          .query(
-            "insert into handoff_state (session_id, last_model_id, pending_provider_id, pending_model_id, pending_since, last_injected_at, last_event_type, updated_at) values (?, ?, null, null, null, ?, ?, ?) on conflict(session_id) do update set last_model_id = excluded.last_model_id, pending_provider_id = null, pending_model_id = null, pending_since = null, last_injected_at = excluded.last_injected_at, last_event_type = excluded.last_event_type, updated_at = excluded.updated_at",
-          )
-          .run(sessionID, modelID ?? null, now, "handoff-context", now)
         indexDb
           .query(
             "insert into handoff_log (id, session_id, model_id, event_type, content_hash, created_at) values (?, ?, ?, ?, ?, ?)",
           )
-          .run(crypto.randomUUID(), sessionID, modelID ?? null, "handoff-context", contentHash, now)
-        return { indexDbPath, block, contentHash, lastSyncAt }
+          .run(crypto.randomUUID(), sessionID, modelID ?? null, "handoff-context", contentHash, Date.now())
+        return { indexDbPath, block, contentHash, lastSyncAt, pendingSince, fresh }
+      } finally {
+        indexDb.close(false)
+      }
+    },
+
+    ackHandoff(input: { sessionID: string; modelID?: string; ackedAt?: number; indexDbPath?: string }) {
+      const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
+      const indexDb = openDatabase(indexDbPath, false)
+
+      try {
+        ensureIndexSchema(indexDb)
+        const sessionID = requireNonEmpty(input.sessionID, "sessionID")
+        const ackedAt = clampTimestamp(input.ackedAt) ?? Date.now()
+        indexDb
+          .query(
+            "insert into handoff_state (session_id, last_model_id, pending_provider_id, pending_model_id, pending_since, last_injected_at, last_event_type, updated_at) values (?, ?, null, null, null, ?, ?, ?) on conflict(session_id) do update set last_model_id = excluded.last_model_id, pending_provider_id = null, pending_model_id = null, pending_since = null, last_injected_at = excluded.last_injected_at, last_event_type = excluded.last_event_type, updated_at = excluded.updated_at",
+          )
+          .run(sessionID, normalizeOptionalString(input.modelID) ?? null, ackedAt, "handoff-ack", ackedAt)
+        indexDb
+          .query(
+            "insert into handoff_log (id, session_id, model_id, event_type, created_at) values (?, ?, ?, ?, ?)",
+          )
+          .run(crypto.randomUUID(), sessionID, normalizeOptionalString(input.modelID) ?? null, "handoff-ack", ackedAt)
+        return { indexDbPath, ok: true, ackedAt }
       } finally {
         indexDb.close(false)
       }
@@ -335,7 +349,8 @@ function buildHandoffLines(input: {
     ...(input.warnings.length ? ["", "## Warnings", ...input.warnings] : []),
   ]
   sections.forEach((section, index) => appendSection(lines, section.heading, section.lines, input.maxChars, sections.slice(index + 1)))
-  return lines
+  if (lineLength(lines) <= input.maxChars) return lines
+  return trimHard(lines, input.maxChars)
 }
 
 function appendSection(
@@ -361,6 +376,22 @@ function appendSection(
   }
 }
 
+function trimHard(lines: string[], maxChars: number) {
+  if (maxChars < 32) return [truncate(lines[0] ?? "Trade Memory Handoff", maxChars)]
+  const output: string[] = []
+  for (const line of lines) {
+    const next = [...output, line]
+    if (lineLength(next) <= maxChars) {
+      output.push(line)
+      continue
+    }
+    const remaining = maxChars - lineLength(output) - 1
+    if (remaining > 0) output.push(truncate(line, remaining))
+    return output
+  }
+  return output
+}
+
 function lineLength(lines: string[]) {
   return lines.join("\n").length
 }
@@ -381,6 +412,12 @@ function requireStatus(input: NoteStatus) {
   return input
 }
 
+function clampImportance(input: number | undefined) {
+  if (input === undefined) return undefined
+  if (!Number.isInteger(input) || input < 1 || input > 5) throw new TradeMemoryInputError("importance must be an integer from 1 to 5")
+  return input
+}
+
 function clampLimit(input: number | undefined, fallback: number, max: number) {
   if (input === undefined) return fallback
   if (!Number.isFinite(input) || input < 1) throw new TradeMemoryInputError("limit must be a positive integer")
@@ -391,6 +428,19 @@ function clampPositive(input: number | undefined, fallback: number) {
   if (input === undefined) return fallback
   if (!Number.isFinite(input) || input < 1) throw new TradeMemoryInputError("maxChars must be a positive integer")
   return Math.floor(input)
+}
+
+function clampTimestamp(input: number | undefined) {
+  if (input === undefined) return undefined
+  if (!Number.isFinite(input) || input < 1) throw new TradeMemoryInputError("timestamp must be a positive integer")
+  return Math.floor(input)
+}
+
+function readPositiveEnv(name: string, fallback: number) {
+  const value = process.env[name]
+  if (!value?.trim()) return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
 }
 
 function formatPinnedNotes(rows: Array<MemoryNoteRow & { priority: number; reason: string }>) {

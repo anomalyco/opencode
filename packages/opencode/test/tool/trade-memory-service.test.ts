@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { startTradeMemoryHttpServer } from "../../../../.opencode/mcp/http"
 import { createTradeMemoryService, TradeMemoryInputError } from "../../../../.opencode/mcp/service"
 import { tmpdir } from "../fixture/fixture"
 
@@ -47,5 +48,41 @@ describe("trade-memory service", () => {
     const service = createTradeMemoryService({ indexDbPath: path.join(tmp.path, "memory.sqlite3") })
 
     expect(() => service.buildHandoffContext({ sessionID: "" })).toThrow(TradeMemoryInputError)
+  })
+
+  test("storeNote rejects invalid importance", async () => {
+    await using tmp = await tmpdir()
+    const service = createTradeMemoryService({ indexDbPath: path.join(tmp.path, "memory.sqlite3") })
+
+    expect(() =>
+      service.storeNote({ title: "Bad", body: "bad", memory_type: "risk", importance: 6, status: "active" }),
+    ).toThrow(TradeMemoryInputError)
+  })
+
+  test("http enforces auth and validation", async () => {
+    await using tmp = await tmpdir()
+    const originalToken = process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN = "test-token"
+    const service = createTradeMemoryService({ indexDbPath: path.join(tmp.path, "memory.sqlite3") })
+    const server = startTradeMemoryHttpServer({ service, port: 0 })
+
+    try {
+      const unauthorized = await fetch(`http://127.0.0.1:${server.port}/notes`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "x", body: "y", memory_type: "risk" }),
+      })
+      expect(unauthorized.status).toBe(401)
+
+      const invalid = await fetch(`http://127.0.0.1:${server.port}/notes`, {
+        method: "POST",
+        headers: { authorization: "Bearer test-token", "content-type": "application/json" },
+        body: JSON.stringify({ title: "x", body: "y", memory_type: "risk", importance: 99 }),
+      })
+      expect(invalid.status).toBe(400)
+    } finally {
+      process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN = originalToken
+      void server.stop(true)
+    }
   })
 })

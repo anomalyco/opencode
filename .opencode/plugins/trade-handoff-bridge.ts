@@ -1,15 +1,24 @@
 import type { Hooks, Plugin } from "@opencode-ai/plugin"
 
+type ChildProcessLike = { kill(signal?: number | string): void; exited: Promise<number>; exitCode: number | null }
+type PendingSession = {
+  pendingSince: number
+  providerID?: string
+  modelID?: string
+  eventPosted: boolean
+  retryCount: number
+  lastSyncAttemptAt?: number
+}
+
+const SYNC_RETRY_BACKOFF_MS = 5000
+
 export default (async ({ directory }) => createTradeHandoffBridgeHooks(directory)) satisfies Plugin
 
-export function createTradeHandoffBridgeHooks(
-  directory: string,
-  options?: { startService?: (directory: string) => { kill(signal?: number | string): void; exited: Promise<number>; exitCode: number | null } },
-): Hooks {
-  let child: { kill(signal?: number | string): void; exited: Promise<number>; exitCode: number | null } | undefined
+export function createTradeHandoffBridgeHooks(directory: string, options?: { startService?: (directory: string) => ChildProcessLike }): Hooks {
+  let child: ChildProcessLike | undefined
   let starting: Promise<boolean> | undefined
-  let lastWarning = "trade memory handoff unavailable"
-  const pendingSessions = new Set<string>()
+  const pendingSessions = new Map<string, PendingSession>()
+  const sessionModelState = new Map<string, { lastInjectedModelID?: string }>()
 
   const ensureService = () => {
     if (starting) return starting
@@ -28,71 +37,113 @@ export function createTradeHandoffBridgeHooks(
     return starting
   }
 
-  const injectWarning = (target: string[]) => {
-    if (!target.includes(lastWarning)) target.push(lastWarning)
-  }
-
-  const hooks: Hooks = {
+  return {
     dispose: async () => {
       child?.kill()
       if (child) await child.exited
+      pendingSessions.clear()
+      sessionModelState.clear()
     },
     config: async () => {
       await ensureService()
     },
     event: async (input) => {
       const event = readModelSwitchedEvent(input.event)
-      if (!event) return
-      if (!event.sessionID) return
-      pendingSessions.add(event.sessionID)
+      if (!event?.sessionID) return
+      const pendingSince = Date.now()
+      pendingSessions.set(event.sessionID, {
+        pendingSince,
+        providerID: event.model?.providerID,
+        modelID: event.model?.id,
+        eventPosted: false,
+        retryCount: 0,
+      })
       if (!(await ensureService())) return
-      await postJson("/handoff/model-switched", {
-        session_id: event.sessionID,
-        provider_id: event.model?.providerID,
-        model_id: event.model?.id,
-      }).catch(() => undefined)
+      const state = pendingSessions.get(event.sessionID)
+      if (!state) return
+      const posted = await postModelSwitched(event.sessionID, state)
+      if (posted) state.eventPosted = true
     },
     "experimental.chat.system.transform": async (input, output) => {
       if (!input.sessionID) return
-      if (!(await ensureService())) {
-        injectWarning(output.system)
-        return
-      }
-      const shouldSync = pendingSessions.has(input.sessionID)
-      if (shouldSync) {
-        const synced = await postJson("/sync", {}).then(() => true).catch(() => false)
-        if (!synced) output.system.push("trade memory handoff may be stale")
-      }
-      const result = await postJson("/handoff/context", {
-        session_id: input.sessionID,
-        model_id: input.model.id,
-      }).catch(() => undefined)
-      const block = typeof result?.block === "string" ? result.block.trim() : ""
-      if (block) {
-        pendingSessions.delete(input.sessionID)
-        output.system.push(block)
-        return
-      }
-      injectWarning(output.system)
+      await injectFreshHandoff({ sessionID: input.sessionID, modelID: input.model.id, append: (line) => output.system.push(line) })
     },
     "experimental.session.compacting": async (input, output) => {
-      if (!(await ensureService())) {
-        output.context.push(lastWarning)
-        return
-      }
-      const result = await postJson("/handoff/context", {
-        session_id: input.sessionID,
-      }).catch(() => undefined)
-      const block = typeof result?.block === "string" ? result.block.trim() : ""
-      if (block) {
-        output.context.push(block)
-        return
-      }
-      output.context.push(lastWarning)
+      await injectFreshHandoff({ sessionID: input.sessionID, append: (line) => output.context.push(line) })
     },
   }
 
-  return hooks
+  async function injectFreshHandoff(input: { sessionID: string; modelID?: string; append: (line: string) => void }) {
+    if (!(await ensureService())) {
+      input.append("trade memory handoff unavailable")
+      return
+    }
+    const pending = ensurePendingState(input.sessionID, input.modelID)
+    if (pending && !pending.eventPosted) pending.eventPosted = await postModelSwitched(input.sessionID, pending)
+    const synced = pending ? await syncPending(input.sessionID, pending) : true
+    if (pending && !synced) input.append("trade memory handoff may be stale")
+    const result = await postJson("/handoff/context", {
+      session_id: input.sessionID,
+      model_id: input.modelID,
+    }).catch(() => undefined)
+    const block = typeof result?.block === "string" ? result.block.trim() : ""
+    if (!block) {
+      input.append("trade memory handoff unavailable")
+      return
+    }
+    input.append(block)
+    if (input.modelID) sessionModelState.set(input.sessionID, { lastInjectedModelID: input.modelID })
+    if (pending && isFreshEnough(result, pending.pendingSince, synced)) {
+      const acked = await postJson("/handoff/ack", {
+        session_id: input.sessionID,
+        model_id: input.modelID,
+        acked_at: Date.now(),
+      }).then(() => true).catch(() => false)
+      if (acked) pendingSessions.delete(input.sessionID)
+    }
+  }
+
+  function ensurePendingState(sessionID: string, modelID?: string) {
+    const pending = pendingSessions.get(sessionID)
+    if (pending) return pending
+    const inferred = inferPendingFromModel(sessionID, modelID)
+    if (!inferred) return undefined
+    pendingSessions.set(sessionID, inferred)
+    return inferred
+  }
+
+  function inferPendingFromModel(sessionID: string, modelID?: string) {
+    const previous = sessionModelState.get(sessionID)
+    if (!previous?.lastInjectedModelID || !modelID || previous.lastInjectedModelID === modelID) return undefined
+    return {
+      pendingSince: Date.now(),
+      modelID,
+      eventPosted: false,
+      retryCount: 0,
+    } satisfies PendingSession
+  }
+
+  async function syncPending(sessionID: string, pending: PendingSession) {
+    const now = Date.now()
+    if (pending.lastSyncAttemptAt && now - pending.lastSyncAttemptAt < SYNC_RETRY_BACKOFF_MS) return false
+    pending.lastSyncAttemptAt = now
+    const synced = await postJson("/sync", {}).then(() => true).catch(() => false)
+    if (!synced) {
+      pending.retryCount += 1
+      return false
+    }
+    sessionModelState.set(sessionID, { lastInjectedModelID: pending.modelID })
+    return true
+  }
+
+  async function postModelSwitched(sessionID: string, pending: PendingSession) {
+    return postJson("/handoff/model-switched", {
+      session_id: sessionID,
+      provider_id: pending.providerID,
+      model_id: pending.modelID,
+      pending_since: pending.pendingSince,
+    }).then(() => true).catch(() => false)
+  }
 
   async function isHealthy() {
     try {
@@ -116,6 +167,14 @@ export function createTradeHandoffBridgeHooks(
     if (!response.ok) throw new Error(`service request failed: ${response.status}`)
     return response.json()
   }
+}
+
+function isFreshEnough(result: unknown, pendingSince: number, synced: boolean) {
+  if (!synced || !result || typeof result !== "object") return false
+  const pending = Reflect.get(result, "pendingSince")
+  const fresh = Reflect.get(result, "fresh")
+  if (typeof fresh === "boolean") return fresh && (typeof pending !== "number" || pending <= pendingSince)
+  return false
 }
 
 function startService(directory: string) {
@@ -167,7 +226,8 @@ function serviceUrl() {
 }
 
 function timeoutMs() {
-  return Number(process.env.OPENCODE_TRADE_MEMORY_SERVICE_TIMEOUT_MS ?? 3000)
+  const parsed = Number(process.env.OPENCODE_TRADE_MEMORY_SERVICE_TIMEOUT_MS ?? 3000)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 3000
 }
 
 function isAutostartEnabled() {

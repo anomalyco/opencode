@@ -1,5 +1,8 @@
 import { createTradeMemoryService, TradeMemoryInputError, type TradeMemoryService } from "./service"
 
+const MAX_BODY_BYTES = readPositiveEnv("OPENCODE_TRADE_MEMORY_SERVICE_MAX_BODY_BYTES", 1024 * 1024)
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1"])
+
 export function startTradeMemoryHttpServer(input?: {
   service?: TradeMemoryService
   hostname?: string
@@ -7,7 +10,9 @@ export function startTradeMemoryHttpServer(input?: {
 }) {
   const service = input?.service ?? createTradeMemoryService()
   const hostname = input?.hostname ?? process.env.OPENCODE_TRADE_MEMORY_SERVICE_HOST ?? "127.0.0.1"
-  const port = input?.port ?? Number(process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT ?? 19787)
+  const port = input?.port ?? readPositiveEnv("OPENCODE_TRADE_MEMORY_SERVICE_PORT", 19787)
+
+  requireTokenForRemoteHost(hostname)
 
   return Bun.serve({
     hostname,
@@ -22,14 +27,15 @@ export function startTradeMemoryHttpServer(input?: {
         if (request.method === "POST" && url.pathname === "/sync") return json(service.sync(toSyncInput(body)))
         if (request.method === "POST" && url.pathname === "/handoff/context") return json(service.buildHandoffContext(toHandoffContextInput(body)))
         if (request.method === "POST" && url.pathname === "/handoff/model-switched") return json(service.markModelSwitched(toModelSwitchedInput(body)))
+        if (request.method === "POST" && url.pathname === "/handoff/ack") return json(service.ackHandoff(toHandoffAckInput(body)))
         if (request.method === "POST" && url.pathname === "/notes") return json(service.storeNote(toStoreNoteInput(body)))
         if (request.method === "POST" && url.pathname === "/notes/search") return json(service.searchNotes(toSearchNotesInput(body)))
         if (request.method === "POST" && url.pathname === "/pins") return json(service.pinNote(toPinInput(body)))
         if (request.method === "GET" && url.pathname === "/pins") {
-          return json(service.listPins({ limit: readLimit(url), indexDbPath: readOptionalString(url.searchParams.get("index_db_path")) }))
+          return json(service.listPins({ limit: readLimit(url), indexDbPath: readOptionalString(url.searchParams.get("index_db_path"), "index_db_path") }))
         }
         if (request.method === "DELETE" && url.pathname.startsWith("/pins/")) {
-          return json(service.unpinNote({ id: decodeURIComponent(url.pathname.slice(6)), indexDbPath: readOptionalString(url.searchParams.get("index_db_path")) }))
+          return json(service.unpinNote({ id: decodeURIComponent(url.pathname.slice(6)), indexDbPath: readOptionalString(url.searchParams.get("index_db_path"), "index_db_path") }))
         }
         if (request.method === "POST" && url.pathname === "/semantic/search") return json(service.semanticSearch(toSemanticSearchInput(body)))
         if (request.method === "POST" && url.pathname === "/conversations/search") return json(service.searchConversations(toSearchConversationsInput(body)))
@@ -40,7 +46,8 @@ export function startTradeMemoryHttpServer(input?: {
       } catch (error) {
         if (error instanceof HttpError) return json({ error: error.message }, error.status)
         if (error instanceof TradeMemoryInputError) return json({ error: error.message }, 400)
-        return json({ error: error instanceof Error ? error.message : "internal error" }, 500)
+        console.error("[trade-memory] request failed", error)
+        return json({ error: "internal error" }, 500)
       }
     },
   })
@@ -56,8 +63,15 @@ class HttpError extends Error {
 }
 
 async function readJson(request: Request) {
+  const contentType = request.headers.get("content-type") ?? ""
+  if (!contentType.toLowerCase().includes("application/json")) throw new HttpError(415, "content-type must be application/json")
+  const contentLength = Number(request.headers.get("content-length") ?? 0)
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) throw new HttpError(413, "request body too large")
+  const text = await request.text()
+  if (!text.trim()) throw new HttpError(400, "request body must not be empty")
+  if (text.length > MAX_BODY_BYTES) throw new HttpError(413, "request body too large")
   try {
-    return await request.json()
+    return JSON.parse(text) as unknown
   } catch {
     throw new HttpError(400, "request body must be valid JSON")
   }
@@ -71,6 +85,12 @@ function authorize(request: Request) {
   throw new HttpError(401, "unauthorized")
 }
 
+function requireTokenForRemoteHost(hostname: string) {
+  if (LOCAL_HOSTS.has(hostname)) return
+  if (process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN?.trim()) return
+  throw new Error("OPENCODE_TRADE_MEMORY_SERVICE_TOKEN is required when binding outside localhost")
+}
+
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
@@ -81,10 +101,11 @@ function readLimit(url: URL) {
 }
 
 function toSyncInput(input: unknown) {
+  const body = readRecord(input)
   return {
-    sourceDbPath: readOptionalString(readRecord(input).source_db_path),
-    indexDbPath: readOptionalString(readRecord(input).index_db_path),
-    fullResync: readOptionalBoolean(readRecord(input).full_resync),
+    sourceDbPath: readOptionalString(body.source_db_path, "source_db_path"),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
+    fullResync: readOptionalBoolean(body.full_resync, "full_resync"),
   }
 }
 
@@ -92,9 +113,9 @@ function toHandoffContextInput(input: unknown) {
   const body = readRecord(input)
   return {
     sessionID: readRequiredString(body.session_id, "session_id"),
-    modelID: readOptionalString(body.model_id),
-    maxChars: readOptionalNumber(body.max_chars),
-    indexDbPath: readOptionalString(body.index_db_path),
+    modelID: readOptionalString(body.model_id, "model_id"),
+    maxChars: readOptionalInteger(body.max_chars, "max_chars"),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
   }
 }
 
@@ -102,9 +123,20 @@ function toModelSwitchedInput(input: unknown) {
   const body = readRecord(input)
   return {
     sessionID: readRequiredString(body.session_id, "session_id"),
-    providerID: readOptionalString(body.provider_id),
-    modelID: readOptionalString(body.model_id),
-    indexDbPath: readOptionalString(body.index_db_path),
+    providerID: readOptionalString(body.provider_id, "provider_id"),
+    modelID: readOptionalString(body.model_id, "model_id"),
+    pendingSince: readOptionalInteger(body.pending_since, "pending_since"),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
+  }
+}
+
+function toHandoffAckInput(input: unknown) {
+  const body = readRecord(input)
+  return {
+    sessionID: readRequiredString(body.session_id, "session_id"),
+    modelID: readOptionalString(body.model_id, "model_id"),
+    ackedAt: readOptionalInteger(body.acked_at, "acked_at"),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
   }
 }
 
@@ -115,21 +147,21 @@ function toStoreNoteInput(input: unknown) {
     body: readRequiredString(body.body, "body"),
     memory_type: readRequiredString(body.memory_type, "memory_type"),
     tags: readOptionalStringArray(body.tags, "tags"),
-    importance: readOptionalNumber(body.importance),
-    status: readOptionalString(body.status) as "active" | "tentative" | "deprecated" | undefined,
-    scope: readOptionalString(body.scope),
-    source_session_id: readOptionalString(body.source_session_id),
+    importance: readOptionalInteger(body.importance, "importance"),
+    status: readOptionalEnum(body.status, "status", ["active", "tentative", "deprecated"]),
+    scope: readOptionalString(body.scope, "scope"),
+    source_session_id: readOptionalString(body.source_session_id, "source_session_id"),
     source_message_ids: readOptionalStringArray(body.source_message_ids, "source_message_ids"),
-    indexDbPath: readOptionalString(body.index_db_path),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
   }
 }
 
 function toSearchNotesInput(input: unknown) {
   const body = readRecord(input)
   return {
-    query: readOptionalString(body.query),
-    limit: readOptionalNumber(body.limit),
-    indexDbPath: readOptionalString(body.index_db_path),
+    query: readOptionalString(body.query, "query"),
+    limit: readOptionalInteger(body.limit, "limit"),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
   }
 }
 
@@ -137,10 +169,10 @@ function toPinInput(input: unknown) {
   const body = readRecord(input)
   return {
     noteID: readRequiredString(body.note_id, "note_id"),
-    priority: readOptionalNumber(body.priority),
-    alwaysInclude: readOptionalBoolean(body.always_include),
+    priority: readOptionalInteger(body.priority, "priority"),
+    alwaysInclude: readOptionalBoolean(body.always_include, "always_include"),
     reason: readRequiredString(body.reason, "reason"),
-    indexDbPath: readOptionalString(body.index_db_path),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
   }
 }
 
@@ -148,8 +180,8 @@ function toSemanticSearchInput(input: unknown) {
   const body = readRecord(input)
   return {
     query: readRequiredString(body.query, "query"),
-    limit: readOptionalNumber(body.limit),
-    indexDbPath: readOptionalString(body.index_db_path),
+    limit: readOptionalInteger(body.limit, "limit"),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
   }
 }
 
@@ -157,8 +189,8 @@ function toSearchConversationsInput(input: unknown) {
   const body = readRecord(input)
   return {
     query: readRequiredString(body.query, "query"),
-    limit: readOptionalNumber(body.limit),
-    indexDbPath: readOptionalString(body.index_db_path),
+    limit: readOptionalInteger(body.limit, "limit"),
+    indexDbPath: readOptionalString(body.index_db_path, "index_db_path"),
   }
 }
 
@@ -166,7 +198,7 @@ function toOpenConversationSourceInput(input: unknown) {
   const body = readRecord(input)
   return {
     messageID: readRequiredString(body.message_id, "message_id"),
-    sourceDbPath: readOptionalString(body.source_db_path),
+    sourceDbPath: readOptionalString(body.source_db_path, "source_db_path"),
   }
 }
 
@@ -184,28 +216,39 @@ function readRequiredString(input: unknown, field: string) {
   return input
 }
 
-function readOptionalString(input: unknown) {
+function readOptionalString(input: unknown, field: string): string | undefined {
   if (input === undefined || input === null) return undefined
-  if (typeof input !== "string") throw new HttpError(400, "optional string field must be a string")
+  if (typeof input !== "string") throw new HttpError(400, `${field} must be a string`)
   return input
 }
 
-function readOptionalStringArray(input: unknown, field: string) {
+function readOptionalStringArray(input: unknown, field: string): string[] | undefined {
   if (input === undefined || input === null) return undefined
-  if (!Array.isArray(input) || input.some((item) => typeof item !== "string")) {
-    throw new HttpError(400, `${field} must be a string array`)
-  }
+  if (!Array.isArray(input) || input.some((item) => typeof item !== "string")) throw new HttpError(400, `${field} must be a string array`)
   return input
 }
 
-function readOptionalBoolean(input: unknown) {
+function readOptionalBoolean(input: unknown, field: string): boolean | undefined {
   if (input === undefined || input === null) return undefined
-  if (typeof input !== "boolean") throw new HttpError(400, "optional boolean field must be a boolean")
+  if (typeof input !== "boolean") throw new HttpError(400, `${field} must be a boolean`)
   return input
 }
 
-function readOptionalNumber(input: unknown) {
+function readOptionalInteger(input: unknown, field: string): number | undefined {
   if (input === undefined || input === null) return undefined
-  if (typeof input !== "number" || !Number.isFinite(input)) throw new HttpError(400, "optional number field must be finite")
-  return input
+  if (!Number.isInteger(input)) throw new HttpError(400, `${field} must be an integer`)
+  return input as number
+}
+
+function readOptionalEnum<T extends string>(input: unknown, field: string, values: T[]): T | undefined {
+  if (input === undefined || input === null) return undefined
+  if (typeof input !== "string" || !values.includes(input as T)) throw new HttpError(400, `${field} is invalid`)
+  return input as T
+}
+
+function readPositiveEnv(name: string, fallback: number) {
+  const value = process.env[name]
+  if (!value?.trim()) return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
 }
