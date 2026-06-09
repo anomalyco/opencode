@@ -36,15 +36,20 @@ private:
    CDataFeed               m_data;
 
 public:
-    CExpertAdvisor() : m_risk(InpMagicNumber) {}
+    CExpertAdvisor() {}
 
     //--- Initialization
-     int OnInit()
-       {
-        if(InpMagicNumber == 0)
-           return(INIT_FAILED);
+      int OnInit()
+        {
+         if(InpMagicNumber == 0)
+           {
+            Print("RiskManager initialization failed: InpMagicNumber must not be 0");
+            return(INIT_FAILED);
+           }
 
-        m_sig_breakout.Init();
+         m_risk.SetMagicNumber(InpMagicNumber);
+
+         m_sig_breakout.Init();
          m_sig_breakout.SetUseH1EMAFilter(InpUseH1EMAFilter);
         m_sig_breakout.SetLookbackBars(InpBreakoutLookbackBars);
         m_sig_breakout.SetATRMin(InpBreakoutATRMin);

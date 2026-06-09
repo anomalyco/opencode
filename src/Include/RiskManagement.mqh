@@ -58,6 +58,7 @@ public:
    void SetMonthlyDDLimit(double limit) { m_monthly_dd_limit = limit; }
    void SetDailyDDLimit(double limit)   { m_daily_dd_limit = limit; }
    void SetKellyFraction(double frac)   { m_kelly_fraction = frac; }
+   void SetMagicNumber(ulong magic_number) { m_magic_number = magic_number; }
    void SetRiskPerTrade(double risk_pct){ m_risk_per_trade_pct = risk_pct; }
    void SetWinRate(double rate)         { m_win_rate = rate; }
    void SetAvgWinLossRatio(double ratio){ m_avg_win_loss_ratio = ratio; }
@@ -232,7 +233,7 @@ public:
          {
           ulong ticket = PositionGetTicket(i);
           if(ticket == 0) continue;
-          if(!IsManagedPosition())
+          if(!IsManagedPosition(ticket))
              continue;
           if(PositionGetString(POSITION_SYMBOL) == _Symbol)
              return true;
@@ -344,16 +345,16 @@ public:
       return false;
      }
    
-   void UpdateTrailingStop()
-     {
-      // Iterate through open positions and update trailing stops
-       for(int i = PositionsTotal() - 1; i >= 0; i--)
-         {
-          ulong ticket = PositionGetTicket(i);
-          if(ticket == 0) continue;
-          
-          if(!IsManagedPosition())
-             continue;
+    void UpdateTrailingStop()
+      {
+       // Iterate through open positions and update trailing stops
+        for(int i = PositionsTotal() - 1; i >= 0; i--)
+          {
+           ulong ticket = PositionGetTicket(i);
+           if(ticket == 0) continue;
+           
+           if(!IsManagedPosition(ticket))
+              continue;
 
           if(PositionGetString(POSITION_SYMBOL) != _Symbol)
              continue;
@@ -387,10 +388,14 @@ public:
      }
 
 private:
-   bool IsManagedPosition()
-      {
-       return PositionGetInteger(POSITION_MAGIC) == (long)m_magic_number;
-      }
+   bool IsManagedPosition(ulong ticket)
+       {
+        if(ticket == 0)
+           return false;
+        if(!PositionSelectByTicket(ticket))
+           return false;
+        return PositionGetInteger(POSITION_MAGIC) == (long)m_magic_number;
+       }
 
    void ResetMonthlyIfNeeded()
        {
