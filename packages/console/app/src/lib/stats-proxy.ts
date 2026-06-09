@@ -10,7 +10,7 @@ export async function statsProxy(evt: APIEvent) {
   targetUrl.hostname = Resource.App.stage === "production" ? "stats.opencode.ai" : "stats.dev.opencode.ai"
   targetUrl.port = ""
 
-  if (targetUrl.pathname.startsWith(`${dataPath}/_build/`) || targetUrl.pathname === `${dataPath}/banner.png`) {
+  if (targetUrl.pathname.startsWith(`${dataPath}/_build/`) || targetUrl.pathname === `${dataPath}/banner.jpg`) {
     targetUrl.pathname = targetUrl.pathname.slice(dataPath.length)
   }
 
