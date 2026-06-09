@@ -1,4 +1,4 @@
-name: upstream-sync
+name: upstream-sync-threshold
 
 on:
   schedule:
