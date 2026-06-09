@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "voa": {
+      "source": "/Users/lelouch/skills",
+      "sourceType": "local",
+      "computedHash": "1b10315b2ecad4e248ae0aab7af66dbed893b7eab5cfda46648e65dcd502554e"
+    }
+  }
+}
