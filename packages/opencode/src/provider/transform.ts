@@ -826,7 +826,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
-      if (model.api.id.toLowerCase() === "north-mini-code-1-0") {
+      if (model.api.id.toLowerCase().includes("north-mini-code")) {
         return Object.fromEntries(
           ["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]),
         )
@@ -1110,7 +1110,7 @@ export function options(input: {
   }
 
   const modelId = input.model.api.id.toLowerCase()
-  if (modelId === "north-mini-code-1-0" && input.model.api.npm === "@ai-sdk/openai-compatible") {
+  if (modelId.includes("north-mini-code") && input.model.api.npm === "@ai-sdk/openai-compatible") {
     result["citation_options"] = { mode: "off" }
   }
 

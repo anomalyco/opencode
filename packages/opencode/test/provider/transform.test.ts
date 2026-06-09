@@ -2490,7 +2490,7 @@ describe("ProviderTransform.options - Cohere North", () => {
         id: "cohere/north-mini-code-1-0",
         providerID: "cohere",
         api: {
-          id: "north-mini-code-1-0",
+          id: "North-Mini-Code-1-0-latest",
           url: "https://api.cohere.com/compatibility/v1",
           npm: "@ai-sdk/openai-compatible",
         },
@@ -3234,7 +3234,7 @@ describe("ProviderTransform.variants", () => {
         id: "cohere/north-mini-code-1-0",
         providerID: "cohere",
         api: {
-          id: "north-mini-code-1-0",
+          id: "North-Mini-Code-1-0-latest",
           url: "https://api.cohere.com/compatibility/v1",
           npm: "@ai-sdk/openai-compatible",
         },
