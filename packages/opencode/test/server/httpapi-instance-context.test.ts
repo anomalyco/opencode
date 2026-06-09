@@ -333,7 +333,7 @@ describe("HttpApi instance context middleware", () => {
         directory: workspaceDir,
       })
       yield* serveDisposeProbe()
-      const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped)
+      const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped({ startImmediately: true }))
 
       const response = yield* HttpClientRequest.post(`/dispose-probe?workspace=${workspace.id}`).pipe(
         HttpClient.execute,

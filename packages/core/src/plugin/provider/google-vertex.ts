@@ -63,7 +63,10 @@ export const GoogleVertexPlugin = PluginV2.define({
           if (item.provider.api.type !== "aisdk") continue
           if (
             item.provider.api.package !== "@ai-sdk/google-vertex" &&
-            !item.provider.api.package.includes("@ai-sdk/openai-compatible")
+            !(
+              item.provider.id === ProviderV2.ID.googleVertex &&
+              item.provider.api.package.includes("@ai-sdk/openai-compatible")
+            )
           )
             continue
           const project = resolveProject(item.provider.request.body)

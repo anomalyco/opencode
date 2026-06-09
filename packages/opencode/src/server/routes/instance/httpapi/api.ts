@@ -17,11 +17,12 @@ import { ProjectCopyApi } from "./groups/project-copy"
 import { ProviderApi } from "./groups/provider"
 import { PtyApi, PtyConnectApi } from "./groups/pty"
 import { QuestionApi } from "./groups/question"
+import { ReferenceApi } from "./groups/reference"
 import { SessionApi } from "./groups/session"
 import { SyncApi } from "./groups/sync"
 import { TuiApi } from "./groups/tui"
 import { WorkspaceApi } from "./groups/workspace"
-import { V2Api } from "@opencode-ai/server/api"
+import { Api } from "@opencode-ai/server/api"
 // GlobalEventSchema snapshots the registry after event-producing groups register their variants.
 import { GlobalApi } from "./groups/global"
 import { Authorization } from "./middleware/authorization"
@@ -32,7 +33,7 @@ const EventSchema = Schema.Union([
     .values()
     .map((definition) =>
       Schema.Struct({
-        id: Schema.String,
+        id: EventV2.ID,
         type: Schema.Literal(definition.type),
         properties: definition.data,
       }).annotate({ identifier: `Event.${definition.type}` }),
@@ -60,6 +61,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(QuestionApi)
   .addHttpApi(PermissionApi)
   .addHttpApi(ProviderApi)
+  .addHttpApi(ReferenceApi)
   .addHttpApi(SessionApi)
   .addHttpApi(SyncApi)
   .addHttpApi(TuiApi)
@@ -70,7 +72,7 @@ export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(RootHttpApi)
   .addHttpApi(EventApi)
   .addHttpApi(InstanceHttpApi)
-  .addHttpApi(V2Api)
+  .addHttpApi(Api)
   .addHttpApi(PtyConnectApi)
   .annotate(HttpApi.AdditionalSchemas, [EventSchema, Question.Replied, Question.Rejected])
 

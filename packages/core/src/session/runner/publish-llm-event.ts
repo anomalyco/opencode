@@ -10,6 +10,7 @@ import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 
 type Input = {
@@ -60,7 +61,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const tools = new Map<
     string,
     {
-      readonly assistantMessageID: EventV2.ID
+      readonly assistantMessageID: SessionMessage.ID
       readonly name: string
       inputEnded: boolean
       called: boolean
@@ -70,13 +71,17 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   >()
   const timestamp = DateTime.now
-  let assistantMessageID: EventV2.ID | undefined
+  let assistantMessageID: SessionMessage.ID | undefined
   let providerFailed = false
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
-    assistantMessageID = (yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp }))
-      .id
+    assistantMessageID = SessionMessage.ID.create()
+    yield* events.publish(SessionEvent.Step.Started, {
+      ...input,
+      assistantMessageID,
+      timestamp: yield* timestamp,
+    })
     return assistantMessageID
   })
   const currentAssistantMessageID = () =>
@@ -118,6 +123,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     Effect.gen(function* () {
       yield* events.publish(SessionEvent.Text.Ended, {
         sessionID: input.sessionID,
+        assistantMessageID: yield* currentAssistantMessageID(),
         timestamp: yield* timestamp,
         textID,
         text: value,
@@ -128,6 +134,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     Effect.gen(function* () {
       yield* events.publish(SessionEvent.Reasoning.Ended, {
         sessionID: input.sessionID,
+        assistantMessageID: yield* currentAssistantMessageID(),
         timestamp: yield* timestamp,
         reasoningID,
         text: value,
@@ -158,7 +165,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     if (tools.has(event.id)) return yield* Effect.die(`Duplicate tool input start: ${event.id}`)
-    const assistantMessageID = yield* currentAssistantMessageID()
+    const assistantMessageID = yield* startAssistant()
     tools.set(event.id, {
       assistantMessageID,
       name: event.name,
@@ -211,15 +218,23 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const assistantMessageIDForTool = (callID: string) => {
+    const tool = tools.get(callID)
+    return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(`Unknown tool call: ${callID}`)
+  }
+
+  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
+    event: LLMEvent,
+    outputPaths: ReadonlyArray<string> = [],
+  ) {
     switch (event.type) {
       case "step-start":
-        yield* startAssistant()
         return
       case "text-start":
         yield* text.start(event.id)
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
+          assistantMessageID: yield* startAssistant(),
           timestamp: yield* timestamp,
           textID: event.id,
         })
@@ -228,6 +243,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* text.append(event.id, event.text)
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
           timestamp: yield* timestamp,
           textID: event.id,
           delta: event.text,
@@ -240,6 +256,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* reasoning.start(event.id)
         yield* events.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
+          assistantMessageID: yield* startAssistant(),
           timestamp: yield* timestamp,
           reasoningID: event.id,
           providerMetadata: event.providerMetadata,
@@ -249,6 +266,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* reasoning.append(event.id, event.text)
         yield* events.publish(SessionEvent.Reasoning.Delta, {
           sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
           timestamp: yield* timestamp,
           reasoningID: event.id,
           delta: event.text,
@@ -336,7 +354,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
-          result: event.result,
+          outputPaths,
+          ...(provider.executed ? { result: event.result } : {}),
           provider,
         })
         return
@@ -366,7 +385,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Step.Ended, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
-          assistantMessageID: yield* currentAssistantMessageID(),
+          assistantMessageID: yield* startAssistant(),
           finish: event.reason,
           cost: 0,
           tokens: tokens(event.usage),
@@ -387,5 +406,13 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  return { publish, flush, failUnsettledTools, hasProviderError: () => providerFailed, startAssistant }
+  return {
+    publish,
+    flush,
+    failUnsettledTools,
+    hasAssistantStarted: () => assistantMessageID !== undefined,
+    hasProviderError: () => providerFailed,
+    startAssistant,
+    assistantMessageID: assistantMessageIDForTool,
+  }
 }

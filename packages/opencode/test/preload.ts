@@ -10,6 +10,9 @@ import { afterAll } from "bun:test"
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(async () => {
+  const { AppRuntime } = await import("../src/effect/app-runtime")
+  await AppRuntime.dispose()
+
   const busy = (error: unknown) =>
     typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
   const rm = async (left: number): Promise<void> => {
@@ -17,7 +20,8 @@ afterAll(async () => {
     await sleep(100)
     return fs.rm(dir, { recursive: true, force: true }).catch((error) => {
       if (!busy(error)) throw error
-      if (left <= 1) throw error
+      if (left <= 1 && process.platform !== "win32") throw error
+      if (left <= 1) return
       return rm(left - 1)
     })
   }
@@ -83,13 +87,6 @@ delete process.env["OTEL_RESOURCE_ATTRIBUTES"]
 process.env["OPENCODE_DB"] = ":memory:"
 
 // Now safe to import from src/
-const { Log } = await import("@opencode-ai/core/util/log")
 const { initProjectors } = await import("../src/server/projectors")
-
-void Log.init({
-  print: false,
-  dev: true,
-  level: "DEBUG",
-})
 
 initProjectors()

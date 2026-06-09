@@ -1,11 +1,13 @@
-import { NodeFileSystem } from "@effect/platform-node"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { AgentV2 } from "@opencode-ai/core/agent"
+import { Config } from "@opencode-ai/core/config"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -14,12 +16,15 @@ import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
-import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { ToolRegistry } from "@opencode-ai/core/tool-registry"
+import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { Location } from "@opencode-ai/core/location"
+import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { SystemContext } from "@opencode-ai/core/system-context"
+import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -30,10 +35,15 @@ const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
-const cassette = HttpRecorder.cassetteLayer("session-runner/openai-chat-streams-text", {
-  directory: path.resolve(import.meta.dir, "fixtures/recordings"),
-  mode: process.env.RECORD === "true" ? "record" : "replay",
-}).pipe(Layer.provide(NodeFileSystem.layer))
+const cassette =
+  process.env.RECORD === "true"
+    ? HttpRecorderInternal.cassetteLayer("session-runner/openai-chat-streams-text", {
+        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
+        mode: "record",
+      })
+    : HttpRecorder.http("session-runner/openai-chat-streams-text", {
+        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
+      })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
 const permission = Layer.succeed(
@@ -47,7 +57,8 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission))
+const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
+const agents = AgentV2.layer
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
@@ -56,6 +67,10 @@ const model = OpenAIChat.route
   })
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
+const systemContext = SystemContextRegistry.layer
+const location = Location.layer({ directory: AbsolutePath.make("/project") }).pipe(Layer.provide(Project.defaultLayer))
+const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
+const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
 const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(database),
   Layer.provide(store),
@@ -63,12 +78,23 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
+  Layer.provide(systemContext),
+  Layer.provide(location),
+  Layer.provide(agents),
+  Layer.provide(skillGuidance),
+  Layer.provide(config),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
   SessionExecution.Service,
   SessionRunCoordinator.Service.pipe(
-    Effect.map((coordinator) => SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake })),
+    Effect.map((coordinator) =>
+      SessionExecution.Service.of({
+        resume: coordinator.run,
+        wake: coordinator.wake,
+        interrupt: coordinator.interrupt,
+      }),
+    ),
   ),
 ).pipe(Layer.provide(coordinator))
 const sessions = SessionV2.layer.pipe(
@@ -87,8 +113,13 @@ const it = testEffect(
     executor,
     client,
     permission,
+    agents,
     registry,
     models,
+    systemContext,
+    location,
+    skillGuidance,
+    config,
     runner,
     coordinator,
     execution,
@@ -131,7 +162,7 @@ describe("SessionRunnerLLM recorded", () => {
 
       const messages = yield* session.context(sessionID)
       expect(messages).toHaveLength(2)
-      expect(messages[0]).toEqual(prompt)
+      expect(messages[0]).toMatchObject({ id: prompt.id, type: "user", text: "Say hello in one short sentence." })
       expect(messages[1]).toMatchObject({ type: "assistant", agent: "build", finish: "stop" })
       expect(messages[1]?.type === "assistant" ? messages[1].content : []).toMatchObject([
         { type: "text", text: "Hello!" },
@@ -144,7 +175,8 @@ describe("SessionRunnerLLM recorded", () => {
           .orderBy(EventTable.seq)
           .all()).map((event) => event.type),
       ).toEqual([
-        "session.next.prompted.1",
+        "session.next.prompt.admitted.1",
+        "session.next.prompt.promoted.1",
         "session.next.step.started.1",
         "session.next.text.started.1",
         "session.next.text.ended.1",
