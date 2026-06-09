@@ -49,7 +49,7 @@ function Avatars(props: { items: { actorID: string; name: string; color: string 
               title={item.name}
               style={{ "background-color": item.color }}
             >
-              {(item.name || "?").trim().charAt(0).toUpperCase()}
+              {((item.name || "?").trim().slice(-2) || "?").toUpperCase()}
             </span>
           )}
         </For>
@@ -161,6 +161,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const avatarsFor = (optLabel: string) =>
     presence()
       .filter((item) => item.actorID !== actor()?.actorID && item.qIndex === tab() && item.selection.includes(optLabel))
+      .map((item) => ({ actorID: item.actorID, name: item.name, color: item.color }))
+
+  // Other participants (not me) currently viewing question `index` — shown stacked above its segment.
+  const othersOnTab = (index: number) =>
+    presence()
+      .filter((item) => item.actorID !== actor()?.actorID && item.qIndex === index)
       .map((item) => ({ actorID: item.actorID, name: item.name, color: item.color }))
 
   // ── Draft ops ───────────────────────────────────────────────────────────────────────────────
@@ -499,7 +505,21 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   disabled={sending()}
                   onClick={() => jump(i())}
                   aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
-                />
+                >
+                  <Show when={othersOnTab(i()).length > 0}>
+                    <span data-slot="question-progress-presence" aria-hidden="true">
+                      <For each={othersOnTab(i())}>
+                        {(item) => (
+                          <span
+                            data-slot="question-progress-dot"
+                            title={item.name}
+                            style={{ "background-color": item.color }}
+                          />
+                        )}
+                      </For>
+                    </span>
+                  </Show>
+                </button>
               )}
             </For>
           </div>

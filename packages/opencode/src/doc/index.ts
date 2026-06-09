@@ -42,10 +42,30 @@ export namespace Doc {
     "#e8590c",
   ]
 
+  // How recently an actor must have been seen to "reserve" its color. Keeps the palette collision-free
+  // among currently-active participants without ancient/test actors permanently consuming colors.
+  const COLOR_WINDOW = 60 * 60 * 1000
+
   function color(id: string) {
     let h = 0
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
     return COLORS[Math.abs(h) % COLORS.length]!
+  }
+
+  // Choose a presence color so concurrent participants are visually distinct (dots/avatars).
+  // - Keep `current` if it doesn't collide with another recently-active actor (stable across reconnects).
+  // - Otherwise move to a free palette color (heals a pre-existing hash collision when one reconnects).
+  // - Collision-free up to COLORS.length (12) active participants; beyond that, fall back to the stable
+  //   hash color. The "recently active" window keeps stale/historical actors from hogging the palette.
+  function pickColor(sessionID: SessionID, selfActorID: ActorID, current?: string) {
+    const now = Date.now()
+    const used = new Set(
+      Database.use((db) => db.select().from(SessionActorTable).where(eq(SessionActorTable.session_id, sessionID)).all())
+        .filter((row) => row.actor_id !== selfActorID && now - row.time_seen < COLOR_WINDOW)
+        .map((row) => row.color),
+    )
+    if (current && !used.has(current)) return current
+    return COLORS.find((item) => !used.has(item)) ?? current ?? color(selfActorID)
   }
 
   export const ActorInfo = z
@@ -1325,7 +1345,7 @@ export namespace Doc {
         actor_id: actorID,
         user_id: input.userID ?? existing?.user_id ?? null,
         name,
-        color: existing?.color ?? color(actorID),
+        color: pickColor(input.sessionID, actorID, existing?.color),
         time_seen: Date.now(),
       }
 
@@ -1341,6 +1361,7 @@ export namespace Doc {
             set: {
               user_id: row.user_id,
               name: row.name,
+              color: row.color,
               time_seen: row.time_seen,
             },
           })

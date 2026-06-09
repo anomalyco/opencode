@@ -873,6 +873,7 @@
   }
 
   [data-slot="question-progress-segment"] {
+    position: relative;
     width: 16px;
     height: 16px;
     padding: 0;
@@ -906,6 +907,30 @@
       cursor: not-allowed;
       opacity: 0.6;
     }
+  }
+
+  /* Other participants' current step — dots BELOW the segment bar (self excluded), filled
+     horizontally at most 3 per row, left-aligned, stacking from the top down. */
+  [data-slot="question-progress-presence"] {
+    position: absolute;
+    top: calc(50% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-content: flex-start;
+    gap: 2px;
+    width: 19px; /* exactly 3 dots (3×5px) + 2 gaps (2×2px) → 3 per row */
+    pointer-events: none;
+  }
+
+  [data-slot="question-progress-dot"] {
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px var(--background-base);
   }
 
   [data-slot="question-content"] {
@@ -1048,6 +1073,34 @@
     gap: 2px;
     min-width: 0;
     flex: 1;
+  }
+
+  /* Who currently has this option selected (self excluded) — last 2 chars of each name. */
+  [data-slot="question-option-avatars"] {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+    transform: translateY(2px);
+  }
+
+  [data-slot="question-option-avatar"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--radius-xs);
+    font-family: var(--font-family-sans);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: #fff;
+    box-shadow: 0 0 0 1px var(--background-base);
+    user-select: none;
+    white-space: nowrap;
   }
 
   [data-slot="option-label"] {
