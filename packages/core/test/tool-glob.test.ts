@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationSearch } from "@opencode-ai/core/location-search"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { RelativePath } from "@opencode-ai/core/schema"
@@ -12,7 +11,6 @@ import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/to
 
 const sessionID = SessionV2.ID.make("ses_glob_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
-const resolutions: FileSystem.ListInput[] = []
 const searches: LocationSearch.FilesInput[] = []
 let allow = true
 let result = new LocationSearch.FilesResult({ items: [], truncated: false, partial: false })
@@ -32,34 +30,6 @@ const permission = Layer.succeed(
   }),
 )
 
-const filesystem = Layer.succeed(
-  FileSystem.Service,
-  FileSystem.Service.of({
-    read: () => Effect.die("unused"),
-    resolveReadPath: () => Effect.die("unused"),
-    readTool: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-    resolveRoot: (input = {}) =>
-      Effect.sync(() => {
-        resolutions.push(input)
-        const relative = input.path ?? RelativePath.make(".")
-        return new FileSystem.RootTarget({
-          real: `/project/${relative}`,
-          root: "/project",
-          resource: relative,
-          type: "directory",
-        })
-      }),
-    resolveList: () => Effect.die("unused"),
-    listResolved: () => Effect.die("unused"),
-    listPage: () => Effect.die("unused"),
-    listPageResolved: () => Effect.die("unused"),
-    find: () => Effect.die("unused"),
-    grep: () => Effect.die("unused"),
-    isIgnored: () => false,
-  }),
-)
-
 const search = Layer.succeed(
   LocationSearch.Service,
   LocationSearch.Service.of({
@@ -76,14 +46,12 @@ const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const glob = GlobTool.layer.pipe(
   Layer.provide(registry),
   Layer.provide(permission),
-  Layer.provide(filesystem),
   Layer.provide(search),
 )
-const it = testEffect(Layer.mergeAll(registry, permission, filesystem, search, glob))
+const it = testEffect(Layer.mergeAll(registry, permission, search, glob))
 
 const reset = () => {
   assertions.length = 0
-  resolutions.length = 0
   searches.length = 0
   allow = true
   result = new LocationSearch.FilesResult({ items: [], truncated: false, partial: false })
@@ -123,7 +91,6 @@ describe("GlobTool", () => {
           metadata: { root: "src", path: "src", limit: 12 },
         },
       ])
-      expect(resolutions).toEqual([{ path: RelativePath.make("src") }])
       expect(searches).toEqual([{ pattern: "**/*.ts", path: RelativePath.make("src"), limit: 12 }])
     }),
   )

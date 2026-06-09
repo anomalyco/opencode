@@ -38,9 +38,8 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
 
 const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
-    // TODO: Materialize remote URL and managed file sources before provider-history lowering.
-    // ToolOutput.toResultValue intentionally rejects unmaterialized sources rather than
-    // guessing whether a provider can fetch them or leaking host-local resource paths.
+    // TODO: Materialize remote and managed URIs before provider-history lowering.
+    // ToolOutput.toResultValue rejects unresolved URIs rather than treating them as media bytes.
     const result =
       tool.provider?.executed === true && tool.state.result !== undefined
         ? tool.state.result

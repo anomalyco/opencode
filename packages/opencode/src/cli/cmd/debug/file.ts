@@ -38,7 +38,9 @@ const FileReadCommand = effectCmd({
       description: "File path to read",
     }),
   handler: Effect.fn("Cli.debug.file.read")(function* (args) {
-    const content = yield* filesystem(FileSystem.Service.use((svc) => svc.read({ path: RelativePath.make(args.path) })))
+    const content = yield* filesystem(
+      FileSystem.Service.use((svc) => svc.read({ path: RelativePath.make(args.path) })),
+    )
     process.stdout.write(JSON.stringify(content, null, 2) + EOL)
   }),
 })
@@ -53,7 +55,9 @@ const FileListCommand = effectCmd({
       description: "File path to list",
     }),
   handler: Effect.fn("Cli.debug.file.list")(function* (args) {
-    const files = yield* filesystem(FileSystem.Service.use((svc) => svc.list({ path: RelativePath.make(args.path) })))
+    const files = yield* filesystem(
+      FileSystem.Service.use((svc) => svc.list({ path: RelativePath.make(args.path) })),
+    )
     process.stdout.write(JSON.stringify(files, null, 2) + EOL)
   }),
 })

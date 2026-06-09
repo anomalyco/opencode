@@ -6,7 +6,7 @@
  */
 export * as EditTool from "./edit"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"
@@ -103,7 +103,7 @@ export const layer = Layer.effectDiscard(
             input: Input,
             output: Output,
             toModelOutput: ({ input, output }) => [
-              toolText({ type: "text", text: toModelOutput(output, input.oldString, input.newString) }),
+              { type: "text", text: toModelOutput(output, input.oldString, input.newString) },
             ],
             execute: (input, context) => {
               const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

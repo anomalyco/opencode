@@ -316,9 +316,9 @@ export function Autocomplete(props: {
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
       // Get files from SDK
-      const result = await sdk.client.find.files({
+      const result = await sdk.client.v2.fs.find({
         query: baseQuery,
-        workspace: project.workspace.current(),
+        location: { workspace: project.workspace.current() },
       })
 
       const options: AutocompleteOption[] = []
@@ -328,15 +328,14 @@ export function Autocomplete(props: {
       if (!result.error && result.data) {
         const width = props.anchor().width - 4
         options.push(
-          ...result.data.map((item): AutocompleteOption => {
-            const { filename, url, part } = createFilePart(item, lineRange)
+          ...result.data.data.map((item): AutocompleteOption => {
+            const { filename, url, part } = createFilePart(item.path, lineRange)
 
-            const isDir = item.endsWith("/")
             return {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
-              isDirectory: isDir,
-              path: item,
+              isDirectory: item.type === "directory",
+              path: item.path,
               onSelect: () => {
                 insertPart(filename, part)
               },
@@ -561,7 +560,7 @@ export function Autocomplete(props: {
     const endCursor = input.logicalCursor
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-    input.insertText("@" + path)
+    input.insertText("@" + path + "/")
 
     setStore("selected", 0)
   }

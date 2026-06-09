@@ -5,6 +5,7 @@ import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { LocationSearch } from "@opencode-ai/core/location-search"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Ripgrep as FileSystemRipgrep } from "@opencode-ai/core/filesystem/ripgrep"
@@ -19,6 +20,7 @@ function provide(directory: string, data = Global.Path.data) {
   const dependencies = Layer.mergeAll(
     FSUtil.defaultLayer,
     FileSystemRipgrep.defaultLayer,
+    Search.defaultLayer,
     AppProcess.defaultLayer,
     Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
     Global.layerWith({ data }),

@@ -48,7 +48,7 @@ describe("file.search", () => {
       yield* waitForFileIndex(search, dir)
       const results = yield* search.file({ cwd: dir, query: "rdme", limit: 10 })
 
-      expect(results).toContain("README.md")
+      expect(results).toContainEqual({ path: "README.md", type: "file" })
     }),
   )
 
@@ -63,9 +63,9 @@ describe("file.search", () => {
       yield* waitForFileIndex(search, dir)
       const results = yield* search.file({ cwd: dir, query: "", limit: 10, kind: "all" })
 
-      expect(results).toContain("README.md")
-      expect(results).toContain("src/")
-      expect(results).not.toContain("")
+      expect(results).toContainEqual({ path: "README.md", type: "file" })
+      expect(results).toContainEqual({ path: "src/", type: "directory" })
+      expect(results.map((item) => item.path)).not.toContain("")
     }),
   )
 
@@ -80,7 +80,10 @@ describe("file.search", () => {
       yield* waitForFileIndex(search, dir)
       const results = yield* search.file({ cwd: dir, query: "", limit: 10 })
 
-      expect(results?.slice(0, 2)).toEqual(["a.ts", "src/longer-name.ts"])
+      expect(results.slice(0, 2)).toEqual([
+        { path: "a.ts", type: "file" },
+        { path: "src/longer-name.ts", type: "file" },
+      ])
     }),
   )
 
@@ -163,7 +166,7 @@ describe("file.search", () => {
       const search = yield* Search.Service
       yield* waitForFileIndex(search, dir)
       const results = yield* search.file({ cwd: dir, query: "alpha target two", limit: 10 })
-      expect(results).toContain("alpha-target-two.ts")
+      expect(results).toContainEqual({ path: "alpha-target-two.ts", type: "file" })
 
       // open() records the query->file association in fff's history db via the
       // live picker. It must resolve a remembered file and run without error.

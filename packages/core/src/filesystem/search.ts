@@ -30,6 +30,11 @@ export interface FileInput {
   readonly kind?: "file" | "directory" | "all"
 }
 
+export interface FileResult {
+  readonly path: string
+  readonly type: "file" | "directory"
+}
+
 export interface GlobInput {
   readonly cwd: string
   readonly pattern: string
@@ -61,7 +66,7 @@ export interface Interface {
   readonly files: Ripgrep.Interface["files"]
   readonly tree: Ripgrep.Interface["tree"]
   readonly search: (input: Ripgrep.SearchInput) => Effect.Effect<Result, SearchError>
-  readonly file: (input: FileInput) => Effect.Effect<string[] | undefined, SearchError>
+  readonly file: (input: FileInput) => Effect.Effect<readonly FileResult[], SearchError>
   readonly glob: (input: GlobInput) => Effect.Effect<{ files: string[]; truncated: boolean }, SearchError>
   readonly open: (input: { cwd?: string; file: string }) => Effect.Effect<void, SearchError>
   readonly warm: (cwd: string) => Effect.Effect<void>
@@ -131,17 +136,29 @@ function item(hit: Fff.Hit): Item {
   }
 }
 
-function collectPaths<T>(items: T[], scores: Array<{ total: number }>, toPath: (item: T) => string): string[] {
-  const rows = items.flatMap((item, index): Array<{ text: string; score: number }> => {
-    const text = toPath(item)
-    if (!text) return []
-    return [{ text, score: scores[index]?.total ?? 0 }]
+function collectPaths<T>(
+  items: T[],
+  scores: Array<{ total: number }>,
+  toResult: (item: T) => FileResult,
+): FileResult[] {
+  const rows = items.flatMap((item, index): Array<FileResult & { score: number }> => {
+    const result = toResult(item)
+    if (!result.path) return []
+    return [{ ...result, score: scores[index]?.total ?? 0 }]
   })
   rows.sort(
-    (a, b) => b.score - a.score || a.text.length - b.text.length || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
+    (a, b) =>
+      b.score - a.score ||
+      a.path.length - b.path.length ||
+      (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
   )
 
-  return Array.from(new Set(rows.map((item) => item.text)))
+  const seen = new Set<string>()
+  return rows.flatMap((item) => {
+    if (seen.has(item.path)) return []
+    seen.add(item.path)
+    return [{ path: item.path, type: item.type }]
+  })
 }
 
 function searchFff(
@@ -149,13 +166,16 @@ function searchFff(
   kind: "file" | "directory" | "all",
   query: string,
   opts: { currentFile?: string; pageIndex?: number; pageSize?: number },
-): Fff.Result<string[]> {
+): Fff.Result<FileResult[]> {
   if (kind === "directory") {
     const out = pick.directorySearch(query, opts)
     if (!out.ok) return out
     return {
       ok: true,
-      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
+      value: collectPaths(out.value.items, out.value.scores, (entry) => ({
+        path: normalize(entry.relativePath),
+        type: "directory",
+      })),
     }
   }
   if (kind === "all") {
@@ -163,14 +183,20 @@ function searchFff(
     if (!out.ok) return out
     return {
       ok: true,
-      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.item.relativePath)),
+      value: collectPaths(out.value.items, out.value.scores, (entry) => ({
+        path: normalize(entry.item.relativePath),
+        type: entry.type,
+      })),
     }
   }
   const out = pick.fileSearch(query, opts)
   if (!out.ok) return out
   return {
     ok: true,
-    value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
+    value: collectPaths(out.value.items, out.value.scores, (entry) => ({
+      path: normalize(entry.relativePath),
+      type: "file",
+    })),
   }
 }
 
@@ -232,10 +258,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
     // and does not await the scan; the native background scan starts as soon as
     // the picker exists. The `wait` gate dedupes concurrent creation.
     const acquire = Effect.fn("Search.acquire")(function* (cwd: string) {
-      // The opencode test runtime owns an isolated XDG tree that Windows must
-      // remove before process exit, so use ripgrep instead of native FFF there.
-      if (process.env.OPENCODE_TEST_HOME) return undefined
-
       const dir = FSUtil.resolve(cwd)
       const existing = state.pick.get(dir)
       if (existing) return existing
@@ -341,8 +363,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       const query = input.query.trim()
       const kind = input.kind ?? "file"
 
-      const entry = yield* acquire(input.cwd).pipe(Effect.catch(() => Effect.succeed<Picker | undefined>(undefined)))
-      if (!entry) return undefined
+      const entry = yield* acquire(input.cwd)
+      if (!entry) return yield* Effect.fail(new Error("fff is unavailable"))
+      yield* entry.ready
       const dir = FSUtil.resolve(input.cwd)
       const limit = input.limit ?? 100
       const fffResult = yield* fffSync(`${kind} search`, () =>
@@ -354,14 +377,13 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       ).pipe(
         Effect.catch((error) =>
           Effect.logWarning(`fff ${kind} search failed`, { dir, query, error }).pipe(
-            Effect.as<Fff.Result<string[]> | undefined>(undefined),
+            Effect.andThen(Effect.fail(error)),
           ),
         ),
       )
-      if (!fffResult) return undefined
       if (!fffResult.ok) {
         yield* Effect.logWarning(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
-        return undefined
+        return yield* Effect.fail(new Error(fffResult.error))
       }
 
       const rows = fffResult.value
@@ -369,7 +391,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
         state,
         dir,
         query,
-        rows.map((row) => path.join(dir, row)),
+        rows.map((row) => path.join(dir, row.path)),
       )
       return rows.slice(0, limit)
     })
