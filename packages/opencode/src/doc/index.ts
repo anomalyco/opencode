@@ -494,8 +494,9 @@ export namespace Doc {
     .meta({ ref: "DocSubmitActor" })
   export type SubmitActorInfo = z.infer<typeof SubmitActorInfo>
 
-  // What a consent vote acts on once approved: a prompt doc, or an AI question (reply/reject).
-  export const SubmitTargetKind = z.enum(["doc", "question"]).meta({ ref: "DocSubmitTargetKind" })
+  // What a consent vote acts on once approved: send a prompt doc, reply/dismiss an AI question, or
+  // stop ('cancel') the session's in-flight AI response.
+  export const SubmitTargetKind = z.enum(["doc", "question", "stop"]).meta({ ref: "DocSubmitTargetKind" })
   export type SubmitTargetKind = z.infer<typeof SubmitTargetKind>
 
   export const SubmitState = z
@@ -646,6 +647,12 @@ export namespace Doc {
   }
 
   function send(row: SubmitRow) {
+    if (row.target_kind === "stop") {
+      // Consensus to stop the AI: cancel the run. Idempotent — a no-op if it already finished
+      // (which is why an agreed and a cancelled stop vote look the same once the response is done).
+      SessionPrompt.cancel(row.session_id).catch((err) => fail(row, err))
+      return
+    }
     if (row.target_kind === "question") {
       const payload = QuestionPayload.parse(JSON.parse(row.prompt))
       const requestID = QuestionID.make(payload.requestID)
@@ -697,7 +704,7 @@ export namespace Doc {
     return next
   }
 
-  function active(sessionID: SessionID, targetID: string, actorID?: ActorID) {
+  function active(sessionID: SessionID, targetID: string, actorID?: ActorID, targetKind?: SubmitTargetKind) {
     const rows = Database.use((db) =>
       db
         .select()
@@ -707,6 +714,7 @@ export namespace Doc {
             eq(DocSubmitTable.session_id, sessionID),
             eq(DocSubmitTable.target_id, targetID),
             eq(DocSubmitTable.status, "pending"),
+            ...(targetKind ? [eq(DocSubmitTable.target_kind, targetKind)] : []),
           ),
         )
         .all(),
@@ -814,7 +822,7 @@ export namespace Doc {
     promptBlob: string
     timeoutMs?: number
   }) {
-    const found = active(input.sessionID, input.targetID)
+    const found = active(input.sessionID, input.targetID, undefined, input.targetKind)
     if (found) return found
 
     const ids = targets(input.targetID, input.actorID, input.actorIDs)
@@ -859,7 +867,7 @@ export namespace Doc {
     } catch (err) {
       // Two participants pressed send at the same instant: the pending unique index
       // rejected the loser. Return whoever won rather than surfacing a DB error.
-      const winner = active(input.sessionID, input.targetID)
+      const winner = active(input.sessionID, input.targetID, undefined, input.targetKind)
       if (winner) return winner
       throw err
     }
@@ -887,6 +895,33 @@ export namespace Doc {
       actorIDs: input.actorIDs,
       names: input.names,
       promptBlob: JSON.stringify(input.prompt),
+      timeoutMs: input.timeoutMs,
+    })
+  })
+
+  // Consensus to STOP the in-flight AI response. Keyed by the session's prompt docID so it reaches
+  // the same connected peers (and dialog) as a doc send; on approval, send() cancels the run.
+  export const StopSubmitCreateInput = z.object({
+    sessionID: SessionID.zod,
+    docID: DocID.zod,
+    actorID: ActorID.zod,
+    actorIDs: ActorID.zod.array(),
+    names: z.record(z.string(), z.string()).optional(),
+    timeoutMs: z.number().optional(),
+  })
+
+  export const stopSubmitCreate = fn(StopSubmitCreateInput, (input) => {
+    Session.get(input.sessionID)
+    get(input.docID)
+    return create({
+      sessionID: input.sessionID,
+      targetKind: "stop",
+      targetID: input.docID,
+      docID: input.docID,
+      actorID: input.actorID,
+      actorIDs: input.actorIDs,
+      names: input.names,
+      promptBlob: "{}",
       timeoutMs: input.timeoutMs,
     })
   })

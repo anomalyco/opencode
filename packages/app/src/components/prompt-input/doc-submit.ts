@@ -10,8 +10,9 @@ export type DocSubmitActor = {
 export type DocSubmitState = {
   submitID: string
   sessionID: string
-  // 'doc' → targetID is the prompt doc id; 'question' → targetID is the question request id.
-  targetKind: "doc" | "question"
+  // 'doc' → targetID is the prompt doc id; 'question' → the question request id; 'stop' → the prompt
+  // doc id whose in-flight AI response a consensus would cancel.
+  targetKind: "doc" | "question" | "stop"
   targetID: string
   // For 'question' votes: whether the vote sends a reply or dismisses the question.
   questionAction?: "send" | "dismiss"
@@ -81,6 +82,29 @@ export async function startSubmit(input: StartInput) {
     actorIDs: input.actorIDs,
     names: input.names,
     prompt: input.prompt,
+    timeoutMs: input.timeoutMs,
+  })
+}
+
+type StopInput = {
+  baseUrl: string
+  directory: string
+  sessionID: string
+  docID: string
+  actorID: string
+  actorIDs: string[]
+  names?: Record<string, string>
+  timeoutMs?: number
+}
+
+// Start a consent vote to stop the session's in-flight AI response. Reuses the doc submit socket
+// (keyed by docID) for lifecycle events and the same respond endpoint.
+export async function startStopSubmit(input: StopInput) {
+  return json(path(input, `/session/${input.sessionID}/prompt-doc/stop`), {
+    docID: input.docID,
+    actorID: input.actorID,
+    actorIDs: input.actorIDs,
+    names: input.names,
     timeoutMs: input.timeoutMs,
   })
 }

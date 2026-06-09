@@ -1593,6 +1593,66 @@ describe("doc", () => {
     })
   })
 
+  test("stop vote routes through the doc submit socket and cancels on consensus", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+
+        // Both connect via the SAME doc submit socket used for sends — stop votes reuse it.
+        const events: Doc.SubmitEvent[] = []
+        const stopA = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          peer: { send: (data) => events.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+        const stopB = Doc.submitConnect({ sessionID: session.id, docID, actorID: bob.actorID, peer: { send: () => {} } })
+
+        const state = Doc.stopSubmitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+        })
+        expect(state.status).toBe("pending")
+        expect(state.targetKind).toBe("stop")
+        expect(state.targetID).toBe(docID)
+        expect(events[0]?.type).toBe("created")
+
+        // A stop vote and a doc send vote can coexist (different kind, same target) — keyed apart.
+        const send = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+        expect(send.targetKind).toBe("doc")
+        expect(send.submitID).not.toBe(state.submitID)
+
+        // Bob approves the stop → consensus → sent (send() calls SessionPrompt.cancel; no-op when idle).
+        const sent = Doc.submitRespond({
+          sessionID: session.id,
+          submitID: state.submitID,
+          actorID: bob.actorID,
+          action: "approve",
+        })
+        expect(sent.status).toBe("sent")
+        expect(events.some((e) => e.type === "sent" && e.state.submitID === state.submitID)).toBe(true)
+
+        stopA()
+        stopB()
+      },
+    })
+  })
+
   test("question submit route is mounted and validates input", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

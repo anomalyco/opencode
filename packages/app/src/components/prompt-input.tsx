@@ -81,7 +81,7 @@ import { createPromptDoc } from "./prompt-input/doc"
 import { createOpenSessionFile } from "./prompt-input/open-session-file"
 import { lineRefToSelection } from "@/components/blocksuite/line-reference-url"
 import { createPromptContextSync } from "./prompt-input/context-sync"
-import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
+import { connectSubmit, respondSubmit, startSubmit, startStopSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
 import { DialogDocSubmit } from "./doc-submit/dialog-doc-submit"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 
@@ -569,6 +569,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (state.status !== "pending") {
       if (finalizedID === state.submitID) return
       finalizedID = state.submitID
+      // A 'stop' vote shows no terminal screen — any resolution just closes. Stopping the response
+      // and the response finishing on its own are the same end state, so there's nothing to show:
+      // on approval the server already cancelled the run; a reject/expire simply does nothing.
+      if (state.targetKind === "stop") {
+        if (approvalID === state.submitID) closeApproval()
+        return
+      }
     }
     if (state.status === "sent") {
       clearContext()
@@ -583,6 +590,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <DialogDocSubmit
           state={approval}
           actorID={actorID}
+          kind={approval()?.targetKind === "stop" ? "stop" : "doc"}
           approve={() => {
             const current = approval()
             if (!current) return
@@ -1656,9 +1664,49 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     requestAnimationFrame(() => editorRef?.focus())
   }
 
+  // Stopping the AI mid-response is a shared action in a collaborative doc: gate it behind the same
+  // consent vote as sending. Solo (or non-doc) falls straight through to a direct abort. The dialog
+  // is driven by the vote, so it stays up even if the response finishes first; on resolution it just
+  // closes (server already cancelled on approval, or nothing on reject — same end state either way).
+  const requestStop = async () => {
+    const sessionID = params.id
+    const docID = doc.docID()
+    const actorID = doc.actorID()
+    if (store.mode !== "doc" || !sessionID || !docID || !actorID) {
+      await abort()
+      return
+    }
+    const list = doc.actors()
+    const ids = Array.from(new Set([actorID, ...list.map((item) => item.actorID)]))
+    if (ids.length <= 1) {
+      await abort()
+      return
+    }
+    const names: Record<string, string> = {}
+    for (const item of list) {
+      const name = item.name?.trim()
+      if (name && name !== item.actorID) names[item.actorID] = name
+    }
+    try {
+      const state = await startStopSubmit({
+        baseUrl: sdk.url,
+        directory: sdk.directory,
+        sessionID,
+        docID,
+        actorID,
+        actorIDs: ids,
+        names,
+      })
+      approvalSession = sessionID
+      showApproval(state)
+    } catch {
+      await abort()
+    }
+  }
+
   async function submit() {
     if (submitAction() === "stop") {
-      await abort()
+      await requestStop()
       return
     }
 
@@ -1799,7 +1847,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
 
       if (working()) {
-        abort()
+        void requestStop()
         event.preventDefault()
         event.stopPropagation()
         return
@@ -1865,7 +1913,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
       if (working()) {
-        abort()
+        void requestStop()
         event.preventDefault()
       }
       return
@@ -1895,7 +1943,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (event.repeat) return
       const action = submitAction()
       if (action === "stop") {
-        void abort()
+        void requestStop()
         return
       }
       if (store.mode === "draw" || store.mode === "doc") {

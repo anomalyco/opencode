@@ -10,7 +10,7 @@ import { useCountdown } from "./use-countdown"
 import "./doc-submit.css"
 
 // What the vote will do once approved — drives the dialog copy.
-export type DocSubmitKind = "doc" | "question-send" | "question-dismiss"
+export type DocSubmitKind = "doc" | "question-send" | "question-dismiss" | "stop"
 
 // For question votes: the question(s) and the answer(s) being agreed on, shown so everyone sees
 // exactly what is about to be sent (or which question is being dismissed).
@@ -60,7 +60,14 @@ function Preview(props: { items: () => DocSubmitPreviewItem[]; dismiss?: boolean
 function headline(kind: DocSubmitKind | undefined) {
   if (kind === "question-send") return "이 답변, 보낼까요?"
   if (kind === "question-dismiss") return "이 질문, 닫을까요?"
+  if (kind === "stop") return "AI 응답을 멈출까요?"
   return "이 프롬프트, 보낼까요?"
+}
+
+function requestVerb(kind: DocSubmitKind | undefined) {
+  if (kind === "question-dismiss") return "닫기를"
+  if (kind === "stop") return "중지를"
+  return "전송을"
 }
 
 function role(
@@ -108,7 +115,7 @@ function VotingBody(props: {
           <div class="ds-eyebrow">자동 거절까지 · {String(display()).padStart(2, "0")}s</div>
           <h2 class="ds-headline">{headline(props.kind)}</h2>
           <div class="ds-sub">
-            <strong>{requester()?.name ?? "참여자"}</strong>님이 전송을 요청했어요
+            <strong>{requester()?.name ?? "참여자"}</strong>님이 {requestVerb(props.kind)} 요청했어요
           </div>
           <Show when={pending().length > 0}>
             <div class="ds-pending-list">
@@ -154,7 +161,13 @@ function WaitingBody(props: {
         <div class="ds-ring-inner">
           <div class="ds-eyebrow ds-eyebrow--helmet">응답 전송됨</div>
           <h2 class="ds-headline ds-headline--waiting">팀원 응답을 기다리고 있어요</h2>
-          <div class="ds-sub">모두 동의하면 AI에 자동으로 전송됩니다</div>
+          <div class="ds-sub">
+            {props.kind === "stop"
+              ? "모두 동의하면 AI 응답을 멈춥니다"
+              : props.kind === "question-dismiss"
+                ? "모두 동의하면 질문을 닫습니다"
+                : "모두 동의하면 AI에 자동으로 전송됩니다"}
+          </div>
           <Show when={pending().length > 0}>
             <div class="ds-pending-list">
               <div class="ds-pending-label">응답 대기 · {pending().length}명</div>

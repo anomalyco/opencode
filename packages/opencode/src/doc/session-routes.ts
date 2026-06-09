@@ -126,6 +126,31 @@ export const SessionDocRoutes = () =>
       },
     )
     .post(
+      "/:sessionID/prompt-doc/stop",
+      describeRoute({
+        summary: "Create AI-response stop approval",
+        description: "Create a collaborative consent vote to stop the session's in-flight AI response.",
+        operationId: "session.promptDoc.stop",
+        responses: {
+          200: {
+            description: "Submit approval state",
+            content: { "application/json": { schema: resolver(Doc.SubmitState) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", Doc.StopSubmitCreateInput.omit({ sessionID: true })),
+      async (c) => {
+        return c.json(
+          Doc.stopSubmitCreate({
+            ...c.req.valid("json"),
+            sessionID: c.req.valid("param").sessionID,
+          }),
+        )
+      },
+    )
+    .post(
       "/:sessionID/prompt-doc/submit/:submitID/respond",
       describeRoute({
         summary: "Respond to prompt doc submit approval",
