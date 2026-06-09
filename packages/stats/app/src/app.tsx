@@ -7,8 +7,8 @@ import "./app.css"
 function AppMeta() {
   return (
     <>
-      <Title>OpenCode Stats</Title>
-      <Meta name="description" content="OpenCode usage, market share, token cost, and session cost stats." />
+      <Title>OpenCode Data</Title>
+      <Meta name="description" content="OpenCode usage data, market share, token cost, and session cost." />
     </>
   )
 }
