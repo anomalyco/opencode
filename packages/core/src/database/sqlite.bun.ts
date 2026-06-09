@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import * as Context from "effect/Context"
+import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
 import { identity } from "effect/Function"
@@ -119,12 +120,40 @@ const make = (options: Config) =>
     })
 
     const semaphore = yield* Semaphore.make(1)
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
+    const lockTimeout = Duration.seconds(30)
+    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection)).pipe(
+      Effect.timeoutFail({
+        duration: lockTimeout,
+        onTimeout: () =>
+          new SqlError({
+            reason: classifySqliteError(new Error("Timed out waiting for database lock after 30s"), {
+              message: "Database lock timeout",
+              operation: "query",
+            }),
+          }),
+      }),
+    )
     const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
       const fiber = Fiber.getCurrent()!
       const scope = Context.getUnsafe(fiber.context, Scope.Scope)
       return Effect.as(
-        Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
+        Effect.tap(
+          restore(
+            semaphore.take(1).pipe(
+              Effect.timeoutFail({
+                duration: lockTimeout,
+                onTimeout: () =>
+                  new SqlError({
+                    reason: classifySqliteError(
+                      new Error("Timed out waiting for database transaction lock after 30s — possible deadlock"),
+                      { message: "Transaction lock timeout", operation: "transaction" },
+                    ),
+                  }),
+              }),
+            ),
+          ),
+          () => Scope.addFinalizer(scope, semaphore.release(1)),
+        ),
         connection,
       )
     })
