@@ -19,6 +19,7 @@ interface MockClientState {
   listResourcesShouldFail: boolean
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
+  callToolSignal?: AbortSignal
   closed: boolean
   notificationHandlers: Map<unknown, (...args: any[]) => any>
 }
@@ -173,6 +174,11 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return { resources: this._state?.resources ?? [] }
     }
 
+    async callTool(_params: unknown, _schema: unknown, options?: { signal?: AbortSignal }) {
+      if (this._state) this._state.callToolSignal = options?.signal
+      return { content: [] }
+    }
+
     async close() {
       if (this._state) this._state.closed = true
     }
@@ -229,6 +235,30 @@ it.instance(
         expect(Object.keys(toolsA).length).toBeGreaterThan(0)
         expect(Object.keys(toolsB).length).toBeGreaterThan(0)
         expect(serverState.listToolsCalls).toBe(1)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "forwards tool cancellation to the MCP request",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "cancel-server"
+        const serverState = getOrCreateClientState("cancel-server")
+        const controller = new AbortController()
+
+        yield* mcp.add("cancel-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const tools = yield* mcp.tools()
+        yield* Effect.promise(() =>
+          tools["cancel-server_test_tool"].execute!({}, { abortSignal: controller.signal } as never),
+        )
+        expect(serverState.callToolSignal).toBe(controller.signal)
       }),
     ),
   { config: { mcp: {} } },
