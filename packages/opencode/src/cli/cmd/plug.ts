@@ -1,4 +1,4 @@
-import { intro, log, outro, spinner } from "@clack/prompts"
+import { intro, log, outro, spinner as clackSpinner } from "@clack/prompts"
 import { Effect } from "effect"
 
 import { ConfigPaths } from "@/config/paths"
@@ -45,7 +45,12 @@ export type PlugCtx = {
 }
 
 const defaultPlugDeps: PlugDeps = {
-  spinner: () => spinner(),
+  spinner: () => {
+    if (process.stdout.isTTY) return clackSpinner()
+    const noop = (msg: string, code?: number) => {}
+    const start = (msg: string) => console.error(msg)
+    return { start, stop: noop }
+  },
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),
