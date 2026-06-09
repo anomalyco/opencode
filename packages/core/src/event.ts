@@ -410,9 +410,7 @@ export const layerWith = (options?: LayerOptions) =>
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterrupts(cause),
             (cause) =>
-              Effect.logError("Event observer failed").pipe(
-                Effect.annotateLogs({ eventID: event.id, eventType: event.type, kind, cause }),
-              ),
+              Effect.logError("Event observer failed", { eventID: event.id, eventType: event.type, kind, cause }),
           ),
         )
 

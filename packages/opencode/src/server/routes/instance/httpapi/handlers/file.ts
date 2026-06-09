@@ -34,11 +34,23 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       const directory = (yield* InstanceState.context).directory
       const limit = ctx.query.limit ?? 10
       const kind = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : "all")
+      const started = performance.now()
       // Prefer fff (frecency + fuzzy ranking) and trust its ordering. Fall back
       // to the ripgrep-backed FileSystem.find when fff is unavailable.
       const fff = yield* search.file({ cwd: directory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
-      if (fff !== undefined) return fff
-      return (yield* filesystem(
+      if (fff !== undefined) {
+        yield* Effect.logInfo("find file", {
+          engine: "fff",
+          query: ctx.query.query,
+          kind,
+          directory,
+          limit,
+          results: fff.length,
+          duration: Math.round(performance.now() - started),
+        })
+        return fff
+      }
+      const fallback = (yield* filesystem(
         FileSystem.Service.use((fs) =>
           fs.find({
             query: ctx.query.query,
@@ -47,6 +59,16 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
           }),
         ),
       )).map((item) => item.path)
+      yield* Effect.logInfo("find file", {
+        engine: "ripgrep",
+        query: ctx.query.query,
+        kind,
+        directory,
+        limit,
+        results: fallback.length,
+        duration: Math.round(performance.now() - started),
+      })
+      return fallback
     })
 
     const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {

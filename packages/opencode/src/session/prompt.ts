@@ -4,7 +4,6 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import os from "os"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
-import { Log } from "@opencode-ai/core/util/log"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
 import { Agent } from "../agent/agent"
@@ -43,7 +42,6 @@ import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -79,9 +77,6 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
-
-const log = Log.create({ service: "session.prompt" })
-const elog = EffectLogger.create({ service: "session.prompt" })
 
 function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
@@ -141,7 +136,7 @@ export const layer = Layer.effect(
     })
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
-      yield* elog.info("cancel", { sessionID })
+      yield* Effect.logInfo("cancel", { "session.id": sessionID })
       yield* state.cancel(sessionID)
     })
 
@@ -282,7 +277,7 @@ export const layer = Layer.effect(
       const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
-        .pipe(Effect.catchCause((cause) => elog.error("failed to generate title", { error: Cause.squash(cause) })))
+        .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
     })
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
@@ -384,8 +379,11 @@ export const layer = Layer.effect(
           Effect.catchCause((cause) => {
             const defect = Cause.squash(cause)
             error = defect instanceof Error ? defect : new Error(String(defect))
-            log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-            return Effect.void
+            return Effect.logError("subtask execution failed", {
+              error,
+              agent: task.agent,
+              description: task.description,
+            })
           }),
           Effect.onInterrupt(() =>
             Effect.gen(function* () {
@@ -761,7 +759,7 @@ export const layer = Layer.effect(
         if (part.type === "file") {
           if (part.source?.type === "resource") {
             const { clientName, uri } = part.source
-            log.info("mcp resource", { clientName, uri, mime: part.mime })
+            yield* Effect.logInfo("mcp resource", { clientName, uri, mime: part.mime })
             const pieces: Draft<SessionV1.Part>[] = [
               {
                 messageID: info.id,
@@ -799,7 +797,7 @@ export const layer = Layer.effect(
               pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
             } else {
               const error = Cause.squash(exit.cause)
-              log.error("failed to read MCP resource", { error, clientName, uri })
+              yield* Effect.logError("failed to read MCP resource", { error, clientName, uri })
               const message = error instanceof Error ? error.message : String(error)
               pieces.push({
                 messageID: info.id,
@@ -835,7 +833,7 @@ export const layer = Layer.effect(
               }
               break
             case "file:": {
-              log.info("file", { mime: part.mime })
+              yield* Effect.logInfo("file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
 
@@ -918,7 +916,7 @@ export const layer = Layer.effect(
                   }
                 } else {
                   const error = Cause.squash(exit.cause)
-                  log.error("failed to read file", { error })
+                  yield* Effect.logError("failed to read file", { error, filepath })
                   const message = error instanceof Error ? error.message : String(error)
                   yield* events.publish(Session.Event.Error, {
                     sessionID: input.sessionID,
@@ -940,7 +938,7 @@ export const layer = Layer.effect(
                 const exit = yield* execRead(args).pipe(Effect.exit)
                 if (Exit.isFailure(exit)) {
                   const error = Cause.squash(exit.cause)
-                  log.error("failed to read directory", { error })
+                  yield* Effect.logError("failed to read directory", { error, filepath })
                   const message = error instanceof Error ? error.message : String(error)
                   yield* events.publish(Session.Event.Error, {
                     sessionID: input.sessionID,
@@ -1065,7 +1063,7 @@ export const layer = Layer.effect(
 
       const parsed = decodeMessageInfo(info, { errors: "all", propertyOrder: "original" })
       if (Exit.isFailure(parsed)) {
-        log.error("invalid user message before save", {
+        yield* Effect.logError("invalid user message before save", {
           sessionID: input.sessionID,
           messageID: info.id,
           agent: info.agent,
@@ -1073,10 +1071,10 @@ export const layer = Layer.effect(
           cause: Cause.pretty(parsed.cause),
         })
       }
-      parts.forEach((part, index) => {
+      for (const [index, part] of parts.entries()) {
         const p = decodeMessagePart(part, { errors: "all", propertyOrder: "original" })
-        if (Exit.isSuccess(p)) return
-        log.error("invalid user part before save", {
+        if (Exit.isSuccess(p)) continue
+        yield* Effect.logError("invalid user part before save", {
           sessionID: input.sessionID,
           messageID: info.id,
           partID: part.id,
@@ -1085,7 +1083,7 @@ export const layer = Layer.effect(
           cause: Cause.pretty(p.cause),
           part,
         })
-      })
+      }
 
       yield* sessions.updateMessage(info)
       for (const part of parts) yield* sessions.updatePart(part)
@@ -1217,14 +1215,13 @@ export const layer = Layer.effect(
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
-        const slog = elog.with({ sessionID })
         let structured: unknown
         let step = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
-          yield* slog.info("loop", { step })
+          yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
             Effect.provideService(Database.Service, database),
@@ -1255,13 +1252,14 @@ export const layer = Layer.effect(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
             )
             if (orphan) {
-              yield* slog.warn("loop exit with orphaned interrupted tool", {
+              yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+                "session.id": sessionID,
                 messageID: lastAssistant.id,
                 tool: orphan.tool,
                 callID: orphan.callID,
               })
             }
-            yield* slog.info("exiting loop")
+            yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
             break
           }
 
@@ -1486,7 +1484,11 @@ export const layer = Layer.effect(
     })
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-      yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
+      yield* Effect.logInfo("command", {
+        "session.id": input.sessionID,
+        command: input.command,
+        agent: input.agent,
+      })
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
