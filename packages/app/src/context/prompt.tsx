@@ -283,7 +283,9 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       return entry.value
     }
 
-    const session = createMemo(() => load(search.draftId ? { draftID: search.draftId } : { dir: params.dir!, id: params.id }))
+    const session = createMemo(() =>
+      load(search.draftId ? { draftID: search.draftId } : { dir: params.dir!, id: params.id }),
+    )
     const pick = (scope?: Scope) => (scope ? load(scope) : session())
 
     return {
