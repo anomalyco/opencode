@@ -277,6 +277,20 @@ function completedTool(
   } satisfies ToolPart
 }
 
+function todoUpdatedEvent(
+  sessionID: string,
+  todos: Array<{ content: string; status: string; priority?: string }>,
+): Event {
+  return {
+    id: `evt_todo_${sessionID}_${Math.random()}`,
+    type: "todo.updated",
+    properties: {
+      sessionID,
+      todos: todos.map((todo) => ({ ...todo, priority: todo.priority ?? "" })),
+    },
+  }
+}
+
 function errorTool(sessionID: string, callID: string) {
   return {
     id: `part_${callID}`,
@@ -712,6 +726,52 @@ describe("acp event routing", () => {
       content: [{ type: "content", content: { type: "text", text: "failed hard" } }],
       rawOutput: { error: "failed hard", metadata: { exit: 1 } },
     })
+  })
+
+  it("emits an ACP plan session update from todo.updated events", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_plan", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      todoUpdatedEvent("ses_plan", [
+        { content: "first", status: "in_progress", priority: "high" },
+        { content: "second", status: "pending", priority: "weird" },
+        { content: "third", status: "cancelled", priority: "low" },
+        { content: "fourth", status: "completed" },
+      ]),
+    )
+
+    const planUpdates = harness.updates.filter((u) => u.update.sessionUpdate === "plan")
+    expect(planUpdates).toHaveLength(1)
+    expect(planUpdates[0]).toMatchObject({
+      sessionId: "ses_plan",
+      update: {
+        sessionUpdate: "plan",
+        entries: [
+          { content: "first", status: "in_progress", priority: "high" },
+          { content: "second", status: "pending", priority: "medium" },
+          { content: "third", status: "completed", priority: "low" },
+          { content: "fourth", status: "completed", priority: "medium" },
+        ],
+      },
+    })
+  })
+
+  it("dedupes identical sequential plan updates and re-emits on change", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_plan2", cwd: "/workspace" }))
+
+    const todos = [{ content: "a", status: "pending", priority: "medium" }]
+    await harness.subscription.handle(todoUpdatedEvent("ses_plan2", todos))
+    await harness.subscription.handle(todoUpdatedEvent("ses_plan2", todos))
+    await harness.subscription.handle(
+      todoUpdatedEvent("ses_plan2", [{ content: "a", status: "in_progress", priority: "medium" }]),
+    )
+
+    const planUpdates = harness.updates.filter((u) => u.update.sessionUpdate === "plan")
+    expect(planUpdates).toHaveLength(2)
+    expect(planUpdates[0]?.update).toMatchObject({ entries: [{ status: "pending" }] })
+    expect(planUpdates[1]?.update).toMatchObject({ entries: [{ status: "in_progress" }] })
   })
 
   it("emits image attachments as ACP image content for live and replayed completed tool updates", async () => {
