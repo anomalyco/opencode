@@ -1,6 +1,7 @@
 import { useEvent } from "./event"
 import type {
   Event,
+  ReferenceInfo,
   SessionMessage,
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
@@ -10,6 +11,8 @@ import type {
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
+import { useProject } from "./project"
+import { createEffect } from "solid-js"
 
 function activeAssistant(messages: SessionMessage[]) {
   const index = messages.findIndex((message) => message.type === "assistant" && !message.time.completed)
@@ -60,12 +63,15 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       messages: {
         [sessionID: string]: SessionMessage[]
       }
+      reference: ReferenceInfo[]
     }>({
       messages: {},
+      reference: [],
     })
 
     const event = useEvent()
     const sdk = useSDK()
+    const project = useProject()
     const applied = new Set<string>()
     const buffering = new Map<string, Event[]>()
     const syncing = new Map<string, Promise<void>>()
@@ -117,6 +123,17 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       return result
     }
 
+    async function syncReferences(workspace = project.workspace.current()) {
+      const result = await sdk.client.v2.reference.list({ location: { workspace } })
+      if (workspace !== project.workspace.current()) return
+      setStore("reference", reconcile(result.data?.data ?? []))
+    }
+
+    createEffect(() => {
+      project.workspace.current()
+      void syncReferences()
+    })
+
     function apply(event: Event) {
       switch (event.type) {
         case "session.next.agent.switched":
@@ -147,7 +164,6 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               text: event.properties.prompt.text,
               files: event.properties.prompt.files,
               agents: event.properties.prompt.agents,
-              references: event.properties.prompt.references,
               time: { created: event.properties.timestamp },
             })
           })
@@ -163,7 +179,6 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               text: event.properties.prompt.text,
               files: event.properties.prompt.files,
               agents: event.properties.prompt.agents,
-              references: event.properties.prompt.references,
               time: { created: event.properties.timeCreated },
             })
           })
@@ -417,6 +432,9 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               time: { created: event.properties.timestamp },
             })
           })
+          break
+        case "reference.updated":
+          void syncReferences()
           break
       }
     }

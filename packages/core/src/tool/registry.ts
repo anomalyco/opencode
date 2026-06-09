@@ -1,6 +1,6 @@
 export * as ToolRegistry from "./registry"
 
-import { ToolOutput, type ToolCall, type ToolDefinition, type ToolSettlement } from "@opencode-ai/llm"
+import { ToolOutput, type ToolCall, type ToolDefinition, type ToolResultValue } from "@opencode-ai/llm"
 import { Context, Effect, Layer, Scope } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
@@ -30,7 +30,9 @@ export interface Materialization {
   readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement, ToolOutputStore.Error>
 }
 
-export interface Settlement extends ToolSettlement {
+export interface Settlement {
+  readonly result: ToolResultValue
+  readonly output?: ToolOutput
   readonly outputPaths?: ReadonlyArray<string>
 }
 

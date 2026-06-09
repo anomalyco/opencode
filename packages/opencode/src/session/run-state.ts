@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Runner } from "@/effect/runner"
@@ -149,5 +150,7 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
 function busyError(sessionID: SessionID) {
   return new Session.BusyError({ sessionID })
 }
+
+export const node = LayerNode.make(layer, [BackgroundJob.node, SessionStatus.node])
 
 export * as SessionRunState from "./run-state"

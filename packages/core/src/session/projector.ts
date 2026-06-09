@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
+import { LayerNode } from "../effect/layer-node"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
@@ -447,3 +448,4 @@ export const layer = Layer.effectDiscard(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer))
+export const node = LayerNode.make(layer, [EventV2.node, Database.node])

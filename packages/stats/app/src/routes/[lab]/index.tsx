@@ -35,7 +35,7 @@ const labHeaderLinks: readonly HeaderLink[] = [
   { href: "#models", label: "Models" },
 ]
 const labFooterLinks: readonly HeaderLink[] = [
-  { href: import.meta.env.BASE_URL, label: "Stats Home" },
+  { href: import.meta.env.BASE_URL, label: "Data Home" },
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
   { href: `${import.meta.env.BASE_URL}#market-share`, label: "Market Share" },
   { href: `${import.meta.env.BASE_URL}#geo-breakdown`, label: "Geo Breakdown" },
@@ -69,7 +69,7 @@ export default function StatsLab() {
   const labTitle = createMemo(() => `${labName()} Models`)
   const labDescription = createMemo(
     () =>
-      `Explore ${labName()} models used in OpenCode, with recent token usage, context windows, release dates, and model-specific stats.`,
+      `Explore ${labName()} models used in OpenCode, with recent token usage, context windows, release dates, and model-specific data.`,
   )
   const labUrl = createMemo(() =>
     new URL(
@@ -136,7 +136,7 @@ function LabLoading() {
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
           <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-            Stats
+            Data
           </a>
           <h1>Model Lab</h1>
           <p>Reading model availability and recent OpenCode usage.</p>
@@ -152,7 +152,7 @@ function LabNotFound(props: { lab: string }) {
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
           <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-            Stats
+            Data
           </a>
           <h1>{formatCatalogLabName(props.lab)}</h1>
           <p>No models matched this lab.</p>
@@ -175,7 +175,7 @@ function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
   return (
     <section id="overview" data-section="lab-hero">
       <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-        Stats
+        Data
       </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
@@ -184,7 +184,7 @@ function LabHero(props: { lab: ModelCatalogLab; stats: StatsLabData | null }) {
           <p>
             Explore {props.lab.models.length} {props.lab.name} models used in OpenCode
             <Show when={featuredModels().length > 0}> including {formatList(featuredModels())}</Show>. Compare recent
-            token usage, context windows, release dates, and model-specific stats.
+            token usage, context windows, release dates, and model-specific data.
           </p>
         </div>
         <div data-component="model-rank-panel">

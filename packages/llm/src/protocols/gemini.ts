@@ -14,7 +14,7 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultContentPart,
+  type ToolContent,
 } from "../schema"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
@@ -262,7 +262,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         })
         continue
       }
-      const content: ReadonlyArray<ToolResultContentPart> = part.result.value
+      const content: ReadonlyArray<ToolContent> = part.result.value
       const text = content.filter((item) => item.type === "text").map((item) => item.text)
       parts.push({
         functionResponse: {
@@ -275,7 +275,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       })
       for (const item of content) {
         if (item.type === "text") continue
-        const media = yield* ProviderShared.validateMedia("Gemini", item, IMAGE_MIMES)
+        const media = yield* ProviderShared.validateToolFile("Gemini", item, IMAGE_MIMES)
         parts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
       }
     }

@@ -9,6 +9,7 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
+  type ToolFileContent,
   type TextPart,
   type ToolResultPart,
 } from "../schema"
@@ -232,6 +233,9 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
   if (bytes.toString("base64") !== base64) return yield* invalidRequest(`${route} media must contain canonical base64`)
   return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
 })
+
+export const validateToolFile = (route: string, part: ToolFileContent, supportedMimes: ReadonlySet<string>) =>
+  validateMedia(route, { type: "media", mediaType: part.mime, data: part.uri, filename: part.name }, supportedMimes)
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
