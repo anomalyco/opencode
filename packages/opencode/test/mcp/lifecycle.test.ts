@@ -8,7 +8,13 @@ import { testEffect } from "../lib/effect"
 // Per-client state for controlling mock behavior
 interface MockClientState {
   capabilities: { tools?: object; prompts?: object; resources?: object }
-  tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
+  tools: Array<{
+    name: string
+    description?: string
+    inputSchema: object
+    outputSchema?: object
+    execution?: { taskSupport?: "required" | "optional" | "forbidden" }
+  }>
   listToolsCalls: number
   listPromptsCalls: number
   listResourcesCalls: number
@@ -22,7 +28,13 @@ interface MockClientState {
   toolPages: Record<
     string,
     {
-      tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
+      tools: Array<{
+        name: string
+        description?: string
+        inputSchema: object
+        outputSchema?: object
+        execution?: { taskSupport?: "required" | "optional" | "forbidden" }
+      }>
       nextCursor?: string
     }
   >
@@ -31,6 +43,8 @@ interface MockClientState {
     string,
     { resources: Array<{ name: string; uri: string; description?: string }>; nextCursor?: string }
   >
+  callToolResult: { content: Array<{ type: "text"; text: string }>; structuredContent?: Record<string, unknown> }
+  callToolCalls: number
   closed: boolean
   notificationHandlers: Map<unknown, (...args: any[]) => any>
 }
@@ -65,6 +79,8 @@ function getOrCreateClientState(name?: string): MockClientState {
       toolPages: {},
       promptPages: {},
       resourcePages: {},
+      callToolResult: { content: [{ type: "text", text: "ok" }] },
+      callToolCalls: 0,
       closed: false,
       notificationHandlers: new Map(),
     }
@@ -201,6 +217,11 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       const page = this._state?.resourcePages[params === undefined ? "initial" : (params.cursor ?? "")]
       if (page) return page
       return { resources: this._state?.resources ?? [] }
+    }
+
+    async callTool() {
+      if (this._state) this._state.callToolCalls++
+      return this._state?.callToolResult
     }
 
     async close() {
@@ -351,6 +372,51 @@ it.instance(
           "empty-cursor-server:prompt-two",
         ])
         expect(serverState.listPromptsCalls).toBe(2)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "enforces metadata from later tool pages",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "metadata-server"
+        const serverState = getOrCreateClientState("metadata-server")
+        serverState.toolPages = {
+          initial: { tools: [], nextCursor: "next" },
+          next: {
+            tools: [
+              {
+                name: "structured",
+                inputSchema: { type: "object", properties: {} },
+                outputSchema: { type: "object", required: ["value"], properties: { value: { type: "string" } } },
+              },
+              {
+                name: "task",
+                inputSchema: { type: "object", properties: {} },
+                execution: { taskSupport: "required" },
+              },
+            ],
+          },
+        }
+
+        yield* mcp.add("metadata-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const tools = yield* mcp.tools()
+        const structured = yield* Effect.tryPromise(() =>
+          tools["metadata-server_structured"].execute!({}, {} as never),
+        ).pipe(Effect.exit)
+        const task = yield* Effect.tryPromise(() => tools["metadata-server_task"].execute!({}, {} as never)).pipe(
+          Effect.exit,
+        )
+        expect(Exit.isFailure(structured)).toBe(true)
+        expect(Exit.isFailure(task)).toBe(true)
+        expect(serverState.callToolCalls).toBe(1)
       }),
     ),
   { config: { mcp: {} } },
