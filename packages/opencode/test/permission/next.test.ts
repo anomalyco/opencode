@@ -449,6 +449,19 @@ test("evaluate - merges multiple rulesets", () => {
   expect(result.action).toBe("deny")
 })
 
+test("evaluate - approved wildcard allow overrides config deny (documents bug)", () => {
+  // This test documents the evaluate() behavior that enables the bug.
+  // The fix is in Permission.ask() which checks config deny rules first.
+  const config: PermissionV1.Ruleset = [
+    { permission: "edit", pattern: "*", action: "ask" },
+    { permission: "edit", pattern: "*/AGENTS.md", action: "deny" },
+  ]
+  const approved: PermissionV1.Ruleset = [{ permission: "edit", pattern: "*", action: "allow" }]
+  const result = Permission.evaluate("edit", "Users/someone/workspace/AGENTS.md", config, approved)
+  // evaluate() alone still returns "allow" — the fix is in ask() which checks config deny first
+  expect(result.action).toBe("allow")
+})
+
 // disabled tests
 
 test("disabled - returns empty set when all tools allowed", () => {
@@ -586,6 +599,44 @@ it.instance(
           metadata: {},
           always: [],
           ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
+        }),
+      )
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - config deny is not overridden by approved wildcard allow",
+  () =>
+    Effect.gen(function* () {
+      // First, approve an edit with "always" to populate the approved list
+      const fiber = yield* ask({
+        id: PermissionV1.ID.make("per_deny_override_1"),
+        sessionID: SessionID.make("session_test"),
+        permission: "edit",
+        patterns: ["some/file.ts"],
+        metadata: {},
+        always: ["*"],
+        ruleset: [{ permission: "edit", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      yield* reply({ requestID: PermissionV1.ID.make("per_deny_override_1"), reply: "always" })
+      yield* Fiber.join(fiber)
+
+      // Now attempt an edit that config explicitly denies — should still be denied
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_test2"),
+          permission: "edit",
+          patterns: ["Users/someone/workspace/AGENTS.md"],
+          metadata: {},
+          always: [],
+          ruleset: [
+            { permission: "edit", pattern: "*", action: "ask" },
+            { permission: "edit", pattern: "*/AGENTS.md", action: "deny" },
+          ],
         }),
       )
       expect(err).toBeInstanceOf(PermissionV1.DeniedError)

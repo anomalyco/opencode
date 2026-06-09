@@ -80,6 +80,14 @@ export const layer = Layer.effect(
       let needsAsk = false
 
       for (const pattern of request.patterns) {
+        // Check config deny rules first — they cannot be overridden by approved rules
+        const configRule = evaluate(request.permission, pattern, ruleset)
+        if (configRule.action === "deny") {
+          yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: configRule })
+          return yield* new PermissionV1.DeniedError({
+            ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+          })
+        }
         const rule = evaluate(request.permission, pattern, ruleset, approved)
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
