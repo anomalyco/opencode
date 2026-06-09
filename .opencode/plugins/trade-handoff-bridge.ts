@@ -93,7 +93,8 @@ export function createTradeHandoffBridgeHooks(directory: string, options?: { sta
     }
     input.append(block)
     if (input.modelID) sessionModelState.set(input.sessionID, { lastInjectedModelID: input.modelID })
-    if (pending && isFreshEnough(result, pending.pendingSince, synced)) {
+    const resultPendingSince = readPendingSince(result)
+    if (isFreshEnough(result, pending?.pendingSince ?? resultPendingSince, synced)) {
       const acked = await postJson("/handoff/ack", {
         session_id: input.sessionID,
         model_id: input.modelID,
@@ -169,11 +170,20 @@ export function createTradeHandoffBridgeHooks(directory: string, options?: { sta
   }
 }
 
-function isFreshEnough(result: unknown, pendingSince: number, synced: boolean) {
-  if (!synced || !result || typeof result !== "object") return false
+function readPendingSince(result: unknown) {
+  if (!result || typeof result !== "object") return undefined
+  const pending = Reflect.get(result, "pendingSince")
+  return typeof pending === "number" ? pending : undefined
+}
+
+function isFreshEnough(result: unknown, pendingSince: number | undefined, synced: boolean) {
+  if ((!synced && pendingSince === undefined) || !result || typeof result !== "object") return false
   const pending = Reflect.get(result, "pendingSince")
   const fresh = Reflect.get(result, "fresh")
-  if (typeof fresh === "boolean") return fresh && (typeof pending !== "number" || pending <= pendingSince)
+  if (typeof fresh === "boolean") {
+    if (pendingSince === undefined) return fresh
+    return fresh && (typeof pending !== "number" || pending <= pendingSince)
+  }
   return false
 }
 

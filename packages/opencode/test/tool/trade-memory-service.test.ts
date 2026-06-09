@@ -85,4 +85,18 @@ describe("trade-memory service", () => {
       void server.stop(true)
     }
   })
+
+  test("markModelSwitched ignores stale late event after ack", async () => {
+    await using tmp = await tmpdir()
+    const service = createTradeMemoryService({ indexDbPath: path.join(tmp.path, "memory.sqlite3") })
+
+    service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.4", pendingSince: 100 })
+    service.ackHandoff({ sessionID: "ses_test", modelID: "gpt-5.4", ackedAt: 200 })
+    const result = service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.4", pendingSince: 150 })
+    const state = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.4" })
+
+    expect(result).toMatchObject({ ignored: true })
+    expect(state.pendingSince).toBeNull()
+    expect(state.fresh).toBe(true)
+  })
 })

@@ -180,16 +180,28 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
         ensureIndexSchema(indexDb)
         const sessionID = requireNonEmpty(input.sessionID, "sessionID")
         const pendingSince = clampTimestamp(input.pendingSince) ?? Date.now()
+        const modelID = normalizeOptionalString(input.modelID) ?? null
+        const current = indexDb
+          .query<{ last_model_id: string | null; last_injected_at: number | null; pending_since: number | null }, [string]>(
+            "select last_model_id, last_injected_at, pending_since from handoff_state where session_id = ? limit 1",
+          )
+          .get(sessionID)
+        if (current?.last_model_id === modelID && current.last_injected_at && current.last_injected_at >= pendingSince) {
+          return { indexDbPath, ok: true, pendingSince, ignored: true }
+        }
+        if (current?.pending_since && current.pending_since > pendingSince) {
+          return { indexDbPath, ok: true, pendingSince: current.pending_since, ignored: true }
+        }
         indexDb
           .query(
             "insert into handoff_state (session_id, pending_provider_id, pending_model_id, pending_since, last_event_type, updated_at) values (?, ?, ?, ?, ?, ?) on conflict(session_id) do update set pending_provider_id = excluded.pending_provider_id, pending_model_id = excluded.pending_model_id, pending_since = excluded.pending_since, last_event_type = excluded.last_event_type, updated_at = excluded.updated_at",
           )
-          .run(sessionID, normalizeOptionalString(input.providerID) ?? null, normalizeOptionalString(input.modelID) ?? null, pendingSince, "model-switched", Date.now())
+          .run(sessionID, normalizeOptionalString(input.providerID) ?? null, modelID, pendingSince, "model-switched", Date.now())
         indexDb
           .query(
             "insert into handoff_log (id, session_id, provider_id, model_id, event_type, created_at) values (?, ?, ?, ?, ?, ?)",
           )
-          .run(crypto.randomUUID(), sessionID, normalizeOptionalString(input.providerID) ?? null, normalizeOptionalString(input.modelID) ?? null, "model-switched", pendingSince)
+          .run(crypto.randomUUID(), sessionID, normalizeOptionalString(input.providerID) ?? null, modelID, "model-switched", pendingSince)
         return { indexDbPath, ok: true, pendingSince }
       } finally {
         indexDb.close(false)

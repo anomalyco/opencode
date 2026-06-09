@@ -153,6 +153,34 @@ describe("trade-handoff bridge", () => {
     }
   })
 
+  test("system transform acks fresh DB pending even without local pending state", async () => {
+    await using tmp = await tmpdir()
+    const sourceDbPath = path.join(tmp.path, "opencode.db")
+    const indexDbPath = path.join(tmp.path, "memory.sqlite3")
+    seedSourceDb(sourceDbPath)
+    process.env.OPENCODE_DB = sourceDbPath
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_AUTOSTART = "false"
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN = "test-token"
+
+    const service = createTradeMemoryService({ indexDbPath, sourceDbPath })
+    service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.4", pendingSince: 100 })
+    service.sync()
+    const server = startTradeMemoryHttpServer({ service, port: 0 })
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT = String(server.port)
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = `http://127.0.0.1:${server.port}`
+    const hooks = createTradeHandoffBridgeHooks(tmp.path)
+
+    try {
+      const output = { system: [] as string[] }
+      await hooks["experimental.chat.system.transform"]?.({ sessionID: "ses_test", model: makeModel("gpt-5.4") }, output)
+      expect(output.system.join("\n")).toContain("hello handoff")
+      expect(service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.4" }).pendingSince).toBeNull()
+    } finally {
+      await hooks.dispose?.()
+      void server.stop(true)
+    }
+  })
+
   test("autostart attempts to spawn local service when enabled", async () => {
     await using tmp = await tmpdir()
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = "http://127.0.0.1:1"
