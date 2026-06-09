@@ -611,6 +611,17 @@ export function latest(msgs: WithParts[]) {
   return { user, assistant, finished, tasks }
 }
 
+const TRANSIENT_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH", "EPIPE"])
+const TRANSIENT_PATTERNS = ["failed to fetch", "network connection was lost", "network request failed", "socket hang up", "unexpected end of data", "premature close", "response closed without sending", "load failed", "fetch failed", "body is unusable"]
+
+function isTransientNetworkError(e: unknown): e is Error {
+  if (!(e instanceof Error)) return false
+  const code = (e as Error & { code?: string }).code
+  if (code && TRANSIENT_CODES.has(code)) return true
+  const msg = e.message.toLowerCase()
+  return TRANSIENT_PATTERNS.some((p) => msg.includes(p))
+}
+
 export function fromError(
   e: unknown,
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
@@ -707,6 +718,18 @@ export function fromError(
           responseHeaders: parsed.responseHeaders,
           responseBody: parsed.responseBody,
           metadata: parsed.metadata,
+        },
+        { cause: e },
+      ).toObject()
+    case isTransientNetworkError(e):
+      return new APIError(
+        {
+          message: e.message,
+          isRetryable: true,
+          metadata: {
+            type: "network_error",
+            code: e.name,
+          },
         },
         { cause: e },
       ).toObject()

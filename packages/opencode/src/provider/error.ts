@@ -66,7 +66,8 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
       return msg
     }
 
-    return `${msg}: ${e.responseBody}`
+    const body = e.responseBody.length > 200 ? e.responseBody.slice(0, 200) + "..." : e.responseBody
+    return `${msg}: ${body}`
   }).trim()
 }
 
