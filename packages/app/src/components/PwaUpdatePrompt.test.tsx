@@ -232,6 +232,21 @@ describe("PwaUpdatePrompt", () => {
     dispose()
   })
 
+  test("B8: component does not throw when updateServiceWorker is not provided", () => {
+    omitUpdateServiceWorker = true
+
+    const { container, dispose } = mountIntoContainer()
+    triggerNeedRefresh()
+
+    const reloadBtn = findButton(container, "reload")
+    expect(reloadBtn).not.toBeNull()
+
+    // Clicking Reload when updateServiceWorker is undefined must not throw
+    expect(() => reloadBtn!.click()).not.toThrow()
+
+    dispose()
+  })
+
   test("B9: re-shows banner if SW update fires again after dismiss", () => {
     const { container, dispose } = mountIntoContainer()
 
@@ -275,21 +290,6 @@ describe("PwaUpdatePrompt", () => {
     // 3. SW fires onRegisterError → onRegisterError calls setShow(true) → banner reappears
     triggerRegisterError()
     expect(container.querySelector("[role='status']")).not.toBeNull()
-
-    dispose()
-  })
-
-  test("B8: component does not throw when updateServiceWorker is not provided", () => {
-    omitUpdateServiceWorker = true
-
-    const { container, dispose } = mountIntoContainer()
-    triggerNeedRefresh()
-
-    const reloadBtn = findButton(container, "reload")
-    expect(reloadBtn).not.toBeNull()
-
-    // Clicking Reload when updateServiceWorker is undefined must not throw
-    expect(() => reloadBtn!.click()).not.toThrow()
 
     dispose()
   })

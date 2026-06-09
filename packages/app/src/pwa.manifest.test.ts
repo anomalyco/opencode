@@ -10,10 +10,9 @@
  *   - At least one icon entry has `purpose` containing "any"
  *     (browsers require an "any" icon for the install prompt and splash screen;
  *      currently ALL icons are "maskable" only — this is the missing entry)
- *   - `theme_color` is NOT "#ffffff"
- *     (white conflicts with the dark-themed app shell and causes a jarring
- *      flash in browsers that honour theme_color for the title bar; the fix
- *      should align it with the app's primary brand/background colour)
+ *   - `theme_color` is "#F8F7F7"
+ *     (aligned with the app's primary brand/background colour and consistent
+ *      with the index.html meta theme-color)
  *
  * @edge-cases
  *   - `purpose` field may be a space-separated list: "any maskable" is valid
@@ -47,6 +46,11 @@ type WebManifest = {
   theme_color?: string
   background_color?: string
   icons?: ManifestIcon[]
+  start_url?: string
+  id?: string
+  scope?: string
+  description?: string
+  screenshots?: Array<{ form_factor?: string }>
 }
 
 const manifest: WebManifest = await Bun.file(manifestPath).json()
@@ -74,12 +78,6 @@ describe("site.webmanifest", () => {
     expect(hasAnyPurpose).toBe(true)
   })
 
-  test("theme_color is not '#ffffff'", () => {
-    // #ffffff is visually inconsistent with the dark app shell.
-    // After the fix this should match the app's primary brand/background colour.
-    expect(manifest.theme_color?.toLowerCase()).not.toBe("#ffffff")
-  })
-
   test("theme_color is #F8F7F7 (consistent with index.html meta theme-color)", () => {
     expect(manifest.theme_color).toBe("#F8F7F7")
   })
@@ -89,25 +87,24 @@ describe("site.webmanifest", () => {
   })
 
   test("start_url is '/'", () => {
-    expect((manifest as { start_url?: string }).start_url).toBe("/")
+    expect(manifest.start_url).toBe("/")
   })
 
   test("id is '/' (PWA identity spec compliance)", () => {
-    expect((manifest as { id?: string }).id).toBe("/")
+    expect(manifest.id).toBe("/")
   })
 
   test("scope is '/'", () => {
-    expect((manifest as { scope?: string }).scope).toBe("/")
+    expect(manifest.scope).toBe("/")
   })
 
   test("screenshots has wide and narrow entries", () => {
-    const screenshots = (manifest as { screenshots?: Array<{ form_factor?: string }> }).screenshots
-    expect(screenshots).toBeDefined()
-    expect(screenshots?.some((s) => s.form_factor === "wide")).toBe(true)
-    expect(screenshots?.some((s) => s.form_factor === "narrow")).toBe(true)
+    expect(manifest.screenshots).toBeDefined()
+    expect(manifest.screenshots?.some((s) => s.form_factor === "wide")).toBe(true)
+    expect(manifest.screenshots?.some((s) => s.form_factor === "narrow")).toBe(true)
   })
 
   test("description is set", () => {
-    expect((manifest as { description?: string }).description).toBeTruthy()
+    expect(manifest.description).toBeTruthy()
   })
 })
