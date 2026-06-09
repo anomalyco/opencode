@@ -104,9 +104,7 @@ function materializeReference(cache: RepositoryCache.Interface, reference: Extra
   return cache.ensure({ reference: reference.reference, branch: reference.branch, refresh: true }).pipe(
     Effect.asVoid,
     Effect.catchCause((cause) =>
-      Effect.logWarning("failed to materialize reference repository").pipe(
-        Effect.annotateLogs({ name: reference.name, cause }),
-      ),
+      Effect.logWarning("failed to materialize reference repository", { name: reference.name, cause }),
     ),
   )
 }

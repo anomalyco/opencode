@@ -1,12 +1,9 @@
 import WebSocket from "ws"
-import * as Log from "@opencode-ai/core/util/log"
 import { ProviderError } from "@/provider/error"
 import { isRecord } from "@/util/record"
 import { OpenAIWebSocket } from "./ws"
 
 export const TITLE_HEADER = "x-opencode-title"
-
-const log = Log.create({ service: "plugin.openai.ws" })
 
 export interface CreateWebSocketFetchOptions {
   httpFetch?: typeof globalThis.fetch
@@ -63,13 +60,11 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     })()
     if (!body?.stream) return httpFetch(input, httpInit)
     if (internalHeaders[TITLE_HEADER] === "true") {
-      log.debug("http fallback", { reason: "title" })
       return httpFetch(input, httpInit)
     }
 
     const sessionID = internalHeaders["x-session-affinity"] ?? internalHeaders["session-id"]
     if (!sessionID) {
-      log.debug("http fallback", { reason: "missing_session" })
       return httpFetch(input, httpInit)
     }
     const key = `${sessionID}:conversation`
@@ -78,11 +73,9 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     pool.set(key, entry)
 
     if (entry.fallback) {
-      log.debug("http fallback", { key, reason: "fallback_active" })
       return httpFetch(input, httpInit)
     }
     if (entry.busy) {
-      log.debug("http fallback", { key, reason: "busy" })
       return httpFetch(input, httpInit)
     }
 
@@ -114,12 +107,10 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           entry.lastUsedAt = Date.now()
           entry.streamFailures = 0
           if (event.type !== "response.completed" && event.type !== "response.done") {
-            log.warn("websocket terminal failure", { key, type: event.type })
             invalidate(entry)
           }
         },
         onConnectionInvalid: (error) => {
-          log.warn("websocket invalidated", { key, error: error.message })
           entry.busy = false
           entry.lastUsedAt = Date.now()
           if (!entry.fallback) recordStreamFailure(entry)
@@ -127,7 +118,6 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           resolveFirstEvent(false)
         },
         onAbort: (error) => {
-          log.debug("websocket aborted", { key })
           entry.busy = false
           entry.lastUsedAt = Date.now()
           entry.streamFailures = 0
@@ -137,7 +127,6 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onRetryableTerminal: async (event) => {
           const error = connectionLimitError(event)
           if (!error) return undefined
-          log.warn("websocket connection limit reached", { key })
           throw error
         },
       })
@@ -150,7 +139,6 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         })
       }
       if (!entry.fallback) return response
-      log.debug("http fallback", { key, reason: "websocket_retries_exhausted" })
       return httpFetch(input, httpInit)
     } catch (error) {
       entry.busy = false
@@ -162,11 +150,6 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       }
 
       recordStreamFailure(entry)
-      log.warn("websocket setup failed", {
-        key,
-        error: error instanceof Error ? error.message : String(error),
-        fallback: entry.fallback ? "http" : undefined,
-      })
       invalidate(entry)
       if (entry.fallback) return httpFetch(input, httpInit)
       return failedResponse(
@@ -189,14 +172,12 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       if (entry.busy) continue
       if (entry.fallback) continue
       if (now - entry.lastUsedAt < idleTimeout) continue
-      log.debug("websocket idle prune", { key })
       invalidate(entry)
       pool.delete(key)
     }
   }
 
   function close() {
-    log.debug("websocket pool close", { count: pool.size })
     clearInterval(pruneTimer)
     for (const entry of pool.values()) invalidate(entry)
     pool.clear()
@@ -206,7 +187,6 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     const key = `${sessionID}:conversation`
     const entry = pool.get(key)
     if (!entry) return
-    log.debug("websocket pool remove", { key })
     invalidate(entry)
     pool.delete(key)
   }
