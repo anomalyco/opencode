@@ -6,7 +6,6 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
-import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv"
 import {
   CallToolResultSchema,
   ListToolsResultSchema,
@@ -114,7 +113,6 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
 const MAX_LIST_PAGES = 1_000
-const outputValidator = new AjvJsonSchemaValidator()
 
 function remoteURL(key: string, value: string) {
   if (URL.canParse(value)) return new URL(value)
@@ -150,12 +148,10 @@ function listTools(client: MCPClient, timeout: number) {
   return Effect.tryPromise({
     try: () =>
       paginate(
-        async (cursor): Promise<{ tools: MCPToolDef[]; nextCursor?: string }> => {
+        async (cursor) => {
           const params = cursor === undefined ? undefined : { cursor }
           try {
-            return cursor === undefined
-              ? await client.listTools(params, { timeout })
-              : await client.request({ method: "tools/list", params }, ListToolsResultSchema, { timeout })
+            return await client.listTools(params, { timeout })
           } catch (error) {
             if (!(error instanceof Error) || !isOutputSchemaValidationError(error)) throw error
             return client.request({ method: "tools/list", params }, TolerantListToolsResultSchema, { timeout })
@@ -183,11 +179,7 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(schema),
     execute: async (args: unknown) => {
-      if (mcpTool.execution?.taskSupport === "required") {
-        throw new Error(`Tool "${mcpTool.name}" requires MCP Tasks, which OpenCode does not support`)
-      }
-
-      const result = await client.callTool(
+      return client.callTool(
         {
           name: mcpTool.name,
           arguments: (args || {}) as Record<string, unknown>,
@@ -198,17 +190,6 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
           timeout,
         },
       )
-      if (!mcpTool.outputSchema || result.isError) return result
-      if (!result.structuredContent) {
-        throw new Error(`Tool "${mcpTool.name}" has an output schema but did not return structured content`)
-      }
-      const validation = outputValidator.getValidator(mcpTool.outputSchema)(result.structuredContent)
-      if (!validation.valid) {
-        throw new Error(
-          `Structured content does not match tool "${mcpTool.name}" output schema: ${validation.errorMessage}`,
-        )
-      }
-      return result
     },
   })
 }
