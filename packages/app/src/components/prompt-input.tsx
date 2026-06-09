@@ -31,9 +31,10 @@ import {
   FileAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
+import { useTabs } from "@/context/tabs"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -144,6 +145,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const platform = usePlatform()
   const pickDirectory = useDirectoryPicker()
   const settings = useSettings()
+  const tabsStore = useTabs()
+  const [search] = useSearchParams<{ draftId?: string }>()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -1398,6 +1401,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     layout.projects.open(worktree)
     server.projects.touch(worktree)
+
+    // On the draft route, retarget the existing draft in place so we keep the same
+    // draft id (and its tab/prompt) instead of spawning a new draft for the new directory.
+    const draftID = search.draftId
+    if (draftID) {
+      tabsStore.updateDraft(draftID, { server: server.key, directory: worktree })
+      restoreFocus()
+      return
+    }
+
     navigate(`/${base64Encode(worktree)}/session`)
   }
   const addProject = () => {

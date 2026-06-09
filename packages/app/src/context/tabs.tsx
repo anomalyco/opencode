@@ -5,7 +5,7 @@ import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/utils/persist"
 import { ServerConnection, useServer } from "./server"
 import { createEffect, startTransition } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "./platform"
 import { uuid } from "@/utils/uuid"
 import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
@@ -65,6 +65,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     const params = useParams()
     const navigate = useNavigate()
+    const location = useLocation()
 
     const closing = new Set<string>()
 
@@ -123,14 +124,20 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         )
       },
       promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
-        const active = `${location.pathname}${location.search}` === draftHref(draftID)
-        setStore(
-          produce((tabs) => {
-            const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
-            if (index !== -1) tabs[index] = { type: "session", ...session }
-          }),
-        )
-        if (active) navigateTab({ type: "session", ...session })
+        // We're viewing this draft when /new-session?draftId=… points at it. Promoting
+        // replaces the draft tab with a session tab, so the draft route would stop resolving
+        // and fall back home. Navigate to the new session first so we leave /new-session
+        // before the draft is removed from the store.
+        const active = location.pathname === "/new-session" && location.query.draftId === draftID
+        startTransition(() => {
+          setStore(
+            produce((tabs) => {
+              const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
+              if (index !== -1) tabs[index] = { type: "session", ...session }
+            }),
+          )
+          if (active) navigateTab({ type: "session", ...session })
+        })
         removeDraftPersisted(draftID)
       },
       removeTab: (index: number) => {

@@ -53,6 +53,7 @@ import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
+const NewSession = lazy(() => import("@/pages/new-session"))
 
 const SessionRoute = Object.assign(
   () => {
@@ -105,12 +106,18 @@ function ResolvedDraftRoute(props: { draftID: string }) {
     if (current && current.server !== server.key) server.setActive(current.server)
   })
 
+  // Key on the directory so retargeting the draft's project re-instantiates the
+  // SDK/data providers for the new directory while keeping the same draft id.
+  const directory = () => draft()?.directory
+
   return (
-    <Show when={draft()} keyed fallback={<Navigate href="/" />}>
-      {(current) => (
-        <SDKProvider directory={current.directory}>
-          <DirectoryDataProvider directory={current.directory} draftID={props.draftID}>
-            <SessionRoute />
+    <Show when={directory()} keyed>
+      {(dir) => (
+        <SDKProvider directory={dir}>
+          <DirectoryDataProvider directory={dir} draftID={props.draftID}>
+            <DraftProviders>
+              <NewSession />
+            </DraftProviders>
           </DirectoryDataProvider>
         </SDKProvider>
       )}
@@ -194,6 +201,18 @@ function SessionProviders(props: ParentProps) {
         </PromptProvider>
       </FileProvider>
     </TerminalProvider>
+  )
+}
+
+// The draft page only renders the prompt composer, so it drops TerminalProvider.
+// FileProvider and CommentsProvider stay because PromptInput uses file search and comment context.
+function DraftProviders(props: ParentProps) {
+  return (
+    <FileProvider>
+      <PromptProvider>
+        <CommentsProvider>{props.children}</CommentsProvider>
+      </PromptProvider>
+    </FileProvider>
   )
 }
 
