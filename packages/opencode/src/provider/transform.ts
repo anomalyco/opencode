@@ -1109,9 +1109,6 @@ export function options(input: {
   }
 
   const modelId = input.model.api.id.toLowerCase()
-  if (modelId.includes("north-mini-code") && input.model.api.npm === "@ai-sdk/openai-compatible") {
-    result["options"] = { citation_options: { mode: "disabled" } }
-  }
 
   // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
   if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
