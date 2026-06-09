@@ -2,9 +2,10 @@ import { Effect } from "effect"
 import { Fff } from "@opencode-ai/core/filesystem/fff.bun"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Search } from "@opencode-ai/core/filesystem/search"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceStore } from "@/project/instance-store"
 
-const dir = process.cwd()
+const dir = AbsolutePath.make(process.cwd())
 
 const FILE_QUERIES = ["fff", "package.json", "tools/ experiment"]
 const GREP_QUERIES = ["FileFinder", "import", "grep", "autocomplete"]
@@ -57,32 +58,17 @@ for (const q of GREP_QUERIES) {
 
 picker.destroy()
 
-// --- Ripgrep service (via Search with file:["."] to force rg path) ---
-console.log()
-console.log("--- Ripgrep (via Search service) ---")
-
-// warmup
-await run(Search.Service.use((svc) => svc.search({ cwd: dir, pattern: "_warmup_rg_", limit: 1, file: ["."] })))
-
-for (const q of GREP_QUERIES) {
-  const t = performance.now()
-  const r = await run(Search.Service.use((svc) => svc.search({ cwd: dir, pattern: q, limit: GREP_LIMIT, file: ["."] })))
-  console.log(
-    `[ripgrep] grep "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.items.length} total, limit is per-file not total)`,
-  )
-}
-
 // --- Search service: init breakdown ---
 console.log()
 
 // 1) runtime + InstanceState + picker create + scan poll
 const tRuntime = performance.now()
-await run(Search.Service.use((svc) => svc.file({ cwd: dir, query: "_warmup_file_", limit: 1 })))
+await run(Search.Service.use((svc) => svc.find({ cwd: dir, query: "_warmup_file_", limit: 1 })))
 console.log(`[Search] init file (runtime + picker + scan): ${(performance.now() - tRuntime).toFixed(1)}ms`)
 
 // 2) grep warmup (content index cold-start inside the Search service picker)
 const tGrepWarmup = performance.now()
-await run(Search.Service.use((svc) => svc.search({ cwd: dir, pattern: "_warmup_grep_", limit: 1 })))
+await run(Search.Service.use((svc) => svc.grep({ cwd: dir, pattern: "_warmup_grep_", limit: 1 })))
 console.log(`[Search] init grep (content index warmup):    ${(performance.now() - tGrepWarmup).toFixed(1)}ms`)
 
 console.log()
@@ -90,24 +76,20 @@ console.log("--- Search service (warm) ---")
 
 for (const q of FILE_QUERIES) {
   const t = performance.now()
-  const r = await run(Search.Service.use((svc) => svc.file({ cwd: dir, query: q, limit: FILE_LIMIT })))
-  console.log(`[Search.file] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} results)`)
+  const r = await run(Search.Service.use((svc) => svc.find({ cwd: dir, query: q, limit: FILE_LIMIT })))
+  console.log(`[Search.find] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} results)`)
 }
 
 for (const q of GREP_QUERIES) {
   const t = performance.now()
-  const r = await run(Search.Service.use((svc) => svc.search({ cwd: dir, pattern: q, limit: GREP_LIMIT })))
-  console.log(
-    `[Search.search] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.items.length} matches, engine=${r.engine})`,
-  )
+  const r = await run(Search.Service.use((svc) => svc.grep({ cwd: dir, pattern: q, limit: GREP_LIMIT })))
+  console.log(`[Search.grep] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} matches)`)
 }
 
 for (const q of GLOB_QUERIES) {
   const t = performance.now()
   const r = await run(Search.Service.use((svc) => svc.glob({ cwd: dir, pattern: q, limit: GLOB_LIMIT })))
-  console.log(
-    `[Search.glob] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.files.length} files, truncated=${r.truncated})`,
-  )
+  console.log(`[Search.glob] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} files)`)
 }
 
 process.exit(0)

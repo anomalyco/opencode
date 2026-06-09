@@ -2,7 +2,11 @@ export * as GlobTool from "./glob"
 
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
-import { LocationSearch } from "../location-search"
+import path from "path"
+import { FileSystem } from "../filesystem"
+import { Search } from "../filesystem/search"
+import { Location } from "../location"
+import { AbsolutePath, RelativePath } from "../schema"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -10,38 +14,32 @@ import { Tools } from "./tools"
 export const name = "glob"
 
 export const Input = Schema.Struct({
-  pattern: LocationSearch.FilesInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
-  path: LocationSearch.FilesInput.fields.path.annotate({
+  pattern: Search.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
+  path: RelativePath.pipe(Schema.optional).annotate({
     description: "Relative directory to search. Defaults to the active Location.",
   }),
-  limit: LocationSearch.FilesInput.fields.limit.annotate({
-    description: `Maximum results to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})`,
+  limit: Search.GlobInput.fields.limit.annotate({
+    description: "Maximum results to return",
   }),
 })
 
-type ModelOutput = typeof LocationSearch.FilesResult.Encoded
+export const Output = Schema.Array(FileSystem.Entry)
+type ModelOutput = typeof Output.Encoded
 
-/** Format raw Location search results into the concise line-oriented output models expect. */
+/** Format raw search results into the concise line-oriented output models expect. */
 export const toModelOutput = (output: ModelOutput) => {
-  const lines = output.items.length === 0 ? ["No files found"] : output.items.map((item) => item.resource)
-  if (output.truncated) {
-    lines.push(
-      "",
-      `(Results are truncated: showing first ${output.items.length} results. Consider using a more specific path or pattern.)`,
-    )
-  }
-  if (output.partial) lines.push("", "(Results may be incomplete because some discovered files could not be read.)")
+  const lines = output.length === 0 ? ["No files found"] : output.map((item) => item.path)
   return lines.join("\n")
 }
 
 /**
- * Location-scoped glob leaf. FileSystem supplies canonical permission metadata;
- * LocationSearch resolves the current root and owns containment and traversal.
+ * Glob leaf that defaults its Search cwd to the active Location.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
-    const search = yield* LocationSearch.Service
+    const search = yield* Search.Service
+    const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
 
     yield* tools
@@ -50,7 +48,7 @@ export const layer = Layer.effectDiscard(
           description:
             "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
           input: Input,
-          output: LocationSearch.FilesResult,
+          output: Output,
           toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
           execute: (input, context) =>
             Effect.gen(function* () {
@@ -67,7 +65,11 @@ export const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
-              return yield* search.files(input)
+              return yield* search.glob({
+                cwd: AbsolutePath.make(path.resolve(location.directory, input.path ?? ".")),
+                pattern: input.pattern,
+                limit: input.limit,
+              })
             }).pipe(
               Effect.mapError(() => new ToolFailure({ message: `Unable to find files matching ${input.pattern}` })),
             ),

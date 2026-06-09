@@ -2,7 +2,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Schema } from "effect"
 import * as Stream from "effect/Stream"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
@@ -15,7 +15,7 @@ export const SkillTool = Tool.define(
   "skill",
   Effect.gen(function* () {
     const skill = yield* Skill.Service
-    const searchSvc = yield* Search.Service
+    const ripgrep = yield* Ripgrep.Service
 
     return {
       description: DESCRIPTION,
@@ -36,7 +36,7 @@ export const SkillTool = Tool.define(
           const dir = path.dirname(info.location)
           const base = pathToFileURL(dir).href
           const limit = 10
-          const files = yield* searchSvc.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
+          const files = yield* ripgrep.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
             Stream.filter((file) => !file.includes("SKILL.md")),
             Stream.map((file) => path.resolve(dir, file)),
             Stream.take(limit),

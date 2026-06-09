@@ -1,4 +1,5 @@
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { Location } from "@opencode-ai/core/location"
 import { PositiveInt, RelativePath } from "@opencode-ai/core/schema"
 import { Schema } from "effect"
@@ -17,8 +18,8 @@ const ListQuery = Schema.Struct({
 
 const FindQuery = Schema.Struct({
   ...LocationQuery.fields,
-  query: FileSystem.FindInput.fields.query,
-  type: FileSystem.FindInput.fields.type,
+  query: Search.FindInput.fields.query,
+  type: Search.FindInput.fields.type,
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
 })
 

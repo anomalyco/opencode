@@ -18,10 +18,9 @@ import { Database } from "./database/database"
 import { PermissionV2 } from "./permission"
 import { PermissionSaved } from "./permission/saved"
 import { FileSystem } from "./filesystem"
-import { Watcher } from "./filesystem/watcher"
 import { Search } from "./filesystem/search"
+import { Watcher } from "./filesystem/watcher"
 import { LocationMutation } from "./location-mutation"
-import { LocationSearch } from "./location-search"
 import { FileMutation } from "./file-mutation"
 import { Reference } from "./reference"
 import { RepositoryCache } from "./repository-cache"
@@ -34,7 +33,6 @@ import { ToolRegistry } from "./tool/registry"
 import { ApplicationTools } from "./tool/application-tools"
 import { ToolOutputStore } from "./tool-output-store"
 import { AppProcess } from "./process"
-import { Ripgrep } from "./ripgrep"
 import { SessionStore } from "./session/store"
 import { SessionTodo } from "./session/todo"
 import { QuestionV2 } from "./question"
@@ -60,6 +58,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       AgentV2.locationLayer,
       PluginBoot.locationLayer,
       FileSystem.locationLayer,
+      Search.defaultLayer,
       Watcher.locationLayer,
       Pty.locationLayer,
       SkillV2.locationLayer,
@@ -75,14 +74,12 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const services = Layer.mergeAll(base, resources, permissionsAndTools)
     const image = Image.layer.pipe(Layer.provide(services))
     const mutation = FileMutation.locationLayer.pipe(Layer.provide(services))
-    const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
       Layer.provide(services),
       Layer.provide(mutation),
-      Layer.provide(searches),
       Layer.provide(resources),
       Layer.provide(todos),
       Layer.provide(questions),
@@ -98,7 +95,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       services,
       image,
       mutation,
-      searches,
       resources,
       todos,
       questions,
@@ -125,6 +121,5 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
     ApplicationTools.layer,
-    Search.defaultLayer,
   ],
 }) {}

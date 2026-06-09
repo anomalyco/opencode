@@ -81,30 +81,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  | Config.Service
-  | Plugin.Service
-  | Question.Service
-  | Todo.Service
-  | Agent.Service
-  | Skill.Service
-  | Session.Service
-  | BackgroundJob.Service
-  | Provider.Service
-  | LSP.Service
-  | Instruction.Service
-  | FSUtil.Service
-  | EventV2Bridge.Service
-  | HttpClient.HttpClient
-  | ChildProcessSpawner
-  | Search.Service
-  | Format.Service
-  | Truncate.Service
-  | RuntimeFlags.Service
-  | Database.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -440,7 +417,7 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-export const node = LayerNode.make(layer, [
+export const node = LayerNode.make(layer.pipe(Layer.provide(Search.defaultLayer)), [
   Config.node,
   Plugin.node,
   Question.node,
@@ -457,7 +434,6 @@ export const node = LayerNode.make(layer, [
   httpClient,
   CrossSpawnSpawner.node,
   Ripgrep.node,
-  Search.node,
   Format.node,
   Truncate.node,
   RuntimeFlags.node,

@@ -35,19 +35,20 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     }) {
       const directory = (yield* InstanceState.context).directory
       const limit = ctx.query.limit ?? 10
-      const kind = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : "all")
+      const type = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined)
       const started = performance.now()
-      const fff = yield* search.file({ cwd: directory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
+      const found = yield* search
+        .find({ cwd: AbsolutePath.make(directory), query: ctx.query.query, limit, type })
+        .pipe(Effect.orDie)
       yield* Effect.logInfo("find file", {
-        engine: "fff",
         query: ctx.query.query,
-        kind,
+        type,
         directory,
         limit,
-        results: fff.length,
+        results: found.length,
         duration: Math.round(performance.now() - started),
       })
-      return fff.map((item) => item.path)
+      return found.map((item) => item.path)
     })
 
     const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
@@ -112,4 +113,4 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       .handle("content", content)
       .handle("status", status)
   }),
-).pipe(Layer.provide(LocationServiceMap.layer), Layer.provide(Search.defaultLayer))
+).pipe(Layer.provide(Search.defaultLayer), Layer.provide(LocationServiceMap.layer))

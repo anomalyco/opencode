@@ -1,6 +1,8 @@
 import { EOL } from "os"
 import { Effect, Stream } from "effect"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Search } from "@opencode-ai/core/filesystem/search"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 import { InstanceRef } from "@/effect/instance-ref"
@@ -22,7 +24,7 @@ const TreeCommand = effectCmd({
   handler: Effect.fn("Cli.debug.rg.tree")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return
-    const tree = yield* Effect.orDie(Search.Service.use((svc) => svc.tree({ cwd: ctx.directory, limit: args.limit })))
+    const tree = yield* Effect.orDie(Ripgrep.Service.use((svc) => svc.tree({ cwd: ctx.directory, limit: args.limit })))
     process.stdout.write(tree + EOL)
   }),
 })
@@ -47,8 +49,8 @@ const FilesCommand = effectCmd({
   handler: Effect.fn("Cli.debug.rg.files")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return
-    const search = yield* Search.Service
-    const files = yield* search
+    const ripgrep = yield* Ripgrep.Service
+    const files = yield* ripgrep
       .files({
         cwd: ctx.directory,
         glob: args.glob ? [args.glob] : undefined,
@@ -86,14 +88,14 @@ const SearchCommand = effectCmd({
     if (!ctx) return
     const results = yield* Effect.orDie(
       Search.Service.use((svc) =>
-        svc.search({
-          cwd: ctx.directory,
+        svc.grep({
+          cwd: AbsolutePath.make(ctx.directory),
           pattern: args.pattern,
-          glob: args.glob as string[] | undefined,
+          include: args.glob?.[0],
           limit: args.limit,
         }),
       ),
     )
-    process.stdout.write(JSON.stringify(results.items, null, 2) + EOL)
+    process.stdout.write(JSON.stringify(results, null, 2) + EOL)
   }),
 })

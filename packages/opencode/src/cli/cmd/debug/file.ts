@@ -1,8 +1,9 @@
 import { EOL } from "os"
 import { Effect } from "effect"
 import { FileSystem } from "@opencode-ai/core/filesystem"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Search } from "@opencode-ai/core/filesystem/search"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
@@ -23,7 +24,11 @@ const FileSearchCommand = effectCmd({
       description: "Search query",
     }),
   handler: Effect.fn("Cli.debug.file.search")(function* (args) {
-    const results = yield* filesystem(FileSystem.Service.use((svc) => svc.find({ query: args.query })))
+    const results = yield* Effect.orDie(
+      filesystem(
+        Search.Service.use((svc) => svc.find({ cwd: AbsolutePath.make(process.cwd()), query: args.query })),
+      ).pipe(Effect.provide(Search.defaultLayer)),
+    )
     process.stdout.write(results.map((item) => item.path).join(EOL) + EOL)
   }),
 })
@@ -68,7 +73,7 @@ const FileTreeCommand = effectCmd({
       default: process.cwd(),
     }),
   handler: Effect.fn("Cli.debug.file.tree")(function* (args) {
-    const tree = yield* Effect.orDie(Search.Service.use((svc) => svc.tree({ cwd: args.dir, limit: 200 })))
+    const tree = yield* Effect.orDie(Ripgrep.Service.use((svc) => svc.tree({ cwd: args.dir, limit: 200 })))
     console.log(JSON.stringify(tree, null, 2))
   }),
 })

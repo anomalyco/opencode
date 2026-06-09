@@ -8,8 +8,8 @@ import { NonNegativeInt, PositiveInt } from "./schema"
 
 /**
  * Small core-owned ripgrep execution adapter. It deliberately exposes raw
- * process-oriented rows, not model text or permission behavior. LocationSearch
- * supplies read authority and bounded substrate results; future leaf tools own
+ * process-oriented rows, not model text or permission behavior. Search maps
+ * these rows into filesystem results; leaf tools own
  * presentation and permission prompts.
  */
 
@@ -190,3 +190,5 @@ export const layer = Layer.effect(
     })
   }),
 ).pipe(Layer.provide(FileSystemRipgrep.defaultLayer))
+
+export const defaultLayer = layer.pipe(Layer.provide(AppProcess.defaultLayer))
