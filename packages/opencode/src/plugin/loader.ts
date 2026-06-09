@@ -133,10 +133,18 @@ export namespace PluginLoader {
   }
 
   // Import the resolved module only after all earlier validation has succeeded.
-  export async function load(row: Resolved): Promise<{ ok: true; value: Loaded } | { ok: false; error: unknown }> {
+  //
+  // Dynamic import of a misconfigured or incompatible npm package can deadlock without throwing.
+  // A timeout ensures the process surfaces a visible error instead of hanging silently.
+  export async function load(row: Resolved, timeoutMs = 30000): Promise<{ ok: true; value: Loaded } | { ok: false; error: unknown }> {
     let mod
     try {
-      mod = await import(row.entry)
+      mod = await Promise.race([
+        import(row.entry),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Plugin import timed out after ${timeoutMs}ms: ${row.spec}`)), timeoutMs),
+        ),
+      ])
     } catch (error) {
       return { ok: false, error }
     }
