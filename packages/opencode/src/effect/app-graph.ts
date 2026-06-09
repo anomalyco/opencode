@@ -64,6 +64,7 @@ import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { FetchHttpClient } from "effect/unstable/http"
 import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Layer } from "effect"
@@ -209,6 +210,8 @@ export const account = node(Account.layer, [accountRepo, httpClient])
 export const discovery = node(Discovery.layer, [fs, nodePath, httpClient])
 
 export const ripgrep = node(Ripgrep.layer, [fs, childProcessSpawner, httpClient])
+
+export const search = node(Search.layer, [fs, ripgrep])
 
 export const git = node(Git.layer, [appProcess])
 
@@ -367,6 +370,7 @@ export const toolRegistry = node(ToolRegistry.layer, [
   httpClient,
   childProcessSpawner,
   ripgrep,
+  search,
   format,
   truncate,
   runtimeFlags,
@@ -422,6 +426,7 @@ export const instanceBootstrap = node(InstanceBootstrap.layer, [
   plugin,
   project,
   reference,
+  search,
   shareNext,
   snapshot,
   vcs,
