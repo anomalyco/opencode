@@ -279,11 +279,11 @@ const live: Layer.Layer<
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
-            const lower = failed.toolCall.toolName.toLowerCase()
-            if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
+            const repaired = repairToolName(prepared.tools, failed.toolCall.toolName)
+            if (repaired) {
               return {
                 ...failed.toolCall,
-                toolName: lower,
+                toolName: repaired,
               }
             }
             return {
@@ -385,5 +385,15 @@ export const defaultLayer = Layer.suspend(() =>
 )
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
+
+// Match case/hyphen variants back to the registered key; ambiguous collisions resolve to undefined.
+const normalizeToolName = (name: string) => name.toLowerCase().replaceAll("-", "_")
+
+export function repairToolName(tools: Record<string, unknown>, name: string) {
+  if (tools[name]) return name
+  const target = normalizeToolName(name)
+  const matches = Object.keys(tools).filter((key) => normalizeToolName(key) === target)
+  return matches.length === 1 ? matches[0] : undefined
+}
 
 export * as LLM from "./llm"

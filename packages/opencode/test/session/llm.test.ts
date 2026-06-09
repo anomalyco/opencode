@@ -173,6 +173,35 @@ describe("session.llm.hasToolCalls", () => {
   })
 })
 
+describe("session.llm.repairToolName", () => {
+  const stub = tool({
+    description: "",
+    inputSchema: z.object({}),
+    execute: async () => "",
+  })
+  const tools = (...names: string[]) => Object.fromEntries(names.map((name) => [name, stub]))
+
+  test("matches a lowercased capitalized-prefix MCP tool (#31506)", () => {
+    expect(LLM.repairToolName(tools("Tool_get_prop"), "tool_get_prop")).toBe("Tool_get_prop")
+  })
+
+  test("matches an all-underscore variant of a hyphenated MCP tool (#27396)", () => {
+    expect(LLM.repairToolName(tools("server_get-by-id"), "server_get_by_id")).toBe("server_get-by-id")
+  })
+
+  test("returns the exact name when it already matches", () => {
+    expect(LLM.repairToolName(tools("Tool_get_prop"), "Tool_get_prop")).toBe("Tool_get_prop")
+  })
+
+  test("returns undefined for an unknown tool", () => {
+    expect(LLM.repairToolName(tools("Tool_get_prop"), "totally_unknown")).toBeUndefined()
+  })
+
+  test("returns undefined when the normalized name is ambiguous", () => {
+    expect(LLM.repairToolName(tools("Tool_get_prop", "tool_get_prop"), "TOOL_GET_PROP")).toBeUndefined()
+  })
+})
+
 describe("session.llm.ai-sdk adapter", () => {
   type AISDKAdapterEvent = Parameters<typeof LLMAISDK.toLLMEvents>[1]
 
