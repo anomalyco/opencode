@@ -37,8 +37,17 @@ if (process.env.OPENCODE_FLAVOR === "anr") {
   if (process.env.OPENCODE_ENABLE_TELEMETRY === "1") {
     const workerContext = reconstructTelemetryContextFromEnv()
     if (workerContext) {
-      initializeOTEL(config, workerContext)
+      try {
+        initializeOTEL(config, workerContext)
+        console.error("[worker] OTEL initialized successfully")
+      } catch (e) {
+        console.error("[worker] OTEL init failed:", e instanceof Error ? e.message : e)
+      }
+    } else {
+      console.error("[worker] OTEL skipped: no telemetry context (OPENCODE_ANR_USER_ID=" + process.env.OPENCODE_ANR_USER_ID + ")")
     }
+  } else {
+    console.error("[worker] OTEL skipped: OPENCODE_ENABLE_TELEMETRY=" + process.env.OPENCODE_ENABLE_TELEMETRY)
   }
 
   // Audit logger: so logTokenUsage calls from processor.ts write to DynamoDB
