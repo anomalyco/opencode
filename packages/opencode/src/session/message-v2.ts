@@ -1,6 +1,6 @@
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionID, MessageID, PartID } from "./schema"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import {
   APIError,
@@ -17,7 +17,7 @@ import {
   User,
   WithParts,
   type ToolPart,
-} from "@opencode-ai/core/session/legacy"
+} from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
@@ -37,7 +37,6 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -56,9 +55,9 @@ function truncateToolOutput(text: string, maxChars?: number) {
 }
 
 export const Event = {
-  Updated: SessionLegacy.Event.MessageUpdated,
-  Removed: SessionLegacy.Event.MessageRemoved,
-  PartUpdated: SessionLegacy.Event.PartUpdated,
+  Updated: SessionV1.Event.MessageUpdated,
+  Removed: SessionV1.Event.MessageRemoved,
+  PartUpdated: SessionV1.Event.PartUpdated,
   PartDelta: EventV2.define({
     type: "message.part.delta",
     schema: {
@@ -69,7 +68,7 @@ export const Event = {
       delta: Schema.String,
     },
   }),
-  PartRemoved: SessionLegacy.Event.PartRemoved,
+  PartRemoved: SessionV1.Event.PartRemoved,
 }
 
 const Cursor = Schema.Struct({
@@ -159,6 +158,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
+    if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
@@ -430,7 +430,7 @@ export function toModelMessages(
   model: Provider.Model,
   options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
 ): Promise<ModelMessage[]> {
-  return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
+  return Effect.runPromise(toModelMessagesEffect(input, model, options))
 }
 
 export const page = Effect.fn("MessageV2.page")(function* (input: {

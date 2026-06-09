@@ -1,6 +1,6 @@
 ---
 description: translate English to other languages
-model: opencode/claude-opus-4-7
+model: opencode/claude-opus-4-8
 ---
 
 run git diff and translate changed english doc and UI copy files to other international languages. Translate all languages in parallel to save time.

@@ -4,42 +4,30 @@ import { Schema } from "effect"
 import { Location } from "../location"
 import { ModelV2 } from "../model"
 import { ProjectV2 } from "../project"
-import { RelativePath, optionalOmitUndefined, withStatics } from "../schema"
-import { WorkspaceV2 } from "../workspace"
+import { externalID, type ExternalID, RelativePath, optionalOmitUndefined, withStatics } from "../schema"
 import { Identifier } from "../util/identifier"
 import { V2Schema } from "../v2-schema"
-
-export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
-  identifier: "Session.Delivery",
-})
-export type Delivery = Schema.Schema.Type<typeof Delivery>
-
-export const DefaultDelivery = "immediate" satisfies Delivery
+import { AgentV2 } from "../agent"
 
 export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
   Schema.brand("SessionID"),
-  withStatics((schema) => ({
-    descending: (id?: string) => schema.make(id ?? "ses_" + Identifier.descending()),
-  })),
+  withStatics((schema) => {
+    const create = () => schema.make("ses_" + Identifier.descending())
+    return {
+      create,
+      descending: (id?: string) => (id === undefined ? create() : schema.make(id)),
+      fromExternal: (input: ExternalID) => schema.make(externalID("ses", input)),
+    }
+  }),
 )
 export type ID = typeof ID.Type
 
-export const LegacyInfo = Schema.Struct({
+export class Info extends Schema.Class<Info>("SessionV2.Info")({
   id: ID,
-  location: Location.Ref,
-  subpath: RelativePath, // derived from location
-  project: ProjectV2.ID, // derived from location
-})
-export type LegacyInfo = typeof LegacyInfo.Type
-
-export class Info extends Schema.Class<Info>("Session.Info")({
-  id: ID,
-  parentID: optionalOmitUndefined(ID),
+  parentID: ID.pipe(optionalOmitUndefined),
   projectID: ProjectV2.ID,
-  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
-  path: optionalOmitUndefined(Schema.String),
-  agent: optionalOmitUndefined(Schema.String),
-  model: ModelV2.Ref.pipe(optionalOmitUndefined),
+  agent: AgentV2.ID.pipe(Schema.optional),
+  model: ModelV2.Ref.pipe(Schema.optional),
   cost: Schema.Finite,
   tokens: Schema.Struct({
     input: Schema.Finite,
@@ -53,7 +41,9 @@ export class Info extends Schema.Class<Info>("Session.Info")({
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
     updated: V2Schema.DateTimeUtcFromMillis,
-    archived: optionalOmitUndefined(V2Schema.DateTimeUtcFromMillis),
+    archived: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
   title: Schema.String,
+  location: Location.Ref,
+  subpath: RelativePath.pipe(Schema.optional),
 }) {}

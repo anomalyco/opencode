@@ -7,13 +7,10 @@ import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
 import { EventV2 } from "@opencode-ai/core/event"
-import * as Log from "@opencode-ai/core/util/log"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
-
-const log = Log.create({ service: "installation" })
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
@@ -149,13 +146,20 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
       return `Upgrade failed for ${method}.`
     }
 
+    const upgradeScriptShell = Effect.fnUntraced(function* () {
+      const bashVersion = yield* text(["bash", "--version"])
+      if (bashVersion) return "bash"
+      return "sh"
+    })
+
     const upgradeCurl = Effect.fnUntraced(
       function* (target: string) {
         const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
         const body = yield* response.text
         const bodyBytes = new TextEncoder().encode(body)
+        const shell = yield* upgradeScriptShell()
         const result = yield* appProcess.run(
-          ChildProcess.make("bash", [], {
+          ChildProcess.make(shell, [], {
             stdin: Stream.make(bodyBytes),
             env: { VERSION: target },
             extendEnv: true,
@@ -317,7 +321,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         if (!upgradeResult || upgradeResult.code !== 0) {
           return yield* new UpgradeFailedError({ stderr: upgradeFailure(m, upgradeResult) })
         }
-        log.info("upgraded", {
+        yield* Effect.logInfo("upgraded", {
           method: m,
           target,
           stdout: upgradeResult.stdout,

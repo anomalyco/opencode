@@ -30,7 +30,6 @@ import {
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import * as Log from "@opencode-ai/core/util/log"
 import type { Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
@@ -42,11 +41,11 @@ import { ACPSession } from "./session"
 import { UsageService } from "./usage"
 import { ACPProfile } from "./profile"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
 
 export const AuthMethodID = "opencode-login"
-const log = Log.create({ service: "acp-service" })
 
 export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
@@ -213,11 +212,7 @@ export function make(input: {
       "session",
     )
     const messages = yield* request(
-      () =>
-        input.sdk.session.messages(
-          { directory: params.cwd, sessionID: params.sessionId, limit: 100 },
-          { throwOnError: true },
-        ),
+      () => input.sdk.session.messages({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
       "session",
     )
     const restored = restoreFromMessages(messages.map((item) => item.info))
@@ -330,23 +325,30 @@ export function make(input: {
     }
   })
 
+  const abortBackingSession = Effect.fn("ACP.abortBackingSession")(function* (current: ACPSession.Info) {
+    yield* request(
+      () => input.sdk.session.abort({ directory: current.cwd, sessionID: current.id }, { throwOnError: true }),
+      "session",
+    ).pipe(
+      Effect.catch((error) =>
+        Effect.logError("failed to abort ACP backing session", { error: error, sessionID: current.id }),
+      ),
+    )
+  })
+
   const closeSession = Effect.fn("ACP.closeSession")(function* (params: CloseSessionRequest) {
     const removed = yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
     sessionSnapshots.delete(params.sessionId)
     if (!removed) return {}
 
-    yield* request(
-      () => input.sdk.session.abort({ directory: removed.cwd, sessionID: params.sessionId }, { throwOnError: true }),
-      "session",
-    ).pipe(
-      Effect.catch((error) =>
-        Effect.sync(() => {
-          log.error("failed to abort session while closing ACP session", { error, sessionID: params.sessionId })
-        }),
-      ),
-    )
+    yield* abortBackingSession(removed)
     return {}
+  })
+
+  const cancel = Effect.fn("ACP.cancel")(function* (params: CancelNotification) {
+    const current = yield* session.get(params.sessionId)
+    yield* abortBackingSession(current)
   })
 
   const forkSession = Effect.fn("ACP.forkSession")(function* (params: ForkSessionRequest) {
@@ -563,9 +565,7 @@ export function make(input: {
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
       return promptResponse(undefined, params.messageId)
     }),
-    cancel: Effect.fn("ACP.cancel")(function* (_input: CancelNotification) {
-      return yield* new ACPError.UnsupportedOperationError({ method: "session/cancel" })
-    }),
+    cancel,
   }
 }
 
@@ -606,10 +606,7 @@ function makeUsageService(sdk: OpencodeClient) {
           ) as Record<ProviderV2.ID, Provider.Info>
           return UsageService.findContextLimit(providers, params.providerID, params.modelID)
         })
-        .catch((error: unknown) => {
-          log.error("failed to get providers for usage context limit", { error })
-          return undefined
-        })
+        .catch(() => undefined)
       limits.set(key, next)
       return yield* Effect.promise(() => next)
     },
@@ -629,10 +626,7 @@ function makeUsageService(sdk: OpencodeClient) {
     ).pipe(
       Effect.map((messages) => messages as readonly UsageService.SessionMessage[]),
       Effect.catch((error) =>
-        Effect.sync(() => {
-          log.error("failed to fetch messages for usage update", { error })
-          return undefined
-        }),
+        Effect.logError("failed to fetch messages for usage update", { error: error }).pipe(Effect.as(undefined)),
       ),
     )
     if (!messages) return
@@ -643,7 +637,7 @@ function makeUsageService(sdk: OpencodeClient) {
     const size = yield* contextLimit({
       directory: params.directory,
       providerID: ProviderV2.ID.make(message.providerID),
-      modelID: ProviderV2.ModelID.make(message.modelID),
+      modelID: ModelV2.ID.make(message.modelID),
     })
     if (!size) return
 
@@ -658,9 +652,7 @@ function makeUsageService(sdk: OpencodeClient) {
             cost: { amount: UsageService.totalSessionCost(messages), currency: "USD" },
           },
         })
-        .catch((error) => {
-          log.error("failed to send usage update", { error })
-        }),
+        .catch(() => {}),
     )
   })
 
@@ -677,9 +669,7 @@ function replayMessages(subscription: ACPEvent.Subscription | undefined, message
   if (!subscription) return Effect.void
   return Effect.promise(async () => {
     for (const message of messages) {
-      await subscription.replayMessage(message).catch((error: unknown) => {
-        log.error("failed to replay ACP message", { error, messageID: message.info.id })
-      })
+      await subscription.replayMessage(message).catch(() => {})
     }
   })
 }
@@ -805,7 +795,7 @@ function selectDefaultModel(snapshot: Directory.Snapshot) {
   if (snapshot.defaultModel) return snapshot.defaultModel
   const model = snapshot.modelOptions[0]
   if (model) return { providerID: model.providerID, modelID: model.modelID }
-  return { providerID: "unknown" as ProviderV2.ID, modelID: "unknown" as ProviderV2.ModelID }
+  return { providerID: "unknown" as ProviderV2.ID, modelID: "unknown" as ModelV2.ID }
 }
 
 function detectSlashCommand(parts: ReturnType<typeof promptContentToParts>) {
@@ -865,7 +855,7 @@ function configOptions(snapshot: Directory.Snapshot, session: ConfigState) {
 function parseSelectedModel(snapshot: Directory.Snapshot, modelId: string) {
   const selected = parseModelSelection(modelId, Object.values(snapshot.providers))
   const provider = snapshot.providers[ProviderV2.ID.make(selected.model.providerID)]
-  const model = provider?.models[ProviderV2.ModelID.make(selected.model.modelID)]
+  const model = provider?.models[ModelV2.ID.make(selected.model.modelID)]
   if (!model) {
     return Effect.fail(
       new ACPError.InvalidModelError({
@@ -993,7 +983,7 @@ function restoreFromMessages(messages: readonly MessageInfo[]) {
   )
   if (user?.model?.providerID && user.model.modelID) {
     return {
-      model: { providerID: user.model.providerID as ProviderV2.ID, modelID: user.model.modelID as ProviderV2.ModelID },
+      model: { providerID: user.model.providerID as ProviderV2.ID, modelID: user.model.modelID as ModelV2.ID },
       variant: user.model.variant,
       modeId: user.agent,
     }
@@ -1002,7 +992,7 @@ function restoreFromMessages(messages: readonly MessageInfo[]) {
   const assistant = messages.findLast((message) => message.providerID && message.modelID)
   if (assistant?.providerID && assistant.modelID) {
     return {
-      model: { providerID: assistant.providerID as ProviderV2.ID, modelID: assistant.modelID as ProviderV2.ModelID },
+      model: { providerID: assistant.providerID as ProviderV2.ID, modelID: assistant.modelID as ModelV2.ID },
       variant: assistant.variant,
       modeId: assistant.mode ?? assistant.agent,
     }

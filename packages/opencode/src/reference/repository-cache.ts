@@ -1,6 +1,6 @@
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Git } from "@/git"
 import {
@@ -168,7 +168,7 @@ export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(functi
 const ensureWithServices = Effect.fn("RepositoryCache.ensureWithServices")(function* (
   input: EnsureInput,
   services: {
-    fs: AppFileSystem.Interface
+    fs: FSUtil.Interface
     git: Git.Interface
   },
 ) {
@@ -298,10 +298,10 @@ const ensureWithServices = Effect.fn("RepositoryCache.ensureWithServices")(funct
   )
 })
 
-export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service> = Layer.effect(
+export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const git = yield* Git.Service
 
     return Service.of({
@@ -313,7 +313,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
 )
 
 export const defaultLayer: Layer.Layer<Service> = layer.pipe(
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
 )
 

@@ -1,9 +1,8 @@
 import path from "path"
-import { Schema } from "effect"
-import { Effect, Option } from "effect"
+import { Effect, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Ripgrep } from "../file/ripgrep"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Search } from "@opencode-ai/core/filesystem/search"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
@@ -24,8 +23,8 @@ export const Parameters = Schema.Struct({
 export const GrepTool = Tool.define(
   "grep",
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
-    const rg = yield* Ripgrep.Service
+    const fs = yield* FSUtil.Service
+    const searchSvc = yield* Search.Service
     const reference = yield* Reference.Service
 
     return {
@@ -64,12 +63,12 @@ export const GrepTool = Tool.define(
             kind: requestedInfo?.type === "Directory" ? "directory" : "file",
           })
 
-          const search = AppFileSystem.resolve(requested)
+          const search = FSUtil.resolve(requested)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           const cwd = info?.type === "Directory" ? search : path.dirname(search)
           const file = info?.type === "Directory" ? undefined : [path.relative(cwd, search)]
 
-          const result = yield* rg.search({
+          const result = yield* searchSvc.search({
             cwd,
             pattern: params.pattern,
             glob: params.include ? [params.include] : undefined,
@@ -79,44 +78,19 @@ export const GrepTool = Tool.define(
           if (result.items.length === 0) return empty
 
           const rows = result.items.map((item) => ({
-            path: AppFileSystem.resolve(
-              path.isAbsolute(item.path.text) ? item.path.text : path.join(cwd, item.path.text),
-            ),
+            path: FSUtil.resolve(path.isAbsolute(item.path.text) ? item.path.text : path.join(cwd, item.path.text)),
             line: item.line_number,
             text: item.lines.text,
           }))
-          const times = new Map(
-            (yield* Effect.forEach(
-              [...new Set(rows.map((row) => row.path))],
-              Effect.fnUntraced(function* (file) {
-                const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
-                if (!info || info.type === "Directory") return undefined
-                return [
-                  file,
-                  info.mtime.pipe(
-                    Option.map((time) => time.getTime()),
-                    Option.getOrElse(() => 0),
-                  ) ?? 0,
-                ] as const
-              }),
-              { concurrency: 16 },
-            )).filter((entry): entry is readonly [string, number] => Boolean(entry)),
-          )
-          const matches = rows.flatMap((row) => {
-            const mtime = times.get(row.path)
-            if (mtime === undefined) return []
-            return [{ ...row, mtime }]
-          })
-
-          matches.sort((a, b) => b.mtime - a.mtime)
 
           const limit = 100
-          const truncated = matches.length > limit
-          const final = truncated ? matches.slice(0, limit) : matches
+          const truncated = rows.length > limit
+          const final = truncated ? rows.slice(0, limit) : rows
           if (final.length === 0) return empty
 
-          const total = matches.length
-          const output = [`Found ${total} matches${truncated ? ` (showing first ${limit})` : ""}`]
+          const total = rows.length
+          const hasMore = truncated || result.hasNextPage
+          const output = [`Found ${total} matches${hasMore ? " (more matches available)" : ""}`]
 
           let current = ""
           for (const match of final) {
@@ -137,9 +111,19 @@ export const GrepTool = Tool.define(
             )
           }
 
+          if (result.hasNextPage) {
+            output.push("")
+            output.push(`(Results truncated. Consider using a more specific path or pattern.)`)
+          }
+
           if (result.partial) {
             output.push("")
             output.push("(Some paths were inaccessible and skipped)")
+          }
+
+          if (result.regexFallbackError) {
+            output.push("")
+            output.push(`(Regex fallback: ${result.regexFallbackError})`)
           }
 
           return {
