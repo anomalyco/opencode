@@ -141,10 +141,7 @@ describe("app graph", () => {
     class ReplacementConfig extends Context.Service<ReplacementConfig, { readonly value: string }>()(
       "test/ReplacementConfig",
     ) {}
-    const replacementConfig = node(
-      Layer.succeed(ReplacementConfig, ReplacementConfig.of({ value: "replacement" })),
-      [],
-    )
+    const replacementConfig = node(Layer.succeed(ReplacementConfig, ReplacementConfig.of({ value: "replacement" })), [])
     const replacement = node(
       Layer.effect(
         Value,
@@ -175,7 +172,9 @@ describe("app graph", () => {
       [],
     )
 
-    await Effect.runPromise(Effect.provide(Greeting, build(greeting, { replacements: [replace(unreachable, replacement)] })))
+    await Effect.runPromise(
+      Effect.provide(Greeting, build(greeting, { replacements: [replace(unreachable, replacement)] })),
+    )
 
     expect(acquisitions).toBe(0)
   })

@@ -19,23 +19,26 @@ class NetworkError {
 }
 
 const aImplementation = Layer.succeed(A, A.of({ value: "a" }))
-const bImplementation = Layer.effect(B, Effect.gen(function* () {
-  yield* A
-  return B.of({ value: "b" })
-}))
-const cImplementation = Layer.effect(C, Effect.gen(function* () {
-  yield* A
-  yield* B
-  return C.of({ value: "c" })
-}))
+const bImplementation = Layer.effect(
+  B,
+  Effect.gen(function* () {
+    yield* A
+    return B.of({ value: "b" })
+  }),
+)
+const cImplementation = Layer.effect(
+  C,
+  Effect.gen(function* () {
+    yield* A
+    yield* B
+    return C.of({ value: "c" })
+  }),
+)
 const failingAImplementation = Layer.effect(A, Effect.fail(new LayerError()))
 const notFoundAImplementation = Layer.effect(A, Effect.fail(new NotFoundError()))
 const diskAImplementation = Layer.effect(A, Effect.fail(new DiskError()))
 const networkAImplementation = Layer.effect(A, Effect.fail(new NetworkError()))
-const notFoundOrDiskAImplementation = Layer.effect(
-  A,
-  Effect.fail(new NotFoundError() as NotFoundError | DiskError),
-)
+const notFoundOrDiskAImplementation = Layer.effect(A, Effect.fail(new NotFoundError() as NotFoundError | DiskError))
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Assert<T extends true> = T

@@ -79,13 +79,13 @@ export type Event =
   | EventCommandExecuted
   | EventProjectDirectoriesUpdated
   | EventProjectUpdated
+  | EventVcsBranchUpdated
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
-  | EventVcsBranchUpdated
   | EventWorktreeReady
   | EventWorktreeFailed
   | EventWorkspaceReady
@@ -1524,6 +1524,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "vcs.branch.updated"
+        properties: {
+          branch?: string
+        }
+      }
+    | {
+        id: string
         type: "question.asked"
         properties: {
           id: string
@@ -1572,13 +1579,6 @@ export type GlobalEvent = {
         type: "session.compacted"
         properties: {
           sessionID: string
-        }
-      }
-    | {
-        id: string
-        type: "vcs.branch.updated"
-        properties: {
-          branch?: string
         }
       }
     | {
@@ -5103,6 +5103,14 @@ export type EventProjectUpdated = {
   }
 }
 
+export type EventVcsBranchUpdated = {
+  id: string
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
 export type EventQuestionAsked = {
   id: string
   type: "question.asked"
@@ -5158,14 +5166,6 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
-  }
-}
-
-export type EventVcsBranchUpdated = {
-  id: string
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
   }
 }
 
