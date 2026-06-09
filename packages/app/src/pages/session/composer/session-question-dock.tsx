@@ -1,15 +1,29 @@
-import { For, Show, createMemo, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createMemo, createSignal, createEffect, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import type { QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useParentParams } from "@/context/parent-params"
+import { label } from "@/components/blocksuite/actor"
+import { loadActor, saveActor } from "@/components/prompt-input/doc-actor"
+import { DialogDocSubmit, type DocSubmitKind } from "@/components/doc-submit/dialog-doc-submit"
+import {
+  connectQuestionDraft,
+  connectQuestionSubmit,
+  respondQuestionSubmit,
+  startQuestionSubmit,
+  type DocSubmitState,
+  type QuestionDraftChannel,
+  type QuestionDraftOp,
+  type QuestionPresenceEntry,
+} from "@/components/prompt-input/doc-submit"
 
-const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
+type Actor = { actorID: string; name: string; color: string }
 
 function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseEvent) => void }) {
   return (
@@ -23,12 +37,34 @@ function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseE
   )
 }
 
+// Small attributed presence chips so everyone sees who currently has an option selected.
+function Avatars(props: { items: { actorID: string; name: string; color: string }[] }) {
+  return (
+    <Show when={props.items.length > 0}>
+      <span data-slot="question-option-avatars" aria-hidden="true">
+        <For each={props.items}>
+          {(item) => (
+            <span
+              data-slot="question-option-avatar"
+              title={item.name}
+              style={{ "background-color": item.color }}
+            >
+              {(item.name || "?").trim().charAt(0).toUpperCase()}
+            </span>
+          )}
+        </For>
+      </span>
+    </Show>
+  )
+}
+
 function Option(props: {
   multi: boolean
   picked: boolean
   label: string
   description?: string
   disabled: boolean
+  avatars: { actorID: string; name: string; color: string }[]
   onClick: VoidFunction
 }) {
   return (
@@ -48,6 +84,7 @@ function Option(props: {
           <span data-slot="option-description">{props.description}</span>
         </Show>
       </span>
+      <Avatars items={props.avatars} />
     </button>
   )
 }
@@ -55,218 +92,128 @@ function Option(props: {
 export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
   const language = useLanguage()
+  const dialog = useDialog()
+  const parentParams = useParentParams()
 
+  const sessionID = props.request.sessionID
+  const requestID = props.request.id
   const questions = createMemo(() => props.request.questions)
   const total = createMemo(() => questions().length)
 
-  const cached = cache.get(props.request.id)
-  const [store, setStore] = createStore({
-    tab: cached?.tab ?? 0,
-    answers: cached?.answers ?? ([] as QuestionAnswer[]),
-    custom: cached?.custom ?? ([] as string[]),
-    customOn: cached?.customOn ?? ([] as boolean[]),
-    editing: false,
-  })
+  // Navigation + edit cursor stay LOCAL — each participant browses freely.
+  const [tab, setTab] = createSignal(0)
+  const [editing, setEditing] = createSignal(false)
 
+  // The shared answer draft is authoritative on the server; this mirrors the last broadcast.
+  const [draft, setDraft] = createStore<{ answers: string[][]; custom: string[]; customOn: boolean[]; rev: number }>({
+    answers: [],
+    custom: [],
+    customOn: [],
+    rev: -1,
+  })
+  // Each participant's own current selection on their tab (for per-option avatars).
+  const [mine, setMine] = createStore<string[][]>([])
+  const [presence, setPresence] = createSignal<QuestionPresenceEntry[]>([])
+  const [actor, setActor] = createSignal<Actor>()
+
+  let channel: QuestionDraftChannel | undefined
   let root: HTMLDivElement | undefined
-  let replied = false
 
-  const question = createMemo(() => questions()[store.tab])
+  const question = createMemo(() => questions()[tab()])
   const options = createMemo(() => question()?.options ?? [])
-  const input = createMemo(() => store.custom[store.tab] ?? "")
-  const on = createMemo(() => store.customOn[store.tab] === true)
   const multi = createMemo(() => question()?.multiple === true)
-
-  const summary = createMemo(() => {
-    const n = Math.min(store.tab + 1, total())
-    return language.t("session.question.progress", { current: n, total: total() })
-  })
+  const input = createMemo(() => draft.custom[tab()] ?? "")
+  const on = createMemo(() => draft.customOn[tab()] === true)
+  const last = createMemo(() => tab() >= total() - 1)
 
   const customLabel = () => language.t("ui.messagePart.option.typeOwnAnswer")
   const customPlaceholder = () => language.t("ui.question.custom.placeholder")
-
-  const last = createMemo(() => store.tab >= total() - 1)
-
-  const customUpdate = (value: string, selected: boolean = on()) => {
-    const prev = input().trim()
-    const next = value.trim()
-
-    setStore("custom", store.tab, value)
-    if (!selected) return
-
-    if (multi()) {
-      setStore("answers", store.tab, (current = []) => {
-        const removed = prev ? current.filter((item) => item.trim() !== prev) : current
-        if (!next) return removed
-        if (removed.some((item) => item.trim() === next)) return removed
-        return [...removed, next]
-      })
-      return
-    }
-
-    setStore("answers", store.tab, next ? [next] : [])
-  }
-
-  const measure = () => {
-    if (!root) return
-
-    const scroller = document.querySelector(".scroll-view__viewport")
-    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
-    const top =
-      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
-    if (!top) {
-      root.style.removeProperty("--question-prompt-max-height")
-      return
-    }
-
-    const dock = root.closest('[data-component="session-prompt-dock"]')
-    if (!(dock instanceof HTMLElement)) return
-
-    const dockBottom = dock.getBoundingClientRect().bottom
-    const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
-    const gap = 8
-    const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
-    root.style.setProperty("--question-prompt-max-height", `${max}px`)
-  }
-
-  onMount(() => {
-    let raf: number | undefined
-    const update = () => {
-      if (raf !== undefined) cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        raf = undefined
-        measure()
-      })
-    }
-
-    update()
-    window.addEventListener("resize", update)
-
-    const dock = root?.closest('[data-component="session-prompt-dock"]')
-    const scroller = document.querySelector(".scroll-view__viewport")
-    const observer = new ResizeObserver(update)
-    if (dock instanceof HTMLElement) observer.observe(dock)
-    if (scroller instanceof HTMLElement) observer.observe(scroller)
-
-    onCleanup(() => {
-      window.removeEventListener("resize", update)
-      observer.disconnect()
-      if (raf !== undefined) cancelAnimationFrame(raf)
-    })
-  })
-
-  onCleanup(() => {
-    if (replied) return
-    cache.set(props.request.id, {
-      tab: store.tab,
-      answers: store.answers.map((a) => (a ? [...a] : [])),
-      custom: store.custom.map((s) => s ?? ""),
-      customOn: store.customOn.map((b) => b ?? false),
-    })
-  })
+  const summary = createMemo(() =>
+    language.t("session.question.progress", { current: Math.min(tab() + 1, total()), total: total() }),
+  )
 
   const fail = (err: unknown) => {
     const message = err instanceof Error ? err.message : String(err)
     showToast({ title: language.t("common.requestFailed"), description: message })
   }
 
-  const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) => sdk.client.question.reply({ requestID: props.request.id, answers }),
-    onMutate: () => {
-      props.onSubmit()
-    },
-    onSuccess: () => {
-      replied = true
-      cache.delete(props.request.id)
-    },
-    onError: fail,
-  }))
-
-  const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk.client.question.reject({ requestID: props.request.id }),
-    onMutate: () => {
-      props.onSubmit()
-    },
-    onSuccess: () => {
-      replied = true
-      cache.delete(props.request.id)
-    },
-    onError: fail,
-  }))
-
-  const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
-
-  const reply = async (answers: QuestionAnswer[]) => {
-    if (sending()) return
-    await replyMutation.mutateAsync(answers)
+  // ── Presence ────────────────────────────────────────────────────────────────────────────────
+  const broadcastPresence = () => {
+    const a = actor()
+    if (!a || !channel) return
+    channel.sendPresence({
+      actorID: a.actorID,
+      name: a.name,
+      color: a.color,
+      qIndex: tab(),
+      selection: mine[tab()] ?? [],
+      customFocused: editing(),
+    })
   }
+  createEffect(() => {
+    // Re-broadcast whenever this participant's tab, edit state, or own selection changes.
+    tab()
+    editing()
+    void mine[tab()]
+    broadcastPresence()
+  })
 
-  const reject = async () => {
-    if (sending()) return
-    await rejectMutation.mutateAsync()
-  }
+  const avatarsFor = (optLabel: string) =>
+    presence()
+      .filter((item) => item.actorID !== actor()?.actorID && item.qIndex === tab() && item.selection.includes(optLabel))
+      .map((item) => ({ actorID: item.actorID, name: item.name, color: item.color }))
 
-  const submit = () => void reply(questions().map((_, i) => store.answers[i] ?? []))
+  // ── Draft ops ───────────────────────────────────────────────────────────────────────────────
+  const sendOp = (op: QuestionDraftOp) => channel?.sendOp(op)
 
-  const answered = (i: number) => {
-    if ((store.answers[i]?.length ?? 0) > 0) return true
-    return store.customOn[i] === true && (store.custom[i] ?? "").trim().length > 0
-  }
+  const picked = (answer: string) => draft.answers[tab()]?.includes(answer) ?? false
 
-  const picked = (answer: string) => store.answers[store.tab]?.includes(answer) ?? false
-
-  const pick = (answer: string, custom: boolean = false) => {
-    setStore("answers", store.tab, [answer])
-    if (custom) setStore("custom", store.tab, answer)
-    if (!custom) setStore("customOn", store.tab, false)
-    setStore("editing", false)
+  const pick = (answer: string) => {
+    setMine(tab(), [answer])
+    sendOp({ kind: "single", q: tab(), value: answer })
+    setEditing(false)
   }
 
   const toggle = (answer: string) => {
-    setStore("answers", store.tab, (current = []) => {
-      if (current.includes(answer)) return current.filter((item) => item !== answer)
-      return [...current, answer]
-    })
+    const next = !(draft.answers[tab()]?.includes(answer) ?? false)
+    setMine(tab(), (current = []) => (next ? [...current.filter((x) => x !== answer), answer] : current.filter((x) => x !== answer)))
+    sendOp({ kind: "toggle", q: tab(), label: answer, on: next })
+  }
+
+  const customUpdate = (value: string, selected: boolean = on()) => {
+    sendOp({ kind: "custom", q: tab(), text: value, on: selected, multi: multi() })
+    if (selected) setMine(tab(), multi() ? (current = []) => [...current.filter((x) => x !== input().trim()), value] : [value])
   }
 
   const customToggle = () => {
     if (sending()) return
-
     if (!multi()) {
-      setStore("customOn", store.tab, true)
-      setStore("editing", true)
+      setEditing(true)
       customUpdate(input(), true)
       return
     }
-
     const next = !on()
-    setStore("customOn", store.tab, next)
-    if (next) {
-      setStore("editing", true)
-      customUpdate(input(), true)
-      return
-    }
-
-    const value = input().trim()
-    if (value) setStore("answers", store.tab, (current = []) => current.filter((item) => item.trim() !== value))
-    setStore("editing", false)
+    setEditing(next)
+    customUpdate(input(), next)
   }
 
   const customOpen = () => {
     if (sending()) return
-    if (!on()) setStore("customOn", store.tab, true)
-    setStore("editing", true)
+    setEditing(true)
     customUpdate(input(), true)
+  }
+
+  const commitCustom = () => {
+    setEditing(false)
+    customUpdate(input())
   }
 
   const selectOption = (optIndex: number) => {
     if (sending()) return
-
     if (optIndex === options().length) {
       customOpen()
       return
     }
-
     const opt = options()[optIndex]
     if (!opt) return
     if (multi()) {
@@ -276,53 +223,262 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     pick(opt.label)
   }
 
-  const commitCustom = () => {
-    setStore("editing", false)
-    customUpdate(input())
+  const answered = (i: number) => {
+    if ((draft.answers[i]?.length ?? 0) > 0) return true
+    return draft.customOn[i] === true && (draft.custom[i] ?? "").trim().length > 0
   }
+
+  // ── Consent (send / dismiss) ────────────────────────────────────────────────────────────────
+  const [approval, setApproval] = createSignal<DocSubmitState>()
+  const [voteKind, setVoteKind] = createSignal<DocSubmitKind>("question-send")
+  const [pendingSend, setPendingSend] = createSignal(false)
+  let approvalID: string | undefined
+  let finalizedID: string | undefined
+
+  const sending = createMemo(() => pendingSend() || approval()?.status === "pending")
+
+  const closeApproval = () => {
+    dialog.close()
+    approvalID = undefined
+    setApproval(undefined)
+  }
+
+  const showApproval = (state: DocSubmitState) => {
+    const a = actor()
+    if (!a) return
+    if (!state.actors.some((item) => item.actorID === a.actorID)) return
+    // Show the right copy even for participants who did not start the vote.
+    if (state.questionAction) setVoteKind(state.questionAction === "dismiss" ? "question-dismiss" : "question-send")
+    // Terminal states handled exactly once: a reconnect replay must not re-open or re-fire.
+    if (state.status !== "pending") {
+      if (finalizedID === state.submitID) return
+      finalizedID = state.submitID
+    }
+    if (state.status === "sent") {
+      if (approvalID === state.submitID) closeApproval()
+      props.onSubmit()
+      return
+    }
+    setApproval(state)
+    if (approvalID === state.submitID) return
+    approvalID = state.submitID
+    dialog.show(
+      () => (
+        <DialogDocSubmit
+          state={approval}
+          actorID={a.actorID}
+          kind={voteKind()}
+          approve={() => {
+            const current = approval()
+            if (!current) return
+            void respondQuestionSubmit({
+              baseUrl: sdk.url,
+              directory: sdk.directory,
+              sessionID,
+              submitID: current.submitID,
+              actorID: a.actorID,
+              action: "approve",
+            })
+              .then(setApproval)
+              .catch(() => showToast({ title: "전송 동의 실패", description: language.t("common.requestFailed") }))
+          }}
+          cancel={() => {
+            const current = approval()
+            if (!current) return
+            void respondQuestionSubmit({
+              baseUrl: sdk.url,
+              directory: sdk.directory,
+              sessionID,
+              submitID: current.submitID,
+              actorID: a.actorID,
+              action: "cancel",
+            })
+              .then(setApproval)
+              .catch(() => showToast({ title: "전송 동의 취소 실패", description: language.t("common.requestFailed") }))
+          }}
+          close={closeApproval}
+        />
+      ),
+      () => {
+        const current = approval()
+        if (current?.status === "pending") {
+          approvalID = undefined
+          window.setTimeout(() => {
+            const next = approval()
+            if (next?.status === "pending") showApproval(next)
+          }, 120)
+          return
+        }
+        approvalID = undefined
+        setApproval(undefined)
+      },
+    )
+  }
+
+  const roster = () => {
+    const a = actor()
+    const names: Record<string, string> = {}
+    const ids = new Set<string>()
+    if (a) {
+      ids.add(a.actorID)
+      if (a.name && a.name !== a.actorID) names[a.actorID] = a.name
+    }
+    for (const item of presence()) {
+      ids.add(item.actorID)
+      if (item.name && item.name !== item.actorID) names[item.actorID] = item.name
+    }
+    return { actorIDs: Array.from(ids), names }
+  }
+
+  const startVote = async (kind: DocSubmitKind, payload: { answers?: string[][]; reject?: boolean }) => {
+    const a = actor()
+    if (!a || sending()) return
+    setVoteKind(kind)
+    setPendingSend(true)
+    try {
+      const { actorIDs, names } = roster()
+      const state = await startQuestionSubmit({
+        baseUrl: sdk.url,
+        directory: sdk.directory,
+        sessionID,
+        requestID,
+        actorID: a.actorID,
+        actorIDs,
+        names,
+        payload: { requestID, ...payload },
+      })
+      showApproval(state)
+    } catch (err) {
+      fail(err)
+    } finally {
+      setPendingSend(false)
+    }
+  }
+
+  const submit = () => {
+    if (editing()) commitCustom()
+    void startVote("question-send", { answers: questions().map((_, i) => draft.answers[i] ?? []) })
+  }
+
+  const dismiss = () => void startVote("question-dismiss", { reject: true })
+
+  // ── Navigation (local) ──────────────────────────────────────────────────────────────────────
+  const next = () => {
+    if (sending()) return
+    if (editing()) commitCustom()
+    if (tab() >= total() - 1) {
+      submit()
+      return
+    }
+    setTab(tab() + 1)
+    setEditing(false)
+  }
+  const back = () => {
+    if (sending() || tab() <= 0) return
+    setTab(tab() - 1)
+    setEditing(false)
+  }
+  const jump = (next: number) => {
+    if (sending()) return
+    setTab(next)
+    setEditing(false)
+  }
+
+  // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
+  const init = async () => {
+    const user = parentParams.user[0]
+    const stored = loadActor(sessionID, user?.id)
+    const res = await sdk.client.session.actor.upsert({
+      sessionID,
+      directory: sdk.directory,
+      ...(stored ? { actorID: stored } : {}),
+      ...(user ? { userID: user.id, name: user.name } : {}),
+    })
+    const a = res.data
+    if (!a) return
+    saveActor(sessionID, a.actorID, user?.id)
+    setActor({ actorID: a.actorID, name: label(a.actorID, a.name), color: a.color })
+
+    channel = connectQuestionDraft({
+      baseUrl: sdk.url,
+      directory: sdk.directory,
+      sessionID,
+      requestID,
+      actorID: a.actorID,
+      onDraft: (d) => setDraft({ answers: d.answers, custom: d.custom, customOn: d.customOn, rev: d.rev }),
+      onPresence: (list) => setPresence(list),
+    })
+    broadcastPresence()
+
+    const stopVote = connectQuestionSubmit({
+      baseUrl: sdk.url,
+      directory: sdk.directory,
+      sessionID,
+      requestID,
+      actorID: a.actorID,
+      event: (event) => showApproval(event.state),
+    })
+    onCleanup(stopVote)
+  }
+
+  onMount(() => void init().catch(fail))
+  onCleanup(() => channel?.close())
+
+  // Keep the dock from overflowing the prompt area (matches the previous local-state behavior).
+  const measure = () => {
+    if (!root) return
+    const scroller = document.querySelector(".scroll-view__viewport")
+    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+    const top =
+      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
+    if (!top) {
+      root.style.removeProperty("--question-prompt-max-height")
+      return
+    }
+    const dock = root.closest('[data-component="session-prompt-dock"]')
+    if (!(dock instanceof HTMLElement)) return
+    const dockBottom = dock.getBoundingClientRect().bottom
+    const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
+    const max = Math.max(240, Math.floor(dockBottom - top - 8 - below))
+    root.style.setProperty("--question-prompt-max-height", `${max}px`)
+  }
+  onMount(() => {
+    let raf: number | undefined
+    const update = () => {
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = undefined
+        measure()
+      })
+    }
+    update()
+    window.addEventListener("resize", update)
+    const dock = root?.closest('[data-component="session-prompt-dock"]')
+    const scroller = document.querySelector(".scroll-view__viewport")
+    const observer = new ResizeObserver(update)
+    if (dock instanceof HTMLElement) observer.observe(dock)
+    if (scroller instanceof HTMLElement) observer.observe(scroller)
+    onCleanup(() => {
+      window.removeEventListener("resize", update)
+      observer.disconnect()
+      if (raf !== undefined) cancelAnimationFrame(raf)
+    })
+  })
 
   const resizeInput = (el: HTMLTextAreaElement) => {
     el.style.height = "0px"
     el.style.height = `${el.scrollHeight}px`
   }
-
   const focusCustom = (el: HTMLTextAreaElement) => {
     setTimeout(() => {
       el.focus()
       resizeInput(el)
     }, 0)
   }
-
   const toggleCustomMark = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
     customToggle()
-  }
-
-  const next = () => {
-    if (sending()) return
-    if (store.editing) commitCustom()
-
-    if (store.tab >= total() - 1) {
-      submit()
-      return
-    }
-
-    setStore("tab", store.tab + 1)
-    setStore("editing", false)
-  }
-
-  const back = () => {
-    if (sending()) return
-    if (store.tab <= 0) return
-    setStore("tab", store.tab - 1)
-    setStore("editing", false)
-  }
-
-  const jump = (tab: number) => {
-    if (sending()) return
-    setStore("tab", tab)
-    setStore("editing", false)
   }
 
   return (
@@ -338,7 +494,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 <button
                   type="button"
                   data-slot="question-progress-segment"
-                  data-active={i() === store.tab}
+                  data-active={i() === tab()}
                   data-answered={answered(i())}
                   disabled={sending()}
                   onClick={() => jump(i())}
@@ -351,11 +507,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       }
       footer={
         <>
-          <Button variant="ghost" size="large" disabled={sending()} onClick={reject}>
+          <Button variant="ghost" size="large" disabled={sending()} onClick={dismiss}>
             {language.t("ui.common.dismiss")}
           </Button>
           <div data-slot="question-footer-actions">
-            <Show when={store.tab > 0}>
+            <Show when={tab() > 0}>
               <Button variant="secondary" size="large" disabled={sending()} onClick={back}>
                 {language.t("ui.common.back")}
               </Button>
@@ -380,13 +536,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               label={opt.label}
               description={opt.description}
               disabled={sending()}
+              avatars={avatarsFor(opt.label)}
               onClick={() => selectOption(i())}
             />
           )}
         </For>
 
         <Show
-          when={store.editing}
+          when={editing()}
           fallback={
             <button
               type="button"
@@ -418,8 +575,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 return
               }
               if (e.target instanceof HTMLTextAreaElement) return
-              const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
-              if (input instanceof HTMLTextAreaElement) input.focus()
+              const field = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
+              if (field instanceof HTMLTextAreaElement) field.focus()
             }}
             onSubmit={(e) => {
               e.preventDefault()
@@ -439,7 +596,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {
                     e.preventDefault()
-                    setStore("editing", false)
+                    setEditing(false)
                     return
                   }
                   if (e.key !== "Enter" || e.shiftKey) return

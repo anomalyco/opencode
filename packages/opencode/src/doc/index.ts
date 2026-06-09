@@ -3,6 +3,8 @@ import z from "zod"
 import { ulid } from "ulid"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { Question } from "@/question"
+import { QuestionID } from "@/question/schema"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { SessionPrompt } from "@/session/prompt"
@@ -472,11 +474,20 @@ export namespace Doc {
     .meta({ ref: "DocSubmitActor" })
   export type SubmitActorInfo = z.infer<typeof SubmitActorInfo>
 
+  // What a consent vote acts on once approved: a prompt doc, or an AI question (reply/reject).
+  export const SubmitTargetKind = z.enum(["doc", "question"]).meta({ ref: "DocSubmitTargetKind" })
+  export type SubmitTargetKind = z.infer<typeof SubmitTargetKind>
+
   export const SubmitState = z
     .object({
       submitID: SubmitID.zod,
       sessionID: SessionID.zod,
-      docID: DocID.zod,
+      // 'doc' → targetID is the prompt doc id; 'question' → targetID is the question request id.
+      targetKind: SubmitTargetKind,
+      targetID: z.string(),
+      // For 'question' votes: whether this vote sends a reply or dismisses the question — lets every
+      // participant (not just the requester) see the right dialog copy.
+      questionAction: z.enum(["send", "dismiss"]).optional(),
       actorID: ActorID.zod,
       status: SubmitStatus,
       actors: SubmitActorInfo.array(),
@@ -495,6 +506,15 @@ export namespace Doc {
     .meta({ ref: "DocSubmitEvent" })
   export type SubmitEvent = z.infer<typeof SubmitEvent>
 
+  // The payload persisted in doc_submit.prompt for a 'question' vote: either a reply (answers per
+  // question) or a close vote (reject). Mirrors the SessionPrompt blob used for 'doc' votes.
+  export const QuestionPayload = z.object({
+    requestID: z.string(),
+    answers: z.array(z.array(z.string())).optional(),
+    reject: z.boolean().optional(),
+  })
+  export type QuestionPayload = z.infer<typeof QuestionPayload>
+
   export const SubmitCreateInput = z.object({
     sessionID: SessionID.zod,
     docID: DocID.zod,
@@ -502,6 +522,16 @@ export namespace Doc {
     actorIDs: ActorID.zod.array(),
     names: z.record(z.string(), z.string()).optional(),
     prompt: SubmitPrompt,
+    timeoutMs: z.number().optional(),
+  })
+
+  export const QuestionSubmitCreateInput = z.object({
+    sessionID: SessionID.zod,
+    requestID: z.string(),
+    actorID: ActorID.zod,
+    actorIDs: ActorID.zod.array(),
+    names: z.record(z.string(), z.string()).optional(),
+    payload: QuestionPayload,
     timeoutMs: z.number().optional(),
   })
 
@@ -519,7 +549,8 @@ export namespace Doc {
   }
 
   const LEAVE_GRACE = 2_000
-  const peers = new Map<DocID, Set<SubmitPeer>>()
+  // Keyed by targetID (doc id or question request id) — the single routing key for a vote's peers.
+  const peers = new Map<string, Set<SubmitPeer>>()
   const timers = new Map<SubmitID, ReturnType<typeof setTimeout>>()
   const leaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -544,10 +575,18 @@ export namespace Doc {
       name: item.name,
       status: SubmitActorStatus.parse(item.status),
     }))
+    const questionAction: "send" | "dismiss" | undefined =
+      row.target_kind === "question"
+        ? QuestionPayload.safeParse(JSON.parse(row.prompt)).data?.reject
+          ? "dismiss"
+          : "send"
+        : undefined
     return {
       submitID: row.id,
       sessionID: row.session_id,
-      docID: row.doc_id,
+      targetKind: SubmitTargetKind.parse(row.target_kind),
+      targetID: row.target_id,
+      questionAction,
       actorID: row.actor_id,
       status: SubmitStatus.parse(row.status),
       actors,
@@ -558,7 +597,7 @@ export namespace Doc {
   }
 
   function cast(type: SubmitEvent["type"], state: SubmitState) {
-    const set = peers.get(state.docID)
+    const set = peers.get(state.targetID)
     if (!set) return
     const ids = new Set(state.actors.map((actor) => actor.actorID))
     const data = JSON.stringify({ type, state } satisfies SubmitEvent)
@@ -587,6 +626,14 @@ export namespace Doc {
   }
 
   function send(row: SubmitRow) {
+    if (row.target_kind === "question") {
+      const payload = QuestionPayload.parse(JSON.parse(row.prompt))
+      const requestID = QuestionID.make(payload.requestID)
+      const run = payload.reject ? Question.reject(requestID) : Question.reply({ requestID, answers: payload.answers ?? [] })
+      run.catch((err) => fail(row, err))
+      questionDraftReset(payload.requestID)
+      return
+    }
     const body = SubmitPrompt.parse(JSON.parse(row.prompt))
     // Cycle recording happens centrally in the cycle recorder (subscribes to assistant
     // message completion), so it covers normal/shell prompts too — not just doc submits.
@@ -630,7 +677,7 @@ export namespace Doc {
     return next
   }
 
-  function active(sessionID: SessionID, docID: DocID, actorID?: ActorID) {
+  function active(sessionID: SessionID, targetID: string, actorID?: ActorID) {
     const rows = Database.use((db) =>
       db
         .select()
@@ -638,7 +685,7 @@ export namespace Doc {
         .where(
           and(
             eq(DocSubmitTable.session_id, sessionID),
-            eq(DocSubmitTable.doc_id, docID),
+            eq(DocSubmitTable.target_id, targetID),
             eq(DocSubmitTable.status, "pending"),
           ),
         )
@@ -654,12 +701,12 @@ export namespace Doc {
     return state
   }
 
-  function recent(sessionID: SessionID, docID: DocID, actorID: ActorID, now = Date.now()) {
+  function recent(sessionID: SessionID, targetID: string, actorID: ActorID, now = Date.now()) {
     const rows = Database.use((db) =>
       db
         .select()
         .from(DocSubmitTable)
-        .where(and(eq(DocSubmitTable.session_id, sessionID), eq(DocSubmitTable.doc_id, docID)))
+        .where(and(eq(DocSubmitTable.session_id, sessionID), eq(DocSubmitTable.target_id, targetID)))
         .orderBy(desc(DocSubmitTable.time_updated))
         .all(),
     )
@@ -700,6 +747,10 @@ export namespace Doc {
       const next = expire(row)
       if (next.status === "pending") schedule(next)
     }
+    // GC a question's shared draft/presence when it resolves outside the vote path (e.g. the AI
+    // tool times out, or a solo participant auto-replies). The vote path GCs in send() directly.
+    Bus.subscribe(Question.Event.Replied, async (event) => questionDraftReset(String(event.properties.requestID)))
+    Bus.subscribe(Question.Event.Rejected, async (event) => questionDraftReset(String(event.properties.requestID)))
   }
 
   function actorNames(sessionID: SessionID, ids: ActorID[], names?: Record<string, string>) {
@@ -716,24 +767,37 @@ export namespace Doc {
     })
   }
 
-  function targets(docID: DocID, actorID: ActorID) {
-    // The connected submit peers are the single source of truth for "who is in the doc":
-    // it is the same set used by cast() and leave(), so a vote can never target someone
-    // we cannot reach (or skip someone we can). The requester is always included, even if
-    // their own socket has not finished connecting yet.
-    const online = new Set(Array.from(peers.get(docID) ?? []).map((peer) => peer.actorID))
-    online.add(actorID)
-    return Array.from(online)
+  function targets(targetID: string, actorID: ActorID, allow?: ActorID[]) {
+    // Connected submit peers are the reachability source of truth (same set as cast()/leave()), so a
+    // vote never targets someone we cannot reach. When the requester provides `allow` — the
+    // collaborators it actually sees via awareness/presence — we intersect with it so STALE peers
+    // (e.g. a half-open socket from a refreshed/HMR'd tab that lingers in the map but is no longer a
+    // real participant) cannot join the vote and block consensus by never responding. The requester
+    // is always included, even if its own socket has not finished connecting yet.
+    const online = new Set(Array.from(peers.get(targetID) ?? []).map((peer) => peer.actorID))
+    const ids = allow && allow.length ? allow.filter((id) => online.has(id)) : Array.from(online)
+    const result = new Set(ids)
+    result.add(actorID)
+    return Array.from(result)
   }
 
-  export const submitCreate = fn(SubmitCreateInput, (input) => {
-    Session.get(input.sessionID)
-    get(input.docID)
-
-    const found = active(input.sessionID, input.docID)
+  // Shared core for both 'doc' and 'question' votes. `promptBlob` is the persisted payload
+  // (a SessionPrompt for doc, a QuestionPayload for question); `docID` is set only for doc votes.
+  function create(input: {
+    sessionID: SessionID
+    targetKind: SubmitTargetKind
+    targetID: string
+    docID: DocID | null
+    actorID: ActorID
+    actorIDs: ActorID[]
+    names?: Record<string, string>
+    promptBlob: string
+    timeoutMs?: number
+  }) {
+    const found = active(input.sessionID, input.targetID)
     if (found) return found
 
-    const ids = targets(input.docID, input.actorID)
+    const ids = targets(input.targetID, input.actorID, input.actorIDs)
     const timeout = clamp(input.timeoutMs)
     const now = Date.now()
     const build = () =>
@@ -741,10 +805,12 @@ export namespace Doc {
         const submit = {
           id: SubmitID.ascending(),
           session_id: input.sessionID,
+          target_kind: input.targetKind,
+          target_id: input.targetID,
           doc_id: input.docID,
           actor_id: input.actorID,
           status: ids.length <= 1 ? "sent" : "pending",
-          prompt: JSON.stringify(input.prompt),
+          prompt: input.promptBlob,
           timeout_ms: timeout,
           expires_at: now + timeout,
           cancelled_by: null,
@@ -773,7 +839,7 @@ export namespace Doc {
     } catch (err) {
       // Two participants pressed send at the same instant: the pending unique index
       // rejected the loser. Return whoever won rather than surfacing a DB error.
-      const winner = active(input.sessionID, input.docID)
+      const winner = active(input.sessionID, input.targetID)
       if (winner) return winner
       throw err
     }
@@ -787,6 +853,37 @@ export namespace Doc {
     schedule(row)
     cast("created", state)
     return state
+  }
+
+  export const submitCreate = fn(SubmitCreateInput, (input) => {
+    Session.get(input.sessionID)
+    get(input.docID)
+    return create({
+      sessionID: input.sessionID,
+      targetKind: "doc",
+      targetID: input.docID,
+      docID: input.docID,
+      actorID: input.actorID,
+      actorIDs: input.actorIDs,
+      names: input.names,
+      promptBlob: JSON.stringify(input.prompt),
+      timeoutMs: input.timeoutMs,
+    })
+  })
+
+  export const questionSubmitCreate = fn(QuestionSubmitCreateInput, (input) => {
+    Session.get(input.sessionID)
+    return create({
+      sessionID: input.sessionID,
+      targetKind: "question",
+      targetID: input.requestID,
+      docID: null,
+      actorID: input.actorID,
+      actorIDs: input.actorIDs,
+      names: input.names,
+      promptBlob: JSON.stringify(input.payload),
+      timeoutMs: input.timeoutMs,
+    })
   })
 
   export const submitRespond = fn(SubmitRespondInput, (input) => {
@@ -858,12 +955,12 @@ export namespace Doc {
     return finished
   })
 
-  function leave(docID: DocID, actorID: ActorID) {
+  function leave(targetID: string, actorID: ActorID) {
     const rows = Database.use((db) =>
       db
         .select()
         .from(DocSubmitTable)
-        .where(and(eq(DocSubmitTable.doc_id, docID), eq(DocSubmitTable.status, "pending")))
+        .where(and(eq(DocSubmitTable.target_id, targetID), eq(DocSubmitTable.status, "pending")))
         .all(),
     )
     for (const row of rows) {
@@ -885,29 +982,29 @@ export namespace Doc {
     }
   }
 
-  function leaveKey(docID: DocID, actorID: ActorID) {
-    return `${docID}:${actorID}`
+  function leaveKey(targetID: string, actorID: ActorID) {
+    return `${targetID}:${actorID}`
   }
 
-  function cancelLeave(docID: DocID, actorID: ActorID) {
-    const key = leaveKey(docID, actorID)
+  function cancelLeave(targetID: string, actorID: ActorID) {
+    const key = leaveKey(targetID, actorID)
     const timer = leaveTimers.get(key)
     if (!timer) return
     clearTimeout(timer)
     leaveTimers.delete(key)
   }
 
-  function scheduleLeave(docID: DocID, actorID: ActorID) {
-    cancelLeave(docID, actorID)
-    const key = leaveKey(docID, actorID)
+  function scheduleLeave(targetID: string, actorID: ActorID) {
+    cancelLeave(targetID, actorID)
+    const key = leaveKey(targetID, actorID)
     leaveTimers.set(
       key,
       setTimeout(() => {
         leaveTimers.delete(key)
-        const set = peers.get(docID)
+        const set = peers.get(targetID)
         const online = set ? Array.from(set).some((item) => item.actorID === actorID) : false
         if (online) return
-        leave(docID, actorID)
+        leave(targetID, actorID)
       }, LEAVE_GRACE),
     )
   }
@@ -921,6 +1018,43 @@ export namespace Doc {
     (input) => active(input.sessionID, input.docID, input.actorID),
   )
 
+  export const questionSubmitActive = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      requestID: z.string(),
+      actorID: ActorID.zod,
+    }),
+    (input) => active(input.sessionID, input.requestID, input.actorID),
+  )
+
+  // Shared peer-attach core. `targetID` routes casts/leaves; the caller validates the target first.
+  function connect(input: {
+    sessionID: SessionID
+    targetID: string
+    actorID: ActorID
+    peer: { send: (data: string) => void }
+  }) {
+    const peer = { actorID: input.actorID, send: input.peer.send }
+    const set = peers.get(input.targetID) ?? new Set<SubmitPeer>()
+    set.add(peer)
+    peers.set(input.targetID, set)
+    cancelLeave(input.targetID, input.actorID)
+    const state = active(input.sessionID, input.targetID, input.actorID)
+    if (state) {
+      peer.send(JSON.stringify({ type: "created", state } satisfies SubmitEvent))
+    } else {
+      // No live vote — but if one resolved moments ago, replay its terminal state so a
+      // client that missed the cast() (e.g. reconnected just after) can update its dialog.
+      const last = recent(input.sessionID, input.targetID, input.actorID)
+      if (last) peer.send(JSON.stringify({ type: last.status as SubmitEvent["type"], state: last } satisfies SubmitEvent))
+    }
+    return () => {
+      set.delete(peer)
+      if (!Array.from(set).some((item) => item.actorID === peer.actorID)) scheduleLeave(input.targetID, peer.actorID)
+      if (set.size === 0) peers.delete(input.targetID)
+    }
+  }
+
   export const submitConnect = fn(
     z.object({
       sessionID: SessionID.zod,
@@ -931,24 +1065,219 @@ export namespace Doc {
     (input) => {
       Session.get(input.sessionID)
       get(input.docID)
-      const peer = { actorID: input.actorID, send: input.peer.send }
-      const set = peers.get(input.docID) ?? new Set<SubmitPeer>()
-      set.add(peer)
-      peers.set(input.docID, set)
-      cancelLeave(input.docID, input.actorID)
-      const state = active(input.sessionID, input.docID, input.actorID)
-      if (state) {
-        peer.send(JSON.stringify({ type: "created", state } satisfies SubmitEvent))
+      return connect({ sessionID: input.sessionID, targetID: input.docID, actorID: input.actorID, peer: input.peer })
+    },
+  )
+
+  export const questionSubmitConnect = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      requestID: z.string(),
+      actorID: ActorID.zod,
+      peer: z.custom<{ send: (data: string) => void }>(),
+    }),
+    (input) => {
+      Session.get(input.sessionID)
+      return connect({ sessionID: input.sessionID, targetID: input.requestID, actorID: input.actorID, peer: input.peer })
+    },
+  )
+
+  // ── Question answer draft + presence relay ─────────────────────────────────────────────────
+  // Lets several participants co-edit one shared answer set before a consent send. State is
+  // authoritative in-memory per requestID and relayed to connected peers over a bidirectional ws;
+  // it is ephemeral and GC'd when the question resolves. Single-choice answers are last-write-wins;
+  // multi-choice toggles are commutative; custom text is per-field last-write-wins.
+
+  export const QuestionDraft = z
+    .object({
+      requestID: z.string(),
+      sessionID: SessionID.zod,
+      answers: z.array(z.array(z.string())),
+      custom: z.array(z.string()),
+      customOn: z.array(z.boolean()),
+      rev: z.number(),
+    })
+    .meta({ ref: "QuestionDraft" })
+  export type QuestionDraft = z.infer<typeof QuestionDraft>
+
+  export const QuestionDraftOp = z
+    .discriminatedUnion("kind", [
+      // Single-choice: replace the question's answer outright (LWW). null clears it.
+      z.object({ kind: z.literal("single"), q: z.number(), value: z.string().nullable() }),
+      // Multi-choice: add/remove one predefined label (commutative across actors).
+      z.object({ kind: z.literal("toggle"), q: z.number(), label: z.string(), on: z.boolean() }),
+      // Custom "직접 답변": text + toggle. `multi` mirrors the dock's single vs multi custom handling.
+      z.object({ kind: z.literal("custom"), q: z.number(), text: z.string(), on: z.boolean(), multi: z.boolean() }),
+    ])
+    .meta({ ref: "QuestionDraftOp" })
+  export type QuestionDraftOp = z.infer<typeof QuestionDraftOp>
+
+  export const QuestionPresenceEntry = z
+    .object({
+      actorID: ActorID.zod,
+      name: z.string(),
+      color: z.string(),
+      qIndex: z.number(),
+      selection: z.array(z.string()),
+      customFocused: z.boolean(),
+    })
+    .meta({ ref: "QuestionPresenceEntry" })
+  export type QuestionPresenceEntry = z.infer<typeof QuestionPresenceEntry>
+
+  export const QuestionChannelEvent = z
+    .object({
+      type: z.enum(["draft", "presence"]),
+      draft: QuestionDraft.optional(),
+      presence: QuestionPresenceEntry.array().optional(),
+    })
+    .meta({ ref: "QuestionChannelEvent" })
+  export type QuestionChannelEvent = z.infer<typeof QuestionChannelEvent>
+
+  type DraftPeer = { actorID: ActorID; send: (data: string) => void }
+  const drafts = new Map<string, QuestionDraft>()
+  const presences = new Map<string, Map<ActorID, QuestionPresenceEntry>>()
+  const draftPeers = new Map<string, Set<DraftPeer>>()
+  const draftLeaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+  function castDraft(requestID: string) {
+    const set = draftPeers.get(requestID)
+    const draft = drafts.get(requestID)
+    if (!set || !draft) return
+    const data = JSON.stringify({ type: "draft", draft } satisfies QuestionChannelEvent)
+    set.forEach((peer) => peer.send(data))
+  }
+
+  function castPresence(requestID: string) {
+    const set = draftPeers.get(requestID)
+    if (!set) return
+    const list = Array.from(presences.get(requestID)?.values() ?? [])
+    const data = JSON.stringify({ type: "presence", presence: list } satisfies QuestionChannelEvent)
+    set.forEach((peer) => peer.send(data))
+  }
+
+  function ensureDraft(sessionID: SessionID, requestID: string) {
+    let draft = drafts.get(requestID)
+    if (!draft) {
+      draft = { requestID, sessionID, answers: [], custom: [], customOn: [], rev: 0 }
+      drafts.set(requestID, draft)
+    }
+    return draft
+  }
+
+  export const questionDraftApply = fn(
+    z.object({ sessionID: SessionID.zod, requestID: z.string(), op: QuestionDraftOp }),
+    (input) => {
+      const draft = ensureDraft(input.sessionID, input.requestID)
+      const op = input.op
+      while (draft.answers.length <= op.q) draft.answers.push([])
+      while (draft.custom.length <= op.q) draft.custom.push("")
+      while (draft.customOn.length <= op.q) draft.customOn.push(false)
+
+      if (op.kind === "single") {
+        draft.answers[op.q] = op.value === null ? [] : [op.value]
+        draft.customOn[op.q] = false
+      } else if (op.kind === "toggle") {
+        const cur = draft.answers[op.q] ?? []
+        draft.answers[op.q] = op.on
+          ? cur.includes(op.label)
+            ? cur
+            : [...cur, op.label]
+          : cur.filter((item) => item !== op.label)
       } else {
-        // No live vote — but if one resolved moments ago, replay its terminal state so a
-        // client that missed the cast() (e.g. reconnected just after) can update its dialog.
-        const last = recent(input.sessionID, input.docID, input.actorID)
-        if (last) peer.send(JSON.stringify({ type: last.status as SubmitEvent["type"], state: last } satisfies SubmitEvent))
+        const prev = (draft.custom[op.q] ?? "").trim()
+        const next = op.text.trim()
+        draft.custom[op.q] = op.text
+        draft.customOn[op.q] = op.on
+        if (op.multi) {
+          let cur = draft.answers[op.q] ?? []
+          if (prev) cur = cur.filter((item) => item.trim() !== prev)
+          if (op.on && next && !cur.some((item) => item.trim() === next)) cur = [...cur, op.text]
+          draft.answers[op.q] = cur
+        } else {
+          draft.answers[op.q] = op.on && next ? [op.text] : []
+        }
       }
+      draft.rev += 1
+      castDraft(input.requestID)
+      return draft
+    },
+  )
+
+  export const questionPresenceSet = fn(
+    z.object({ sessionID: SessionID.zod, requestID: z.string(), entry: QuestionPresenceEntry }),
+    (input) => {
+      const map = presences.get(input.requestID) ?? new Map<ActorID, QuestionPresenceEntry>()
+      map.set(input.entry.actorID, input.entry)
+      presences.set(input.requestID, map)
+      castPresence(input.requestID)
+    },
+  )
+
+  function dropPresence(requestID: string, actorID: ActorID) {
+    const map = presences.get(requestID)
+    if (!map) return
+    if (map.delete(actorID)) castPresence(requestID)
+    if (map.size === 0) presences.delete(requestID)
+  }
+
+  function draftLeaveKey(requestID: string, actorID: ActorID) {
+    return `draft:${requestID}:${actorID}`
+  }
+
+  function cancelDraftLeave(requestID: string, actorID: ActorID) {
+    const key = draftLeaveKey(requestID, actorID)
+    const timer = draftLeaveTimers.get(key)
+    if (!timer) return
+    clearTimeout(timer)
+    draftLeaveTimers.delete(key)
+  }
+
+  function scheduleDraftLeave(requestID: string, actorID: ActorID) {
+    cancelDraftLeave(requestID, actorID)
+    const key = draftLeaveKey(requestID, actorID)
+    draftLeaveTimers.set(
+      key,
+      setTimeout(() => {
+        draftLeaveTimers.delete(key)
+        const set = draftPeers.get(requestID)
+        const online = set ? Array.from(set).some((peer) => peer.actorID === actorID) : false
+        if (online) return
+        dropPresence(requestID, actorID)
+      }, LEAVE_GRACE),
+    )
+  }
+
+  // GC a resolved question's shared state. Called on reply/reject (vote path and Bus events).
+  export function questionDraftReset(requestID: string) {
+    drafts.delete(requestID)
+    presences.delete(requestID)
+    castPresence(requestID)
+  }
+
+  export const questionDraftConnect = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      requestID: z.string(),
+      actorID: ActorID.zod,
+      peer: z.custom<{ send: (data: string) => void }>(),
+    }),
+    (input) => {
+      Session.get(input.sessionID)
+      const peer = { actorID: input.actorID, send: input.peer.send }
+      const set = draftPeers.get(input.requestID) ?? new Set<DraftPeer>()
+      set.add(peer)
+      draftPeers.set(input.requestID, set)
+      cancelDraftLeave(input.requestID, input.actorID)
+      // Snapshot current draft + presence so a late joiner sees the in-progress shared answer.
+      const draft = drafts.get(input.requestID)
+      if (draft) peer.send(JSON.stringify({ type: "draft", draft } satisfies QuestionChannelEvent))
+      const list = Array.from(presences.get(input.requestID)?.values() ?? [])
+      if (list.length) peer.send(JSON.stringify({ type: "presence", presence: list } satisfies QuestionChannelEvent))
       return () => {
         set.delete(peer)
-        if (!Array.from(set).some((item) => item.actorID === peer.actorID)) scheduleLeave(input.docID, peer.actorID)
-        if (set.size === 0) peers.delete(input.docID)
+        if (!Array.from(set).some((item) => item.actorID === peer.actorID))
+          scheduleDraftLeave(input.requestID, peer.actorID)
+        if (set.size === 0) draftPeers.delete(input.requestID)
       }
     },
   )
@@ -963,14 +1292,32 @@ export namespace Doc {
     (input) => {
       Session.get(input.sessionID)
 
-      const actorID = input.actorID ?? ActorID.ascending()
-      const existing = Database.use((db) =>
-        db
-          .select()
-          .from(SessionActorTable)
-          .where(and(eq(SessionActorTable.session_id, input.sessionID), eq(SessionActorTable.actor_id, actorID)))
-          .get(),
-      )
+      // Identity resolution priority:
+      //  1. An explicit actorID (tab-scoped client identity).
+      //  2. Otherwise, if a userID is given, reuse that user's existing actor in this session so the
+      //     SAME user is one collaborator across tabs/browsers/devices (and distinct users stay
+      //     distinct → consent applies between them).
+      //  3. Otherwise mint a fresh actor.
+      const byUser =
+        !input.actorID && input.userID
+          ? Database.use((db) =>
+              db
+                .select()
+                .from(SessionActorTable)
+                .where(and(eq(SessionActorTable.session_id, input.sessionID), eq(SessionActorTable.user_id, input.userID!)))
+                .get(),
+            )
+          : undefined
+      const actorID = input.actorID ?? byUser?.actor_id ?? ActorID.ascending()
+      const existing =
+        byUser ??
+        Database.use((db) =>
+          db
+            .select()
+            .from(SessionActorTable)
+            .where(and(eq(SessionActorTable.session_id, input.sessionID), eq(SessionActorTable.actor_id, actorID)))
+            .get(),
+        )
 
       const name = (input.name ? cap(input.name) : "") || existing?.name || fallback(actorID)
       const row = {

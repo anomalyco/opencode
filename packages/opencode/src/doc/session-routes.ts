@@ -220,6 +220,170 @@ export const SessionDocRoutes = () =>
       }),
     )
     .post(
+      "/:sessionID/question/submit",
+      describeRoute({
+        summary: "Create question reply submit approval",
+        description: "Create a collaborative consent vote to send an AI question reply (or dismiss).",
+        operationId: "session.question.submit",
+        responses: {
+          200: {
+            description: "Submit approval state",
+            content: { "application/json": { schema: resolver(Doc.SubmitState) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", Doc.QuestionSubmitCreateInput.omit({ sessionID: true })),
+      async (c) => {
+        return c.json(
+          Doc.questionSubmitCreate({
+            ...c.req.valid("json"),
+            sessionID: c.req.valid("param").sessionID,
+          }),
+        )
+      },
+    )
+    .post(
+      "/:sessionID/question/submit/:submitID/respond",
+      describeRoute({
+        summary: "Respond to question reply submit approval",
+        description: "Approve or cancel a collaborative question reply consent vote.",
+        operationId: "session.question.submit.respond",
+        responses: {
+          200: {
+            description: "Submit approval state",
+            content: { "application/json": { schema: resolver(Doc.SubmitState) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod, submitID: SubmitID.zod })),
+      validator("json", z.object({ actorID: ActorID.zod, action: z.enum(["approve", "cancel"]) })),
+      async (c) => {
+        const param = c.req.valid("param")
+        return c.json(
+          Doc.submitRespond({
+            ...c.req.valid("json"),
+            sessionID: param.sessionID,
+            submitID: param.submitID,
+          }),
+        )
+      },
+    )
+    .get(
+      "/:sessionID/question/submit/connect",
+      describeRoute({
+        summary: "Connect to question reply submit approvals",
+        description: "WebSocket connection for question reply consent vote lifecycle events.",
+        operationId: "session.question.submit.connect",
+        responses: {
+          200: { description: "Connected", content: { "application/json": { schema: resolver(z.boolean()) } } },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("query", z.object({ requestID: z.string(), actorID: ActorID.zod })),
+      upgradeWebSocket(async (c) => {
+        const param = z.object({ sessionID: SessionID.zod }).parse(c.req.param())
+        const query = z.object({ requestID: z.string(), actorID: ActorID.zod }).parse(c.req.query())
+
+        type Socket = { readyState: number; send: (data: string) => void; close: (code?: number, reason?: string) => void }
+        const isSocket = (value: unknown): value is Socket => {
+          if (!value || typeof value !== "object") return false
+          if (!("readyState" in value)) return false
+          if (!("send" in value) || typeof (value as { send?: unknown }).send !== "function") return false
+          return typeof (value as { readyState?: unknown }).readyState === "number"
+        }
+
+        let stop: (() => void) | undefined
+        return {
+          onOpen(_event, ws) {
+            const socket = ws.raw
+            if (!isSocket(socket)) {
+              ws.close()
+              return
+            }
+            stop = Doc.questionSubmitConnect({
+              sessionID: param.sessionID,
+              requestID: query.requestID,
+              actorID: query.actorID,
+              peer: { send: (data) => { if (socket.readyState === 1) socket.send(data) } },
+            })
+          },
+          onClose() {
+            stop?.()
+          },
+        }
+      }),
+    )
+    .get(
+      "/:sessionID/question/draft/connect",
+      describeRoute({
+        summary: "Connect to question answer draft",
+        description: "Bidirectional WebSocket for co-editing a shared question answer draft and presence.",
+        operationId: "session.question.draft.connect",
+        responses: {
+          200: { description: "Connected", content: { "application/json": { schema: resolver(z.boolean()) } } },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("query", z.object({ requestID: z.string(), actorID: ActorID.zod })),
+      upgradeWebSocket(async (c) => {
+        const param = z.object({ sessionID: SessionID.zod }).parse(c.req.param())
+        const query = z.object({ requestID: z.string(), actorID: ActorID.zod }).parse(c.req.query())
+
+        type Socket = { readyState: number; send: (data: string) => void; close: (code?: number, reason?: string) => void }
+        const isSocket = (value: unknown): value is Socket => {
+          if (!value || typeof value !== "object") return false
+          if (!("readyState" in value)) return false
+          if (!("send" in value) || typeof (value as { send?: unknown }).send !== "function") return false
+          return typeof (value as { readyState?: unknown }).readyState === "number"
+        }
+
+        // Inbound messages from the client: a draft op or a presence update.
+        const Inbound = z.discriminatedUnion("type", [
+          z.object({ type: z.literal("op"), op: Doc.QuestionDraftOp }),
+          z.object({ type: z.literal("presence"), entry: Doc.QuestionPresenceEntry }),
+        ])
+
+        let stop: (() => void) | undefined
+        return {
+          onOpen(_event, ws) {
+            const socket = ws.raw
+            if (!isSocket(socket)) {
+              ws.close()
+              return
+            }
+            stop = Doc.questionDraftConnect({
+              sessionID: param.sessionID,
+              requestID: query.requestID,
+              actorID: query.actorID,
+              peer: { send: (data) => { if (socket.readyState === 1) socket.send(data) } },
+            })
+          },
+          onMessage(event) {
+            if (typeof event.data !== "string") return
+            let parsed: z.infer<typeof Inbound>
+            try {
+              parsed = Inbound.parse(JSON.parse(event.data))
+            } catch {
+              return
+            }
+            if (parsed.type === "op") {
+              Doc.questionDraftApply({ sessionID: param.sessionID, requestID: query.requestID, op: parsed.op })
+              return
+            }
+            Doc.questionPresenceSet({ sessionID: param.sessionID, requestID: query.requestID, entry: parsed.entry })
+          },
+          onClose() {
+            stop?.()
+          },
+        }
+      }),
+    )
+    .post(
       "/:sessionID/actor",
       describeRoute({
         summary: "Register session actor",

@@ -20,8 +20,11 @@ type PromptDocInput = {
 }
 
 async function register(input: PromptDocInput, sessionID: string) {
-  const stored = loadActor(sessionID)
   const user = input.user?.()
+  // With a ?user= param the identity is keyed by that user id (stable per user, distinct across
+  // users); without it, per tab. We never force a tab/browser-stored actorID onto a user-scoped
+  // identity — that would merge two different users into one. The server also de-dupes by user id.
+  const stored = loadActor(sessionID, user?.id)
   const res = await input.client.session.actor.upsert({
     sessionID,
     directory: input.directory(),
@@ -30,7 +33,7 @@ async function register(input: PromptDocInput, sessionID: string) {
   })
   const actor = res.data as SessionActor | undefined
   if (!actor) throw new Error("actor registration failed")
-  saveActor(sessionID, actor.actorID)
+  saveActor(sessionID, actor.actorID, user?.id)
   return actor
 }
 

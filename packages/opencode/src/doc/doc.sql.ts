@@ -78,6 +78,10 @@ export const DocAssetTable = sqliteTable(
   (table) => [primaryKey({ columns: [table.doc_id, table.id] }), index("doc_asset_doc_idx").on(table.doc_id)],
 )
 
+// A consent vote. Generalized over its target: a prompt doc ('doc', target_id = doc_id) or an
+// AI question ('question', target_id = the question request id). For questions there is no backing
+// doc, so doc_id is null and `prompt` carries the question payload JSON ({ requestID, answers } or
+// { requestID, reject: true }) instead of a SessionPrompt.
 export const DocSubmitTable = sqliteTable(
   "doc_submit",
   {
@@ -86,9 +90,14 @@ export const DocSubmitTable = sqliteTable(
       .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
+    // 'doc' | 'question' — what this vote, once approved, acts on.
+    target_kind: text().notNull().default("doc"),
+    // The doc_id for 'doc' votes or the question request id for 'question' votes. Drives peer
+    // routing and the pending-unique constraint.
+    target_id: text().notNull(),
+    // Only set for 'doc' votes (FK to the prompt doc). Null for 'question' votes.
     doc_id: text()
       .$type<DocID>()
-      .notNull()
       .references(() => DocTable.id, { onDelete: "cascade" }),
     actor_id: text().$type<ActorID>().notNull(),
     status: text().notNull(),
@@ -101,11 +110,12 @@ export const DocSubmitTable = sqliteTable(
     ...Timestamps,
   },
   (table) => [
-    index("doc_submit_session_doc_status_idx").on(table.session_id, table.doc_id, table.status),
+    index("doc_submit_session_target_status_idx").on(table.session_id, table.target_id, table.status),
     index("doc_submit_expires_idx").on(table.expires_at),
-    // At most one pending submit per (session, doc) — closes the concurrent-create race.
+    // At most one pending vote per (session, target) — closes the concurrent-create race for both
+    // doc sends and question replies.
     uniqueIndex("doc_submit_pending_unique")
-      .on(table.session_id, table.doc_id)
+      .on(table.session_id, table.target_kind, table.target_id)
       .where(sql`${table.status} = 'pending'`),
   ],
 )

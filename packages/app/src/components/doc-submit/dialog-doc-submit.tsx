@@ -9,12 +9,22 @@ import { PendingRow } from "./pending-row"
 import { useCountdown } from "./use-countdown"
 import "./doc-submit.css"
 
+// What the vote will do once approved — drives the dialog copy.
+export type DocSubmitKind = "doc" | "question-send" | "question-dismiss"
+
 type Props = {
   state: Accessor<DocSubmitState | undefined>
   actorID: string
+  kind?: DocSubmitKind
   approve: () => void
   cancel: () => void
   close: () => void
+}
+
+function headline(kind: DocSubmitKind | undefined) {
+  if (kind === "question-send") return "이 답변, 보낼까요?"
+  if (kind === "question-dismiss") return "이 질문, 닫을까요?"
+  return "이 프롬프트, 보낼까요?"
 }
 
 function role(
@@ -39,6 +49,7 @@ function IconBolt() {
 
 function VotingBody(props: {
   state: DocSubmitState
+  kind?: DocSubmitKind
   approve: () => void
   cancel: () => void
 }) {
@@ -57,7 +68,7 @@ function VotingBody(props: {
         <MatchAcceptRing remaining={remaining()} total={total()} />
         <div class="ds-ring-inner">
           <div class="ds-eyebrow">자동 거절까지 · {String(display()).padStart(2, "0")}s</div>
-          <h2 class="ds-headline">이 프롬프트, 보낼까요?</h2>
+          <h2 class="ds-headline">{headline(props.kind)}</h2>
           <div class="ds-sub">
             <strong>{requester()?.name ?? "참여자"}</strong>님이 전송을 요청했어요
           </div>
@@ -237,7 +248,7 @@ export function DialogDocSubmit(props: Props) {
                   when={pending() && approved()}
                   fallback={
                     <Show when={pending() && !approved()}>
-                      <VotingBody state={current()} approve={props.approve} cancel={props.cancel} />
+                      <VotingBody state={current()} kind={props.kind} approve={props.approve} cancel={props.cancel} />
                     </Show>
                   }
                 >

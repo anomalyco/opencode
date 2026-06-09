@@ -1132,6 +1132,8 @@ describe("doc", () => {
             .values({
               id: "sub_multi" as never,
               session_id: session.id as never,
+              target_kind: "doc",
+              target_id: docID as never,
               doc_id: docID as never,
               actor_id: alice.actorID as never,
               status: "sent",
@@ -1384,6 +1386,305 @@ describe("doc", () => {
         expect(c.timeCompleted).toBe(1500) // last step
         expect(c.ttftMs).toBe(100) // 1100 - 1000
         expect(c.status).toBe("completed")
+      },
+    })
+  })
+
+  test("doc submit transitions to sent and casts when all approve", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+
+        const aliceEvents: Doc.SubmitEvent[] = []
+        const stopA = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          peer: { send: (data) => aliceEvents.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+        const bobEvents: Doc.SubmitEvent[] = []
+        const stopB = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: (data) => bobEvents.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+        expect(state.status).toBe("pending")
+
+        // Bob (the only outstanding approver) approves → all approved → sent.
+        const sent = Doc.submitRespond({
+          sessionID: session.id,
+          submitID: state.submitID,
+          actorID: bob.actorID,
+          action: "approve",
+        })
+        expect(sent.status).toBe("sent")
+        // Both participants must receive the terminal "sent" cast so their dialogs close.
+        expect(aliceEvents.at(-1)?.type).toBe("sent")
+        expect(bobEvents.at(-1)?.type).toBe("sent")
+
+        stopA()
+        stopB()
+      },
+    })
+  })
+
+  test("submit excludes stale connected peers not in the requester's actorIDs so consensus completes", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const ghost = Doc.actorUpsert({ sessionID: session.id, name: "Ghost" })
+
+        // All three have live submit sockets, but `ghost` is a stale tab the requester no longer
+        // sees in its awareness list.
+        const stopA = Doc.submitConnect({ sessionID: session.id, docID, actorID: alice.actorID, peer: { send: () => {} } })
+        const stopB = Doc.submitConnect({ sessionID: session.id, docID, actorID: bob.actorID, peer: { send: () => {} } })
+        const stopG = Doc.submitConnect({ sessionID: session.id, docID, actorID: ghost.actorID, peer: { send: () => {} } })
+
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID], // ghost intentionally omitted
+          prompt,
+        })
+        // The ghost is not a vote target — only the two real participants are.
+        expect(state.actors.map((a) => a.actorID).sort()).toEqual([alice.actorID, bob.actorID].sort())
+
+        const sent = Doc.submitRespond({ sessionID: session.id, submitID: state.submitID, actorID: bob.actorID, action: "approve" })
+        expect(sent.status).toBe("sent")
+
+        stopA()
+        stopB()
+        stopG()
+      },
+    })
+  })
+
+  test("question draft relays shared answers: single is LWW, multi toggles are commutative", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const requestID = "question_draft_1"
+
+        const seen: Doc.QuestionChannelEvent[] = []
+        const stopA = Doc.questionDraftConnect({
+          sessionID: session.id,
+          requestID,
+          actorID: alice.actorID,
+          peer: { send: (data) => seen.push(JSON.parse(data) as Doc.QuestionChannelEvent) },
+        })
+        const stopB = Doc.questionDraftConnect({
+          sessionID: session.id,
+          requestID,
+          actorID: bob.actorID,
+          peer: { send: () => {} },
+        })
+
+        // Single-choice: latest pick wins outright.
+        Doc.questionDraftApply({ sessionID: session.id, requestID, op: { kind: "single", q: 0, value: "A" } })
+        Doc.questionDraftApply({ sessionID: session.id, requestID, op: { kind: "single", q: 0, value: "B" } })
+        const afterSingle = seen.filter((e) => e.type === "draft").at(-1)?.draft
+        expect(afterSingle?.answers[0]).toEqual(["B"])
+
+        // Multi-choice: independent toggles both land; toggling off removes only that label.
+        Doc.questionDraftApply({ sessionID: session.id, requestID, op: { kind: "toggle", q: 1, label: "X", on: true } })
+        Doc.questionDraftApply({ sessionID: session.id, requestID, op: { kind: "toggle", q: 1, label: "Y", on: true } })
+        expect(seen.filter((e) => e.type === "draft").at(-1)?.draft?.answers[1]).toEqual(["X", "Y"])
+        Doc.questionDraftApply({ sessionID: session.id, requestID, op: { kind: "toggle", q: 1, label: "X", on: false } })
+        const afterMulti = seen.filter((e) => e.type === "draft").at(-1)?.draft
+        expect(afterMulti?.answers[1]).toEqual(["Y"])
+        expect(afterMulti?.rev).toBe(5)
+
+        // A late joiner gets the current draft snapshot immediately on connect.
+        const late: Doc.QuestionChannelEvent[] = []
+        const stopC = Doc.questionDraftConnect({
+          sessionID: session.id,
+          requestID,
+          actorID: bob.actorID,
+          peer: { send: (data) => late.push(JSON.parse(data) as Doc.QuestionChannelEvent) },
+        })
+        expect(late.find((e) => e.type === "draft")?.draft?.answers[0]).toEqual(["B"])
+
+        stopA()
+        stopB()
+        stopC()
+      },
+    })
+  })
+
+  test("question presence is snapshotted to late joiners and GC'd on resolve", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const requestID = "question_presence_1"
+
+        const stopA = Doc.questionDraftConnect({
+          sessionID: session.id,
+          requestID,
+          actorID: alice.actorID,
+          peer: { send: () => {} },
+        })
+        Doc.questionPresenceSet({
+          sessionID: session.id,
+          requestID,
+          entry: { actorID: alice.actorID, name: "Alice", color: "#fff", qIndex: 0, selection: ["A"], customFocused: false },
+        })
+
+        const late: Doc.QuestionChannelEvent[] = []
+        const stopB = Doc.questionDraftConnect({
+          sessionID: session.id,
+          requestID,
+          actorID: "actor_late" as never,
+          peer: { send: (data) => late.push(JSON.parse(data) as Doc.QuestionChannelEvent) },
+        })
+        const presence = late.find((e) => e.type === "presence")?.presence
+        expect(presence?.[0]?.actorID).toBe(alice.actorID)
+        expect(presence?.[0]?.selection).toEqual(["A"])
+
+        // Resolving the question clears the shared state.
+        Doc.questionDraftReset(requestID)
+        const after: Doc.QuestionChannelEvent[] = []
+        const stopC = Doc.questionDraftConnect({
+          sessionID: session.id,
+          requestID,
+          actorID: "actor_late2" as never,
+          peer: { send: (data) => after.push(JSON.parse(data) as Doc.QuestionChannelEvent) },
+        })
+        expect(after.find((e) => e.type === "draft")).toBeUndefined()
+
+        stopA()
+        stopB()
+        stopC()
+      },
+    })
+  })
+
+  test("question submit route is mounted and validates input", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const app = Server.Default()
+        const dir = encodeURIComponent(tmp.path)
+
+        // Empty body → the route is reached and Zod validation rejects it (400), not a 404/fallback.
+        const bad = await app.request(`/session/${session.id}/question/submit?directory=${dir}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        })
+        expect(bad.status).toBe(400)
+
+        // Valid body → the generalized machine creates a question vote and returns its state.
+        const ok = await app.request(`/session/${session.id}/question/submit?directory=${dir}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestID: "question_route_1",
+            actorID: alice.actorID,
+            actorIDs: [alice.actorID],
+            payload: { requestID: "question_route_1", answers: [["A"]] },
+          }),
+        })
+        expect(ok.status).toBe(200)
+        const state = (await ok.json()) as Doc.SubmitState
+        expect(state.targetKind).toBe("question")
+        expect(state.targetID).toBe("question_route_1")
+      },
+    })
+  })
+
+  test("question consent vote keys on requestID and resolves once all approve", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const requestID = "question_vote_1"
+
+        const events: Doc.SubmitEvent[] = []
+        const stop = Doc.questionSubmitConnect({
+          sessionID: session.id,
+          requestID,
+          actorID: bob.actorID,
+          peer: { send: (data) => events.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+
+        const state = Doc.questionSubmitCreate({
+          sessionID: session.id,
+          requestID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          payload: { requestID, answers: [["B"]] },
+        })
+        expect(state.status).toBe("pending")
+        expect(state.targetKind).toBe("question")
+        expect(state.targetID).toBe(requestID)
+        expect(events[0]?.type).toBe("created")
+
+        // Concurrent create on the same request returns the same in-flight vote (pending-unique).
+        const again = Doc.questionSubmitCreate({
+          sessionID: session.id,
+          requestID,
+          actorID: bob.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          payload: { requestID, answers: [["B"]] },
+        })
+        expect(again.submitID).toBe(state.submitID)
+
+        // Bob approves → all approved → sent (send() calls Question.reply; no pending request just warns).
+        const sent = Doc.submitRespond({
+          sessionID: session.id,
+          submitID: state.submitID,
+          actorID: bob.actorID,
+          action: "approve",
+        })
+        expect(sent.status).toBe("sent")
+        expect(events.at(-1)?.type).toBe("sent")
+
+        stop()
       },
     })
   })
