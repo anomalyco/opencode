@@ -1,4 +1,5 @@
 import path from "path"
+import os from "os"
 import { Context, Deferred, Effect, Layer, Option, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { FSUtil } from "../fs-util"
@@ -208,6 +209,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
       wait: new Map<string, Deferred.Deferred<Picker, Error>>(),
       recent: [] as Query[],
     }
+    const home = FSUtil.resolve(os.homedir())
 
     yield* fs.ensureDir(root).pipe(Effect.ignore)
     yield* Effect.addFinalizer(() =>
@@ -278,10 +280,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
             frecencyDbPath: path.join(root, `${id}.frecency.mdb`),
             historyDbPath: path.join(root, `${id}.history.mdb`),
             aiMode: true,
-            // only the first toolcall picker can accumulate resources to index
-            // home directory, if the user specifically opened opencode at the
-            // $HOME level or asked it to search there on purpose, otherwise fallback
-            enableHomeDirScanning: isFirstPicker,
+            // FFF rejects home scanning unless opted in. Preserve the existing
+            // first-picker opt-in and also allow explicit $HOME picker requests.
+            enableHomeDirScanning: dir === home || isFirstPicker,
             // on unix system it is 99.9% that you do not need to search for the
             // content at the / so make fff fail creation and fallback to rg
             enableFsRootScanning: isFirstPicker && process.platform === "win32",
