@@ -23,7 +23,7 @@
  */
 
 import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test"
-import { createSignal } from "solid-js"
+import { type JSX, createSignal } from "solid-js"
 import { render } from "solid-js/web"
 
 // ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ mock.module("virtual:pwa-register/solid", () => ({
 // ---------------------------------------------------------------------------
 // The component is dynamically imported AFTER mock.module is registered
 // ---------------------------------------------------------------------------
-let PwaUpdatePrompt: () => ReturnType<typeof import("solid-js").JSX.Element>
+let PwaUpdatePrompt: () => JSX.Element
 
 beforeAll(async () => {
   const mod = await import("./PwaUpdatePrompt")
