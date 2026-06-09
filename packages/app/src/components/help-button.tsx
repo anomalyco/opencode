@@ -1,3 +1,4 @@
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { createSignal, Show } from "solid-js"
 
@@ -24,7 +25,15 @@ export function HelpButton() {
         placement="top-end"
       >
         <Show when={shown()}>
-          <div class="flex flex-col gap-1 w-[320px] p-4 rounded-xl bg-background-strong shadow-[var(--shadow-lg-border-base)]">
+          <div class="relative flex flex-col gap-1 w-[320px] p-4 rounded-xl bg-background-strong shadow-[var(--shadow-lg-border-base)]">
+            <button
+              type="button"
+              aria-label="Close"
+              class="absolute top-3.5 right-3.5 size-6 rounded-md flex items-center justify-center text-text-base hover:text-text-strong hover:bg-surface-raised-base-hover transition-colors"
+              onClick={() => setShown(false)}
+            >
+              <Icon name="xmark-small" />
+            </button>
             <span class="text-14-regular text-text-strong">Lorem ipsum dolor sit amet</span>
             <p class="text-12-regular text-text-weak">
               Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
