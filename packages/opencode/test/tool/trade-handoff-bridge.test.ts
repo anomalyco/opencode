@@ -76,4 +76,68 @@ describe("trade-handoff bridge", () => {
       void server.stop(true)
     }
   })
+
+  test("system transform injects warning when service is unavailable", async () => {
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = "http://127.0.0.1:19789"
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT = "19789"
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_AUTOSTART = "false"
+
+    const hooks = createTradeHandoffBridgeHooks(path.resolve("/Users/wag/ea/opencode-trade"))
+    const output = { system: [] as string[] }
+    const model: Model = {
+      id: ModelV2.ID.make("gpt-5.4"),
+      providerID: ProviderV2.ID.openai,
+      api: { id: "openai", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
+      name: "GPT-5.4",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 200000, output: 32000 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-01-01",
+    }
+
+    try {
+      await hooks["experimental.chat.system.transform"]?.({ sessionID: "ses_test", model }, output)
+      expect(output.system).toContain("trade memory handoff unavailable")
+    } finally {
+      await hooks.dispose?.()
+    }
+  })
+
+  test("autostart attempts to spawn local service when enabled", async () => {
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = "http://127.0.0.1:19790"
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT = "19790"
+    process.env.OPENCODE_TRADE_MEMORY_SERVICE_AUTOSTART = "true"
+
+    let started = 0
+    const hooks = createTradeHandoffBridgeHooks(path.resolve("/Users/wag/ea/opencode-trade"), {
+      startService: () => {
+        started += 1
+        return {
+          kill() {},
+          exited: Promise.resolve(0),
+          exitCode: 0,
+        }
+      },
+    })
+    const output = { context: [] as string[] }
+
+    try {
+      await hooks["experimental.session.compacting"]?.({ sessionID: "ses_test" }, output)
+      expect(started).toBe(1)
+      expect(output.context).toContain("trade memory handoff unavailable")
+    } finally {
+      await hooks.dispose?.()
+    }
+  })
 })

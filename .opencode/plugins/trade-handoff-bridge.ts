@@ -2,7 +2,10 @@ import type { Hooks, Plugin } from "@opencode-ai/plugin"
 
 export default (async ({ directory }) => createTradeHandoffBridgeHooks(directory)) satisfies Plugin
 
-export function createTradeHandoffBridgeHooks(directory: string): Hooks {
+export function createTradeHandoffBridgeHooks(
+  directory: string,
+  options?: { startService?: (directory: string) => { kill(signal?: number | string): void; exited: Promise<number>; exitCode: number | null } },
+): Hooks {
   let child: { kill(signal?: number | string): void; exited: Promise<number>; exitCode: number | null } | undefined
   let starting: Promise<boolean> | undefined
   let lastWarning = "trade memory handoff unavailable"
@@ -13,7 +16,7 @@ export function createTradeHandoffBridgeHooks(directory: string): Hooks {
       .then(async () => {
         if (await isHealthy()) return true
         if (!isAutostartEnabled()) return false
-        if (!child || child.exitCode !== null) child = startService(directory)
+        if (!child || child.exitCode !== null) child = (options?.startService ?? startService)(directory)
         await Bun.sleep(1200)
         return isHealthy()
       })
