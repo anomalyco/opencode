@@ -258,10 +258,6 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
     // and does not await the scan; the native background scan starts as soon as
     // the picker exists. The `wait` gate dedupes concurrent creation.
     const acquire = Effect.fn("Search.acquire")(function* (cwd: string) {
-      // The opencode test runtime owns an isolated XDG tree that Windows must
-      // remove before process exit, so use ripgrep instead of native FFF there.
-      if (process.platform === "win32" && process.env.OPENCODE_TEST_HOME) return undefined
-
       const dir = FSUtil.resolve(cwd)
       const existing = state.pick.get(dir)
       if (existing) return existing
