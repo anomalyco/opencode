@@ -37,6 +37,16 @@ import {
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
 
+function promptAsyncErrorDetails(cause: Cause.Cause<unknown>): Record<string, unknown> {
+  const error = Cause.squash(cause)
+  return {
+    message: error instanceof Error ? error.message : String(error),
+    name: error instanceof Error ? error.name : undefined,
+    stack: error instanceof Error ? error.stack : undefined,
+    pretty: Cause.pretty(cause),
+  }
+}
+
 const tryParseJson = (text: string) =>
   Effect.try({
     try: () => JSON.parse(text) as unknown,
@@ -307,8 +317,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       yield* promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
+            const error = promptAsyncErrorDetails(cause)
             yield* Effect.logError("prompt_async failed").pipe(
-              Effect.annotateLogs({ sessionID: ctx.params.sessionID, cause }),
+              Effect.annotateLogs({ sessionID: ctx.params.sessionID, cause, error }),
             )
             yield* bus.publish(Session.Event.Error, {
               sessionID: ctx.params.sessionID,
