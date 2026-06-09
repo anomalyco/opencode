@@ -27,17 +27,20 @@ export default defineConfig({
       registerType: "prompt",
       manifest: false,
       devOptions: {
+        // SW disabled in dev — active SW intercepts Vite HMR requests and breaks hot reload
         enabled: false,
       },
       includeAssets: ["favicon*.{ico,png,svg}", "apple-touch-icon*.png", "web-app-manifest-*.png", "site.webmanifest"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,woff,woff2,ttf,eot,png,svg,ico}"],
         navigateFallback: "/index.html",
+        // Exclude API routes from SW navigation fallback.
+        // If new non-HTML backend paths are added (e.g. /ws/, /oauth/), append them here.
         navigateFallbackDenylist: [/^\/api\//],
       },
     }),
     sentry,
-  ] as any,
+  ] as any, // as any: vite.js custom plugin typings don't fully satisfy Vite's Plugin union
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
