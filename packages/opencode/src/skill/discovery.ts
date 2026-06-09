@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient, nodePath } from "@opencode-ai/core/effect/layer-node-platform"
+import { httpClient, path } from "@opencode-ai/core/effect/layer-node-platform"
 import { NodePath } from "@effect/platform-node"
 import { Effect, Layer, Path, Schema, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -104,6 +104,6 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(NodePath.layer),
 )
 
-export const node = LayerNode.make(layer, [FSUtil.node, nodePath, httpClient])
+export const node = LayerNode.make(layer, [FSUtil.node, path, httpClient])
 
 export * as Discovery from "./discovery"
