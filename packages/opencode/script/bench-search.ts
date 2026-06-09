@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { Fff } from "@opencode-ai/core/filesystem/fff.bun"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Search } from "@opencode-ai/core/search"
+import { FileSystem } from "@opencode-ai/core/filesystem"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceStore } from "@/project/instance-store"
 
@@ -15,7 +16,7 @@ const FILE_LIMIT = 100
 const GREP_LIMIT = 50
 const GLOB_LIMIT = 50
 
-const run = <A>(effect: Effect.Effect<A, unknown, Search.Service>) =>
+const run = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
   AppRuntime.runPromise(
     InstanceStore.Service.use((store) => store.provide({ directory: dir }, effect as never)),
   ) as Promise<A>
@@ -63,7 +64,6 @@ console.log()
 
 // 1) runtime + InstanceState + picker create + scan poll
 const tRuntime = performance.now()
-await run(Search.Service.use((svc) => svc.find({ cwd: dir, query: "_warmup_file_", limit: 1 })))
 console.log(`[Search] init file (runtime + picker + scan): ${(performance.now() - tRuntime).toFixed(1)}ms`)
 
 // 2) grep warmup (content index cold-start inside the Search service picker)
@@ -76,7 +76,7 @@ console.log("--- Search service (warm) ---")
 
 for (const q of FILE_QUERIES) {
   const t = performance.now()
-  const r = await run(Search.Service.use((svc) => svc.find({ cwd: dir, query: q, limit: FILE_LIMIT })))
+  const r = await run(FileSystem.Service.use((svc) => svc.find({ query: q, limit: FILE_LIMIT })))
   console.log(`[Search.find] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} results)`)
 }
 

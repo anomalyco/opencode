@@ -2,25 +2,12 @@ export * as Search from "./index"
 
 import path from "path"
 import { pathToFileURL } from "url"
-import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { Fff } from "#fff"
-import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
-import { Global } from "../global"
 import { Ripgrep } from "../ripgrep"
 import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema"
-
-export class FindInput extends Schema.Class<FindInput>("Search.FindInput")({
-  /** Absolute directory to search. */
-  cwd: AbsolutePath,
-  /** Text used to rank file and directory names. */
-  query: Schema.String,
-  /** Restricts results to files or directories. Omission searches both. */
-  type: Schema.Literals(["file", "directory"]).pipe(Schema.optional),
-  /** Maximum number of results to return. */
-  limit: PositiveInt.pipe(Schema.optional),
-}) {}
 
 export class GlobInput extends Schema.Class<GlobInput>("Search.GlobInput")({
   /** Absolute directory to search. */
@@ -71,7 +58,6 @@ export class Error extends Schema.TaggedErrorClass<Error>()("Search.Error", {
 }) {}
 
 export interface Interface {
-  readonly find: (input: FindInput) => Effect.Effect<readonly FileSystem.Entry[], Error>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly FileSystem.Entry[], Error>
   readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[], Error>
 }
@@ -82,107 +68,7 @@ export const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const ripgrep = yield* Ripgrep.Service
-    const fs = yield* FSUtil.Service
-    const scope = yield* Scope.Scope
-    const cache = new Map<
-      string,
-      {
-        files: string[]
-        directories: string[]
-        scan?: Fiber.Fiber<void, Error>
-      }
-    >()
     return Service.of({
-      find: (input) =>
-        Effect.gen(function* () {
-          const cwd = FSUtil.resolve(input.cwd)
-          const existing = cache.get(cwd)
-          const result =
-            existing ??
-            (yield* Effect.gen(function* () {
-              const state = {
-                files: [] as string[],
-                directories: [] as string[],
-                scan: undefined as Fiber.Fiber<void, Error> | undefined,
-              }
-              state.scan = yield* (cwd === Global.Path.home
-                ? Effect.gen(function* () {
-                    const ignored = new Set([
-                      "node_modules",
-                      "dist",
-                      "build",
-                      "target",
-                      "vendor",
-                      ...(process.platform === "darwin" ? ["Library"] : []),
-                      ...(process.platform === "win32" ? ["AppData"] : []),
-                    ])
-                    const top = yield* fs.readDirectoryEntries(cwd).pipe(Effect.catch(() => Effect.succeed([])))
-                    state.directories = yield* Effect.forEach(
-                      top.filter(
-                        (entry) => entry.type === "directory" && !entry.name.startsWith(".") && !ignored.has(entry.name),
-                      ),
-                      (entry) =>
-                        fs.readDirectoryEntries(path.join(cwd, entry.name)).pipe(
-                          Effect.catch(() => Effect.succeed([])),
-                          Effect.map((children) => [
-                            entry.name + path.sep,
-                            ...children
-                              .filter(
-                                (child) =>
-                                  child.type === "directory" &&
-                                  !child.name.startsWith(".") &&
-                                  !ignored.has(child.name),
-                              )
-                              .map((child) => path.join(entry.name, child.name) + path.sep),
-                          ]),
-                        ),
-                      { concurrency: "unbounded" },
-                    ).pipe(Effect.map((entries) => entries.flat()))
-                  })
-                : ripgrep.files({ cwd, pattern: "*", limit: Number.MAX_SAFE_INTEGER }).pipe(
-                    Effect.tap((result) =>
-                      Effect.sync(() => {
-                        state.files = result.items.map((item) => item.replaceAll("\\", "/"))
-                        state.directories = Array.from(
-                          new Set(
-                            state.files.flatMap((file) => {
-                              const parts = file.split("/")
-                              return parts
-                                .slice(0, -1)
-                                .map((_, index) => parts.slice(0, index + 1).join("/") + path.sep)
-                            }),
-                          ),
-                        )
-                      }),
-                    ),
-                    Effect.asVoid,
-                  )
-              ).pipe(Effect.mapError((cause) => new Error({ cause })), Effect.forkIn(scope))
-              cache.set(cwd, state)
-              return state
-            }))
-          if (cwd === Global.Path.home && result.scan) yield* Fiber.join(result.scan)
-          const items =
-            input.type === "file"
-              ? result.files
-              : input.type === "directory"
-                ? result.directories
-                : [...result.files, ...result.directories]
-          const query = input.query.trim()
-          const selected = query
-            ? fuzzysort.go(query, items, { limit: input.limit ?? Number.MAX_SAFE_INTEGER }).map((item) => item.target)
-            : items.slice(0, input.limit ?? Number.MAX_SAFE_INTEGER)
-          return selected.map((value) => {
-            const type = value.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
-            const absolute = path.resolve(cwd, value)
-            return new FileSystem.Entry({
-              path: RelativePath.make(value),
-              uri: pathToFileURL(absolute).href,
-              type,
-              mime: type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
-            })
-          })
-        }),
       glob: (input) =>
         ripgrep.files({ cwd: input.cwd, pattern: input.pattern, limit: input.limit ?? Number.MAX_SAFE_INTEGER }).pipe(
           Effect.map((result) =>
@@ -266,48 +152,6 @@ export const fffLayer = Layer.effect(
     })
 
     return Service.of({
-      find: (input) =>
-        picker(input.cwd).pipe(
-          Effect.flatMap(
-            Effect.fnUntraced(function* (picker) {
-              const options = { pageIndex: 0, pageSize: input.limit }
-              const result = yield* Effect.try({
-                try: () => {
-                  if (input.type === "file") {
-                    const result = picker.fileSearch(input.query.trim(), options)
-                    if (!result.ok) throw new globalThis.Error(result.error)
-                    return result.value.items.map((item) => ({
-                      relativePath: item.relativePath,
-                      type: "file" as const,
-                    }))
-                  }
-                  if (input.type === "directory") {
-                    const result = picker.directorySearch(input.query.trim(), options)
-                    if (!result.ok) throw new globalThis.Error(result.error)
-                    return result.value.items.map((item) => ({
-                      relativePath: item.relativePath,
-                      type: "directory" as const,
-                    }))
-                  }
-                  const result = picker.mixedSearch(input.query.trim(), options)
-                  if (!result.ok) throw new globalThis.Error(result.error)
-                  return result.value.items.map((item) => ({ relativePath: item.item.relativePath, type: item.type }))
-                },
-                catch: (cause) => new Error({ cause }),
-              })
-              return result.map((item) => {
-                const relativePath = item.relativePath.replaceAll("\\", "/").replace(/\/$/, "")
-                const absolute = path.resolve(input.cwd, relativePath)
-                return new FileSystem.Entry({
-                  path: RelativePath.make(relativePath + (item.type === "directory" ? path.sep : "")),
-                  uri: pathToFileURL(absolute).href,
-                  type: item.type,
-                  mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
-                })
-              })
-            }),
-          ),
-        ),
       glob: (input) =>
         picker(input.cwd).pipe(
           Effect.flatMap((picker) => {
@@ -384,4 +228,4 @@ export const layer = Layer.unwrap(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Ripgrep.defaultLayer), Layer.provide(FSUtil.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(Ripgrep.defaultLayer))

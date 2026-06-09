@@ -16,22 +16,6 @@ const withTmp = <A, E, R>(f: (directory: AbsolutePath) => Effect.Effect<A, E, R>
   ).pipe(Effect.flatMap((tmp) => f(AbsolutePath.make(tmp.path))))
 
 describe("Search", () => {
-  it.live("finds files and directories", () =>
-    withTmp((cwd) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => fs.mkdir(path.join(cwd, "src")))
-        yield* Effect.promise(() => fs.writeFile(path.join(cwd, "src", "index.ts"), "export const needle = 1\n"))
-        const search = yield* Search.Service
-        expect((yield* search.find({ cwd, query: "index", type: "file" })).map((item) => item.path)).toEqual([
-          RelativePath.make("src/index.ts"),
-        ])
-        expect((yield* search.find({ cwd, query: "src", type: "directory" })).map((item) => item.path)).toEqual([
-          RelativePath.make("src"),
-        ])
-      }),
-    ),
-  )
-
   it.live("globs files as an array", () =>
     withTmp((cwd) =>
       Effect.gen(function* () {

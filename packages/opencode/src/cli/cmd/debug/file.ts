@@ -1,7 +1,6 @@
 import { EOL } from "os"
 import { Effect } from "effect"
 import { FileSystem } from "@opencode-ai/core/filesystem"
-import { Search } from "@opencode-ai/core/search"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
@@ -26,8 +25,8 @@ const FileSearchCommand = effectCmd({
   handler: Effect.fn("Cli.debug.file.search")(function* (args) {
     const results = yield* Effect.orDie(
       filesystem(
-        Search.Service.use((svc) => svc.find({ cwd: AbsolutePath.make(process.cwd()), query: args.query })),
-      ).pipe(Effect.provide(Search.defaultLayer)),
+        FileSystem.Service.use((svc) => svc.find({ query: args.query })),
+      ),
     )
     process.stdout.write(results.map((item) => item.path).join(EOL) + EOL)
   }),

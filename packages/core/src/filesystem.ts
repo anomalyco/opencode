@@ -6,7 +6,11 @@ import { Context, Effect, Layer, Option, Schema } from "effect"
 import { EventV2 } from "./event"
 import { FSUtil } from "./fs-util"
 import { Location } from "./location"
+import { Ripgrep } from "./ripgrep"
 import { RelativePath } from "./schema"
+import { FileSystemFind } from "./filesystem/find"
+
+export { Input as FindInput } from "./filesystem/find"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
@@ -46,15 +50,17 @@ export const Event = {
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<Content>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
+  readonly find: (input: FileSystemFind.Input) => Effect.Effect<Entry[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem") {}
 
-export const layer = Layer.effect(
+const baseLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
+    const find = yield* FileSystemFind.Service
     const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
     const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
       const absolute = path.resolve(location.directory, input ?? ".")
@@ -65,6 +71,7 @@ export const layer = Layer.effect(
       return { absolute, real, directory: location.directory, root }
     })
     return Service.of({
+      find: find.find,
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(Effect.orDie)
@@ -119,5 +126,7 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+export const layer = baseLayer.pipe(Layer.provide(FileSystemFind.layer), Layer.provide(Ripgrep.defaultLayer))
 
 export const locationLayer = layer
