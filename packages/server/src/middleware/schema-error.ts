@@ -1,9 +1,7 @@
-import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import { InvalidRequestError } from "../errors"
 
-const log = Log.create({ service: "server" })
 const REASON_LIMIT = 1024
 
 function truncateReason(reason: string) {
@@ -18,6 +16,8 @@ export class SchemaErrorMiddleware extends HttpApiMiddleware.Service<SchemaError
 
 export const schemaErrorLayer = HttpApiMiddleware.layerSchemaErrorTransform(SchemaErrorMiddleware, (error) => {
   const reason = truncateReason(error.cause.message)
-  log.warn("schema rejection", { kind: error.kind, reason })
-  return Effect.fail(new InvalidRequestError({ message: reason, kind: error.kind }))
+  return Effect.logWarning("schema rejection").pipe(
+    Effect.annotateLogs({ kind: error.kind, reason }),
+    Effect.andThen(Effect.fail(new InvalidRequestError({ message: reason, kind: error.kind }))),
+  )
 })
