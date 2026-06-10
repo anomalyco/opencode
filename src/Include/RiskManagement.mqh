@@ -5,6 +5,14 @@
 
 #define RISK_VERSION "RISK_V3_ORDER_CALC_PROFIT"
 
+enum ERiskState
+  {
+   RISK_STATE_OK = 0,
+   RISK_STATE_DAILY_STOP = 1,
+   RISK_STATE_MONTHLY_STOP = 2,
+   RISK_STATE_GLOBAL_STOP = 3
+  };
+
 //+------------------------------------------------------------------+
 //| CRiskManager class                                                |
 //+------------------------------------------------------------------+
@@ -27,9 +35,13 @@ private:
    double m_day_high_equity;
    datetime m_last_month_reset;
    datetime m_last_day_reset;
+   ERiskState m_risk_state;
    bool     m_global_dd_alerted;
    bool     m_monthly_dd_alerted;
    bool     m_daily_dd_alerted;
+   bool     m_monthly_stop_latched;
+   bool     m_daily_stop_latched;
+   bool     m_global_stop_latched;
    bool     m_risk_version_logged;
 
 public:
@@ -41,16 +53,20 @@ public:
                      m_risk_per_trade_pct(0.005),
                      m_win_rate(0.55),
                     m_avg_win_loss_ratio(1.5),
-                     m_default_sl_ticks(100),
-                      m_initial_equity(0),
-                      m_month_high_equity(0),
-                      m_day_high_equity(0),
-                      m_global_dd_alerted(false),
-                      m_monthly_dd_alerted(false),
-                      m_daily_dd_alerted(false),
-                      m_risk_version_logged(false)
-       {
-        m_last_month_reset = TimeCurrent();
+                      m_default_sl_ticks(100),
+                       m_initial_equity(0),
+                       m_month_high_equity(0),
+                       m_day_high_equity(0),
+                      m_risk_state(RISK_STATE_OK),
+                       m_global_dd_alerted(false),
+                       m_monthly_dd_alerted(false),
+                       m_daily_dd_alerted(false),
+                      m_monthly_stop_latched(false),
+                      m_daily_stop_latched(false),
+                      m_global_stop_latched(false),
+                       m_risk_version_logged(false)
+        {
+         m_last_month_reset = TimeCurrent();
         m_last_day_reset = TimeCurrent();
       }
    
@@ -64,68 +80,10 @@ public:
    void SetAvgWinLossRatio(double ratio){ m_avg_win_loss_ratio = ratio; }
    void SetDefaultSLTicks(int ticks)    { m_default_sl_ticks = ticks; }
    
-    bool IsHealthy()
-      {
-       double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-       if(equity <= 0.0)
-          return false;
-       
-       if(m_initial_equity == 0)
-         {
-         m_initial_equity = equity;
-         m_month_high_equity = equity;
-         m_day_high_equity = equity;
-         return true;
-        }
-      
-       ResetMonthlyIfNeeded();
-       ResetDailyIfNeeded();
-
-       // Update highs
-       if(equity > m_month_high_equity) m_month_high_equity = equity;
-       if(equity > m_day_high_equity)   m_day_high_equity = equity;
-      
-       if(m_initial_equity <= 0.0 || m_month_high_equity <= 0.0 || m_day_high_equity <= 0.0)
-          return false;
-
-       // Check global DD
-        double global_dd = (equity - m_initial_equity) / m_initial_equity;
-       if(global_dd < m_global_dd_limit)
-         {
-         if(!m_global_dd_alerted)
-           {
-            Print("CRITICAL: Global Drawdown limit reached: ", DoubleToString(global_dd * 100, 2), "%");
-            m_global_dd_alerted = true;
-           }
-          return false;
-         }
-       
-       // Check monthly DD
-       double monthly_dd = (equity - m_month_high_equity) / m_month_high_equity;
-       if(monthly_dd < m_monthly_dd_limit)
-         {
-         if(!m_monthly_dd_alerted)
-           {
-            Print("WARNING: Monthly Drawdown limit reached: ", DoubleToString(monthly_dd * 100, 2), "%");
-            m_monthly_dd_alerted = true;
-           }
-          return false;
-         }
-       
-       // Check daily DD
-       double daily_dd = (equity - m_day_high_equity) / m_day_high_equity;
-       if(daily_dd < m_daily_dd_limit)
-         {
-         if(!m_daily_dd_alerted)
-           {
-            Print("CAUTION: Daily Drawdown limit reached: ", DoubleToString(daily_dd * 100, 2), "%");
-            m_daily_dd_alerted = true;
-           }
-          return false;
-         }
-      
-      return true;
-     }
+     bool IsHealthy()
+       {
+        return CanOpenNewPosition();
+      }
    
     double CalculateLot()
       {
@@ -222,9 +180,56 @@ public:
       return 0.0;
       }
    
-    bool CanEnter()
+     bool CanEnter()
+        {
+        return CanOpenNewPosition();
+        }
+
+     ERiskState GetRiskState()
        {
-       return IsHealthy();
+        UpdateRiskState();
+        return m_risk_state;
+       }
+
+     bool CanOpenNewPosition()
+       {
+        if(AccountInfoDouble(ACCOUNT_EQUITY) <= 0.0)
+           return false;
+        return GetRiskState() == RISK_STATE_OK;
+       }
+
+     bool IsGlobalStop()
+       {
+        return GetRiskState() == RISK_STATE_GLOBAL_STOP;
+       }
+
+     bool HasPendingGlobalEmergencyClose()
+       {
+        return IsGlobalStop() && HasOpenPositionForCurrentSymbol();
+       }
+
+     bool CloseAllPositionsForCurrentSymbol()
+       {
+        bool attempted = false;
+        bool all_closed = true;
+        for(int i = PositionsTotal() - 1; i >= 0; i--)
+          {
+           ulong ticket = PositionGetTicket(i);
+           if(ticket == 0)
+              continue;
+           if(!IsManagedPosition(ticket))
+              continue;
+           if(PositionGetString(POSITION_SYMBOL) != _Symbol)
+              continue;
+
+           attempted = true;
+           if(!ClosePosition(ticket))
+              all_closed = false;
+          }
+
+        if(!attempted)
+           Print("GLOBAL STOP: no managed positions to close for symbol ", _Symbol);
+        return attempted && all_closed && !HasOpenPositionForCurrentSymbol();
        }
 
     bool HasOpenPositionForCurrentSymbol()
@@ -242,8 +247,91 @@ public:
       }
 
 private:
-   double NormalizeLotDown(double lot, double lot_step, double max_lot)
+   void UpdateRiskState()
       {
+       double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+       if(equity <= 0.0)
+          return;
+
+       if(m_initial_equity == 0.0)
+         {
+          m_initial_equity = equity;
+          m_month_high_equity = equity;
+          m_day_high_equity = equity;
+          SetRiskState(RISK_STATE_OK, 0.0);
+          return;
+         }
+
+       ResetMonthlyIfNeeded();
+       ResetDailyIfNeeded();
+
+       if(equity > m_month_high_equity)
+          m_month_high_equity = equity;
+       if(equity > m_day_high_equity)
+          m_day_high_equity = equity;
+
+       if(m_initial_equity <= 0.0 || m_month_high_equity <= 0.0 || m_day_high_equity <= 0.0)
+          return;
+
+       double global_dd = (equity - m_initial_equity) / m_initial_equity;
+       if(m_global_stop_latched || global_dd < m_global_dd_limit)
+         {
+          m_global_stop_latched = true;
+          SetRiskState(RISK_STATE_GLOBAL_STOP, global_dd);
+          return;
+         }
+
+       double monthly_dd = (equity - m_month_high_equity) / m_month_high_equity;
+       if(m_monthly_stop_latched || monthly_dd < m_monthly_dd_limit)
+         {
+          m_monthly_stop_latched = true;
+          SetRiskState(RISK_STATE_MONTHLY_STOP, monthly_dd);
+          return;
+         }
+
+       double daily_dd = (equity - m_day_high_equity) / m_day_high_equity;
+       if(m_daily_stop_latched || daily_dd < m_daily_dd_limit)
+         {
+          m_daily_stop_latched = true;
+          SetRiskState(RISK_STATE_DAILY_STOP, daily_dd);
+          return;
+         }
+
+       SetRiskState(RISK_STATE_OK, 0.0);
+      }
+
+   void SetRiskState(ERiskState state, double drawdown)
+      {
+       if(m_risk_state == state)
+          return;
+
+       m_risk_state = state;
+       if(state == RISK_STATE_OK)
+         {
+          Print("Risk state reset to OK");
+          return;
+         }
+
+       if(state == RISK_STATE_DAILY_STOP)
+         {
+          m_daily_dd_alerted = true;
+          Print("CAUTION: Daily Drawdown limit reached: ", DoubleToString(drawdown * 100, 2), "%");
+          return;
+         }
+
+       if(state == RISK_STATE_MONTHLY_STOP)
+         {
+          m_monthly_dd_alerted = true;
+          Print("WARNING: Monthly Drawdown limit reached: ", DoubleToString(drawdown * 100, 2), "%");
+          return;
+         }
+
+       m_global_dd_alerted = true;
+       Print("CRITICAL: Global Drawdown limit reached: ", DoubleToString(drawdown * 100, 2), "%");
+      }
+
+   double NormalizeLotDown(double lot, double lot_step, double max_lot)
+       {
        if(lot_step <= 0.0)
           return 0.0;
        if(lot <= 0.0)
@@ -398,20 +486,23 @@ private:
        }
 
    void ResetMonthlyIfNeeded()
-       {
-       datetime now = TimeCurrent();
+        {
+        datetime now = TimeCurrent();
        MqlDateTime dt_now, dt_last;
 
        TimeToStruct(now, dt_now);
        TimeToStruct(m_last_month_reset, dt_last);
 
-       if(dt_now.mon != dt_last.mon || dt_now.year != dt_last.year)
-         {
-          m_month_high_equity = AccountInfoDouble(ACCOUNT_EQUITY);
-          m_last_month_reset = now;
-          m_monthly_dd_alerted = false;
-         }
-      }
+        if(dt_now.mon != dt_last.mon || dt_now.year != dt_last.year)
+          {
+           m_month_high_equity = AccountInfoDouble(ACCOUNT_EQUITY);
+           m_last_month_reset = now;
+           m_monthly_dd_alerted = false;
+           m_monthly_stop_latched = false;
+           if(m_risk_state == RISK_STATE_MONTHLY_STOP)
+              SetRiskState(RISK_STATE_OK, 0.0);
+          }
+       }
 
    void ResetDailyIfNeeded()
       {
@@ -421,12 +512,52 @@ private:
       TimeToStruct(now, dt_now);
       TimeToStruct(m_last_day_reset, dt_last);
       
-       if(dt_now.day != dt_last.day)
+        if(dt_now.day != dt_last.day)
+          {
+           m_day_high_equity = AccountInfoDouble(ACCOUNT_EQUITY);
+           m_last_day_reset = now;
+           m_daily_dd_alerted = false;
+           m_daily_stop_latched = false;
+           if(m_risk_state == RISK_STATE_DAILY_STOP)
+              SetRiskState(RISK_STATE_OK, 0.0);
+          }
+       }
+
+   bool ClosePosition(ulong ticket)
+      {
+       if(ticket == 0)
+          return false;
+       if(!PositionSelectByTicket(ticket))
+          return false;
+
+       ENUM_POSITION_TYPE position_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+       double volume = PositionGetDouble(POSITION_VOLUME);
+       if(volume <= 0.0)
+          return false;
+
+       MqlTradeRequest request = {};
+       MqlTradeResult result = {};
+       request.action = TRADE_ACTION_DEAL;
+       request.position = ticket;
+       request.symbol = _Symbol;
+       request.volume = volume;
+       request.magic = m_magic_number;
+       request.deviation = 10;
+       request.type_filling = ORDER_FILLING_IOC;
+       request.comment = "global-stop-close";
+       request.type = (position_type == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
+       request.price = (position_type == POSITION_TYPE_BUY)
+                       ? SymbolInfoDouble(_Symbol, SYMBOL_BID)
+                       : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+       if(OrderSend(request, result) && result.retcode == TRADE_RETCODE_DONE)
          {
-          m_day_high_equity = AccountInfoDouble(ACCOUNT_EQUITY);
-          m_last_day_reset = now;
-          m_daily_dd_alerted = false;
+          Print("GLOBAL STOP: closed position ", ticket, " on ", _Symbol);
+          return true;
          }
+
+       Print("GLOBAL STOP: failed to close position ", ticket, ": ", result.retcode, " - ", result.comment);
+       return false;
       }
    
    bool ModifyPosition(ulong ticket, double sl, double tp)

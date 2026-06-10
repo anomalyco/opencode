@@ -1,0 +1,79 @@
+{
+  "scenario": "step2_operational_stop_global_stop_log_only",
+  "status": "provisional_pass_log_only_clean_retest_complete",
+  "created_at": "2026-06-10T12:20:16+09:00",
+  "updated_at": "2026-06-10T12:52:43+09:00",
+  "source": {
+    "host": "wag-dell",
+    "tester_log": "C:\\Users\\wag\\AppData\\Roaming\\MetaQuotes\\Tester\\ED051E4A9BEE8A33BDDD0F947358B2B2\\Agent-127.0.0.1-3000\\logs\\20260610.log",
+    "compile_log": "C:\\Users\\wag\\Downloads\\opencode-step2-compile.log",
+    "audit_fix_compile_log": "C:\\Users\\wag\\Downloads\\opencode-step2-auditfix-compile.log",
+    "clean_bundle_compile_log": "C:\\Users\\wag\\Downloads\\opencode-step2-cleanbundle-compile.log",
+    "report_available": false
+  },
+  "blocked_items": [
+    "MT5 CLI /config run completed but Report= did not produce a fresh HTML/XML report.",
+    "Existing terminal64.exe process could not be closed remotely: taskkill returned access denied, CloseMainWindow had no effect, CIM metadata access was denied."
+  ],
+  "inputs": {
+    "expert": "Experts\\opencode-trade\\Expert_Main.ex5",
+    "symbol": "XAUUSD",
+    "timeframe": "M15",
+    "date_from": "2024-06-01 00:00",
+    "date_to": "2024-12-31 00:00",
+    "deposit": "10000.00 USD",
+    "leverage": "1:500",
+    "inp_magic_number": 12345,
+    "inp_global_dd_limit": -0.0005,
+    "inp_monthly_dd_limit": -0.2,
+    "inp_daily_dd_limit": -0.03,
+    "inp_enable_global_emergency_close": true
+  },
+  "evidence": {
+    "risk_version_marker": {
+      "line": 12627,
+      "text": "RiskManager Version: RISK_V3_ORDER_CALC_PROFIT"
+    },
+    "initial_order": {
+      "lines": [12628, 12632],
+      "text": "market buy 0.14 XAUUSD; Order placed successfully: 0 0.14 lots at 2330.54"
+    },
+    "global_stop_trigger": {
+      "line": 12633,
+      "text": "CRITICAL: Global Drawdown limit reached: -0.09%"
+    },
+    "emergency_close": {
+      "lines": [12634, 12638],
+      "text": "market sell 0.14 XAUUSD, close #2; GLOBAL STOP: closed position 2 on XAUUSD"
+    },
+    "completion": {
+      "lines": [12639, 12640, 12643],
+      "text": "final balance 9990.90 USD; 823720 ticks, 13756 bars generated; test thread finished"
+    },
+    "retest_window": {
+      "lines": [12589, 12648],
+      "host_timestamp": "2026-06-10 12:52:42-12:52:43 JST",
+      "text": "clean Step2 bundle retest window after audit fixes"
+    }
+  },
+  "checks": {
+    "compiled_without_errors_or_warnings": true,
+    "audit_fix_compiled_without_errors_or_warnings": true,
+    "clean_bundle_compiled_without_errors_or_warnings": true,
+    "risk_version_marker_present": true,
+    "global_stop_triggered": true,
+    "global_emergency_close_triggered": true,
+    "test_completed": true,
+    "fresh_report_generated": false,
+    "parser_gate_ran_on_fresh_report": false,
+    "retest_required_after_audit_fixes": false,
+    "clean_bundle_used_for_retest": true
+  },
+  "notes": [
+    "This is an operational stop-state validation, not a profitability gate.",
+    "The parser gate remains pending until MT5 emits a fresh report file or an alternate report export path is confirmed.",
+    "The audit fix and clean bundle both compiled with 0 errors and 0 warnings.",
+    "The clean retest used a temporary HEAD version of TradeLogic.mqh on wag-dell so Step2 evidence is not polluted by the unrelated local TradeLogic candidate diff; the remote candidate file was restored after retest.",
+    "HTML/XML report generation is still blocked, so parser gate evidence remains pending and this result stays log-only."
+  ]
+}

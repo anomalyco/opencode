@@ -17,6 +17,10 @@ input double InpTakeProfitATRMultiplier = 3.0;
 input int    InpSessionStartHour = 12;
 input int    InpSessionEndHour = 24;
 input ulong  InpMagicNumber = 12345;
+input double InpGlobalDDLimit = -0.25;
+input double InpMonthlyDDLimit = -0.20;
+input double InpDailyDDLimit = -0.03;
+input bool   InpEnableGlobalEmergencyClose = true;
 
 //+------------------------------------------------------------------+
 //| CExpertAdvisor class                                              |
@@ -47,6 +51,25 @@ public:
             return(INIT_FAILED);
            }
 
+         bool invalid_limit = false;
+         if(!IsValidDrawdownLimit(InpGlobalDDLimit))
+           {
+            Print("RiskManager initialization failed: InpGlobalDDLimit must be a negative fraction greater than -1.0");
+            invalid_limit = true;
+           }
+         if(!IsValidDrawdownLimit(InpMonthlyDDLimit))
+           {
+            Print("RiskManager initialization failed: InpMonthlyDDLimit must be a negative fraction greater than -1.0");
+            invalid_limit = true;
+           }
+         if(!IsValidDrawdownLimit(InpDailyDDLimit))
+           {
+            Print("RiskManager initialization failed: InpDailyDDLimit must be a negative fraction greater than -1.0");
+            invalid_limit = true;
+           }
+         if(invalid_limit)
+            return(INIT_FAILED);
+
          m_risk.SetMagicNumber(InpMagicNumber);
 
          m_sig_breakout.Init();
@@ -57,9 +80,9 @@ public:
         m_sig_breakout.SetTakeProfitATRMultiplier(InpTakeProfitATRMultiplier);
         m_sig_breakout.SetSessionHours(InpSessionStartHour, InpSessionEndHour);
         
-       m_risk.SetGlobalDDLimit(-0.25);
-      m_risk.SetMonthlyDDLimit(-0.20);
-      m_risk.SetDailyDDLimit(-0.03);
+       m_risk.SetGlobalDDLimit(InpGlobalDDLimit);
+      m_risk.SetMonthlyDDLimit(InpMonthlyDDLimit);
+      m_risk.SetDailyDDLimit(InpDailyDDLimit);
       m_risk.SetRiskPerTrade(0.005);
       
       m_data.Init();
@@ -68,21 +91,31 @@ public:
      }
    
    //--- Main tick handler
-   void OnTick()
-     {
-      // 1. Evaluate breakout-only validation flow
-      double breakout_score = m_sig_breakout.Evaluate();
-      
-      // 2. Risk check
-      if(!m_risk.IsHealthy())
-         return;
-      
-      if(m_risk.HasOpenPositionForCurrentSymbol())
-         return;
-      
-      // 3. Position management
-      if(m_risk.CanEnter() && MathAbs(breakout_score) > 0.7)
+    void OnTick()
+      {
+       ERiskState risk_state = m_risk.GetRiskState();
+       if(risk_state == RISK_STATE_GLOBAL_STOP)
          {
+          if(InpEnableGlobalEmergencyClose && m_risk.HasPendingGlobalEmergencyClose())
+             m_risk.CloseAllPositionsForCurrentSymbol();
+          return;
+         }
+
+       if(risk_state == RISK_STATE_DAILY_STOP || risk_state == RISK_STATE_MONTHLY_STOP)
+          return;
+
+       if(!m_risk.CanOpenNewPosition())
+          return;
+
+       // 1. Evaluate breakout-only validation flow
+       double breakout_score = m_sig_breakout.Evaluate();
+       
+       if(m_risk.HasOpenPositionForCurrentSymbol())
+          return;
+       
+       // 3. Position management
+       if(MathAbs(breakout_score) > 0.7)
+          {
          double entry=0, sl=0, tp=0;
          ENUM_ORDER_TYPE type = ORDER_TYPE_BUY;
           
@@ -104,7 +137,13 @@ public:
      {
       // Cleanup resources
      }
-  };
+
+private:
+   bool IsValidDrawdownLimit(double limit)
+     {
+      return limit < 0.0 && limit > -1.0;
+     }
+   };
 
 //+------------------------------------------------------------------+
 //| Global expert instance                                            |
