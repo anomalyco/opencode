@@ -57,6 +57,10 @@ import { Permission } from "@/permission"
 import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { MemoryAddTool } from "./memory-add"
+import { MemorySearchTool } from "./memory-search"
+import { MemoryForgetTool } from "./memory-forget"
+import { Memory } from "@/memory/memory"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -90,6 +94,7 @@ export const layer: Layer.Layer<
   | Plugin.Service
   | Question.Service
   | Todo.Service
+  | Memory.Service
   | Agent.Service
   | Skill.Service
   | Session.Service
@@ -140,6 +145,9 @@ export const layer: Layer.Layer<
     const skilltool = yield* SkillTool
     const searchDataTool = yield* SearchDataTool
     const callToolTool = yield* CallTool
+    const memoryAdd = yield* MemoryAddTool
+    const memorySearch = yield* MemorySearchTool
+    const memoryForget = yield* MemoryForgetTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -255,6 +263,10 @@ export const layer: Layer.Layer<
           plan: Tool.init(plan),
         })
 
+        const memoryAddDef = yield* Tool.init(memoryAdd)
+        const memorySearchDef = yield* Tool.init(memorySearch)
+        const memoryForgetDef = yield* Tool.init(memoryForget)
+
         return {
           custom,
           builtin: [
@@ -275,6 +287,9 @@ export const layer: Layer.Layer<
             ...(flags.experimentalScout ? [tool.repo_clone, tool.repo_overview] : []),
             tool.skill,
             tool.patch,
+            memoryAddDef,
+            memorySearchDef,
+            memoryForgetDef,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
@@ -407,7 +422,10 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Ripgrep.defaultLayer),
       Layer.provide(Layer.mergeAll(Truncate.defaultLayer, ToolRuntime.layer)),
     )
-    .pipe(Layer.provide(RuntimeFlags.defaultLayer)),
+    .pipe(
+      Layer.provide(Memory.defaultLayer),
+      Layer.provide(RuntimeFlags.defaultLayer),
+    ),
 )
 
 function isZodType(value: unknown): value is z.ZodType {
