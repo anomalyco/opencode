@@ -1,6 +1,7 @@
 export const dict = {
   "nav.github": "GitHub",
   "nav.docs": "Docs",
+  "nav.data": "Data",
   "nav.changelog": "Changelog",
   "nav.discord": "Discord",
   "nav.x": "X",
