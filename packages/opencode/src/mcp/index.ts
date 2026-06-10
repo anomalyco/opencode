@@ -670,6 +670,11 @@ export const layer = Layer.effect(
       s.status[name] = { status: "disabled" }
     })
 
+    function requestTimeout(s: State, name: string, configured: McpEntry | undefined, fallback?: number) {
+      const staticTimeout = configured && isMcpConfigured(configured) ? configured.timeout : undefined
+      return s.config[name]?.timeout ?? staticTimeout ?? fallback
+    }
+
     const tools = Effect.fn("MCP.tools")(function* () {
       const result: Record<string, Tool> = {}
       const s = yield* InstanceState.get(state)
@@ -681,13 +686,12 @@ export const layer = Layer.effect(
       for (const [clientName, client] of Object.entries(s.clients)) {
         if (s.status[clientName]?.status !== "connected") continue
         const mcpConfig = config[clientName]
-        const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : s.config[clientName]
         const listed = s.defs[clientName]
         if (!listed) {
           yield* Effect.logWarning("missing cached tools for connected server", { clientName })
           continue
         }
-        const timeout = entry?.timeout ?? defaultTimeout
+        const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const mcpTool of listed) {
           result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
         }
@@ -697,25 +701,33 @@ export const layer = Layer.effect(
 
     function collectFromConnected<T extends { name: string }>(
       s: State,
-      listFn: (c: Client) => Promise<T[]>,
+      listFn: (c: Client, timeout?: number) => Promise<T[]>,
       label: string,
     ) {
-      return Effect.forEach(
-        Object.entries(s.clients).filter(([name]) => s.status[name]?.status === "connected"),
-        ([clientName, client]) =>
-          fetchFromClient(clientName, client, listFn, label).pipe(Effect.map((items) => Object.entries(items ?? {}))),
-        { concurrency: "unbounded" },
-      ).pipe(Effect.map((results) => Object.fromEntries<T & { client: string }>(results.flat())))
+      return Effect.gen(function* () {
+        const cfg = yield* cfgSvc.get()
+        return yield* Effect.forEach(
+          Object.entries(s.clients).filter(([name]) => s.status[name]?.status === "connected"),
+          ([clientName, client]) =>
+            fetchFromClient(
+              clientName,
+              client,
+              (c) => listFn(c, requestTimeout(s, clientName, cfg.mcp?.[clientName], cfg.experimental?.mcp_timeout)),
+              label,
+            ).pipe(Effect.map((items) => Object.entries(items ?? {}))),
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map((results) => Object.fromEntries<T & { client: string }>(results.flat())))
+      })
     }
 
     const prompts = Effect.fn("MCP.prompts")(function* () {
       const s = yield* InstanceState.get(state)
       return yield* collectFromConnected(
         s,
-        (c) =>
+        (c, timeout) =>
           c.getServerCapabilities()?.prompts
             ? paginate(
-                (cursor) => c.listPrompts(cursor === undefined ? undefined : { cursor }),
+                (cursor) => c.listPrompts(cursor === undefined ? undefined : { cursor }, { timeout }),
                 (result) => result.prompts,
               )
             : Promise.resolve([]),
@@ -727,10 +739,10 @@ export const layer = Layer.effect(
       const s = yield* InstanceState.get(state)
       return yield* collectFromConnected(
         s,
-        (c) =>
+        (c, timeout) =>
           c.getServerCapabilities()?.resources
             ? paginate(
-                (cursor) => c.listResources(cursor === undefined ? undefined : { cursor }),
+                (cursor) => c.listResources(cursor === undefined ? undefined : { cursor }, { timeout }),
                 (result) => result.resources,
               )
             : Promise.resolve([]),
@@ -751,10 +763,8 @@ export const layer = Layer.effect(
         return undefined
       }
       const cfg = yield* cfgSvc.get()
-      const configured = cfg.mcp?.[clientName]
-      const staticTimeout = configured && isMcpConfigured(configured) ? configured.timeout : undefined
       return yield* Effect.tryPromise({
-        try: () => fn(client, s.config[clientName]?.timeout ?? staticTimeout ?? cfg.experimental?.mcp_timeout),
+        try: () => fn(client, requestTimeout(s, clientName, cfg.mcp?.[clientName], cfg.experimental?.mcp_timeout)),
         catch: (error) => error,
       }).pipe(
         Effect.tapError((error) =>
