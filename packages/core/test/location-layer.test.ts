@@ -1,10 +1,11 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Equal, Hash, Layer, Schema } from "effect"
 import { Tool } from "@opencode-ai/core/public"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Location } from "@opencode-ai/core/location"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -44,6 +45,16 @@ const it = testEffect(
 )
 
 describe("LocationServiceMap", () => {
+  it.effect("compares equivalent location refs by value", () =>
+    Effect.sync(() => {
+      const directory = AbsolutePath.make("/project")
+      expect(Equal.equals(Location.Ref.make({ directory }), Location.Ref.make({ directory }))).toBe(true)
+      expect(Hash.hash(Location.Ref.make({ directory }))).toBe(
+        Hash.hash(Location.Ref.make({ directory, workspaceID: undefined })),
+      )
+    }),
+  )
+
   it.live("isolates location state while sharing location policy with catalog", () =>
     Effect.acquireRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
@@ -79,7 +90,10 @@ describe("LocationServiceMap", () => {
                 providers: yield* catalog.provider.all(),
                 tools: yield* toolDefinitions(yield* ToolRegistry.Service),
               }
-            }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
+            }).pipe(
+              Effect.scoped,
+              Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+            )
 
           const blockedState = yield* update(blocked.path)
           expect(blockedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(false)
