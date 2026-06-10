@@ -117,6 +117,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   for (const [key, item] of Object.entries(yield* mcp.tools())) {
     const execute = item.execute
     if (!execute) continue
+    // Fire tool.definition hook so plugins can modify MCP tool descriptions
+    const defOutput = { description: item.description, parameters: item.inputSchema }
+    yield* plugin.trigger("tool.definition", { toolID: key }, defOutput)
+    item.description = defOutput.description
 
     const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
     const transformed = ProviderTransform.schema(input.model, schema)
