@@ -10,8 +10,8 @@ import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
 
 const DEFAULT_BUFFER = 20_000
-const DEFAULT_KEEP_TOKENS = 8_000
-const TOOL_OUTPUT_MAX_CHARS = 2_000
+const DEFAULT_KEEP_TOKENS = 16_000
+const TOOL_OUTPUT_MAX_CHARS = 8_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
@@ -187,14 +187,6 @@ export const make = (dependencies: Dependencies) => {
     })
     const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
-    const messageID = SessionMessage.ID.create()
-    yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
-      sessionID: input.sessionID,
-      messageID,
-      timestamp: yield* DateTime.now,
-      reason: "auto",
-    })
-
     const chunks: string[] = []
     let failed = false
     const summarized = yield* dependencies.llm
@@ -217,6 +209,13 @@ export const make = (dependencies: Dependencies) => {
       )
     const summary = chunks.join("")
     if (!summarized || failed || !summary.trim()) return false
+    const messageID = SessionMessage.ID.create()
+    yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
+      sessionID: input.sessionID,
+      messageID,
+      timestamp: yield* DateTime.now,
+      reason: "auto",
+    })
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
       sessionID: input.sessionID,
       messageID,
