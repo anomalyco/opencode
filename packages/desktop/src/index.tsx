@@ -181,11 +181,21 @@ const createPlatform = (): Platform => {
         return store
       }
 
+      const STORE_LOAD_TIMEOUT_MS = 5_000
+
+      const loadStore = (name: string) =>
+        Promise.race([
+          Store.load(name),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error(`Store.load(${name}) timed out`)), STORE_LOAD_TIMEOUT_MS)
+          }),
+        ])
+
       const getStore = (name: string) => {
         const cached = storeCache.get(name)
         if (cached) return cached
 
-        const store = Store.load(name).catch(() => {
+        const store = loadStore(name).catch(() => {
           const cached = memoryCache.get(name)
           if (cached) return cached
 
