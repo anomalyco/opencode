@@ -25,14 +25,19 @@
  * @no-model-guard
  *   - When providerID OR modelID is absent (user message with no model), return
  *     "" — never render a stray "/". Preserves the existing user-memo guard at
- *     message-part.tsx:1072 (`if (!providerID || !modelID) return ""`).
+ *     message-part.tsx:1072 (`if (!providerID || !modelID) return ""`). The guard
+ *     is an OR: EITHER field absent → "". Both OR-branches are tested so a stray
+ *     `||`→`&&` refactor cannot slip through.
  *
  * @edge-cases
- *   - Provider resolves but the specific model is absent in its catalog →
- *     `${provider.name}/${modelID}` (provider name + raw model id).
+ *   - PARTIAL MISS — provider resolves but the specific model is absent in its
+ *     catalog → `${provider.name}/${modelID}` (provider DISPLAY NAME + raw model
+ *     id). This is the per-field branch where UI historically diverged from TUI;
+ *     the TUI `Model.providerModel` is now ALIGNED to this same per-field result.
  *
  * @see ./message-part.tsx (lines 1478-1483 assistant memo, 1069-1088 user memo)
  * @see ./message-part-text.ts (sibling pure-helper module pattern to mirror)
+ * @see packages/tui/test/util/provider-model-label.test.ts (aligned TUI per-field semantics)
  */
 import { describe, expect, test } from "bun:test"
 import type { Provider } from "@opencode-ai/sdk/v2"
@@ -47,9 +52,31 @@ function provider(part: Partial<Provider> = {}): Provider {
     options: {},
     models: {
       "claude-sonnet-4-20250514": {
+        id: "claude-sonnet-4-20250514",
+        providerID: "anthropic",
+        api: {
+          id: "claude-sonnet-4-20250514",
+          url: "https://example.com/claude-sonnet-4-20250514",
+          npm: "@ai-sdk/anthropic",
+        },
         name: "Claude Sonnet",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: { text: true, audio: false, image: true, video: false, pdf: true },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        limit: { context: 200_000, output: 8_192 },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2025-05-14",
       },
-    } as unknown as Provider["models"],
+    } satisfies Provider["models"],
     ...part,
   }
 }
@@ -65,8 +92,16 @@ describe("formatModelLabel", () => {
     )
   })
 
-  test("user message with model renders provider/model from the catalog", () => {
-    expect(formatModelLabel("anthropic", "claude-sonnet-4-20250514", provider())).toBe("Anthropic/Claude Sonnet")
+  test("partial miss (known provider, unknown model) renders provider display name + raw model id", () => {
+    expect(formatModelLabel("anthropic", "unknown-model", provider())).toBe("Anthropic/unknown-model")
+  })
+
+  test("no-model guard returns empty string when modelID is absent (provider known)", () => {
+    expect(formatModelLabel("anthropic", undefined, provider())).toBe("")
+  })
+
+  test("no-model guard returns empty string when providerID is absent", () => {
+    expect(formatModelLabel(undefined, "claude-sonnet-4-20250514", provider())).toBe("")
   })
 
   test("user message without model renders empty string and never a stray slash", () => {
