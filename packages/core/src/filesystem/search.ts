@@ -9,6 +9,7 @@ import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
+import { Flag } from "../flag/flag"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
@@ -236,4 +237,4 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.unwrap(Effect.sync(() => (Fff.available() ? fffLayer : ripgrepLayer)))
+export const defaultLayer = Layer.unwrap(Effect.sync(() => (Flag.OPENCODE_ENABLE_FFF ? fffLayer : ripgrepLayer)))
