@@ -1,4 +1,6 @@
-import { test, expect, mock, beforeEach } from "bun:test"
+import { describe, expect, mock, beforeEach } from "bun:test"
+import { Effect } from "effect"
+import { testEffect } from "../lib/effect"
 
 // Track what options were passed to each transport constructor
 const transportCalls: Array<{
@@ -8,7 +10,7 @@ const transportCalls: Array<{
 }> = []
 
 // Mock the transport constructors to capture their arguments
-mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     constructor(url: URL, options?: { authProvider?: unknown; requestInit?: RequestInit }) {
       transportCalls.push({
@@ -23,7 +25,7 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   },
 }))
 
-mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   SSEClientTransport: class MockSSE {
     constructor(url: URL, options?: { authProvider?: unknown; requestInit?: RequestInit }) {
       transportCalls.push({
@@ -44,43 +46,22 @@ beforeEach(() => {
 
 // Import MCP after mocking
 const { MCP } = await import("../../src/mcp/index")
-const { Instance } = await import("../../src/project/instance")
-const { tmpdir } = await import("../fixture/fixture")
+const it = testEffect(MCP.defaultLayer)
 
-test("headers are passed to transports when oauth is enabled (default)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        `${dir}/opencode.json`,
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            "test-server": {
-              type: "remote",
-              url: "https://example.com/mcp",
-              headers: {
-                Authorization: "Bearer test-token",
-                "X-Custom-Header": "custom-value",
-              },
-            },
+describe("mcp.headers", () => {
+  it.instance("headers are passed to transports when oauth is enabled (default)", () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      yield* mcp
+        .add("test-server", {
+          type: "remote",
+          url: "https://example.com/mcp",
+          headers: {
+            Authorization: "Bearer test-token",
+            "X-Custom-Header": "custom-value",
           },
-        }),
-      )
-    },
-  })
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      // Trigger MCP initialization - it will fail to connect but we can check the transport options
-      await MCP.add("test-server", {
-        type: "remote",
-        url: "https://example.com/mcp",
-        headers: {
-          Authorization: "Bearer test-token",
-          "X-Custom-Header": "custom-value",
-        },
-      }).catch(() => {})
+        })
+        .pipe(Effect.catch(() => Effect.void))
 
       // Both transports should have been created with headers
       expect(transportCalls.length).toBeGreaterThanOrEqual(1)
@@ -94,26 +75,22 @@ test("headers are passed to transports when oauth is enabled (default)", async (
         // OAuth should be enabled by default, so authProvider should exist
         expect(call.options.authProvider).toBeDefined()
       }
-    },
-  })
-})
+    }),
+  )
 
-test("headers are passed to transports when oauth is explicitly disabled", async () => {
-  await using tmp = await tmpdir()
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      transportCalls.length = 0
-
-      await MCP.add("test-server-no-oauth", {
-        type: "remote",
-        url: "https://example.com/mcp",
-        oauth: false,
-        headers: {
-          Authorization: "Bearer test-token",
-        },
-      }).catch(() => {})
+  it.instance("headers are passed to transports when oauth is explicitly disabled", () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      yield* mcp
+        .add("test-server-no-oauth", {
+          type: "remote",
+          url: "https://example.com/mcp",
+          oauth: false,
+          headers: {
+            Authorization: "Bearer test-token",
+          },
+        })
+        .pipe(Effect.catch(() => Effect.void))
 
       expect(transportCalls.length).toBeGreaterThanOrEqual(1)
 
@@ -125,22 +102,18 @@ test("headers are passed to transports when oauth is explicitly disabled", async
         // OAuth is disabled, so no authProvider
         expect(call.options.authProvider).toBeUndefined()
       }
-    },
-  })
-})
+    }),
+  )
 
-test("no requestInit when headers are not provided", async () => {
-  await using tmp = await tmpdir()
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      transportCalls.length = 0
-
-      await MCP.add("test-server-no-headers", {
-        type: "remote",
-        url: "https://example.com/mcp",
-      }).catch(() => {})
+  it.instance("no requestInit when headers are not provided", () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      yield* mcp
+        .add("test-server-no-headers", {
+          type: "remote",
+          url: "https://example.com/mcp",
+        })
+        .pipe(Effect.catch(() => Effect.void))
 
       expect(transportCalls.length).toBeGreaterThanOrEqual(1)
 
@@ -148,6 +121,6 @@ test("no requestInit when headers are not provided", async () => {
         // No headers means requestInit should be undefined
         expect(call.options.requestInit).toBeUndefined()
       }
-    },
-  })
+    }),
+  )
 })

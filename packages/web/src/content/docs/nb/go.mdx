@@ -1,0 +1,213 @@
+---
+title: Go
+description: Lavkostnadsabonnement for åpne kodemodeller.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go er et lavkostnadsabonnement — **$5 for din første måned**, deretter **$10/måned** — som gir deg pålitelig tilgang til populære åpne kodemodeller.
+
+Go fungerer som enhver annen leverandør i OpenCode. Du abonnerer på OpenCode Go og
+får din API-nøkkel. Det er **helt valgfritt**, og du trenger ikke å bruke det for å
+bruke OpenCode.
+
+Det er primært utformet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang.
+
+---
+
+## Bakgrunn
+
+Åpne modeller har blitt veldig gode. De oppnår nå ytelse nær
+proprietære modeller for kodeoppgaver. Og fordi mange leverandører kan tilby dem
+konkurransedyktig, er de vanligvis mye billigere.
+
+Imidlertid kan det være vanskelig å få pålitelig tilgang med lav forsinkelse til dem. Leverandører
+varierer i kvalitet og tilgjengelighet.
+
+:::tip
+Vi testet en utvalgt gruppe modeller og leverandører som fungerer godt med OpenCode.
+:::
+
+For å fikse dette, gjorde vi et par ting:
+
+1. Vi testet en utvalgt gruppe åpne modeller og snakket med teamene deres om hvordan de
+   best kan kjøres.
+2. Deretter samarbeidet vi med noen få leverandører for å sikre at disse ble levert
+   riktig.
+3. Til slutt utførte vi ytelsestester på kombinasjonen av modell og leverandør, og kom frem
+   til en liste som vi trygt kan anbefale.
+
+OpenCode Go gir deg tilgang til disse modellene for **$5 for din første måned**, deretter **$10/måned**.
+
+---
+
+## Hvordan det fungerer
+
+OpenCode Go fungerer som enhver annen leverandør i OpenCode.
+
+1. Du logger inn på **<a href={console}>OpenCode Zen</a>**, abonnerer på Go, og
+   kopierer din API-nøkkel.
+2. Du kjører kommandoen `/connect` i TUI-en, velger `OpenCode Go`, og limer inn
+   din API-nøkkel.
+3. Kjør `/models` i TUI-en for å se listen over modeller som er tilgjengelige gjennom Go.
+
+:::note
+Kun ett medlem per arbeidsområde kan abonnere på OpenCode Go.
+:::
+
+Den nåværende listen over modeller inkluderer:
+
+- **GLM-5**
+- **GLM-5.1**
+- **Kimi K2.5**
+- **Kimi K2.6**
+- **MiMo-V2.5**
+- **MiMo-V2.5-Pro**
+- **MiniMax M2.5**
+- **MiniMax M2.7**
+- **MiniMax M3**
+- **Qwen3.6 Plus**
+- **Qwen3.7 Plus**
+- **Qwen3.7 Max**
+- **DeepSeek V4 Pro**
+- **DeepSeek V4 Flash**
+
+Listen over modeller kan endres etter hvert som vi tester og legger til nye.
+
+---
+
+## Bruksgrenser
+
+OpenCode Go inkluderer følgende grenser:
+
+- **5-timers grense** — $12 i bruk
+- **Ukentlig grense** — $30 i bruk
+- **Månedlig grense** — $60 i bruk
+
+Grensene er definert i dollarverdi. Dette betyr at ditt faktiske antall forespørsler avhenger av modellen du bruker. Billigere modeller som DeepSeek V4 Flash tillater flere forespørsler, mens dyrere modeller som GLM-5.1 tillater færre.
+
+Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksmønstre for Go:
+
+| Model             | forespørsler per 5 timer | forespørsler per uke | forespørsler per måned |
+| ----------------- | ------------------------ | -------------------- | ---------------------- |
+| GLM-5.1           | 880                      | 2,150                | 4,300                  |
+| GLM-5             | 1,150                    | 2,880                | 5,750                  |
+| Kimi K2.5         | 1,850                    | 4,630                | 9,250                  |
+| Kimi K2.6         | 1,150                    | 2,880                | 5,750                  |
+| MiMo-V2.5         | 30,100                   | 75,200               | 150,400                |
+| MiMo-V2.5-Pro     | 3,250                    | 8,150                | 16,300                 |
+| MiniMax M3        | 3,200                    | 8,000                | 16,000                 |
+| MiniMax M2.7      | 3,400                    | 8,500                | 17,000                 |
+| MiniMax M2.5      | 6,300                    | 15,900               | 31,800                 |
+| Qwen3.7 Max       | 950                      | 2,390                | 4,770                  |
+| Qwen3.7 Plus      | 4,300                    | 10,800               | 21,600                 |
+| Qwen3.6 Plus      | 3,300                    | 8,200                | 16,300                 |
+| DeepSeek V4 Pro   | 3,450                    | 8,550                | 17,150                 |
+| DeepSeek V4 Flash | 31,650                   | 79,050               | 158,150                |
+
+Estimatene er basert på observerte gjennomsnittlige forespørselsmønstre:
+
+- GLM-5/5.1 — 700 input, 52 000 bufret, 150 output-tokens per forespørsel
+- Kimi K2.5/K2.6 — 870 input, 55 000 bufret, 200 output-tokens per forespørsel
+- DeepSeek V4 Pro — 750 input, 82 000 bufret, 290 output-tokens per forespørsel
+- DeepSeek V4 Flash — 790 input, 68 000 bufret, 280 output-tokens per forespørsel
+- MiniMax M3 — 510 input, 56 000 bufret, 190 output-tokens per forespørsel
+- MiniMax M2.7/M2.5 — 300 input, 55 000 bufret, 125 output-tokens per forespørsel
+- Qwen3.7 Max — 420 input, 66 000 bufret, 200 output-tokens per forespørsel
+- Qwen3.7 Plus — 500 input, 57 000 bufret, 190 output-tokens per forespørsel
+- Qwen3.6 Plus — 500 input, 57 000 bufret, 190 output-tokens per forespørsel
+- MiMo-V2.5 — 830 input, 71 500 bufret, 295 output-tokens per forespørsel
+- MiMo-V2.5-Pro — 790 input, 86 000 bufret, 305 output-tokens per forespørsel
+
+Estimatene er også basert på følgende priser per 1M tokens:
+
+| Model                        | Input | Output | Cached Read | Cached Write |
+| ---------------------------- | ----- | ------ | ----------- | ------------ |
+| GLM-5.1                      | $1.40 | $4.40  | $0.26       | -            |
+| GLM-5                        | $1.00 | $3.20  | $0.20       | -            |
+| Kimi K2.6                    | $0.95 | $4.00  | $0.16       | -            |
+| Kimi K2.5                    | $0.60 | $3.00  | $0.10       | -            |
+| MiMo V2.5                    | $0.14 | $0.28  | $0.0028     | -            |
+| MiMo V2.5 Pro                | $1.74 | $3.48  | $0.0145     | -            |
+| MiniMax M3                   | $0.30 | $1.20  | $0.06       | -            |
+| MiniMax M2.7                 | $0.30 | $1.20  | $0.06       | $0.375       |
+| MiniMax M2.5                 | $0.30 | $1.20  | $0.06       | $0.375       |
+| Qwen3.7 Max                  | $2.50 | $7.50  | $0.50       | $3.125       |
+| Qwen3.7 Plus (≤ 256K tokens) | $0.40 | $1.60  | $0.04       | $0.50        |
+| Qwen3.7 Plus (> 256K tokens) | $1.20 | $4.80  | $0.12       | $1.50        |
+| Qwen3.6 Plus (≤ 256K tokens) | $0.50 | $3.00  | $0.05       | $0.625       |
+| Qwen3.6 Plus (> 256K tokens) | $2.00 | $6.00  | $0.20       | $2.50        |
+| DeepSeek V4 Pro              | $1.74 | $3.48  | $0.0145     | -            |
+| DeepSeek V4 Flash            | $0.14 | $0.28  | $0.0028     | -            |
+
+Du kan spore din nåværende bruk i **<a href={console}>konsollen</a>**.
+
+:::tip
+Hvis du når bruksgrensen, kan du fortsette å bruke gratismodellene.
+:::
+
+Bruksgrenser kan endres etter hvert som vi lærer fra tidlig bruk og tilbakemeldinger.
+
+---
+
+### Bruk utover grensene
+
+Hvis du også har kreditt på din Zen-saldo, kan du aktivere alternativet **Bruk saldo**
+i konsollen. Når dette er aktivert, vil Go falle tilbake på din Zen-saldo
+etter at du har nådd bruksgrensene dine, i stedet for å blokkere forespørsler.
+
+---
+
+## Endepunkter
+
+Du kan også få tilgang til Go-modeller gjennom følgende API-endepunkter.
+
+| Modell            | Modell-ID         | Endepunkt                                        | AI SDK Package              |
+| ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+
+[Modell-ID-en](/docs/config/#models) i din OpenCode-konfigurasjon
+bruker formatet `opencode-go/<model-id>`. For eksempel, for Kimi K2.6, vil du
+bruke `opencode-go/kimi-k2.6` i konfigurasjonen din.
+
+---
+
+### Modeller
+
+Du kan hente hele listen over tilgjengelige modeller og metadataene deres fra:
+
+```
+https://opencode.ai/zen/go/v1/models
+```
+
+---
+
+## Personvern
+
+Planen er primært utformet for internasjonale brukere, med modeller hostet i US, EU og Singapore for stabil global tilgang. Våre leverandører følger en zero-retention-policy og bruker ikke dataene dine til modelltrening.
+
+---
+
+## Mål
+
+Vi opprettet OpenCode Go for å:
+
+1. Gjøre AI-koding **tilgjengelig** for flere mennesker med et lavkostnadsabonnement.
+2. Gi **pålitelig** tilgang til de beste åpne kodemodellene.
+3. Kuratere modeller som er **testet og ytelsesmålt** for bruk av kodeagenter.
+4. Ha **ingen innelåsing** ved å la deg bruke en hvilken som helst annen leverandør med OpenCode også.

@@ -79,6 +79,32 @@ Esto crea dos herramientas: `math_add` y `math_multiply`.
 
 ---
 
+#### Colisiones de nombres con herramientas integradas
+
+Las herramientas personalizadas están codificadas por el nombre de la herramienta. Si una herramienta personalizada utiliza el mismo nombre que una herramienta integrada, la herramienta personalizada tiene prioridad.
+
+Por ejemplo, este archivo reemplaza la herramienta `bash` integrada:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Prefiera nombres únicos a menos que intencionalmente desee reemplazar una herramienta integrada. Si desea deshabilitar una herramienta integrada pero no anularla, use [permisos](/docs/permissions).
+:::
+
+---
+
 ### Argumentos
 
 Puedes usar `tool.schema`, que es simplemente [Zod](https://zod.dev), para definir tipos de argumentos.

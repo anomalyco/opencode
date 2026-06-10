@@ -1,78 +1,66 @@
-import { describe, expect, test } from "bun:test"
-import path from "path"
-import { Session } from "../../src/session"
-import { Log } from "../../src/util/log"
-import { Instance } from "../../src/project/instance"
-import { Server } from "../../src/server/server"
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { Session } from "@/session/session"
+import { TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-const projectRoot = path.join(__dirname, "../..")
-Log.init({ print: false })
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, httpApiLayer))
 
 describe("tui.selectSession endpoint", () => {
-  test("should return 200 when called with valid session", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        // #given
-        const session = await Session.create({})
+  it.instance(
+    "should return 200 when called with valid session",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const session = yield* Session.use.create({})
 
-        // #when
-        const app = Server.App()
-        const response = await app.request("/tui/select-session", {
+        const response = yield* requestInDirectory("/tui/select-session", tmp.directory, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionID: session.id }),
         })
 
-        // #then
         expect(response.status).toBe(200)
-        const body = await response.json()
+        const body = yield* response.json
         expect(body).toBe(true)
+      }),
+    { git: true },
+  )
 
-        await Session.remove(session.id)
-      },
-    })
-  })
-
-  test("should return 404 when session does not exist", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        // #given
+  it.instance(
+    "should return 404 when session does not exist",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
         const nonExistentSessionID = "ses_nonexistent123"
 
-        // #when
-        const app = Server.App()
-        const response = await app.request("/tui/select-session", {
+        const response = yield* requestInDirectory("/tui/select-session", tmp.directory, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionID: nonExistentSessionID }),
         })
 
-        // #then
         expect(response.status).toBe(404)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 
-  test("should return 400 when session ID format is invalid", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        // #given
+  it.instance(
+    "should return 400 when session ID format is invalid",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
         const invalidSessionID = "invalid_session_id"
 
-        // #when
-        const app = Server.App()
-        const response = await app.request("/tui/select-session", {
+        const response = yield* requestInDirectory("/tui/select-session", tmp.directory, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionID: invalidSessionID }),
         })
 
-        // #then
         expect(response.status).toBe(400)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 })

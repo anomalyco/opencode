@@ -1,10 +1,12 @@
-import { createStore, type SetStoreFunction } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
-import { useParams } from "@solidjs/router"
+import { checksum } from "@opencode-ai/core/util/encode"
+import { useParams, useSearchParams } from "@solidjs/router"
+import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
+import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
-import { checksum } from "@opencode-ai/util/encode"
+import { useServerSDK } from "./server-sdk"
+import type { ServerScope } from "@/utils/server-scope"
 
 interface PartBase {
   content: string
@@ -116,6 +118,10 @@ function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
+function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
+  return item.type === "file" && !!item.comment?.trim()
+}
+
 function createPromptActions(
   setStore: SetStoreFunction<{
     prompt: Prompt
@@ -147,16 +153,27 @@ const MAX_PROMPT_SESSIONS = 20
 
 type PromptSession = ReturnType<typeof createPromptSession>
 
+type Scope = { draftID: string } | { dir: string; id?: string }
+
+function scopeKey(scope: Scope) {
+  if ("draftID" in scope) return `draft:${scope.draftID}`
+  return `${scope.dir}:${scope.id ?? WORKSPACE_KEY}`
+}
+
 type PromptCacheEntry = {
   value: PromptSession
   dispose: VoidFunction
 }
 
-function createPromptSession(dir: string, id: string | undefined) {
-  const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
+function promptTarget(serverScope: ServerScope, scope: Scope) {
+  if ("draftID" in scope) return Persist.draft(scope.draftID, "prompt")
+  const legacy = `${scope.dir}/prompt${scope.id ? "/" + scope.id : ""}.v2`
+  return Persist.serverScoped(serverScope, scope.dir, scope.id, "prompt", [legacy])
+}
 
+function createPromptSession(serverScope: ServerScope, scope: Scope) {
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "prompt", [legacy]),
+    promptTarget(serverScope, scope),
     createStore<{
       prompt: Prompt
       cursor?: number
@@ -176,9 +193,9 @@ function createPromptSession(dir: string, id: string | undefined) {
 
   return {
     ready,
-    current: createMemo(() => store.prompt),
+    current: () => store.prompt,
     cursor: createMemo(() => store.cursor),
-    dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
+    dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
     context: {
       items: createMemo(() => store.context.items),
       add(item: ContextItem) {
@@ -188,6 +205,26 @@ function createPromptSession(dir: string, id: string | undefined) {
       },
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
+      },
+      removeComment(path: string, commentID: string) {
+        setStore("context", "items", (items) =>
+          items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
+        )
+      },
+      updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
+        setStore("context", "items", (items) =>
+          items.map((item) => {
+            if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
+            const value = { ...item, ...next }
+            return { ...value, key: contextItemKey(value) }
+          }),
+        )
+      },
+      replaceComments(items: FileContextItem[]) {
+        setStore("context", "items", (current) => [
+          ...current.filter((item) => !isCommentItem(item)),
+          ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
+        ])
       },
     },
     set: actions.set,
@@ -200,6 +237,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
   gate: false,
   init: () => {
     const params = useParams()
+    const [search] = useSearchParams<{ draftId?: string }>()
+    const serverSDK = useServerSDK()
     const cache = new Map<string, PromptCacheEntry>()
 
     const disposeAll = () => {
@@ -221,8 +260,9 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       }
     }
 
-    const load = (dir: string, id: string | undefined) => {
-      const key = `${dir}:${id ?? WORKSPACE_KEY}`
+    const owner = getOwner()
+    const load = (scope: Scope) => {
+      const key = scopeKey(scope)
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)
@@ -230,20 +270,26 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         return existing.value
       }
 
-      const entry = createRoot((dispose) => ({
-        value: createPromptSession(dir, id),
-        dispose,
-      }))
+      const entry = createRoot(
+        (dispose) => ({
+          value: createPromptSession(serverSDK.scope, scope),
+          dispose,
+        }),
+        owner,
+      )
 
       cache.set(key, entry)
       prune()
       return entry.value
     }
 
-    const session = createMemo(() => load(params.dir!, params.id))
+    const session = createMemo(() =>
+      load(search.draftId ? { draftID: search.draftId } : { dir: params.dir!, id: params.id }),
+    )
+    const pick = (scope?: Scope) => (scope ? load(scope) : session())
 
     return {
-      ready: () => session().ready(),
+      ready: () => session().ready,
       current: () => session().current(),
       cursor: () => session().cursor(),
       dirty: () => session().dirty(),
@@ -251,9 +297,13 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         items: () => session().context.items(),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
+        removeComment: (path: string, commentID: string) => session().context.removeComment(path, commentID),
+        updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
+          session().context.updateComment(path, commentID, next),
+        replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
       },
-      set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
-      reset: () => session().reset(),
+      set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => pick(scope).set(prompt, cursorPosition),
+      reset: (scope?: Scope) => pick(scope).reset(),
     }
   },
 })

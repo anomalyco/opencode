@@ -1,39 +1,39 @@
 ---
 title: Web
-description: 在浏览器中使用opencode。
+description: 在浏览器中使用 OpenCode。
 ---
 
-opencode 可以在浏览器中作为 Web 应用程序执行，消耗终端可以提供同样强大的 AI 编码体验。
+OpenCode 可以作为 Web 应用在浏览器中运行，无需终端即可获得同样强大的 AI 编码体验。
 
-![opencode Web - New Session](../../../assets/web/web-homepage-new-session.png)
+![OpenCode Web - New Session](../../../assets/web/web-homepage-new-session.png)
 
-## 入门
+## 快速开始
 
-绕过执行以下命令启动 Web 简介：
+运行以下命令启动 Web 界面：
 
 ```bash
 opencode web
 ```
 
-这将在 `127.0.0.1` 上启动一个具有随机可用端口的本地服务器，并自动在默认浏览器中开启 opencode。
+这会在 `127.0.0.1` 上启动一个本地服务器，使用随机可用端口，并自动在默认浏览器中打开 OpenCode。
 
 :::caution
-如果未设置`OPENCODE_SERVER_PASSWORD`，服务器将不安全。这对于本地使用来说很好，但应该针对网路访问进行设置。
+如果未设置 `OPENCODE_SERVER_PASSWORD`，服务器将没有安全保护。本地使用没有问题，但在网络访问时应当设置密码。
 :::
 
 :::tip[Windows 用户]
-For the best experience, run `opencode web` from [WSL](/docs/windows-wsl) rather than PowerShell. This ensures proper file system access and terminal integration.
+为获得最佳体验，建议从 [WSL](/docs/windows-wsl) 而非 PowerShell 运行 `opencode web`。这可以确保正确的文件系统访问和终端集成。
 :::
 
 ---
 
 ## 配置
 
-您可以使用命令行标志或在[config file](/docs/config).conf 中配置Web服务器。
+你可以通过命令行标志或[配置文件](/docs/config)来配置 Web 服务器。
 
 ### 端口
 
-默认情况下，opencode 选择一个可用的端口。您可以指定一个端口：
+默认情况下，OpenCode 会选择一个可用端口。你也可以指定端口：
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### 主机名
 
-默认情况下，服务器绑定到`127.0.0.1`（仅限本地主机）。要使opencode在您的网路上可访问：
+默认情况下，服务器绑定到 `127.0.0.1`（仅限本地访问）。要使 OpenCode 在网络中可访问：
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-使用`0.0.0.0`时，opencode将显示本地地址和网络地址：
+使用 `0.0.0.0` 时，OpenCode 会同时显示本地地址和网络地址：
 
 ```
   Local access:       http://localhost:4096
@@ -56,15 +56,15 @@ opencode web --hostname 0.0.0.0
 
 ### mDNS 发现
 
-启用 mDNS 使您的服务器在本地网上可以发现：
+启用 mDNS 可以让你的服务器在本地网络中被自动发现：
 
 ```bash
 opencode web --mdns
 ```
 
-This automatically sets the hostname to `0.0.0.0` and advertises the server as `opencode.local`.
+这会自动将主机名设置为 `0.0.0.0`，并将服务器广播为 `opencode.local`。
 
-您可以自定义 mDNS 域名以在同一网路上执行多个示例：
+你可以自定义 mDNS 域名，以便在同一网络中运行多个实例：
 
 ```bash
 opencode web --mdns --mdns-domain myproject.local
@@ -72,61 +72,61 @@ opencode web --mdns --mdns-domain myproject.local
 
 ### CORS
 
-允许CORS使用其他域（对于自定义前缀有用）：
+要为 CORS 添加额外的允许域名（适用于自定义前端）：
 
 ```bash
 opencode web --cors https://example.com
 ```
 
-### 验证
+### 身份验证
 
-要保护访问，请使用 `OPENCODE_SERVER_PASSWORD` 环境变量设置密码：
+要保护服务器访问，可以通过 `OPENCODE_SERVER_PASSWORD` 环境变量设置密码：
 
 ```bash
 OPENCODE_SERVER_PASSWORD=secret opencode web
 ```
 
-The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USERNAME`.
+用户名默认为 `opencode`，可以通过 `OPENCODE_SERVER_USERNAME` 进行更改。
 
 ---
 
-## 使用web界面
+## 使用 Web 界面
 
-启动后，web界面将提供对您的 opencode 会话的访问。
+启动后，Web 界面提供对 OpenCode 会话的访问。
 
 ### 会话
 
-从主页查看和管理您的会话。您可以查看活动会话并开始新会话。
+在主页上查看和管理你的会话。你可以查看活跃的会话，也可以创建新的会话。
 
-![opencode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
 
 ### 服务器状态
 
-单击“查看服务器”可查看连接的服务器及其状态。
+点击"See Servers"可以查看已连接的服务器及其状态。
 
-![opencode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+![OpenCode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
 ## 连接终端
 
-您可以将终端 TUI 连线到正在执行的 Web 服务器：
+你可以将终端 TUI 连接到正在运行的 Web 服务器：
 
 ```bash
-# Start the web server
+# 启动 Web 服务器
 opencode web --port 4096
 
-# In another terminal, attach the TUI
+# 在另一个终端中连接 TUI
 opencode attach http://localhost:4096
 ```
 
-这允许您同时使用 Web 界面和终端，共享相同的会话和状态。
+这样你就可以同时使用 Web 界面和终端，共享相同的会话和状态。
 
 ---
 
 ## 配置文件
 
-You can also configure server settings in your `opencode.json` config file:
+你也可以在 `opencode.json` 配置文件中设置服务器选项：
 
 ```json
 {
@@ -139,4 +139,4 @@ You can also configure server settings in your `opencode.json` config file:
 }
 ```
 
-命令行标志优先于配置文件设置。
+命令行标志的优先级高于配置文件中的设置。

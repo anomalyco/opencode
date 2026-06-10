@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "openai-compatible-chat/deepseek-streams-text",
+    "recordedAt": "2026-04-28T21:18:49.498Z",
+    "tags": ["prefix:openai-compatible-chat", "protocol:openai-compatible-chat", "provider:deepseek"]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply with exactly: Hello!\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":20,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"0c811926-1e0c-4160-baf8-6e71247c8ad7\",\"object\":\"chat.completion.chunk\",\"created\":1777411128,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_058df29938_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"0c811926-1e0c-4160-baf8-6e71247c8ad7\",\"object\":\"chat.completion.chunk\",\"created\":1777411128,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_058df29938_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"0c811926-1e0c-4160-baf8-6e71247c8ad7\",\"object\":\"chat.completion.chunk\",\"created\":1777411128,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_058df29938_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"!\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"0c811926-1e0c-4160-baf8-6e71247c8ad7\",\"object\":\"chat.completion.chunk\",\"created\":1777411128,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_058df29938_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":14,\"completion_tokens\":2,\"total_tokens\":16,\"prompt_tokens_details\":{\"cached_tokens\":0},\"prompt_cache_hit_tokens\":0,\"prompt_cache_miss_tokens\":14}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

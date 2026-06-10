@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import type { ServerConnection } from "@/context/server"
 import { checkServerHealth } from "./server-health"
+
+const server: ServerConnection.HttpBase = {
+  url: "http://localhost:4096",
+}
 
 function abortFromInput(input: RequestInfo | URL, init?: RequestInit) {
   if (init?.signal) return init.signal
@@ -15,9 +20,34 @@ describe("checkServerHealth", () => {
         headers: { "content-type": "application/json" },
       })) as unknown as typeof globalThis.fetch
 
-    const result = await checkServerHealth("http://localhost:4096", fetch)
+    const result = await checkServerHealth(server, fetch)
 
     expect(result).toEqual({ healthy: true, version: "1.2.3" })
+  })
+
+  test("allows slow servers thirty seconds by default", async () => {
+    const timeout = Object.getOwnPropertyDescriptor(AbortSignal, "timeout")
+    let timeoutMs = 0
+    Object.defineProperty(AbortSignal, "timeout", {
+      configurable: true,
+      value: (ms: number) => {
+        timeoutMs = ms
+        return new AbortController().signal
+      },
+    })
+
+    const fetch = (async () =>
+      new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof globalThis.fetch
+
+    await checkServerHealth(server, fetch).finally(() => {
+      if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
+      if (!timeout) Reflect.deleteProperty(AbortSignal, "timeout")
+    })
+
+    expect(timeoutMs).toBe(30_000)
   })
 
   test("returns unhealthy when request fails", async () => {
@@ -25,7 +55,7 @@ describe("checkServerHealth", () => {
       throw new Error("network")
     }) as unknown as typeof globalThis.fetch
 
-    const result = await checkServerHealth("http://localhost:4096", fetch)
+    const result = await checkServerHealth(server, fetch)
 
     expect(result).toEqual({ healthy: false })
   })
@@ -51,7 +81,9 @@ describe("checkServerHealth", () => {
         )
       })) as unknown as typeof globalThis.fetch
 
-    const result = await checkServerHealth("http://localhost:4096", fetch, { timeoutMs: 10 }).finally(() => {
+    const result = await checkServerHealth(server, fetch, {
+      timeoutMs: 10,
+    }).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
       if (!timeout) Reflect.deleteProperty(AbortSignal, "timeout")
     })
@@ -71,7 +103,9 @@ describe("checkServerHealth", () => {
     }) as unknown as typeof globalThis.fetch
 
     const abort = new AbortController()
-    await checkServerHealth("http://localhost:4096", fetch, { signal: abort.signal })
+    await checkServerHealth(server, fetch, {
+      signal: abort.signal,
+    })
 
     expect(signal).toBe(abort.signal)
   })
@@ -87,7 +121,7 @@ describe("checkServerHealth", () => {
       })
     }) as unknown as typeof globalThis.fetch
 
-    const result = await checkServerHealth("http://localhost:4096", fetch, {
+    const result = await checkServerHealth(server, fetch, {
       retryCount: 2,
       retryDelayMs: 1,
     })
@@ -103,7 +137,7 @@ describe("checkServerHealth", () => {
       throw new TypeError("network")
     }) as unknown as typeof globalThis.fetch
 
-    const result = await checkServerHealth("http://localhost:4096", fetch, {
+    const result = await checkServerHealth(server, fetch, {
       retryCount: 2,
       retryDelayMs: 1,
     })

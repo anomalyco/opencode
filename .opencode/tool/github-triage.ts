@@ -1,7 +1,17 @@
 /// <reference path="../env.d.ts" />
-// import { Octokit } from "@octokit/rest"
 import { tool } from "@opencode-ai/plugin"
-import DESCRIPTION from "./github-triage.txt"
+
+const TEAM = {
+  tui: ["kommander", "simonklee"],
+  desktop_web: ["Hona", "Brendonovich"],
+  core: ["jlongster", "rekram1-node", "nexxeln", "kitlangton", "starptech"],
+  inference: ["fwang", "MrMushrooooom", "starptech"],
+  windows: ["Hona"],
+} as const
+
+function pick<T>(items: readonly T[]) {
+  return items[Math.floor(Math.random() * items.length)]!
+}
 
 function getIssueNumber(): number {
   const issue = parseInt(process.env.ISSUE_NUMBER ?? "", 10)
@@ -16,7 +26,7 @@ async function githubFetch(endpoint: string, options: RequestInit = {}) {
       Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
       Accept: "application/vnd.github+json",
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers instanceof Headers ? Object.fromEntries(options.headers.entries()) : options.headers),
     },
   })
   if (!response.ok) {
@@ -26,65 +36,25 @@ async function githubFetch(endpoint: string, options: RequestInit = {}) {
 }
 
 export default tool({
-  description: DESCRIPTION,
+  description: `Use this tool to assign a GitHub issue.
+
+Provide the team that should own the issue. This tool picks a random assignee from that team and does not apply labels.`,
   args: {
-    assignee: tool.schema
-      .enum(["thdxr", "adamdotdevin", "rekram1-node", "fwang", "jayair", "kommander"])
-      .describe("The username of the assignee")
-      .default("rekram1-node"),
-    labels: tool.schema
-      .array(tool.schema.enum(["nix", "opentui", "perf", "desktop", "zen", "docs", "windows"]))
-      .describe("The labels(s) to add to the issue")
-      .default([]),
+    team: tool.schema
+      .enum(Object.keys(TEAM) as [keyof typeof TEAM, ...(keyof typeof TEAM)[]])
+      .describe("The owning team"),
   },
   async execute(args) {
     const issue = getIssueNumber()
-    // const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
     const owner = "anomalyco"
     const repo = "opencode"
+    const assignee = pick(TEAM[args.team])
 
-    const results: string[] = []
-
-    if (args.assignee === "adamdotdevin" && !args.labels.includes("desktop")) {
-      throw new Error("Only desktop issues should be assigned to adamdotdevin")
-    }
-
-    if (args.assignee === "fwang" && !args.labels.includes("zen")) {
-      throw new Error("Only zen issues should be assigned to fwang")
-    }
-
-    if (args.assignee === "kommander" && !args.labels.includes("opentui")) {
-      throw new Error("Only opentui issues should be assigned to kommander")
-    }
-
-    // await octokit.rest.issues.addAssignees({
-    //   owner,
-    //   repo,
-    //   issue_number: issue,
-    //   assignees: [args.assignee],
-    // })
     await githubFetch(`/repos/${owner}/${repo}/issues/${issue}/assignees`, {
       method: "POST",
-      body: JSON.stringify({ assignees: [args.assignee] }),
+      body: JSON.stringify({ assignees: [assignee] }),
     })
-    results.push(`Assigned @${args.assignee} to issue #${issue}`)
 
-    const labels: string[] = args.labels.map((label) => (label === "desktop" ? "web" : label))
-
-    if (labels.length > 0) {
-      // await octokit.rest.issues.addLabels({
-      //   owner,
-      //   repo,
-      //   issue_number: issue,
-      //   labels,
-      // })
-      await githubFetch(`/repos/${owner}/${repo}/issues/${issue}/labels`, {
-        method: "POST",
-        body: JSON.stringify({ labels }),
-      })
-      results.push(`Added labels: ${args.labels.join(", ")}`)
-    }
-
-    return results.join("\n")
+    return `Assigned @${assignee} from ${args.team} to issue #${issue}`
   },
 })

@@ -1,34 +1,34 @@
 ---
 title: GitLab
-description: 在 GitLab 问题和合并请求中使用 opencode。
+description: 在 GitLab issue 和合并请求中使用 OpenCode。
 ---
 
-opencode 通过 GitLab CI/CD 管道或与 GitLab Duo 与您的 GitLab 工作流程集成。
+OpenCode 通过 GitLab CI/CD 流水线或 GitLab Duo 与你的 GitLab 工作流集成。
 
-在这两种情况下，opencode 都会在您的 GitLab 运行器上运行。
+在这两种情况下，OpenCode 都将在你的 GitLab Runner 上运行。
 
 ---
 
 ## GitLab CI
 
-opencode 在常规 GitLab 管道中工作。您可以将其构建为管道 [CI 组件](https://docs.gitlab.com/ee/ci/components/)
+OpenCode 可以在常规的 GitLab 流水线中运行。你可以将其作为 [CI 组件](https://docs.gitlab.com/ee/ci/components/) 集成到流水线中。
 
-在这里，我们使用社区创建的 opencode CI/CD 组件 — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)。
+这里我们使用的是社区创建的 OpenCode CI/CD 组件 — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)。
 
 ---
 
-### 功能
+### 功能特性
 
-- **Use custom configuration per job**: 使用自定义配置目录配置 opencode，例如 `./config/#custom-directory` 以启用或禁用 opencode 调用的功能。
-- **Authentication**: Uses OIDC for secure authentication
-- **Flexible**: CI 组件支持多种输入来自定义其行为
+- **按任务自定义配置**：使用自定义配置目录来配置 OpenCode，例如 `./config/#custom-directory`，以便为每次 OpenCode 调用启用或禁用特定功能。
+- **最小化配置**：CI 组件会在后台完成 OpenCode 的设置，你只需创建 OpenCode 配置和初始提示词即可。
+- **灵活可定制**：CI 组件支持多种输入参数来自定义其行为。
 
 ---
 
 ### 设置
 
-1. 将 opencode 身份验证 JSON 作为文件类型 CI 环境变量存储在 **Settings** > **CI/CD** > **Variables** 下。确保将它们标记为“隐藏和隐藏”。
-2. 将以下内容添加到您的 `.gitlab-ci.yml` 文件中。
+1. 将你的 OpenCode 身份验证 JSON 作为文件类型的 CI 环境变量存储在 **Settings** > **CI/CD** > **Variables** 下。请确保将其标记为 "Masked and hidden"。
+2. 将以下内容添加到你的 `.gitlab-ci.yml` 文件中。
 
    ```yaml title=".gitlab-ci.yml"
    include:
@@ -40,40 +40,39 @@ opencode 在常规 GitLab 管道中工作。您可以将其构建为管道 [CI �
          message: "Your prompt here"
    ```
 
-有关此组件的更多输入和示例[查看文档](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode)。
+有关更多输入参数和使用场景，请[查看该组件的文档](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode)。
 
 ---
 
 ## GitLab Duo
 
-opencode 与您的 GitLab 工作流程集成。
-在评论中提及 `@opencode`，opencode 将在您的 GitLab CI 管道中执行任务。
+OpenCode 与你的 GitLab 工作流集成。
+在评论中提及 `@opencode`，OpenCode 将在你的 GitLab CI 流水线中执行任务。
 
 ---
 
-### 功能
+### 功能特性
 
-- **Triage issues**: 要求 opencode 调查问题并向您解释。
-- **Fix and implement**: 要求 opencode 修复问题或实施功能。
-  它将创建一个新分支并提出包含更改的合并请求。
-- **Secure**: opencode 在您的 GitLab 运行器上运行。
+- **问题分类**：让 OpenCode 调查某个 issue 并为你解释。
+- **修复与实现**：让 OpenCode 修复 issue 或实现某个功能。它会创建一个新分支，并提交包含更改的合并请求。
+- **安全可靠**：OpenCode 在你的 GitLab Runner 上运行。
 
 ---
 
 ### 设置
 
-opencode 在您的 GitLab CI/CD 管道中运行，您需要进行以下设置：
+OpenCode 在你的 GitLab CI/CD 流水线中运行，以下是设置所需的步骤：
 
 :::tip
-查看 [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) 获取最新说明。
+请查看 [**GitLab 文档**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) 获取最新说明。
 :::
 
-1.  配置您的 GitLab 环境
+1.  配置你的 GitLab 环境
 2.  设置 CI/CD
-3.  获取 AI 模型提供商 API 密钥
+3.  获取 AI 模型提供商的 API 密钥
 4.  创建服务账户
 5.  配置 CI/CD 变量
-6.  创建一个流配置文件，这是一个示例：
+6.  创建流程配置文件，以下是一个示例：
 
         <details>
 
@@ -152,44 +151,44 @@ opencode 在您的 GitLab CI/CD 管道中运行，您需要进行以下设置：
 
         </details>
 
-详细说明可以参考 [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)。
+详细说明请参考 [GitLab CLI agents 文档](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)。
 
 ---
 
 ### 示例
 
-以下是如何在 GitLab 中使用 opencode 的一些示例。
+以下是在 GitLab 中使用 OpenCode 的一些示例。
 
 :::tip
-您可以配置使用与 `@opencode` 不同的触发词。
+你可以配置使用不同于 `@opencode` 的触发词。
 :::
 
-- **Explain an issue**
+- **解释 issue**
 
-  在 GitLab 问题中添加此评论。
+  在 GitLab issue 中添加以下评论。
 
   ```
   @opencode explain this issue
   ```
 
-  opencode 将阅读该问题并回复并提供清晰的解释。
+  OpenCode 会阅读该 issue 并回复清晰的解释。
 
-- **Fix an issue**
+- **修复 issue**
 
-  在 GitLab 问题中，说：
+  在 GitLab issue 中输入：
 
   ```
   @opencode fix this
   ```
 
-  opencode 将创建一个新分支，实施更改，并打开包含更改的合并请求。
+  OpenCode 会创建一个新分支，实现更改，并提交包含更改的合并请求。
 
-- **Review merge requests**
+- **审查合并请求**
 
-  对 GitLab 合并请求留下以下评论。
+  在 GitLab 合并请求中留下以下评论。
 
   ```
   @opencode review this merge request
   ```
 
-  opencode 将审核合并请求并提供反馈。
+  OpenCode 会审查合并请求并提供反馈。

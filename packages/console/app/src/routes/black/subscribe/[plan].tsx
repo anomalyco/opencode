@@ -17,6 +17,12 @@ import { Billing } from "@opencode-ai/console-core/billing.js"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
+import { Resource } from "@opencode-ai/console-resource"
+
+const getEnabled = query(async () => {
+  "use server"
+  return Resource.App.stage !== "production"
+}, "black.subscribe.enabled")
 
 const plansMap = Object.fromEntries(plans.map((p) => [p.id, p])) as Record<PlanID, (typeof plans)[number]>
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY!)
@@ -269,6 +275,7 @@ export default function BlackSubscribe() {
   const params = useParams()
   const i18n = useI18n()
   const language = useLanguage()
+  const enabled = createAsync(() => getEnabled())
   const planData = plansMap[(params.plan as PlanID) ?? "20"] ?? plansMap["20"]
   const plan = planData.id
 
@@ -291,7 +298,7 @@ export default function BlackSubscribe() {
 
   // Resolve stripe promise once
   createEffect(() => {
-    stripePromise.then((s) => {
+    void stripePromise.then((s) => {
       if (s) setStripe(s)
     })
   })
@@ -359,7 +366,7 @@ export default function BlackSubscribe() {
   }
 
   return (
-    <>
+    <Show when={enabled()}>
       <Title>{i18n.t("black.subscribe.title")}</Title>
       <section data-slot="subscribe-form">
         <div data-slot="form-card">
@@ -437,8 +444,13 @@ export default function BlackSubscribe() {
         </div>
 
         {/* Workspace picker modal */}
-        <Modal open={showWorkspacePicker() ?? false} onClose={() => {}} title={i18n.t("black.workspace.selectPlan")}>
-          <div data-slot="workspace-picker">
+        <Modal
+          open={showWorkspacePicker() ?? false}
+          onClose={() => {}}
+          title={i18n.t("black.workspace.selectPlan")}
+          variant="black"
+        >
+          <div data-component="black-workspace-picker-modal" data-slot="workspace-picker">
             <ul
               ref={listRef}
               data-slot="workspace-list"
@@ -472,6 +484,6 @@ export default function BlackSubscribe() {
           <A href={language.route("/legal/terms-of-service")}>{i18n.t("black.finePrint.terms")}</A>
         </p>
       </section>
-    </>
+    </Show>
   )
 }

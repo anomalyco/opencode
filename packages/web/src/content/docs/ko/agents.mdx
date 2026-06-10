@@ -35,13 +35,13 @@ OpenCode에는 기본 제공 primary agent인 **Build**와 **Plan**이 포함되
 
 subagent는 primary agent가 특정 작업을 위해 호출하는 전문 assistant입니다. 메시지에서 **@ mention**으로 직접 호출할 수도 있습니다.
 
-OpenCode에는 기본 제공 subagent인 **General**과 **Explore**가 포함되어 있습니다. 아래에서 살펴보겠습니다.
+OpenCode에는 기본 제공 subagent인 **General**, **Explore**, **Scout**가 포함되어 있습니다. 아래에서 살펴보겠습니다.
 
 ---
 
 ## 기본 제공
 
-OpenCode는 기본적으로 primary agent 2개와 subagent 2개를 제공합니다.
+OpenCode는 기본적으로 primary agent 2개와 subagent 3개를 제공합니다.
 
 ---
 
@@ -80,6 +80,14 @@ _Mode_: `subagent`
 _Mode_: `subagent`
 
 코드베이스 탐색에 최적화된 빠른 읽기 전용 agent입니다. 파일을 수정할 수 없습니다. 패턴 기반 파일 탐색, 키워드 검색, 코드베이스 관련 질의 응답을 빠르게 처리할 때 사용하세요.
+
+---
+
+### Use Scout
+
+_Mode_: `subagent`
+
+외부 docs와 dependency 리서치를 위한 읽기 전용 agent입니다. dependency repository를 OpenCode의 관리형 cache에 clone하거나, 라이브러리 소스를 살펴보거나, workspace를 수정하지 않고 로컬 코드를 upstream 구현과 교차 확인해야 할 때 사용하세요.
 
 ---
 

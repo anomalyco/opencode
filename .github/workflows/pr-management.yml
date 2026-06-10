@@ -6,37 +6,41 @@ on:
 
 jobs:
   check-duplicates:
-    if: |
-      github.event.pull_request.user.login != 'actions-user' &&
-      github.event.pull_request.user.login != 'opencode' &&
-      github.event.pull_request.user.login != 'rekram1-node' &&
-      github.event.pull_request.user.login != 'thdxr' &&
-      github.event.pull_request.user.login != 'kommander' &&
-      github.event.pull_request.user.login != 'jayair' &&
-      github.event.pull_request.user.login != 'fwang' &&
-      github.event.pull_request.user.login != 'adamdotdevin' &&
-      github.event.pull_request.user.login != 'iamdavidhill' &&
-      github.event.pull_request.user.login != 'opencode-agent[bot]'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 1
 
+      - name: Check team membership
+        id: team-check
+        run: |
+          LOGIN="${{ github.event.pull_request.user.login }}"
+          if [ "$LOGIN" = "opencode-agent[bot]" ] || grep -qxF "$LOGIN" .github/TEAM_MEMBERS; then
+            echo "is_team=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping: $LOGIN is a team member or bot"
+          else
+            echo "is_team=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Bun
+        if: steps.team-check.outputs.is_team != 'true'
         uses: ./.github/actions/setup-bun
 
       - name: Install dependencies
+        if: steps.team-check.outputs.is_team != 'true'
         run: bun install
 
       - name: Install opencode
+        if: steps.team-check.outputs.is_team != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Build prompt
+        if: steps.team-check.outputs.is_team != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -53,6 +57,7 @@ jobs:
           } > pr_info.txt
 
       - name: Check for duplicate PRs
+        if: steps.team-check.outputs.is_team != 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -73,7 +78,7 @@ jobs:
       issues: write
     steps:
       - name: Add Contributor Label
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const isPR = !!context.payload.pull_request;

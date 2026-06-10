@@ -3,6 +3,8 @@ import { createStore, reconcile, type SetStoreFunction, type Store } from "solid
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams } from "@solidjs/router"
 import { Persist, persisted } from "@/utils/persist"
+import { useServerSDK } from "./server-sdk"
+import type { ServerScope } from "@/utils/server-scope"
 import { createScopedCache } from "@/utils/scoped-cache"
 import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
@@ -44,6 +46,37 @@ function aggregate(comments: Record<string, LineComment[]>) {
     .sort((a, b) => a.time - b.time)
 }
 
+function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
+  const next: SelectedLineRange = {
+    start: selection.start,
+    end: selection.end,
+  }
+
+  if (selection.side) next.side = selection.side
+  if (selection.endSide) next.endSide = selection.endSide
+  return next
+}
+
+function cloneComment(comment: LineComment): LineComment {
+  return {
+    ...comment,
+    selection: cloneSelection(comment.selection),
+  }
+}
+
+function group(comments: LineComment[]) {
+  return comments.reduce<Record<string, LineComment[]>>((acc, comment) => {
+    const list = acc[comment.file]
+    const next = cloneComment(comment)
+    if (list) {
+      list.push(next)
+      return acc
+    }
+    acc[comment.file] = [next]
+    return acc
+  }, {})
+}
+
 function createCommentSessionState(store: Store<CommentStore>, setStore: SetStoreFunction<CommentStore>) {
   const [state, setState] = createStore({
     focus: null as CommentFocus | null,
@@ -70,6 +103,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
       id: uuid(),
       time: Date.now(),
       ...input,
+      selection: cloneSelection(input.selection),
     }
 
     batch(() => {
@@ -87,6 +121,23 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     })
   }
 
+  const update = (file: string, id: string, comment: string) => {
+    setStore("comments", file, (items) =>
+      (items ?? []).map((item) => {
+        if (item.id !== id) return item
+        return { ...item, comment }
+      }),
+    )
+  }
+
+  const replace = (comments: LineComment[]) => {
+    batch(() => {
+      setStore("comments", reconcile(group(comments)))
+      setFocus(null)
+      setActive(null)
+    })
+  }
+
   const clear = () => {
     batch(() => {
       setStore("comments", reconcile({}))
@@ -100,6 +151,8 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     all,
     add,
     remove,
+    update,
+    replace,
     clear,
     focus: () => state.focus,
     setFocus,
@@ -115,11 +168,11 @@ export function createCommentSessionForTest(comments: Record<string, LineComment
   return createCommentSessionState(store, setStore)
 }
 
-function createCommentSession(dir: string, id: string | undefined) {
+function createCommentSession(scope: ServerScope, dir: string, id: string | undefined) {
   const legacy = `${dir}/comments${id ? "/" + id : ""}.v1`
 
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "comments", [legacy]),
+    Persist.serverScoped(scope, dir, id, "comments", [legacy]),
     createStore<CommentStore>({
       comments: {},
     }),
@@ -132,6 +185,8 @@ function createCommentSession(dir: string, id: string | undefined) {
     all: session.all,
     add: session.add,
     remove: session.remove,
+    update: session.update,
+    replace: session.replace,
     clear: session.clear,
     focus: session.focus,
     setFocus: session.setFocus,
@@ -147,11 +202,16 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const params = useParams()
+    const serverSDK = useServerSDK()
     const cache = createScopedCache(
       (key) => {
         const decoded = decodeSessionKey(key)
         return createRoot((dispose) => ({
-          value: createCommentSession(decoded.dir, decoded.id === WORKSPACE_KEY ? undefined : decoded.id),
+          value: createCommentSession(
+            serverSDK.scope,
+            decoded.dir,
+            decoded.id === WORKSPACE_KEY ? undefined : decoded.id,
+          ),
           dispose,
         }))
       },
@@ -176,6 +236,8 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
       all: () => session().all(),
       add: (input: Omit<LineComment, "id" | "time">) => session().add(input),
       remove: (file: string, id: string) => session().remove(file, id),
+      update: (file: string, id: string, comment: string) => session().update(file, id, comment),
+      replace: (comments: LineComment[]) => session().replace(comments),
       clear: () => session().clear(),
       focus: () => session().focus(),
       setFocus: (focus: CommentFocus | null) => session().setFocus(focus),
