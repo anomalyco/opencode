@@ -39,6 +39,7 @@ export function providerModel(
         ? list.find((item) => item.id === providerID)
         : undefined
   const model = provider?.models[modelID]
-  if (provider && model) return `${provider.name}/${model.name}`
-  return `${providerID}/${modelID}`
+  const providerLabel = provider ? provider.name : providerID
+  const modelLabel = model ? model.name : modelID
+  return `${providerLabel}/${modelLabel}`
 }

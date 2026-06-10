@@ -9,15 +9,21 @@
  * @behavior
  *   - Catalog hit (provider + model both resolve): returns "<providerName>/<modelName>"
  *     e.g. ("anthropic","claude-sonnet-4-20250514") -> "Anthropic/Claude Sonnet 4"
- *   - Catalog miss (provider OR model not found): falls back to "<providerID>/<modelID>"
+ *   - PARTIAL miss (provider resolves, model does NOT): PER-FIELD fallback now
+ *     ALIGNED to the UI helper -> "<providerName>/<modelID>"
+ *     e.g. ("anthropic","claude-unknown") -> "Anthropic/claude-unknown"
+ *   - FULL miss (provider not found, name unavailable): raw fallback "<providerID>/<modelID>"
  *     e.g. ("openai","gpt-5") -> "openai/gpt-5"
  *   - Format rule: single forward slash, NO surrounding spaces ("a/b", never "a / b").
  * @edge-cases
- *   - Provider resolves but model does not -> full raw-ID fallback "<providerID>/<modelID>".
+ *   - Provider resolves but model does not -> per-field "<providerName>/<modelID>"
+ *     (provider DISPLAY NAME + raw model id). Matches UI formatModelLabel.
  *   - undefined catalog -> "<providerID>/<modelID>".
  * @invariants
- *   - Model.name(...) MUST remain unchanged (other callers depend on model-name-only output).
- *     This file does not test Model.name; existing model/transcript tests guard it.
+ *   - Model.name(...) is RETAINED intentionally (export kept even though tui src
+ *     callers now use Model.providerModel). It is directly guarded by the
+ *     "util.model.name" describe block below: catalog hit -> model display name,
+ *     miss -> raw modelID.
  * @call-sites-to-switch  (Kou — implementation step, NOT covered here)
  *   - packages/tui/src/routes/session/index.tsx:1473  (model memo: Model.name -> Model.providerModel)
  *     rendered at index.tsx:1557. SolidJS route component is not unit-tested here; the
@@ -27,10 +33,13 @@
  * @see packages/tui/src/util/transcript.ts
  */
 import { describe, expect, test } from "bun:test"
-import { providerModel } from "../../src/util/model"
+import { name, providerModel } from "../../src/util/model"
 import { formatAssistantHeader } from "../../src/util/transcript"
 import type { AssistantMessage, Provider } from "@opencode-ai/sdk/v2"
 
+// NOTE (deferred cleanup): this fully-typed provider fixture is duplicated in
+// test/util/transcript.test.ts. If a third consumer appears, extract a shared
+// test fixture; not worth extracting for two call sites today.
 const providers: Provider[] = [
   {
     id: "anthropic",
@@ -77,8 +86,8 @@ describe("util.model.providerModel", () => {
     expect(providerModel(providers, "openai", "gpt-5")).toBe("openai/gpt-5")
   })
 
-  test("partial miss (known provider, unknown model): falls back to providerID/modelID", () => {
-    expect(providerModel(providers, "anthropic", "claude-unknown")).toBe("anthropic/claude-unknown")
+  test("partial miss (known provider, unknown model): per-field fallback providerName/modelID", () => {
+    expect(providerModel(providers, "anthropic", "claude-unknown")).toBe("Anthropic/claude-unknown")
   })
 
   test("undefined catalog: falls back to providerID/modelID", () => {
@@ -89,6 +98,20 @@ describe("util.model.providerModel", () => {
     const result = providerModel(providers, "anthropic", "claude-sonnet-4-20250514")
     expect(result).not.toContain(" / ")
     expect(result.split("/")).toHaveLength(2)
+  })
+})
+
+describe("util.model.name", () => {
+  test("catalog hit: returns the model display name", () => {
+    expect(name(providers, "anthropic", "claude-sonnet-4-20250514")).toBe("Claude Sonnet 4")
+  })
+
+  test("catalog miss (unknown model): falls back to raw modelID", () => {
+    expect(name(providers, "anthropic", "claude-unknown")).toBe("claude-unknown")
+  })
+
+  test("catalog miss (unknown provider): falls back to raw modelID", () => {
+    expect(name(providers, "openai", "gpt-5")).toBe("gpt-5")
   })
 })
 
