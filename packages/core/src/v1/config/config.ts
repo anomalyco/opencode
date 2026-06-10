@@ -43,7 +43,7 @@ export const Info = Schema.Struct({
   }),
   skills: Schema.optional(ConfigSkillsV1.Info).annotate({ description: "Additional skill folder paths" }),
   reference: Schema.optional(ConfigReferenceV1.Info).annotate({
-    description: "Named git or local directory references that can be mentioned as @alias or @alias/path",
+    description: "Named git or local directory references",
   }),
   watcher: Schema.optional(Schema.Struct({ ignore: Schema.optional(Schema.mutable(Schema.Array(Schema.String))) })),
   snapshot: Schema.optional(Schema.Boolean).annotate({

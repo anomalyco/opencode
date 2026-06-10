@@ -7,7 +7,7 @@
   "private": true,
   "scripts": {
     "setup:recording-env": "bun run script/setup-recording-env.ts",
-    "test": "bun test --timeout 30000",
+    "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo --noEmit"
   },
   "exports": {
