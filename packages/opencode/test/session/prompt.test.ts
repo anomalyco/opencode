@@ -2294,19 +2294,19 @@ const autoRejectAsks = Effect.fn("test.autoRejectAsks")(function* (message?: str
 })
 
 unix(
-  "rejected permission with feedback blocks loop by default",
+  "rejected permission with feedback continues loop when continue_loop_on_deny is true",
   () =>
     withSh(() =>
       Effect.gen(function* () {
         const { llm, dir } = yield* useServerConfig((url) => ({
           ...providerCfg(url),
-          experimental: { continue_loop_on_deny: false },
+          experimental: { continue_loop_on_deny: true },
         }))
-        yield* autoRejectAsks("Permission expired and was rejected.")
+        yield* autoRejectAsks("try a different approach")
         const prompt = yield* SessionPrompt.Service
         const sessions = yield* Session.Service
         const session = yield* sessions.create({
-          title: "CorrectedStop",
+          title: "CorrectedContinue",
           permission: [{ permission: "bash", pattern: "*", action: "ask" }],
         })
         yield* prompt.prompt({
@@ -2315,18 +2315,19 @@ unix(
           noReply: true,
           parts: [{ type: "text", text: "run a command" }],
         })
-        const call = { command: "rm -rf /tmp/corrected-stop", workdir: dir, description: "Remove dir" }
-        for (let i = 0; i < 6; i++) yield* llm.tool("bash", call)
-        yield* llm.text("should never be requested")
+        yield* llm.tool("bash", { command: "rm -rf /tmp/corrected-continue", workdir: dir, description: "Remove dir" })
+        yield* llm.text("adjusting based on feedback")
 
         const result = yield* prompt.loop({ sessionID: session.id })
         expect(result.info.role).toBe("assistant")
-        expect(yield* llm.calls).toBe(1)
+        expect(yield* llm.calls).toBe(2)
 
         const msgs = yield* MessageV2.filterCompactedEffect(session.id)
-        const tool = msgs.flatMap((m) => m.parts).find((p): p is SessionV1.ToolPart => p.type === "tool")
+        const parts = msgs.flatMap((m) => m.parts)
+        const tool = parts.find((p): p is SessionV1.ToolPart => p.type === "tool")
         expect(tool?.state.status).toBe("error")
-        if (tool?.state.status === "error") expect(tool.state.error).toContain("Permission expired and was rejected.")
+        if (tool?.state.status === "error") expect(tool.state.error).toContain("try a different approach")
+        expect(parts.some((p) => p.type === "text" && p.text === "adjusting based on feedback")).toBe(true)
       }),
     ),
   15_000,
