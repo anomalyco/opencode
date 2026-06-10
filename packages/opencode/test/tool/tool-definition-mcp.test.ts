@@ -56,16 +56,10 @@ const permissionLayer = Layer.mock(Permission.Service, {
 })
 
 // --- Truncate mock (output is never called during resolve) ---
-const truncateLayer = Layer.succeed(
-  Truncate.Service,
-  Truncate.Service.of({
-    init: () => Effect.void,
-    cleanup: () => Effect.void,
-    write: () => Effect.succeed(""),
-    output: () => Effect.succeed({ content: "", truncated: false as const }),
-    limits: () => Effect.succeed({ maxLines: 2000, maxBytes: 50000 }),
-  }),
-)
+const truncateLayer = Layer.mock(Truncate.Service, {
+  output: () => Effect.succeed({ content: "", truncated: false as const }),
+  limits: () => Effect.succeed({ maxLines: 2000, maxBytes: 50000 }),
+})
 
 // Compose all mock layers
 const testLayer = Layer.mergeAll(pluginLayer, mcpLayer, registryLayer, permissionLayer, truncateLayer)
@@ -105,6 +99,8 @@ describe("tool.definition MCP hook", () => {
       const tools = yield* SessionTools.resolve({
         agent: {
           name: "test",
+          mode: "primary" as const,
+          options: {},
           permission: [
             { action: "allow", permission: "*", pattern: "*" },
           ] as PermissionV1.Rule[],
@@ -141,6 +137,8 @@ describe("tool.definition MCP hook", () => {
       const tools = yield* SessionTools.resolve({
         agent: {
           name: "test",
+          mode: "primary" as const,
+          options: {},
           permission: [
             { action: "allow", permission: "*", pattern: "*" },
           ] as PermissionV1.Rule[],
