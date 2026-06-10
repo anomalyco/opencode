@@ -1,4 +1,6 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
@@ -27,7 +29,7 @@ afterEach(async () => {
 
 const node = CrossSpawnSpawner.defaultLayer
 
-const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
+const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node).pipe(Layer.provide(Ripgrep.defaultLayer)))
 
 describe("tool.skill", () => {
   it.instance("execute returns skill content block with files", () =>
@@ -67,7 +69,10 @@ Use this skill.
       })).find((tool) => tool.id === SkillTool.id)
       if (!tool) throw new Error("Skill tool not found")
 
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+      expect(tool.description).not.toContain("tool-skill")
+      expect(tool.description).not.toContain("Skill for tool tests.")
+
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
       const ctx: Tool.Context = {
         ...baseCtx,
         ask: (req) =>

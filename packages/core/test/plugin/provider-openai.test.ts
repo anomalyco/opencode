@@ -46,7 +46,9 @@ describe("OpenAIPlugin", () => {
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("openai", "alias", { apiID: ModelV2.ID.make("gpt-5") }),
+          model: model("openai", "alias", {
+            api: { id: ModelV2.ID.make("gpt-5"), type: "aisdk", package: "test-provider" },
+          }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },
@@ -79,9 +81,9 @@ describe("OpenAIPlugin", () => {
       yield* plugin.add(OpenAIPlugin)
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
-        const item = provider("openai", { endpoint: { type: "aisdk", package: "@ai-sdk/openai" } })
+        const item = provider("openai", { api: { type: "aisdk", package: "@ai-sdk/openai" } })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
+          draft.api = item.api
         })
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5"), () => {})
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5-chat-latest"), () => {})

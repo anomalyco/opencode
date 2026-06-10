@@ -1,247 +1,147 @@
-import { NodeFileSystem } from "@effect/platform-node"
-import { dirname, join, relative, resolve as pathResolve } from "path"
-import { realpathSync } from "fs"
-import * as NFS from "fs/promises"
-import { lookup } from "mime-types"
-import { Context, Effect, FileSystem, Layer, Schema } from "effect"
-import type { PlatformError } from "effect/PlatformError"
-import { Glob } from "./util/glob"
-import { serviceUse } from "./effect/service-use"
+export * as FileSystem from "./filesystem"
 
-export namespace AppFileSystem {
-  export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {
-    method: Schema.String,
-    cause: Schema.optional(Schema.Defect),
-  }) {}
+import path from "path"
+import { pathToFileURL } from "url"
+import { Context, Effect, Layer, Option, Schema } from "effect"
+import { EventV2 } from "./event"
+import { FSUtil } from "./fs-util"
+import { Location } from "./location"
+import { PositiveInt, RelativePath } from "./schema"
+import { FileSystemSearch } from "./filesystem/search"
+import { Entry, Match } from "./filesystem/schema"
+export { Entry, Match, Submatch } from "./filesystem/schema"
 
-  export type Error = PlatformError | FileSystemError
+export const ReadInput = Schema.Struct({
+  path: RelativePath,
+})
+export type ReadInput = typeof ReadInput.Type
 
-  export interface DirEntry {
-    readonly name: string
-    readonly type: "file" | "directory" | "symlink" | "other"
-  }
+export const Content = Schema.Struct({
+  uri: Schema.String,
+  name: Schema.String.pipe(Schema.optional),
+  content: Schema.String,
+  encoding: Schema.Literals(["utf8", "base64"]),
+  mime: Schema.String,
+}).annotate({ identifier: "FileSystem.Content" })
+export type Content = typeof Content.Type
 
-  export interface Interface extends FileSystem.FileSystem {
-    readonly isDir: (path: string) => Effect.Effect<boolean>
-    readonly isFile: (path: string) => Effect.Effect<boolean>
-    readonly existsSafe: (path: string) => Effect.Effect<boolean>
-    readonly readFileStringSafe: (path: string) => Effect.Effect<string | undefined, Error>
-    readonly readJson: (path: string) => Effect.Effect<unknown, Error>
-    readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
-    readonly ensureDir: (path: string) => Effect.Effect<void, Error>
-    readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
-    readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
-    readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
-    readonly up: (options: { targets: string[]; start: string; stop?: string }) => Effect.Effect<string[], Error>
-    readonly globUp: (pattern: string, start: string, stop?: string) => Effect.Effect<string[], Error>
-    readonly glob: (pattern: string, options?: Glob.Options) => Effect.Effect<string[], Error>
-    readonly globMatch: (pattern: string, filepath: string) => boolean
-  }
+export const ListInput = Schema.Struct({
+  path: RelativePath.pipe(Schema.optional),
+})
+export type ListInput = typeof ListInput.Type
 
-  export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
+export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
+  query: Schema.String,
+  type: Schema.Literals(["file", "directory"]).pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
+}) {}
 
-  export const use = serviceUse(Service)
+export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
+  pattern: Schema.String,
+  path: RelativePath.pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
+}) {}
 
-  export const layer = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
+export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
+  pattern: Schema.String,
+  path: RelativePath.pipe(Schema.optional),
+  include: Schema.String.pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
+}) {}
 
-      const existsSafe = Effect.fn("FileSystem.existsSafe")(function* (path: string) {
-        return yield* fs.exists(path).pipe(Effect.orElseSucceed(() => false))
-      })
+export const Event = {
+  Edited: EventV2.define({
+    type: "file.edited",
+    schema: {
+      file: Schema.String,
+    },
+  }),
+}
 
-      const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
-        return yield* fs
-          .readFileString(path)
-          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
-      })
+export interface Interface {
+  readonly read: (input: ReadInput) => Effect.Effect<Content>
+  readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
+  readonly find: (input: FindInput) => Effect.Effect<Entry[]>
+  readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[]>
+  readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[]>
+}
 
-      const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
-        const info = yield* fs.stat(path).pipe(Effect.catch(() => Effect.void))
-        return info?.type === "Directory"
-      })
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem") {}
 
-      const isFile = Effect.fn("FileSystem.isFile")(function* (path: string) {
-        const info = yield* fs.stat(path).pipe(Effect.catch(() => Effect.void))
-        return info?.type === "File"
-      })
-
-      const readDirectoryEntries = Effect.fn("FileSystem.readDirectoryEntries")(function* (dirPath: string) {
-        return yield* Effect.tryPromise({
-          try: async () => {
-            const entries = await NFS.readdir(dirPath, { withFileTypes: true })
-            return entries.map(
-              (e): DirEntry => ({
-                name: e.name,
-                type: e.isDirectory() ? "directory" : e.isSymbolicLink() ? "symlink" : e.isFile() ? "file" : "other",
-              }),
-            )
-          },
-          catch: (cause) => new FileSystemError({ method: "readDirectoryEntries", cause }),
-        })
-      })
-
-      const readJson = Effect.fn("FileSystem.readJson")(function* (path: string) {
-        const text = yield* fs.readFileString(path)
-        return JSON.parse(text)
-      })
-
-      const writeJson = Effect.fn("FileSystem.writeJson")(function* (path: string, data: unknown, mode?: number) {
-        const content = JSON.stringify(data, null, 2)
-        yield* fs.writeFileString(path, content)
-        if (mode) yield* fs.chmod(path, mode)
-      })
-
-      const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {
-        yield* fs.makeDirectory(path, { recursive: true })
-      })
-
-      const writeWithDirs = Effect.fn("FileSystem.writeWithDirs")(function* (
-        path: string,
-        content: string | Uint8Array,
-        mode?: number,
-      ) {
-        const write = typeof content === "string" ? fs.writeFileString(path, content) : fs.writeFile(path, content)
-
-        yield* write.pipe(
-          Effect.catchIf(
-            (e) => e.reason._tag === "NotFound",
-            () =>
-              Effect.gen(function* () {
-                yield* fs.makeDirectory(dirname(path), { recursive: true })
-                yield* write
-              }),
+const baseLayer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const fs = yield* FSUtil.Service
+    const location = yield* Location.Service
+    const search = yield* FileSystemSearch.Service
+    const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
+    const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
+      const absolute = path.resolve(location.directory, input ?? ".")
+      if (!FSUtil.contains(location.directory, absolute))
+        return yield* Effect.die(new Error("Path escapes the location"))
+      const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
+      if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
+      return { absolute, real, directory: location.directory, root }
+    })
+    return Service.of({
+      find: search.find,
+      glob: search.glob,
+      grep: search.grep,
+      read: Effect.fn("FileSystem.read")(function* (input) {
+        const target = yield* resolve(input.path)
+        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+        if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+        const bytes = yield* fs.readFile(target.real).pipe(Effect.orDie)
+        const mime = FSUtil.mimeType(target.real)
+        if (!bytes.includes(0)) {
+          const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
+            Effect.option,
+          )
+          if (Option.isSome(content))
+            return {
+              uri: pathToFileURL(target.real).href,
+              name: path.basename(target.real),
+              content: content.value,
+              encoding: "utf8" as const,
+              mime,
+            }
+        }
+        return {
+          uri: pathToFileURL(target.real).href,
+          name: path.basename(target.real),
+          content: Buffer.from(bytes).toString("base64"),
+          encoding: "base64" as const,
+          mime,
+        }
+      }),
+      list: Effect.fn("FileSystem.list")(function* (input = {}) {
+        const target = yield* resolve(input.path)
+        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+        if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
+        return yield* fs.readDirectoryEntries(target.real).pipe(
+          Effect.orDie,
+          Effect.map((items) =>
+            items
+              .flatMap((item) => {
+                if (item.type !== "file" && item.type !== "directory") return []
+                const absolute = path.join(target.absolute, item.name)
+                const relative = path.relative(target.directory, absolute)
+                return [
+                  new Entry({
+                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                    type: item.type,
+                    mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
+                  }),
+                ]
+              })
+              .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
           ),
         )
-        if (mode) yield* fs.chmod(path, mode)
-      })
+      }),
+    })
+  }),
+)
 
-      const glob = Effect.fn("FileSystem.glob")(function* (pattern: string, options?: Glob.Options) {
-        return yield* Effect.tryPromise({
-          try: () => Glob.scan(pattern, options),
-          catch: (cause) => new FileSystemError({ method: "glob", cause }),
-        })
-      })
+export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.defaultLayer), Layer.provide(FSUtil.defaultLayer))
 
-      const findUp = Effect.fn("FileSystem.findUp")(function* (target: string, start: string, stop?: string) {
-        const result: string[] = []
-        let current = start
-        while (true) {
-          const search = join(current, target)
-          if (yield* fs.exists(search)) result.push(search)
-          if (stop === current) break
-          const parent = dirname(current)
-          if (parent === current) break
-          current = parent
-        }
-        return result
-      })
-
-      const up = Effect.fn("FileSystem.up")(function* (options: { targets: string[]; start: string; stop?: string }) {
-        const result: string[] = []
-        let current = options.start
-        while (true) {
-          for (const target of options.targets) {
-            const search = join(current, target)
-            if (yield* fs.exists(search)) result.push(search)
-          }
-          if (options.stop === current) break
-          const parent = dirname(current)
-          if (parent === current) break
-          current = parent
-        }
-        return result
-      })
-
-      const globUp = Effect.fn("FileSystem.globUp")(function* (pattern: string, start: string, stop?: string) {
-        const result: string[] = []
-        let current = start
-        while (true) {
-          const matches = yield* glob(pattern, { cwd: current, absolute: true, include: "file", dot: true }).pipe(
-            Effect.catch(() => Effect.succeed([] as string[])),
-          )
-          result.push(...matches)
-          if (stop === current) break
-          const parent = dirname(current)
-          if (parent === current) break
-          current = parent
-        }
-        return result
-      })
-
-      return Service.of({
-        ...fs,
-        existsSafe,
-        readFileStringSafe,
-        isDir,
-        isFile,
-        readDirectoryEntries,
-        readJson,
-        writeJson,
-        ensureDir,
-        writeWithDirs,
-        findUp,
-        up,
-        globUp,
-        glob,
-        globMatch: Glob.match,
-      })
-    }),
-  )
-
-  export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer))
-
-  // Pure helpers that don't need Effect (path manipulation, sync operations)
-  export function mimeType(p: string): string {
-    return lookup(p) || "application/octet-stream"
-  }
-
-  export function normalizePath(p: string): string {
-    if (process.platform !== "win32") return p
-    const resolved = pathResolve(windowsPath(p))
-    try {
-      return realpathSync.native(resolved)
-    } catch {
-      return resolved
-    }
-  }
-
-  export function normalizePathPattern(p: string): string {
-    if (process.platform !== "win32") return p
-    if (p === "*") return p
-    const match = p.match(/^(.*)[\\/]\*$/)
-    if (!match) return normalizePath(p)
-    const dir = /^[A-Za-z]:$/.test(match[1]) ? match[1] + "\\" : match[1]
-    return join(normalizePath(dir), "*")
-  }
-
-  export function resolve(p: string): string {
-    const resolved = pathResolve(windowsPath(p))
-    try {
-      return normalizePath(realpathSync(resolved))
-    } catch (e: any) {
-      if (e?.code === "ENOENT") return normalizePath(resolved)
-      throw e
-    }
-  }
-
-  export function windowsPath(p: string): string {
-    if (process.platform !== "win32") return p
-    return p
-      .replace(/^\/([a-zA-Z]):(?:[\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-      .replace(/^\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-      .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-      .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-  }
-
-  export function overlaps(a: string, b: string) {
-    const relA = relative(a, b)
-    const relB = relative(b, a)
-    return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
-  }
-
-  export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
-  }
-}
+export const locationLayer = layer

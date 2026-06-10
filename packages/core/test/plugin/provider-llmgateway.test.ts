@@ -26,13 +26,13 @@ describe("LLMGatewayPlugin", () => {
       yield* transform((catalog) => {
         const llmgateway = provider("llmgateway", {
           enabled: { via: "env", name: "LLMGATEWAY_API_KEY" },
-          endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.llmgateway.io/v1" },
-          options: { headers: { Existing: "value" }, body: {}, aisdk: { provider: {}, request: {} } },
+          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.llmgateway.io/v1" },
+          request: { headers: { Existing: "value" }, body: {} },
         })
         catalog.provider.update(llmgateway.id, (draft) => {
           draft.enabled = llmgateway.enabled
-          draft.endpoint = llmgateway.endpoint
-          draft.options = llmgateway.options
+          draft.api = llmgateway.api
+          draft.request = llmgateway.request
         })
         const openrouter = provider("openrouter", {
           enabled: { via: "env", name: "OPENROUTER_API_KEY" },
@@ -41,13 +41,13 @@ describe("LLMGatewayPlugin", () => {
           draft.enabled = openrouter.enabled
         })
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).options.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
         "X-Source": "opencode",
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter)).options.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter)).request.headers).toEqual({})
     }),
   )
 
@@ -59,15 +59,15 @@ describe("LLMGatewayPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("llmgateway", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.llmgateway.io/v1" },
+          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.llmgateway.io/v1" },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
+          draft.api = item.api
         })
       })
 
       expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).enabled).toBe(false)
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).options.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({})
     }),
   )
 })

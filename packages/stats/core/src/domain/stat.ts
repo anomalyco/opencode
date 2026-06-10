@@ -147,6 +147,17 @@ export function statPeriodKey(row: StatBaseRow) {
   return [row.grain, row.period_key, row.dataset, row.tier, row.client, row.source].join("\u0000")
 }
 
+export function statRowScope(rows: StatBaseRow[]) {
+  if (rows.length === 0) return
+  return {
+    grains: unique(rows.map((row) => row.grain)),
+    periodKeys: unique(rows.map((row) => row.period_key)),
+    datasets: unique(rows.map((row) => row.dataset ?? "all")),
+    clients: unique(rows.map((row) => row.client ?? "all")),
+    sources: unique(rows.map((row) => row.source ?? "all")),
+  }
+}
+
 export function periodKeyFor(grain: StatGrain, periodStart: Date) {
   if (grain === "week") return isoWeekId(periodStart)
   return utcDateId(periodStart)
@@ -217,6 +228,10 @@ export function chunks<T>(items: T[], size: number) {
   return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
     items.slice(index * size, (index + 1) * size),
   )
+}
+
+function unique(values: string[]) {
+  return [...new Set(values)]
 }
 
 export function inserted(column: string) {

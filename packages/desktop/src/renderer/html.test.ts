@@ -16,7 +16,7 @@ const html = async (name: string) => Bun.file(join(dir, name)).text()
  * All local resource references must use relative paths (`./`).
  */
 describe("electron renderer html", () => {
-  for (const name of ["index.html", "loading.html"]) {
+  for (const name of ["index.html"]) {
     describe(name, () => {
       test("script src attributes use relative paths", async () => {
         const content = await html(name)

@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
 const directory = "C:/OpenCode/TimelineStateRegression"
 const projectID = "proj_timeline_state_regression"
@@ -106,10 +107,10 @@ test.describe("regression: session timeline local row state", () => {
     await configurePage(page)
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-    await expect(page.getByRole("heading", { name: title })).toBeVisible()
+    await expectSessionTitle(page, title)
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
-    await expect(wrapper).toBeVisible()
+    await expectAppVisible(wrapper)
     await expectExpanded(wrapper, true)
 
     await wrapper.evaluate((element) => {
@@ -142,11 +143,11 @@ test.describe("regression: session timeline local row state", () => {
     await configurePage(page)
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-    await expect(page.getByRole("heading", { name: title })).toBeVisible()
+    await expectSessionTitle(page, title)
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
-    await expect(wrapper).toBeVisible()
-    await expect(wrapper.locator('[data-component="file"][data-mode="diff"]').first()).toBeVisible()
+    await expectAppVisible(wrapper)
+    await expectAppVisible(wrapper.locator('[data-component="file"][data-mode="diff"]').first())
     await markDiffProbe(page)
 
     events.push({

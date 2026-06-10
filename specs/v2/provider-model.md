@@ -44,6 +44,7 @@ export type OpenAICompletions = typeof OpenAICompletions.Type
 const AISDK = Schema.Struct({
   type: Schema.Literal("aisdk"),
   package: Schema.String,
+  url: Schema.String.pipe(Schema.optional),
 })
 
 const AnthropicMessages = Schema.Struct({
@@ -67,13 +68,22 @@ export type Endpoint = typeof Endpoint.Type
 export const Options = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.Record(Schema.String, Schema.Any),
+  aisdk: Schema.Struct({
+    provider: Schema.Record(Schema.String, Schema.Any),
+    request: Schema.Record(Schema.String, Schema.Any),
+  }),
 })
 export type Options = typeof Options.Type
 
 export class Info extends Schema.Class<Info>("ProviderV2.Info")({
   id: ID,
   name: Schema.String,
-  enabled: Schema.Boolean,
+  enabled: Schema.Union([
+    Schema.Literal(false),
+    Schema.Struct({ via: Schema.Literal("env"), name: Schema.String }),
+    Schema.Struct({ via: Schema.Literal("account"), service: Schema.String }),
+    Schema.Struct({ via: Schema.Literal("custom"), data: Schema.Record(Schema.String, Schema.Any) }),
+  ]),
   env: Schema.String.pipe(Schema.Array),
   endpoint: Endpoint,
   options: Options,
@@ -90,6 +100,7 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
       options: {
         headers: {},
         body: {},
+        aisdk: { provider: {}, request: {} },
       },
     })
   }
@@ -149,12 +160,13 @@ export type Limit = typeof Limit.Type
 export const Ref = Schema.Struct({
   id: ID,
   providerID: ProviderV2.ID,
-  variant: VariantID,
+  variant: VariantID.pipe(Schema.optional),
 })
 export type Ref = typeof Ref.Type
 
 export class Info extends Schema.Class<Info>("ModelV2.Info")({
   id: ID,
+  apiID: ID,
   providerID: ProviderV2.ID,
   family: Family.pipe(Schema.optional),
   name: Schema.String,
@@ -170,11 +182,13 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
   }),
   cost: Cost.pipe(Schema.Array),
   status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
+  enabled: Schema.Boolean,
   limit: Limit,
 }) {
   static empty(providerID: ProviderV2.ID, modelID: ID) {
     return new Info({
       id: modelID,
+      apiID: modelID,
       providerID,
       name: modelID,
       endpoint: {
@@ -188,6 +202,7 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
       options: {
         headers: {},
         body: {},
+        aisdk: { provider: {}, request: {} },
       },
       variants: [],
       time: {
@@ -195,6 +210,7 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
       },
       cost: [],
       status: "active",
+      enabled: true,
       limit: {
         context: 0,
         output: 0,
@@ -208,22 +224,18 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
 
 ```ts
 export interface Interface {
+  readonly transform: State.Interface<Data, Editor>["transform"]
   readonly provider: {
-    readonly get: (providerID: ProviderV2.ID) => Effect.Effect<Option.Option<ProviderV2.Info>>
-    readonly update: (providerID: ProviderV2.ID, fn: (provider: Draft<ProviderV2.Info>) => void) => Effect.Effect<void>
-    readonly remove: (providerID: ProviderV2.ID) => Effect.Effect<void>
+    readonly get: (providerID: ProviderV2.ID) => Effect.Effect<ProviderV2.Info, ProviderNotFoundError>
     readonly all: () => Effect.Effect<ProviderV2.Info[]>
     readonly available: () => Effect.Effect<ProviderV2.Info[]>
   }
 
   readonly model: {
-    readonly get: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Option.Option<ModelV2.Info>>
-    readonly update: (
+    readonly get: (
       providerID: ProviderV2.ID,
       modelID: ModelV2.ID,
-      fn: (model: Draft<ModelV2.Info>) => void,
-    ) => Effect.Effect<void>
-    readonly remove: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<void>
+    ) => Effect.Effect<ModelV2.Info, ProviderNotFoundError | ModelNotFoundError>
     readonly all: () => Effect.Effect<ModelV2.Info[]>
     readonly available: () => Effect.Effect<ModelV2.Info[]>
     readonly default: () => Effect.Effect<Option.Option<ModelV2.Info>>
@@ -232,7 +244,7 @@ export interface Interface {
 }
 ```
 
-`ProviderV2.Info.enabled` is stored provider state. Provider plugins set this field after checking env, account, config, or provider-specific availability.
+`ProviderV2.Info.enabled` is stored provider state. Provider plugins set it to `false` or record whether availability comes from environment, account, or custom configuration.
 
 `ProviderV2.Endpoint` includes `{ type: "unknown" }`. `CatalogV2.model.get()` and `CatalogV2.model.all()` resolve `unknown` endpoints from the provider before returning models.
 
@@ -247,11 +259,29 @@ type ProviderRecord = {
 let records = HashMap.empty<ProviderV2.ID, ProviderRecord>()
 ```
 
-`ModelV2.Info` does not have an `enabled` field. Model availability is derived by `CatalogV2.model.available()` from provider state and model status.
+`ModelV2.Info.enabled` stores model availability. `CatalogV2.model.available()` also requires a usable provider.
 
 ```ts
-const available = provider.enabled && model.status !== "deprecated"
+const available = provider.enabled !== false && model.enabled
 ```
+
+## Current Session Runner Adaptation
+
+The first local V2 Session runner waits for Location plugin boot, then resolves an explicit Session model without silently falling back. Without an explicit model it uses a supported Location catalog default, then falls back to the first available model with a supported route, and otherwise fails with `SessionRunnerModel.ModelNotSelectedError`. Its native adaptation surface is deliberately narrow:
+
+```text
+openai/responses over HTTP
+openai/completions for OpenAI Chat
+openai/completions for OpenAI-compatible Chat
+anthropic/messages
+aisdk:@ai-sdk/openai
+aisdk:@ai-sdk/openai-compatible with an explicit URL
+aisdk:@ai-sdk/anthropic
+```
+
+Native endpoint URLs are complete endpoint URLs and are split into base URL plus request path when building an LLM route. AI SDK endpoint URLs remain base URLs. The adapter preserves model headers and body options, environment-backed provider credentials, direct model API keys, and selected Session variant overlays.
+
+Unsupported routes fail explicitly with `SessionRunnerModel.UnsupportedEndpointError`. In particular, `openai/responses` with WebSocket transport must not silently downgrade to HTTP. Google, Azure, Bedrock, OpenRouter-specific behavior, GitHub Copilot, Vertex, gateway adapters, and signed authentication remain future provider slices.
 
 ## Plugin Interface
 
