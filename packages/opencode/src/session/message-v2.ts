@@ -684,6 +684,15 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case typeof (e as any)?.message === "string" && (e as any).message.includes("EngineCore"):
+      return new APIError(
+        {
+          message: (e as any).message,
+          isRetryable: true,
+          metadata: { code: "ProviderEngineError" },
+        },
+        { cause: e },
+      ).toObject()
     case APICallError.isInstance(e):
       const parsed = ProviderError.parseAPICallError({
         providerID: ctx.providerID,

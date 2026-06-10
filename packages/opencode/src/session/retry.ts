@@ -32,8 +32,22 @@ function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
 
+export const RETRY_DELAY_BLOCKED = 60_000
+
+function isConnectionBlockingError(error: SessionV1.APIError) {
+  const code = error.data.metadata?.["code"]
+  return (
+    code === "ECONNRESET" ||
+    code === "ProviderHeaderTimeoutError" ||
+    code === "ProviderEngineError" ||
+    error.data.statusCode === 504
+  )
+}
+
 export function delay(attempt: number, error?: SessionV1.APIError) {
   if (error) {
+    // Provider hung or gateway timeout: fixed 5s delay regardless of attempt count
+    if (isConnectionBlockingError(error)) return RETRY_DELAY_BLOCKED
     const headers = error.data.responseHeaders
     if (headers) {
       const retryAfterMs = headers["retry-after-ms"]
