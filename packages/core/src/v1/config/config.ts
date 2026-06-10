@@ -45,6 +45,9 @@ export const Info = Schema.Struct({
   references: Schema.optional(ConfigReference.Info).annotate({
     description: "Named git or local directory references",
   }),
+  reference: Schema.optional(ConfigReference.Info).annotate({
+    description: "@deprecated Use 'references' field instead. Named git or local directory references",
+  }),
   watcher: Schema.optional(Schema.Struct({ ignore: Schema.optional(Schema.mutable(Schema.Array(Schema.String))) })),
   snapshot: Schema.optional(Schema.Boolean).annotate({
     description:
