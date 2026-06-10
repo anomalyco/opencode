@@ -89,7 +89,8 @@ export const layer: Layer.Layer<
     })
 
     const read = Effect.fnUntraced(function* (filepath: string) {
-      return yield* fs.readFileString(filepath).pipe(Effect.catch(() => Effect.succeed("")))
+      const content = yield* fs.readFileStringDecode(filepath)
+      return content ?? ""
     })
 
     const fetch = Effect.fnUntraced(function* (url: string) {

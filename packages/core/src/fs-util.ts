@@ -28,6 +28,7 @@ export namespace FSUtil {
     readonly isFile: (path: string) => Effect.Effect<boolean>
     readonly existsSafe: (path: string) => Effect.Effect<boolean>
     readonly readFileStringSafe: (path: string) => Effect.Effect<string | undefined, Error>
+    readonly readFileStringDecode: (path: string) => Effect.Effect<string | undefined, Error>
     readonly readJson: (path: string) => Effect.Effect<unknown, Error>
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
     readonly ensureDir: (path: string) => Effect.Effect<void, Error>
@@ -57,6 +58,22 @@ export namespace FSUtil {
         return yield* fs
           .readFileString(path)
           .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+      })
+
+      const readFileStringDecode = Effect.fn("FileSystem.readFileStringDecode")(function* (path: string) {
+        const buf = yield* fs.readFile(path).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+        if (!buf) return undefined
+        const utf8 = new TextDecoder().decode(buf)
+        if (!utf8.includes("\uFFFD")) return utf8
+        if (process.platform !== "win32") return utf8
+        try {
+          const cp = require("child_process").execSync("chcp.com", { encoding: "latin1", timeout: 3000 })
+          const m = (cp as string).match(/(\d+)/)
+          if (!m || m[1] === "65001") return utf8
+          const name = m[1] === "936" ? "gbk" : m[1] === "932" ? "shift-jis" : m[1] === "949" ? "euc-kr" : m[1] === "950" ? "big5" : null
+          if (name) return new TextDecoder(name).decode(buf)
+        } catch {}
+        return utf8
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
@@ -179,6 +196,7 @@ export namespace FSUtil {
         ...fs,
         existsSafe,
         readFileStringSafe,
+        readFileStringDecode,
         isDir,
         isFile,
         readDirectoryEntries,
