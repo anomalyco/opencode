@@ -22,8 +22,10 @@ import { debounce } from "@solid-primitives/scheduled"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
+import type { SessionReviewLineComment } from "@opencode-ai/ui/session-review"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
@@ -58,6 +60,9 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { useServer } from "@/context/server"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { SessionSidePanelV2 } from "@/pages/session/v2/session-side-panel-v2"
+import { ReviewPanelV2, ReviewPanelV2Sidebar } from "@/pages/session/v2/review-panel-v2"
+import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -916,26 +921,44 @@ export default function Page() {
     loadFile: file.load,
   })
 
+  const changesLabel = (option: ChangeMode) => {
+    if (option === "git") return language.t("ui.sessionReview.title.git")
+    if (option === "branch") return language.t("ui.sessionReview.title.branch")
+    return language.t("ui.sessionReview.title.lastTurn")
+  }
+
   const changesTitle = () => {
     if (!canReview()) {
       return null
-    }
-
-    const label = (option: ChangeMode) => {
-      if (option === "git") return language.t("ui.sessionReview.title.git")
-      if (option === "branch") return language.t("ui.sessionReview.title.branch")
-      return language.t("ui.sessionReview.title.lastTurn")
     }
 
     return (
       <Select
         options={changesOptions()}
         current={store.changes}
-        label={label}
+        label={changesLabel}
         onSelect={(option) => option && setStore("changes", option)}
         variant="ghost"
         size="small"
         valueClass="text-14-medium"
+      />
+    )
+  }
+
+  const changesTitleV2 = () => {
+    if (!canReview()) {
+      return null
+    }
+
+    return (
+      <SelectV2
+        appearance="inline"
+        options={changesOptions()}
+        current={store.changes}
+        label={changesLabel}
+        placement="bottom-start"
+        gutter={6}
+        onSelect={(option) => option && setStore("changes", option)}
       />
     )
   }
@@ -1018,6 +1041,38 @@ export default function Page() {
       />
     </Show>
   )
+
+  const reviewV2State = createReviewPanelV2State()
+
+  const reviewPanelV2Props = () => ({
+    title: changesTitleV2(),
+    empty: reviewEmpty({
+      loadingClass: "px-6 py-4 text-text-weak",
+      emptyClass: "h-full pb-64 flex flex-col items-center justify-center text-center gap-6",
+    }),
+    diffs: reviewDiffs,
+    diffsReady: reviewReady,
+    activeFile: tree.activeDiff,
+    onSelectFile: focusReviewDiff,
+    diffStyle: layout.review.diffStyle(),
+    onDiffStyleChange: layout.review.setDiffStyle,
+    state: reviewV2State,
+    onLineComment: (comment: SessionReviewLineComment) => addCommentToContext({ ...comment, origin: "review" }),
+    onLineCommentUpdate: updateCommentInContext,
+    onLineCommentDelete: removeCommentFromContext,
+    lineCommentActions: reviewCommentActions(),
+    comments: comments.all(),
+    focusedComment: comments.focus(),
+    onFocusedCommentChange: comments.setFocus,
+  })
+
+  const reviewPanelV2 = () => (
+    <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
+      <ReviewPanelV2 {...reviewPanelV2Props()} />
+    </div>
+  )
+
+  const reviewSidebarV2 = () => <ReviewPanelV2Sidebar {...reviewPanelV2Props()} />
 
   const reviewPanel = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
@@ -1843,19 +1898,37 @@ export default function Page() {
           </Show>
         </div>
 
-        <SessionSidePanel
-          canReview={canReview}
-          diffs={reviewDiffs}
-          diffsReady={reviewReady}
-          empty={reviewEmptyText}
-          hasReview={hasReview}
-          reviewCount={reviewCount}
-          reviewPanel={reviewPanel}
-          activeDiff={tree.activeDiff}
-          focusReviewDiff={focusReviewDiff}
-          reviewSnap={ui.reviewSnap}
-          size={size}
-        />
+        <Show
+          when={newSessionDesign() && !!params.id}
+          fallback={
+            <SessionSidePanel
+              canReview={canReview}
+              diffs={reviewDiffs}
+              diffsReady={reviewReady}
+              empty={reviewEmptyText}
+              hasReview={hasReview}
+              reviewCount={reviewCount}
+              reviewPanel={reviewPanel}
+              activeDiff={tree.activeDiff}
+              focusReviewDiff={focusReviewDiff}
+              reviewSnap={ui.reviewSnap}
+              size={size}
+            />
+          }
+        >
+          <SessionSidePanelV2
+            canReview={canReview}
+            diffs={reviewDiffs}
+            diffsReady={reviewReady}
+            hasReview={hasReview}
+            reviewCount={reviewCount}
+            reviewPanel={reviewPanelV2}
+            reviewSidebar={reviewSidebarV2}
+            reviewV2State={reviewV2State}
+            reviewSnap={ui.reviewSnap}
+            size={size}
+          />
+        </Show>
       </div>
 
       <TerminalPanel />

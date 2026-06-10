@@ -1,8 +1,10 @@
-import { type ComponentProps, Show, splitProps } from "solid-js"
+import { type ComponentProps, type JSX, Show, splitProps } from "solid-js"
 import { Icon } from "./icon"
 import "./text-input-v2.css"
 
 export interface TextInputV2Props extends Omit<ComponentProps<"input">, "type"> {
+  /** Icon or adornment shown before the field value. */
+  leadingIcon?: JSX.Element
   /** Show the trailing copy action. */
   showCopyButton?: boolean
   /** Accessible label for the copy button. */
@@ -21,6 +23,7 @@ export function TextInputV2(props: TextInputV2Props) {
   const [local, inputProps] = splitProps(props, [
     "class",
     "classList",
+    "leadingIcon",
     "showCopyButton",
     "copyLabel",
     "onCopyClick",
@@ -37,12 +40,16 @@ export function TextInputV2(props: TextInputV2Props) {
       data-invalid={local.invalid ? "" : undefined}
       data-numeric={local.numeric ? "" : undefined}
       data-appearance={local.appearance ?? "base"}
+      data-leading-icon={local.leadingIcon ? "" : undefined}
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
       <div data-slot="text-input-v2-value">
+        <Show when={local.leadingIcon}>
+          <span data-slot="text-input-v2-leading-icon">{local.leadingIcon}</span>
+        </Show>
         <input
           {...inputProps}
           type={inputProps.type ?? "text"}

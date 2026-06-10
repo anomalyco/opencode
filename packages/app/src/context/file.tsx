@@ -199,8 +199,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return promise
     }
 
-    const search = (query: string, dirs: "true" | "false") =>
-      sdk.client.find.files({ query, dirs }).then(
+    const search = (query: string, dirs: "true" | "false", limit = 100) =>
+      sdk.client.find.files({ query, dirs, limit }).then(
         (x) => (x.data ?? []).map(path.normalize),
         () => [],
       )
@@ -260,6 +260,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         refresh: (input: string) => tree.listDir(input, { force: true }),
         state: tree.dirState,
         children: tree.children,
+        files: tree.allFiles,
         expand: tree.expandDir,
         collapse: tree.collapseDir,
         toggle(input: string) {

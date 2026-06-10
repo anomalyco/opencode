@@ -90,8 +90,7 @@
   color: var(--v2-text-text-faint);
 }
 
-[data-component="tabs-v2"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-v2-list"],
-[data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"] [data-slot="tabs-v2-list"] {
+[data-component="tabs-v2"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-v2-list"] {
   gap: 6px;
   padding-inline: 8px;
   height: 32px;
@@ -99,8 +98,7 @@
   position: relative;
 }
 
-[data-component="tabs-v2"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-v2-list"]::before,
-[data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"] [data-slot="tabs-v2-list"]::before {
+[data-component="tabs-v2"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-v2-list"]::before {
   height: 1px;
   content: "";
   width: calc(100% + 16px);
@@ -111,8 +109,12 @@
 }
 
 [data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"] [data-slot="tabs-v2-list"] {
-  padding-bottom: 8px;
-  align-items: start;
+  gap: 6px;
+  padding-inline: 8px;
+  height: auto;
+  min-height: 28px;
+  align-items: center;
+  position: relative;
 }
 
 [data-component="tabs-v2"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-v2-trigger-wrapper"] {
@@ -144,10 +146,15 @@
 }
 
 [data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"] [data-slot="tabs-v2-trigger-wrapper"] {
-  height: 24px;
-  border-radius: 4px;
-  border: 0.5px solid transparent;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: none;
   box-sizing: border-box;
+  background-color: transparent;
+  box-shadow: none;
   color: var(--v2-text-text-muted);
 }
 
@@ -155,22 +162,21 @@
   width: 100%;
   height: 100%;
   justify-content: center;
-  padding: 0 6px;
-  border: 0.5px solid transparent;
+  padding: 0 10px;
+  border: none;
+  font-weight: 400;
 }
 
 [data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"]
   [data-slot="tabs-v2-trigger-wrapper"]:hover:not(:disabled):not(:has([data-selected])) {
-  background-color: var(--v2-background-bg-layer-01);
   color: var(--v2-text-text-base);
-  border: 0.5px solid var(--v2-border-border-muted);
 }
 
 [data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"]
   [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
   background-color: var(--v2-background-bg-layer-02);
   color: var(--v2-text-text-base);
-  border: 0.5px solid var(--v2-border-border-muted);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-list"] {

@@ -115,7 +115,7 @@
     flex-shrink: 0;
   }
 
-  [data-slot="basic-tool-v2-diff"] [data-component="diff-changes"] {
+  [data-slot="basic-tool-v2-diff"] [data-component="diff-changes-v2"] {
     gap: 4px;
   }
 

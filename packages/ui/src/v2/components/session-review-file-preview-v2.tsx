@@ -1,0 +1,245 @@
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import type { SelectedLineRange } from "@pierre/diffs"
+import { DiffChanges } from "./diff-changes-v2"
+import { FileIcon } from "../../components/file-icon"
+import { useFileComponent } from "../../context/file"
+import { useI18n } from "../../context/i18n"
+import { mediaKindFromPath } from "../../pierre/media"
+import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
+import type { FileContent, SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import { createEffect, createMemo, Show, untrack } from "solid-js"
+import { createStore } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
+import { normalize, text, type ViewDiff } from "../../components/session-diff"
+import type {
+  SessionReviewComment,
+  SessionReviewCommentActions,
+  SessionReviewCommentDelete,
+  SessionReviewCommentUpdate,
+  SessionReviewDiffStyle,
+  SessionReviewFocus,
+  SessionReviewLineComment,
+} from "../../components/session-review"
+import type { SessionReviewExpandMode } from "./session-review-v2"
+import { createLineCommentControllerV2 } from "./line-comment-annotations-v2"
+import { LineCommentV2OverflowIcon } from "./line-comment-v2"
+import { MenuV2 } from "./menu-v2"
+import "./session-review-v2.css"
+
+type ReviewDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
+
+export type SessionReviewFilePreviewV2Props = {
+  file: string
+  diff: ReviewDiff
+  diffStyle: SessionReviewDiffStyle
+  expandMode?: SessionReviewExpandMode
+  readFile?: (path: string) => Promise<FileContent | undefined>
+  onRendered?: VoidFunction
+  onLineComment?: (comment: SessionReviewLineComment) => void
+  onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
+  onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
+  lineCommentActions?: SessionReviewCommentActions
+  comments?: SessionReviewComment[]
+  focusedComment?: SessionReviewFocus | null
+  onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
+}
+
+function statusLabel(status: ViewDiff["status"]) {
+  if (status === "added") return "A"
+  if (status === "deleted") return "D"
+  return "M"
+}
+
+function statusType(status: ViewDiff["status"]) {
+  if (status === "added") return "added"
+  if (status === "deleted") return "deleted"
+  return "modified"
+}
+
+function selectionSide(range: SelectedLineRange) {
+  return range.endSide ?? range.side ?? "additions"
+}
+
+function selectionPreview(diff: ViewDiff, range: SelectedLineRange) {
+  const side = selectionSide(range)
+  const contents = text(diff, side)
+  if (contents.length === 0) return undefined
+  return previewSelectedLines(contents, range)
+}
+
+function ReviewCommentMenuV2(props: {
+  labels: SessionReviewCommentActions
+  onEdit: VoidFunction
+  onDelete: VoidFunction
+}) {
+  return (
+    <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <MenuV2 gutter={4}>
+        <MenuV2.Trigger
+          as="button"
+          type="button"
+          data-slot="line-comment-v2-overflow"
+          aria-label={props.labels.moreLabel}
+        >
+          <LineCommentV2OverflowIcon />
+        </MenuV2.Trigger>
+        <MenuV2.Portal>
+          <MenuV2.Content>
+            <MenuV2.Item onSelect={props.onEdit}>{props.labels.editLabel}</MenuV2.Item>
+            <MenuV2.Item onSelect={props.onDelete}>{props.labels.deleteLabel}</MenuV2.Item>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
+    </div>
+  )
+}
+
+export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Props) {
+  const i18n = useI18n()
+  const fileComponent = useFileComponent()
+
+  const [store, setStore] = createStore({
+    selection: null as SelectedLineRange | null,
+    commenting: null as SelectedLineRange | null,
+    opened: null as string | null,
+  })
+
+  const view = createMemo(() => ({
+    ...normalize(props.diff),
+    preloaded: "preloaded" in props.diff ? props.diff.preloaded : undefined,
+  }))
+  const diffCanRender = createMemo(() => view().additions !== 0 || view().deletions !== 0)
+  const mediaKind = createMemo(() => mediaKindFromPath(props.file))
+  const comments = createMemo(() => (props.comments ?? []).filter((comment) => comment.file === props.file))
+  const commentedLines = createMemo(() => comments().map((comment) => comment.selection))
+  const lineCommentsEnabled = () => props.onLineComment != null
+
+  const commentsUi = createLineCommentControllerV2<SessionReviewComment>({
+    comments,
+    label: i18n.t("ui.lineComment.submit"),
+    draftKey: () => props.file,
+    state: {
+      opened: () => store.opened,
+      setOpened: (id) => setStore("opened", id),
+      selected: () => store.selection,
+      setSelected: (range) => setStore("selection", range),
+      commenting: () => store.commenting,
+      setCommenting: (range) => setStore("commenting", range),
+    },
+    getSide: selectionSide,
+    clearSelectionOnSelectionEndNull: false,
+    onSubmit: ({ comment, selection }) => {
+      props.onLineComment?.({
+        file: props.file,
+        selection,
+        comment,
+        preview: selectionPreview(view(), selection),
+      })
+    },
+    onUpdate: ({ id, comment, selection }) => {
+      props.onLineCommentUpdate?.({
+        id,
+        file: props.file,
+        selection,
+        comment,
+        preview: selectionPreview(view(), selection),
+      })
+    },
+    onDelete: (comment) => {
+      props.onLineCommentDelete?.({
+        id: comment.id,
+        file: props.file,
+      })
+    },
+    editSubmitLabel: props.lineCommentActions?.saveLabel,
+    renderCommentActions: props.lineCommentActions
+      ? (comment, controls) => (
+          <ReviewCommentMenuV2
+            labels={props.lineCommentActions!}
+            onEdit={controls.edit}
+            onDelete={controls.remove}
+          />
+        )
+      : undefined,
+  })
+
+  createEffect(() => {
+    const focus = props.focusedComment
+    if (!focus || focus.file !== props.file) return
+
+    untrack(() => {
+      setStore("opened", focus.id)
+
+      const comment = (props.comments ?? []).find((item) => item.file === focus.file && item.id === focus.id)
+      if (comment) setStore("selection", cloneSelectedLineRange(comment.selection))
+    })
+  })
+
+  const expandUnchanged = () => props.expandMode === "expand"
+
+  const diffViewer = () => (
+    <Dynamic
+      component={fileComponent}
+      mode="diff"
+      fileDiff={view().fileDiff}
+      preloadedDiff={view().preloaded}
+      diffStyle={props.diffStyle}
+      expandUnchanged={expandUnchanged()}
+      hunkSeparators={view().fileDiff.isPartial ? "simple" : "line-info-basic"}
+      onRendered={props.onRendered}
+      enableLineSelection={lineCommentsEnabled()}
+      enableHoverUtility={lineCommentsEnabled()}
+      onLineSelected={(range: SelectedLineRange | null) => {
+        if (!lineCommentsEnabled()) return
+        commentsUi.onLineSelected(range)
+      }}
+      onLineSelectionEnd={(range: SelectedLineRange | null) => {
+        if (!lineCommentsEnabled()) return
+        commentsUi.onLineSelectionEnd(range)
+      }}
+      onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+      annotations={commentsUi.annotations()}
+      renderAnnotation={commentsUi.renderAnnotation}
+      renderHoverUtility={lineCommentsEnabled() ? commentsUi.renderHoverUtility : undefined}
+      selectedLines={store.selection}
+      commentedLines={commentedLines()}
+      media={{
+        mode: "auto",
+        path: props.file,
+        deleted: view().status === "deleted",
+        readFile: view().status === "deleted" ? undefined : props.readFile,
+      }}
+    />
+  )
+
+  return (
+    <>
+      <div data-slot="session-review-v2-file-header">
+        <div data-slot="session-review-v2-file-title">
+          <div data-slot="session-review-v2-file-status" data-type={statusType(view().status)}>
+            {statusLabel(view().status)}
+          </div>
+          <FileIcon node={{ path: props.file, type: "file" }} />
+          <span data-slot="session-review-v2-file-name">{getFilename(props.file)}</span>
+          <Show when={props.file.includes("/")}>
+            <span data-slot="session-review-v2-file-path">{getDirectory(props.file)}</span>
+          </Show>
+        </div>
+        <DiffChanges changes={view()} />
+      </div>
+      <div data-slot="session-review-v2-diff-scroll">
+        <Show
+          when={diffCanRender()}
+          fallback={
+            <div data-slot="session-review-v2-empty">
+              <span class="text-12-regular text-text-weak">{i18n.t("ui.fileMedia.binary.title")}</span>
+            </div>
+          }
+        >
+          {diffViewer()}
+        </Show>
+        <Show when={mediaKind() && !diffCanRender()}>{diffViewer()}</Show>
+      </div>
+    </>
+  )
+}

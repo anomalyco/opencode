@@ -157,12 +157,22 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     return out
   }
 
+  const allFiles = () => {
+    const out: string[] = []
+    for (const id of Object.keys(tree.node)) {
+      const node = tree.node[id]
+      if (node?.type === "file") out.push(node.path)
+    }
+    return out
+  }
+
   return {
     listDir,
     expandDir,
     collapseDir,
     dirState,
     children,
+    allFiles,
     node: (path: string) => tree.node[path],
     isLoaded: (path: string) => Boolean(tree.dir[path]?.loaded),
     reset,

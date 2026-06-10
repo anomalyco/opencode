@@ -29,6 +29,8 @@ export function TooltipV2(props: TooltipV2Props) {
     "forceOpen",
     "ignoreSafeArea",
     "value",
+    "openDelay",
+    "placement",
   ])
 
   const close = () => setState("open", false)
@@ -89,7 +91,8 @@ export function TooltipV2(props: TooltipV2Props) {
         <KobalteTooltip
           gutter={4}
           {...others}
-          openDelay={0}
+          placement={local.placement ?? "bottom"}
+          openDelay={local.openDelay ?? 2000}
           closeDelay={0}
           ignoreSafeArea={local.ignoreSafeArea ?? true}
           open={local.forceOpen || state.open}
@@ -125,7 +128,7 @@ export function TooltipV2(props: TooltipV2Props) {
                 if (theme) el.setAttribute("data-theme", theme)
               }}
               data-component="tooltip-v2"
-              data-placement={props.placement}
+              data-placement={local.placement ?? "bottom"}
               data-force-open={local.forceOpen}
               class={local.contentClass}
               style={local.contentStyle}
