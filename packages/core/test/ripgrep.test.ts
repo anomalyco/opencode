@@ -10,7 +10,27 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(Ripgrep.defaultLayer)
 
 describe("Ripgrep", () => {
-  it.live("allows caller globs to re-include git metadata", () =>
+  it.live("keeps ignored files out of catch-all find results", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "node_modules", "pkg"), { recursive: true }))
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "src")))
+          yield* Effect.promise(() => Bun.$`git init -q ${tmp.path}`)
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, ".gitignore"), "node_modules/\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "node_modules", "pkg", "index.js"), "ignored\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "src", "index.js"), "included\n"))
+
+          const files = yield* (yield* Ripgrep.Service).find({ cwd: tmp.path, pattern: "*", limit: 10 })
+          expect(files.map((item) => item.path)).toContain(RelativePath.make("src/index.js"))
+          expect(files.map((item) => item.path)).not.toContain(RelativePath.make("node_modules/pkg/index.js"))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("never includes git metadata", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -23,7 +43,7 @@ describe("Ripgrep", () => {
 
           const files = yield* ripgrep.find({ cwd: tmp.path, pattern: "**/*", limit: 10 })
           expect(files.map((item) => item.path)).toContain(RelativePath.make(".opencode/config"))
-          expect(files.map((item) => item.path)).toContain(RelativePath.make(".git/config"))
+          expect(files.map((item) => item.path)).not.toContain(RelativePath.make(".git/config"))
 
           const observed: string[] = []
           const limited = yield* ripgrep.find({
@@ -36,7 +56,7 @@ describe("Ripgrep", () => {
 
           const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", include: "config", limit: 10 })
           expect(matches.map((item) => item.entry.path)).toContain(RelativePath.make(".opencode/config"))
-          expect(matches.map((item) => item.entry.path)).toContain(RelativePath.make(".git/config"))
+          expect(matches.map((item) => item.entry.path)).not.toContain(RelativePath.make(".git/config"))
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
