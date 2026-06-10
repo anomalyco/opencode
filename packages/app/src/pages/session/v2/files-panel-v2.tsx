@@ -33,6 +33,7 @@ export function FilesPanelV2Sidebar(props: FilesPanelV2SidebarProps) {
 
   return (
     <SessionReviewV2Sidebar
+      variant="files"
       open={props.state.sidebarOpened()}
       title={props.title}
       filter={props.state.filesFilter()}

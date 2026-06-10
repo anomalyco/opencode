@@ -78,8 +78,12 @@
   min-width: 0;
   font-size: 13px;
   font-weight: 500;
-  margin-left: 8px;
   color: var(--text-strong, var(--v2-text-text-base));
+}
+
+[data-component="session-review-v2-sidebar-root"][data-variant="files"]
+  [data-slot="session-review-v2-sidebar-title"] {
+  margin-left: 8px;
 }
 
 :is([data-component="session-review-v2"], [data-component="session-review-v2-sidebar-root"])

@@ -39,6 +39,7 @@ export type SessionReviewV2Props = {
 
 export type SessionReviewV2SidebarProps = {
   open: boolean
+  variant?: "review" | "files"
   title?: JSX.Element
   stats?: JSX.Element
   filter: string
@@ -65,7 +66,10 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   })
 
   return (
-    <div data-component="session-review-v2-sidebar-root">
+    <div
+      data-component="session-review-v2-sidebar-root"
+      data-variant={props.variant ?? "review"}
+    >
       <aside
         data-slot="session-review-v2-sidebar"
         data-resizing={resizing() ? "" : undefined}
