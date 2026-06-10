@@ -127,6 +127,60 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
 
+      // An explicit `model` param overrides BOTH the agent's own model and the
+      // parent assistant inheritance. Validate it here — BEFORE the child session
+      // is created and before ops.prompt — so an unknown, malformed, or unsafe
+      // value short-circuits without spawning an orphan child session. The gate is
+      // `!== undefined` (not truthiness) so an empty string is treated as PRESENT
+      // and validated/rejected rather than silently inheriting.
+      const override =
+        params.model !== undefined
+          ? yield* Effect.gen(function* () {
+              const requested = params.model!
+              const resolver = Option.getOrUndefined(providerOption)
+              if (!resolver)
+                return yield* Effect.fail(
+                  new Error(`Cannot resolve task model "${requested}": the provider service is unavailable.`),
+                )
+              const parsed = Provider.parseModel(requested)
+              // Reject empty segments and prototype-polluting keys BEFORE any provider
+              // lookup. An unguarded record index on these keys would otherwise resolve
+              // Object.prototype as a "found" model, or throw a raw TypeError that leaks
+              // "Cannot read properties of undefined" instead of an actionable error.
+              const unsafe = (segment: string) =>
+                segment === "" ||
+                segment === "__proto__" ||
+                segment === "constructor" ||
+                segment === "prototype"
+              if (unsafe(parsed.providerID) || unsafe(parsed.modelID))
+                return yield* Effect.fail(
+                  new Error(
+                    `Invalid task model "${requested}": expected "providerID/modelID" naming a known provider and model.`,
+                  ),
+                )
+              yield* resolver.getModel(parsed.providerID, parsed.modelID).pipe(
+                Effect.mapError(
+                  () =>
+                    new Error(
+                      `Invalid task model "${requested}": expected "providerID/modelID" naming a known provider and model.`,
+                    ),
+                ),
+                // Defensive: the local guard above should make this unreachable, but a
+                // raw DEFECT (e.g. a TypeError from unguarded record indexing) is NOT
+                // caught by mapError. Convert any defect to the same actionable error so
+                // no raw "Cannot read properties of undefined" can leak.
+                Effect.catchDefect(() =>
+                  Effect.fail(
+                    new Error(
+                      `Invalid task model "${requested}": expected "providerID/modelID" naming a known provider and model.`,
+                    ),
+                  ),
+                ),
+              )
+              return parsed
+            })
+          : undefined
+
       const session = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
@@ -176,31 +230,6 @@ export const TaskTool = Tool.define(
       )
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
       const variant = msg.info.variant
-
-      // An explicit `model` param overrides BOTH the agent's own model and the
-      // parent assistant inheritance. Parse "providerID/modelID" and validate it
-      // through Provider.getModel before spawning the subagent so an unknown or
-      // malformed value fails fast (and never reaches ops.prompt).
-      const override = params.model
-        ? yield* Effect.gen(function* () {
-            const requested = params.model!
-            const resolver = Option.getOrUndefined(providerOption)
-            if (!resolver)
-              return yield* Effect.fail(
-                new Error(`Cannot resolve task model "${requested}": the provider service is unavailable.`),
-              )
-            const parsed = Provider.parseModel(requested)
-            yield* resolver.getModel(parsed.providerID, parsed.modelID).pipe(
-              Effect.mapError(
-                () =>
-                  new Error(
-                    `Invalid task model "${requested}": expected "providerID/modelID" naming a known provider and model.`,
-                  ),
-              ),
-            )
-            return parsed
-          })
-        : undefined
 
       const model = override ??
         next.model ?? {

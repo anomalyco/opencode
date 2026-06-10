@@ -1,40 +1,49 @@
 /**
  * @spec-handoff
- * @interface TaskTool input schema — new OPTIONAL `model` parameter
+ * @interface TaskTool input schema — OPTIONAL `model` parameter
  *   model?: string   // format "providerID/modelID", e.g. "anthropic/claude-sonnet-4"
- *   Added to BaseParameterFields in src/tool/task.ts (line ~43-52) so it flows into
- *   BOTH `BaseParameters` (jsonSchema, line 54) and `Parameters` (line 56).
+ *   Lives in BaseParameterFields (src/tool/task.ts:53-56) so it flows into BOTH
+ *   `BaseParameters` (jsonSchema) and `Parameters`.
  *
  * @behavior
- *   1. model OMITTED → unchanged: subagent runs on `agent.model` if set, else inherits
- *      the parent assistant message's { providerID, modelID } (task.ts:171-174). The
- *      `model` passed to ops.prompt (task.ts:195-198) equals that inherited/agent model;
- *      `variant` stays the parent variant when the agent has no model (task.ts:199).
+ *   1. model OMITTED → subagent runs on `agent.model` if set, else inherits the parent
+ *      assistant message's { providerID, modelID }. The `model` passed to ops.prompt
+ *      equals that inherited/agent model; `variant` stays the parent variant when the
+ *      agent has no model of its own.
  *   2. model = VALID "providerID/modelID" → overrides BOTH agent.model and parent
- *      inheritance. Parse with Provider.parseModel(params.model) (provider.ts:1944) and
- *      validate with Provider.getModel(parsed.providerID, parsed.modelID) (provider.ts:1747).
+ *      inheritance. Parsed with Provider.parseModel and validated with Provider.getModel.
  *      The `model` passed to ops.prompt equals the parsed { providerID, modelID }, and
- *      `variant` becomes undefined (treated like an explicit agent-model override).
- *   3. model = unknown provider OR unknown model → Provider.getModel throws
- *      ModelNotFoundError (provider.ts:1757/1766); the tool FAILS with a clear, actionable
- *      error whose message contains the offending "providerID/modelID". ops.prompt is never
- *      called (validation short-circuits before spawning the subagent).
+ *      `variant` becomes undefined (treated like an explicit agent-model override). The
+ *      override beats the subagent's OWN configured model, not just parent inheritance.
+ *   3. model = unknown provider OR unknown model → Provider.getModel raises
+ *      ModelNotFoundError; the tool FAILS with a clear, actionable error whose message
+ *      contains the offending "providerID/modelID". ops.prompt is never called and NO
+ *      child subagent session is created (validation short-circuits before spawning).
  *   4. model = malformed string with no "/" → FAIL with a clear error mentioning the bad
  *      string. No silent fallthrough to the inherited model.
+ *   5. model = "" (empty string) → FAIL with a clear error. Empty is NOT treated as
+ *      "omitted": the gate is `params.model !== undefined`, not a truthiness check, so an
+ *      empty string never silently inherits. ops.prompt is never called.
+ *   6. model = prototype-polluting key, e.g. "anthropic/__proto__" or "__proto__/x" →
+ *      FAIL with a clear, actionable error naming the offending value. Must NOT bypass
+ *      validation (treating Object.prototype as a "found" model) and must NOT surface a
+ *      raw "Cannot read properties of undefined" TypeError. ops.prompt is never called.
+ *   7. model = VALID multi-slash modelID, e.g. "openrouter/anthropic/claude-3.5" →
+ *      providerID is the FIRST segment ("openrouter"); modelID is the remainder joined
+ *      back with "/" ("anthropic/claude-3.5"). Resolves and is passed through to ops.prompt
+ *      exactly as { providerID: "openrouter", modelID: "anthropic/claude-3.5" }.
  *
  * @edge-cases
- *   - Only a provided model string triggers validation; omission preserves current behavior.
- *   - Override validation runs through Provider.getModel BEFORE ops.prompt — a failed
- *     validation must short-circuit so ops.prompt is never invoked.
- *   - The error message must surface the user-supplied model string for actionability.
+ *   - Only a present (`!== undefined`) model string triggers validation; omission alone
+ *     preserves the inheritance behavior. An empty string is present → it validates → fails.
+ *   - Override validation runs through Provider.getModel BEFORE the child session is created
+ *     and BEFORE ops.prompt — a failed validation must short-circuit so neither happens.
+ *   - The error message must surface the user-supplied model string for actionability,
+ *     including for prototype-polluting keys (no raw TypeError leakage).
  *
- * @change-sites src/tool/task.ts
- *   - schema:            BaseParameterFields (line ~43) — add `model: Schema.optional(Schema.String)`
- *   - model resolution:  lines 171-174 — when `params.model` is set, override with the
- *                        parsed + validated model instead of agent/parent inheritance
- *   - ops.prompt call:   lines 195-199 — pass the overridden model; set `variant` undefined on override
  * @helpers Provider.parseModel, Provider.getModel, Provider.ModelNotFoundError
- * @see src/provider/provider.ts
+ * @see src/provider/provider.ts (getModel record lookup: provider.ts:1747-1768;
+ *      parseModel split-on-"/": provider.ts:1944)
  */
 import { afterEach, describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -91,7 +100,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const it = testEffect(layer())
 const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
 
-// The one model the Task tool's `model` override is allowed to resolve to.
+// A model the Task tool's `model` override is allowed to resolve to.
 // Distinct from `ref` (the inherited parent/seed model) so override vs. inheritance
 // can be told apart by the captured ops.prompt input.
 const overrideRef = {
@@ -99,13 +108,47 @@ const overrideRef = {
   modelID: ModelV2.ID.make("claude-sonnet-4"),
 }
 
-// Stub Provider.getModel: resolves only `overrideRef`, otherwise raises the same
-// ModelNotFoundError the real provider raises for unknown provider/model.
+// A second valid model whose modelID itself contains slashes. parseModel keeps the
+// FIRST "/" segment as the providerID and joins the rest back as the modelID, so the
+// string "openrouter/anthropic/claude-3.5" must resolve to this pair.
+const multiSlashRef = {
+  providerID: ProviderV2.ID.make("openrouter"),
+  modelID: ModelV2.ID.make("anthropic/claude-3.5"),
+}
+
+// Known-model catalog for the override-validation tests. Declared as plain object
+// literals ON PURPOSE: the real Provider.getModel resolves models with record lookups
+// (`s.providers[providerID]` provider.ts:1749, then `provider.models[modelID]`
+// provider.ts:1760). A prototype key like "__proto__" therefore resolves through
+// Object.prototype here exactly as it would against real provider state, which is what
+// lets the prototype-key tests exercise the genuine lookup hazard instead of a
+// pre-sanitized mock.
+const knownModels: Record<string, { models: Record<string, Provider.Model> }> = {
+  anthropic: {
+    models: {
+      "claude-sonnet-4": ProviderTest.model({ id: overrideRef.modelID, providerID: overrideRef.providerID }),
+    },
+  },
+  openrouter: {
+    models: {
+      "anthropic/claude-3.5": ProviderTest.model({ id: multiSlashRef.modelID, providerID: multiSlashRef.providerID }),
+    },
+  },
+}
+
+// Mirror Provider.getModel (provider.ts:1747-1768): a missing provider OR a missing
+// model raises ModelNotFoundError; whatever the records resolve is treated as a found
+// model — including anything reachable via the prototype chain. The record lookups are
+// deliberately unguarded so prototype-polluting keys behave as they do in production.
 const providerMock = Layer.mock(Provider.Service)({
   getModel: (providerID, modelID) =>
-    providerID === overrideRef.providerID && modelID === overrideRef.modelID
-      ? Effect.succeed(ProviderTest.model({ id: modelID, providerID }))
-      : Effect.fail(new Provider.ModelNotFoundError({ providerID, modelID, suggestions: [] })),
+    Effect.gen(function* () {
+      const provider = knownModels[providerID]
+      if (!provider) return yield* Effect.fail(new Provider.ModelNotFoundError({ providerID, modelID, suggestions: [] }))
+      const info = provider.models[modelID]
+      if (!info) return yield* Effect.fail(new Provider.ModelNotFoundError({ providerID, modelID, suggestions: [] }))
+      return info
+    }),
 })
 
 const withModel = testEffect(Layer.mergeAll(layer(), providerMock))
@@ -957,9 +1000,9 @@ describe("tool.task", () => {
 })
 
 describe("tool.task model override", () => {
-  // Behavior 1 — baseline guard (expected GREEN): omitting `model` preserves the
-  // current inheritance. The captured ops.prompt input must use the parent/seed
-  // model and keep the parent variant (the "general" agent has no model of its own).
+  // Behavior 1 — omitting `model` preserves inheritance. The captured ops.prompt input
+  // uses the parent/seed model and keeps the parent variant (the "general" agent has no
+  // model of its own).
   withModel.instance("omitting model preserves inherited parent model and variant", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -991,10 +1034,9 @@ describe("tool.task model override", () => {
     }),
   )
 
-  // Behavior 2 — valid override (expected RED until implemented): a valid
-  // "providerID/modelID" overrides both agent.model and parent inheritance. The
-  // captured model must equal Provider.parseModel(params.model), and variant must
-  // be undefined (treated like an explicit agent-model override).
+  // Behavior 2 — a valid "providerID/modelID" overrides both agent.model and parent
+  // inheritance. The captured model equals Provider.parseModel(params.model), and variant
+  // is undefined (treated like an explicit agent-model override).
   withModel.instance("valid model param overrides agent and parent inheritance", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -1028,10 +1070,9 @@ describe("tool.task model override", () => {
     }),
   )
 
-  // Behavior 3 — unknown model (expected RED until implemented): a well-formed
-  // "providerID/modelID" that Provider.getModel rejects must fail the tool with a
-  // clear, actionable error mentioning the offending model, and ops.prompt must
-  // never be called.
+  // Behavior 3 — a well-formed "providerID/modelID" that Provider.getModel rejects fails
+  // the tool with a clear, actionable error mentioning the offending model; ops.prompt is
+  // never called.
   withModel.instance("unknown model param fails with an actionable error", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -1062,14 +1103,14 @@ describe("tool.task model override", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("Invalid task model")
       expect(rendered).toContain("bogus/does-not-exist")
       expect(prompted).toBe(false)
     }),
   )
 
-  // Behavior 4 — malformed model (expected RED until implemented): a string with no
-  // "/" must fail with a clear error mentioning the bad value — no silent fallthrough
-  // to the inherited model.
+  // Behavior 4 — a string with no "/" fails with a clear error mentioning the bad value —
+  // no silent fallthrough to the inherited model.
   withModel.instance("malformed model param without a slash fails clearly", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -1100,8 +1141,254 @@ describe("tool.task model override", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("Invalid task model")
       expect(rendered).toContain("not-a-valid-model")
       expect(prompted).toBe(false)
+    }),
+  )
+
+  // Behavior 5 (M1) — RED until the gate becomes `params.model !== undefined`. An empty
+  // string is currently falsy, so the impl silently inherits and reaches ops.prompt. The
+  // spec is the opposite: an empty model string is PRESENT, so it must validate and fail,
+  // and ops.prompt must never be called.
+  withModel.instance("empty-string model param fails instead of silently inheriting", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(prompted).toBe(false)
+    }),
+  )
+
+  // Behavior 6 (M3) — RED until prototype keys are rejected. The provider mock resolves
+  // models with the same unguarded record lookup the real Provider.getModel uses, so
+  // "anthropic/__proto__" currently resolves Object.prototype as a "found" model and
+  // BYPASSES validation, reaching ops.prompt. The spec is that a prototype-polluting key
+  // fails with a clear error naming the offending value, and ops.prompt is never called.
+  withModel.instance("prototype-key model param (anthropic/__proto__) fails clearly", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "anthropic/__proto__",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("anthropic/__proto__")
+      expect(prompted).toBe(false)
+    }),
+  )
+
+  // Behavior 6 (M3) — RED until prototype keys are rejected. With "__proto__" as the
+  // providerID the real record lookup resolves Object.prototype as the provider, then
+  // reads `provider.models` (undefined) and indexes it, surfacing a raw
+  // "Cannot read properties of undefined" TypeError instead of an actionable error. The
+  // spec is a clear error naming the offending value, with ops.prompt never called.
+  withModel.instance("prototype-key model param (__proto__/x) fails with an actionable error", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "__proto__/x",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("__proto__/x")
+      expect(rendered).not.toContain("Cannot read properties of undefined")
+      expect(prompted).toBe(false)
+    }),
+  )
+
+  // Behavior 7 (M6) — a VALID model whose modelID itself contains slashes resolves and is
+  // passed through to ops.prompt verbatim. parseModel keeps only the FIRST segment as the
+  // providerID and joins the rest as the modelID, so "openrouter/anthropic/claude-3.5"
+  // must reach ops.prompt as { providerID: "openrouter", modelID: "anthropic/claude-3.5" }.
+  withModel.instance("valid multi-slash modelID resolves and is passed through verbatim", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "openrouter/anthropic/claude-3.5",
+      }
+
+      yield* def.execute(params, {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
+
+      expect(seen?.model).toEqual(multiSlashRef)
+      expect(seen?.variant).toBeUndefined()
+    }),
+  )
+
+  // Behavior 2 (M6) — the explicit override beats the subagent's OWN configured model, not
+  // merely parent inheritance. The "scoped" subagent is configured with its own model
+  // (anthropic/claude-sonnet-4); calling Task with a DIFFERENT valid model
+  // (openrouter/anthropic/claude-3.5) must send the explicit override — not the agent's own
+  // model and not the inherited parent model — to ops.prompt.
+  withModel.instance(
+    "explicit model param beats the subagent's own configured model",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const params = {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "scoped",
+          model: "openrouter/anthropic/claude-3.5",
+        }
+
+        yield* def.execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+
+        // The explicit override wins over the agent's own model (overrideRef) and over the
+        // inherited parent model (ref).
+        expect(seen?.model).toEqual(multiSlashRef)
+        expect(seen?.model).not.toEqual(overrideRef)
+        expect(seen?.variant).toBeUndefined()
+      }),
+    {
+      config: {
+        agent: {
+          scoped: {
+            mode: "subagent",
+            model: "anthropic/claude-sonnet-4",
+          },
+        },
+      },
+    },
+  )
+
+  // Behavior 3/5 (M5) — RED until model validation moves BEFORE child-session creation.
+  // The impl currently creates the child session (task.ts:155-171) before validating the
+  // override (task.ts:184-203), so an invalid model leaves an orphan child session behind.
+  // The spec is that an invalid model short-circuits before any child session is created.
+  withModel.instance("invalid model param creates no child session (validates first)", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "bogus/does-not-exist",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(prompted).toBe(false)
+      // Observe the side effect directly: a failed validation must not spawn a child.
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(0)
     }),
   )
 })
