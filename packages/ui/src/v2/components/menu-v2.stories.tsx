@@ -179,7 +179,7 @@ export const Context = {
             border: "1px dashed rgba(0, 0, 0, 0.2)",
             color: "#5c5c5c",
             "font-size": "13px",
-            "font-family": "var(--font-family-sans)",
+            "font-family": "var(--v2-font-family-sans)",
             "user-select": "none",
           }}
         >

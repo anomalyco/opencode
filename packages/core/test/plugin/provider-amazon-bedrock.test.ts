@@ -1,7 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { fakeSelectorSdk, it, model, provider, withEnv } from "./provider-helper"
 
 function bedrockBaseURL(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
@@ -16,31 +18,40 @@ function bedrockFetch(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
   ).config.fetch
 }
 
+function openAIUrl(language: unknown, path: string, modelId: string) {
+  return (language as { config: { url: (input: { path: string; modelId: string }) => string } }).config.url({
+    path,
+    modelId,
+  })
+}
+
 describe("AmazonBedrockPlugin", () => {
-  it.effect("moves endpoint option to endpoint URL", () =>
+  it.effect("moves endpoint option to api URL", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
       yield* plugin.add(AmazonBedrockPlugin)
-      const result = yield* plugin.trigger(
-        "provider.update",
-        {},
-        {
-          provider: provider("amazon-bedrock", {
-            options: {
-              headers: {},
-              body: {},
-              aisdk: { provider: { endpoint: "https://bedrock.example" }, request: {} },
-            },
-          }),
-          cancel: false,
-        },
-      )
-      expect(result.provider.endpoint).toEqual({
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
+        const bedrock = provider("amazon-bedrock", {
+          api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock" },
+          request: {
+            headers: {},
+            body: { endpoint: "https://bedrock.example" },
+          },
+        })
+        catalog.provider.update(bedrock.id, (item) => {
+          item.api = bedrock.api
+          item.request = bedrock.request
+        })
+      })
+      const result = yield* catalog.provider.get(ProviderV2.ID.amazonBedrock)
+      expect(result.api).toEqual({
         type: "aisdk",
-        package: "test-provider",
+        package: "@ai-sdk/amazon-bedrock",
         url: "https://bedrock.example",
       })
-      expect(result.provider.options.aisdk.provider.endpoint).toBeUndefined()
+      expect(result.request.body.endpoint).toBeUndefined()
     }),
   )
 
@@ -236,6 +247,85 @@ describe("AmazonBedrockPlugin", () => {
         expect(headers).toEqual(["Bearer env-token"])
       }),
     ),
+  )
+
+  it.effect("creates Mantle SDK with GPT-5 OpenAI base path", () =>
+    withEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined, AWS_ACCESS_KEY_ID: undefined }, () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        yield* plugin.add(AmazonBedrockPlugin)
+        const result = yield* plugin.trigger(
+          "aisdk.sdk",
+          {
+            model: model("amazon-bedrock", "openai.gpt-5.5", {
+              api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
+            }),
+            package: "@ai-sdk/amazon-bedrock/mantle",
+            options: {
+              name: "amazon-bedrock",
+              bearerToken: "token",
+              baseURL: "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+              region: "us-east-2",
+            },
+          },
+          {},
+        )
+        const language = result.sdk.responses("openai.gpt-5.5")
+        expect(openAIUrl(language, "/responses", "openai.gpt-5.5")).toBe(
+          "https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses",
+        )
+      }),
+    ),
+  )
+
+  it.effect("selects Mantle APIs without Bedrock cross-region prefixes", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const calls: string[] = []
+      yield* plugin.add(AmazonBedrockPlugin)
+      yield* plugin.trigger(
+        "aisdk.language",
+        {
+          model: model("amazon-bedrock", "openai.gpt-5.5", {
+            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
+          }),
+          sdk: fakeSelectorSdk(calls),
+          options: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/openai/v1", region: "us-east-2" },
+        },
+        {},
+      )
+      yield* plugin.trigger(
+        "aisdk.language",
+        {
+          model: model("amazon-bedrock", "openai.gpt-oss-safeguard-120b", {
+            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/mantle" },
+          }),
+          sdk: fakeSelectorSdk(calls),
+          options: { region: "us-east-1" },
+        },
+        {},
+      )
+      expect(calls).toEqual(["responses:openai.gpt-5.5", "chat:openai.gpt-oss-safeguard-120b"])
+    }),
+  )
+
+  it.effect("ignores other Bedrock provider subpaths", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      yield* plugin.add(AmazonBedrockPlugin)
+      const result = yield* plugin.trigger(
+        "aisdk.sdk",
+        {
+          model: model("amazon-bedrock", "anthropic.claude-sonnet-4-5", {
+            api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock/anthropic" },
+          }),
+          package: "@ai-sdk/amazon-bedrock/anthropic",
+          options: { name: "amazon-bedrock" },
+        },
+        {},
+      )
+      expect(result.sdk).toBeUndefined()
+    }),
   )
 
   it.effect("uses SigV4 credential env when bearer token is absent", () =>

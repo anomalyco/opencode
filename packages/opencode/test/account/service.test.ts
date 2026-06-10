@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import { Duration, Effect, Layer, Option, Schema } from "effect"
+import { sql } from "drizzle-orm"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
@@ -15,18 +16,18 @@ import {
   RefreshToken,
   UserCode,
 } from "../../src/account/schema"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { testEffect } from "../lib/effect"
 
 const truncate = Layer.effectDiscard(
-  Effect.sync(() => {
-    const db = Database.Client()
-    db.run(/*sql*/ `DELETE FROM account_state`)
-    db.run(/*sql*/ `DELETE FROM account`)
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db.run(sql`DELETE FROM account_state`)
+    yield* db.run(sql`DELETE FROM account`)
   }),
-)
+).pipe(Layer.provide(Database.defaultLayer))
 
-const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
+const it = testEffect(Layer.merge(AccountRepo.defaultLayer, truncate))
 
 const insideEagerRefreshWindow = Duration.toMillis(Duration.minutes(1))
 const outsideEagerRefreshWindow = Duration.toMillis(Duration.minutes(10))
@@ -88,9 +89,7 @@ it.live("login normalizes trailing slashes in the provided server URL", () =>
       }),
     )
 
-    const result = yield* Account.Service.use((s) => s.login("https://one.example.com/")).pipe(
-      Effect.provide(live(client)),
-    )
+    const result = yield* Account.use.login("https://one.example.com/").pipe(Effect.provide(live(client)))
 
     expect(seen).toEqual(["POST https://one.example.com/auth/device/code"])
     expect(result.server).toBe("https://one.example.com")
@@ -108,9 +107,7 @@ it.live("login maps transport failures to account transport errors", () =>
       ),
     )
 
-    const error = yield* Effect.flip(
-      Account.Service.use((s) => s.login("https://one.example.com")).pipe(Effect.provide(live(client))),
-    )
+    const error = yield* Effect.flip(Account.use.login("https://one.example.com").pipe(Effect.provide(live(client))))
 
     expect(error).toBeInstanceOf(AccountTransportError)
     if (error instanceof AccountTransportError) {
@@ -163,7 +160,7 @@ it.live("orgsByAccount groups orgs per account", () =>
       }),
     )
 
-    const rows = yield* Account.Service.use((s) => s.orgsByAccount()).pipe(Effect.provide(live(client)))
+    const rows = yield* Account.use.orgsByAccount().pipe(Effect.provide(live(client)))
 
     expect(rows.map((row) => [row.account.id, row.orgs.map((org) => org.id)]).map(([id, orgs]) => [id, orgs])).toEqual([
       [AccountID.make("user-1"), [OrgID.make("org-1")]],
@@ -201,12 +198,12 @@ it.live("token refresh persists the new token", () =>
       ),
     )
 
-    const token = yield* Account.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
+    const token = yield* Account.use.token(id).pipe(Effect.provide(live(client)))
 
     expect(Option.getOrThrow(token)).toBeDefined()
     expect(String(Option.getOrThrow(token))).toBe("at_new")
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("at_new"))
     expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
@@ -246,12 +243,12 @@ it.live("token refreshes before expiry when inside the eager refresh window", ()
       }),
     )
 
-    const token = yield* Account.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
+    const token = yield* Account.use.token(id).pipe(Effect.provide(live(client)))
 
     expect(String(Option.getOrThrow(token))).toBe("at_new")
     expect(refreshCalls).toBe(1)
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("at_new"))
     expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
@@ -315,7 +312,7 @@ it.live("concurrent config and token requests coalesce token refresh", () =>
     expect(String(Option.getOrThrow(token))).toBe("at_new")
     expect(refreshCalls).toBe(1)
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("at_new"))
     expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
@@ -388,7 +385,7 @@ it.live("poll stores the account and first org on success", () =>
       expect(res.email).toBe("user@example.com")
     }
 
-    const active = yield* AccountRepo.Service.use((r) => r.active())
+    const active = yield* AccountRepo.use.active()
     expect(Option.getOrThrow(active)).toEqual(
       expect.objectContaining({
         id: "user-1",

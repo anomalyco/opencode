@@ -39,17 +39,23 @@ export const MediaPart = Schema.Struct({
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
-export const ToolResultMediaPart = Schema.Struct({
-  type: Schema.Literal("media"),
-  mediaType: Schema.String,
-  data: Schema.String,
-  filename: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.ToolResult.Media" })
-export type ToolResultMediaPart = Schema.Schema.Type<typeof ToolResultMediaPart>
+export const ToolTextContent = Schema.Struct({
+  type: Schema.Literal("text"),
+  text: Schema.String,
+}).annotate({ identifier: "Tool.TextContent" })
+export type ToolTextContent = typeof ToolTextContent.Type
 
-export const ToolResultContentPart = Schema.Union([TextPart, ToolResultMediaPart])
-export type ToolResultContentPart = Schema.Schema.Type<typeof ToolResultContentPart>
+export const ToolFileContent = Schema.Struct({
+  type: Schema.Literal("file"),
+  uri: Schema.String,
+  mime: Schema.String,
+  name: Schema.optional(Schema.String),
+}).annotate({ identifier: "Tool.FileContent" })
+export type ToolFileContent = typeof ToolFileContent.Type
+
+/** Ordered, provider-independent content shown to models and UIs after a tool succeeds. */
+export const ToolContent = Schema.Union([ToolTextContent, ToolFileContent]).pipe(Schema.toTaggedUnion("type"))
+export type ToolContent = Schema.Schema.Type<typeof ToolContent>
 
 const isToolResultValue = (value: unknown): value is ToolResultValue =>
   isRecord(value) &&
@@ -72,7 +78,7 @@ export const ToolResultValue = Object.assign(
     }),
     Schema.Struct({
       type: Schema.Literal("content"),
-      value: Schema.Array(ToolResultContentPart),
+      value: Schema.Array(ToolContent),
     }),
   ]).annotate({ identifier: "LLM.ToolResult" }),
   {
@@ -85,6 +91,48 @@ export const ToolResultValue = Object.assign(
   },
 )
 export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>
+
+export interface ToolOutput {
+  readonly structured: unknown
+  readonly content: ReadonlyArray<ToolContent>
+}
+
+export const ToolOutput = Object.assign(
+  Schema.Struct({
+    structured: Schema.Unknown,
+    content: Schema.Array(ToolContent),
+  }).annotate({ identifier: "LLM.ToolOutput" }),
+  {
+    make: (structured: unknown, content: ReadonlyArray<ToolContent> = []): ToolOutput => ({ structured, content }),
+    fromResultValue: (result: ToolResultValue): ToolOutput | undefined => {
+      switch (result.type) {
+        case "json":
+          return { structured: result.value, content: [] }
+        case "text":
+          return { structured: {}, content: [{ type: "text", text: toolResultText(result.value) }] }
+        case "content":
+          return { structured: {}, content: result.value }
+        case "error":
+          return undefined
+      }
+    },
+    toResultValue: (output: ToolOutput): ToolResultValue => {
+      if (output.content.length === 0) return { type: "json", value: output.structured }
+      if (output.content.length === 1 && output.content[0]?.type === "text")
+        return { type: "text", value: output.content[0].text }
+      return { type: "content", value: output.content }
+    },
+  },
+)
+
+const toolResultText = (value: unknown) => {
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
 
 export const ToolCallPart = Object.assign(
   Schema.Struct({
@@ -157,6 +205,7 @@ export class Message extends Schema.Class<Message>("LLM.Message")({
 
 export namespace Message {
   export type ContentInput = string | ContentPart | ReadonlyArray<ContentPart>
+  export type SystemContentInput = string | TextPart | ReadonlyArray<TextPart>
   export type Input = Omit<ConstructorParameters<typeof Message>[0], "content"> & {
     readonly content: ContentInput
   }
@@ -175,6 +224,14 @@ export namespace Message {
 
   export const assistant = (content: ContentInput) => make({ role: "assistant", content })
 
+  /**
+   * Add an operator-authored instruction at this chronological point in the
+   * conversation. This is distinct from the initial `LLMRequest.system`
+   * prompt. Keep raw retrieved, tool, and web content out of privileged system
+   * updates; pass that untrusted content through ordinary user/tool channels.
+   */
+  export const system = (content: SystemContentInput) => make({ role: "system", content })
+
   export const tool = (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
@@ -183,6 +240,7 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
+  outputSchema: Schema.optional(JsonSchema),
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),

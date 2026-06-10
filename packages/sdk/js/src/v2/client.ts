@@ -1,4 +1,8 @@
 export * from "./gen/types.gen.js"
+export type {
+  FileSystemContent as LocationFileSystemContent,
+  FileSystemEntry as LocationFileSystemEntry,
+} from "./gen/types.gen.js"
 
 import { createClient } from "./gen/client/client.gen.js"
 import { type Config } from "./gen/client/types.gen.js"
@@ -30,8 +34,10 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
       key === "directory" ? encodeURIComponent : undefined,
     )
     if (!value) continue
-    if (!url.searchParams.has(key)) {
-      url.searchParams.set(key, value)
+    for (const query of url.pathname.startsWith("/api/") ? [key, `location[${key}]`] : [key]) {
+      if (!url.searchParams.has(query)) {
+        url.searchParams.set(query, value)
+      }
     }
     changed = true
   }

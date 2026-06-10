@@ -1,3 +1,4 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 /**
  * Reproducer for opencode issue #26514:
  *
@@ -46,8 +47,8 @@ function testAgent(input: {
 
 it.instance("[#26514] subagent spawned from plan mode inherits read-only restriction (edit denied)", () =>
   Effect.gen(function* () {
-    const planAgent = yield* Agent.Service.use((svc) => svc.get("plan"))
-    const generalAgent = yield* Agent.Service.use((svc) => svc.get("general"))
+    const planAgent = yield* Agent.use.get("plan")
+    const generalAgent = yield* Agent.use.get("general")
 
     expect(planAgent).toBeDefined()
     expect(generalAgent).toBeDefined()
@@ -60,7 +61,7 @@ it.instance("[#26514] subagent spawned from plan mode inherits read-only restric
     // session's `permission` field is empty (Plan Mode lives on the agent
     // ruleset, not the session). So we pass [] through as the parent
     // session permission, exactly like the actual code path.
-    const parentSessionPermission: Permission.Ruleset = []
+    const parentSessionPermission: PermissionV1.Ruleset = []
 
     const subagentSessionPermission = deriveSubagentSessionPermission({
       parentSessionPermission,
@@ -83,12 +84,12 @@ it.instance("[#26514] explore subagent launched from plan mode also stays read-o
   // should propagate the parent **agent** permissions, not just deny edit
   // when the subagent happens to already deny it.
   Effect.gen(function* () {
-    const planAgent = yield* Agent.Service.use((svc) => svc.get("plan"))
-    const explore = yield* Agent.Service.use((svc) => svc.get("explore"))
+    const planAgent = yield* Agent.use.get("plan")
+    const explore = yield* Agent.use.get("explore")
     expect(planAgent).toBeDefined()
     expect(explore).toBeDefined()
 
-    const parentSessionPermission: Permission.Ruleset = []
+    const parentSessionPermission: PermissionV1.Ruleset = []
     const subagentSessionPermission = deriveSubagentSessionPermission({
       parentSessionPermission,
       parentAgent: planAgent,
@@ -108,12 +109,12 @@ it.instance(
   // be able to edit when the parent agent is `plan`.
   () =>
     Effect.gen(function* () {
-      const planAgent = yield* Agent.Service.use((svc) => svc.get("plan"))
-      const my = yield* Agent.Service.use((svc) => svc.get("my_subagent"))
+      const planAgent = yield* Agent.use.get("plan")
+      const my = yield* Agent.use.get("my_subagent")
       expect(planAgent).toBeDefined()
       expect(my).toBeDefined()
 
-      const parentSessionPermission: Permission.Ruleset = []
+      const parentSessionPermission: PermissionV1.Ruleset = []
       const subagentSessionPermission = deriveSubagentSessionPermission({
         parentSessionPermission,
         parentAgent: planAgent,

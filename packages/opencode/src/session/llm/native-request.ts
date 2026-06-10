@@ -42,10 +42,15 @@ const providerMetadata = (value: unknown): ProviderMetadata | undefined => {
   return Object.keys(result).length === 0 ? undefined : result
 }
 
+// Stored AI SDK parts historically kept provider-owned continuation metadata in
+// `providerOptions`; native parts now use `providerMetadata` directly.
+const partProviderMetadata = (part: Record<string, unknown>) =>
+  providerMetadata(part.providerMetadata) ?? providerMetadata(part.providerOptions)
+
 const textPart = (part: Record<string, unknown>) => ({
   type: "text" as const,
   text: typeof part.text === "string" ? part.text : "",
-  providerMetadata: providerMetadata(part.providerOptions),
+  providerMetadata: partProviderMetadata(part),
 })
 
 const mediaPart = (part: Record<string, unknown>) => {
@@ -68,7 +73,7 @@ const toolResult = (part: Record<string, unknown>) => {
     result: "value" in output ? output.value : output,
     resultType: type,
     providerExecuted: typeof part.providerExecuted === "boolean" ? part.providerExecuted : undefined,
-    providerMetadata: providerMetadata(part.providerOptions),
+    providerMetadata: partProviderMetadata(part),
   })
 }
 
@@ -80,7 +85,7 @@ const contentPart = (part: unknown) => {
     return {
       type: "reasoning" as const,
       text: typeof part.text === "string" ? part.text : "",
-      providerMetadata: providerMetadata(part.providerOptions),
+      providerMetadata: partProviderMetadata(part),
     }
   if (part.type === "tool-call")
     return ToolCallPart.make({
@@ -88,7 +93,7 @@ const contentPart = (part: unknown) => {
       name: typeof part.toolName === "string" ? part.toolName : "",
       input: part.input,
       providerExecuted: typeof part.providerExecuted === "boolean" ? part.providerExecuted : undefined,
-      providerMetadata: providerMetadata(part.providerOptions),
+      providerMetadata: partProviderMetadata(part),
     })
   if (part.type === "tool-result") return toolResult(part)
   throw new Error(`Native LLM request adapter does not support ${String(part.type)} content parts`)

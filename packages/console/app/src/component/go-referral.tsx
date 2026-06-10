@@ -9,6 +9,7 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
 import { queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
+import { createReferralFromCookie } from "~/lib/referral-invite"
 import "./go-referral.css"
 
 type GoReferralSummary = Awaited<ReturnType<typeof Referral.summary>>
@@ -25,7 +26,10 @@ const emptyUsagePreview = {
 
 export const queryGoReferral = query(async (workspaceID: string) => {
   "use server"
-  return withActor(() => Referral.summary(), workspaceID)
+  return withActor(async () => {
+    await createReferralFromCookie()
+    return Referral.summary()
+  }, workspaceID)
 }, "go.referral.get")
 
 export const queryGoReferralUsagePreview = query(async (workspaceID: string, referralID?: string) => {
@@ -65,6 +69,8 @@ function rewardDescriptionKey(source: GoReferralReward["source"]) {
 
 function rewardActionKey(reward: GoReferralReward, hasActiveGo: boolean) {
   if (reward.status === "applied") return "workspace.referral.reward.action.applied" as const
+  if (reward.status === "pending" && reward.source === "inviter")
+    return "workspace.referral.reward.source.pendingInviter" as const
   if (reward.status === "pending" || !hasActiveGo) return "workspace.referral.reward.action.subscribeUnlock" as const
   return "workspace.referral.reward.action.view" as const
 }

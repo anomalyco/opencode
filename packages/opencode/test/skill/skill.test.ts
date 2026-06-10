@@ -3,30 +3,31 @@ import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
 import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "../../src/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
-import { provideInstance, provideTmpdirInstance, tmpdir } from "../fixture/fixture"
+import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
 
 const node = CrossSpawnSpawner.defaultLayer
 
-const it = testEffect(Layer.mergeAll(Skill.defaultLayer, node))
+const it = testEffect(Layer.mergeAll(Skill.defaultLayer, node, testInstanceStoreLayer))
 const itWithoutClaudeCodeSkills = testEffect(
   Layer.mergeAll(
     Skill.layer.pipe(
       Layer.provide(Discovery.defaultLayer),
       Layer.provide(Config.defaultLayer),
-      Layer.provide(Bus.layer),
-      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(EventV2Bridge.defaultLayer),
+      Layer.provide(FSUtil.defaultLayer),
       Layer.provide(Global.layer),
       Layer.provide(RuntimeFlags.layer({ disableClaudeCodeSkills: true })),
     ),
     node,
+    testInstanceStoreLayer,
   ),
 )
 const itWithoutExternalSkills = testEffect(
@@ -34,12 +35,13 @@ const itWithoutExternalSkills = testEffect(
     Skill.layer.pipe(
       Layer.provide(Discovery.defaultLayer),
       Layer.provide(Config.defaultLayer),
-      Layer.provide(Bus.layer),
-      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(EventV2Bridge.defaultLayer),
+      Layer.provide(FSUtil.defaultLayer),
       Layer.provide(Global.layer),
       Layer.provide(RuntimeFlags.layer({ disableExternalSkills: true })),
     ),
     node,
+    testInstanceStoreLayer,
   ),
 )
 
@@ -287,6 +289,37 @@ description: A skill in the .claude/skills directory.
         }),
       { git: true },
     ),
+  )
+
+  it.live("fails with typed error when requiring a missing skill", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const skill = yield* Skill.Service
+          const error = yield* Effect.flip(skill.require("missing-skill"))
+          expect(error).toBeInstanceOf(Skill.NotFoundError)
+          expect(error._tag).toBe("Skill.NotFoundError")
+          expect(error.name).toBe("missing-skill")
+          expect(error.message).toContain('Skill "missing-skill" not found.')
+        }),
+      { git: true },
+    ),
+  )
+
+  it.effect("exposes tagged expected skill failure classes", () =>
+    Effect.sync(() => {
+      const invalid = new Skill.InvalidError({ path: "/tmp/SKILL.md", message: "Invalid skill frontmatter" })
+      const mismatch = new Skill.NameMismatchError({
+        path: "/tmp/SKILL.md",
+        expected: "expected-skill",
+        actual: "actual-skill",
+      })
+
+      expect(invalid).toBeInstanceOf(Skill.InvalidError)
+      expect(invalid._tag).toBe("SkillInvalidError")
+      expect(mismatch).toBeInstanceOf(Skill.NameMismatchError)
+      expect(mismatch._tag).toBe("SkillNameMismatchError")
+    }),
   )
 
   it.live("discovers skills from .agents/skills/ directory", () =>

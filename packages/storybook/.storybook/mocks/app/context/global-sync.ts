@@ -24,7 +24,7 @@ const [store, setStore] = createStore({
   config: { permission: {} },
 })
 
-export function useGlobalSync() {
+export function useServerSync() {
   return {
     data: {
       provider,
