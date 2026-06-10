@@ -8,6 +8,7 @@ import { testEffect } from "../lib/effect"
 // Per-client state for controlling mock behavior
 interface MockClientState {
   capabilities: { tools?: object; prompts?: object; resources?: object }
+  capabilitiesShouldThrow: boolean
   tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
   listPromptsCalls: number
@@ -51,6 +52,7 @@ function getOrCreateClientState(name?: string): MockClientState {
   if (!state) {
     state = {
       capabilities: { tools: {}, prompts: {}, resources: {} },
+      capabilitiesShouldThrow: false,
       tools: [{ name: "test_tool", description: "A test tool", inputSchema: { type: "object", properties: {} } }],
       listToolsCalls: 0,
       listPromptsCalls: 0,
@@ -155,6 +157,7 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     }
 
     getServerCapabilities() {
+      if (this._state?.capabilitiesShouldThrow) throw new Error("capability discovery failed")
       return this._state?.capabilities
     }
 
@@ -564,6 +567,31 @@ it.instance(
       },
     },
   },
+)
+
+it.instance(
+  "returns failed and closes the client when SDK initialization throws",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "defective-server"
+        const serverState = getOrCreateClientState("defective-server")
+        serverState.capabilitiesShouldThrow = true
+
+        const result = yield* mcp.add("defective-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(statusName(result.status, "defective-server")).toBe("failed")
+        expect((yield* mcp.status())["defective-server"]).toEqual({
+          status: "failed",
+          error: "capability discovery failed",
+        })
+        expect(serverState.closed).toBe(true)
+      }),
+    ),
+  { config: { mcp: {} } },
 )
 
 it.instance(
