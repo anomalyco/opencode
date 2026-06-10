@@ -88,6 +88,9 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
           commands: { start },
         })
         serverSync().project.icon(props.project.worktree, store.iconOverride || undefined)
+        serverSync().project.meta(props.project.worktree, {
+          icon: { color: store.color || undefined },
+        })
         dialog.close()
         return
       }

@@ -418,7 +418,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
       // Without this, different subdirectories of the same git repo would share the same
       // icon from the database instead of using their individual overrides.
-      const base = { ...metadata, ...project }
+      let base = { ...metadata, ...project }
+      // For projects edited via the dialog (especially "global" or no-ID projects),
+      // merge local projectMeta on top so the user's changes take precedence
+      // over the server-side metadata (which may have stale auto-assigned values).
+      if (childStore.projectMeta) {
+        const meta = childStore.projectMeta
+        base = {
+          ...base,
+          name: meta.name ?? base.name,
+          icon: { ...base.icon, ...meta.icon },
+          commands: { ...base.commands, ...meta.commands },
+        }
+      }
       if (childStore.icon) {
         return { ...base, icon: { ...base.icon, override: childStore.icon } }
       }
