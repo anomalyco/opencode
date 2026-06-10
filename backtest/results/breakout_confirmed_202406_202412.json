@@ -1,0 +1,38 @@
+{
+  "scenario": "breakout_confirmed_202406_202412",
+  "passed": false,
+  "metrics": {
+    "report_path": "/var/folders/20/4hf1jmb109bfqzbfv2h30tpr0000gn/T/opencode/mt5-gate/report.html",
+    "log_path": "/var/folders/20/4hf1jmb109bfqzbfv2h30tpr0000gn/T/opencode/mt5-gate/20260610.log",
+    "log_window_selected": null,
+    "risk_version_marker": "RISK_V3_ORDER_CALC_PROFIT",
+    "no_money_count": 0,
+    "margin_error_count": 0,
+    "largest_lot": 0.25,
+    "net_profit": -1534.77,
+    "profit_factor": 0.78,
+    "sharpe_ratio": -5.0,
+    "balance_drawdown_relative_pct": 24.83,
+    "equity_drawdown_relative_pct": 25.39,
+    "balance_drawdown_absolute": 2388.78,
+    "equity_drawdown_absolute": 2422.48,
+    "total_trades": 231,
+    "win_count": 68,
+    "loss_count": 163,
+    "global_stop_count": 0,
+    "global_close_count": 0,
+    "test_passed_count": 1,
+    "test_thread_finished_count": 1,
+    "orders_after_global_stop_count": 0,
+    "win_rate": 0.2943722943722944
+  },
+  "failed_rules": [
+    "profit factor below minimum: 0.78",
+    "sharpe ratio below minimum: -5.0",
+    "drawdown percent above maximum: 25.39"
+  ],
+  "warnings": [],
+  "report_path": "/var/folders/20/4hf1jmb109bfqzbfv2h30tpr0000gn/T/opencode/mt5-gate/report.html",
+  "log_path": "/var/folders/20/4hf1jmb109bfqzbfv2h30tpr0000gn/T/opencode/mt5-gate/20260610.log",
+  "created_at": "2026-06-10T05:24:58.958769+00:00"
+}
