@@ -26,6 +26,7 @@ export type StoreExperimentInput = {
 export type UpdateExperimentResultInput = {
   metrics_json: string
   result_status: ExperimentStatus
+  stage?: ExperimentStage
   overfit_risk: OverfitRisk
 }
 
@@ -57,9 +58,11 @@ export function storeExperiment(db: Database, input: StoreExperimentInput) {
 export function updateExperimentResult(db: Database, id: string, input: UpdateExperimentResultInput) {
   if (!ExperimentStatuses.includes(input.result_status)) throw new Error("invalid result_status")
   if (!OverfitRisks.includes(input.overfit_risk)) throw new Error("invalid overfit_risk")
-  db.query("update experiment set metrics_json = ?, result_status = ?, overfit_risk = ?, updated_at = ? where id = ?").run(
+  if (input.stage !== undefined && !ExperimentStages.includes(input.stage)) throw new Error("invalid stage")
+  db.query("update experiment set metrics_json = ?, result_status = ?, stage = coalesce(?, stage), overfit_risk = ?, updated_at = ? where id = ?").run(
     requireJsonObject(input.metrics_json, "metrics_json"),
     input.result_status,
+    input.stage ?? null,
     input.overfit_risk,
     Date.now(),
     requireText(id, "id"),

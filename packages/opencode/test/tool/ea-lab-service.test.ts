@@ -31,4 +31,22 @@ describe("ea-lab service", () => {
     })
     expect(result.rows[0]?.id).toBe(stored.id)
   })
+
+  test("serves health over http", async () => {
+    await using tmp = await tmpdir()
+    const service = createEaLabService({
+      dbPath: path.join(tmp.path, "ea-lab.sqlite3"),
+      riskGatePath: path.resolve("../../risk/gates.yaml"),
+    })
+    const { startEaLabHttpServer } = await import("../../../../.opencode/mcp/ea-lab-http")
+    const server = startEaLabHttpServer({ service, port: 0 })
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/health`)
+      expect(response.ok).toBe(true)
+      expect(await response.json()).toMatchObject({ ok: true })
+    } finally {
+      void server.stop(true)
+    }
+  })
 })

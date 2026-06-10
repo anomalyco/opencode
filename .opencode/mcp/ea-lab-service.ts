@@ -68,7 +68,10 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
           timeframe: input.timeframe,
           strategy: input.strategy,
           hypothesis: input.hypothesis,
-          implementation_summary: "implementation_summary" in input ? (input.implementation_summary ?? "") : input.implementation_summary,
+          implementation_summary:
+            "implementation_summary" in input
+              ? (input.implementation_summary?.trim() || "No implementation summary provided")
+              : input.implementation_summary,
           test_conditions_json:
             "test_conditions_json" in input ? input.test_conditions_json : JSON.stringify(input.test_conditions ?? {}),
           metrics_json: "metrics_json" in input ? input.metrics_json : JSON.stringify(input.metrics ?? {}),
@@ -90,13 +93,18 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
             overfit_risk?: OverfitRisk
           },
     ) {
-      return withDb((db) =>
-        updateExperimentResult(db, input.id, {
+      return withDb((db) => {
+        const current = db.query<{ result_status: ExperimentStatus; overfit_risk: OverfitRisk }, [string]>(
+          "select result_status, overfit_risk from experiment where id = ? limit 1",
+        ).get(input.id)
+        if (!current) throw new Error(`experiment not found: ${input.id}`)
+        return updateExperimentResult(db, input.id, {
           metrics_json: "metrics_json" in input ? input.metrics_json : JSON.stringify(input.metrics ?? {}),
-          result_status: input.result_status ?? ExperimentStatuses[0],
-          overfit_risk: input.overfit_risk ?? OverfitRisks[3],
-        }),
-      )
+          result_status: input.result_status ?? current.result_status,
+          stage: "stage" in input ? input.stage : undefined,
+          overfit_risk: input.overfit_risk ?? current.overfit_risk,
+        })
+      })
     },
 
     async storeExperience(
@@ -144,8 +152,36 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
       return withDb((db) => searchSimilarExperiences(db, input))
     },
 
-    async checkRiskGates(input: RiskGateCheckInput) {
-      return checkRiskGates(await parseRiskGates(defaults.riskGatePath), input)
+    async checkRiskGates(
+      input:
+        | RiskGateCheckInput
+        | {
+            targetType?: string
+            targetID?: string
+            stage: string
+            requestedAction?: string
+            metrics?: {
+              trade_count?: number
+              max_drawdown_percent?: number
+            }
+            hasOutOfSample?: boolean
+            hasSpreadSensitivity?: boolean
+            has_out_of_sample?: boolean
+            spread_slippage_documented?: boolean
+          },
+    ) {
+      return checkRiskGates(await parseRiskGates(defaults.riskGatePath), {
+        targetType: "targetType" in input ? (input.targetType ?? "promotion") : input.targetType,
+        targetID: "targetID" in input ? (input.targetID ?? "unknown") : input.targetID,
+        stage: input.stage,
+        requestedAction: "requestedAction" in input ? (input.requestedAction ?? "promote") : input.requestedAction,
+        metrics: input.metrics ?? {},
+        hasOutOfSample: "hasOutOfSample" in input ? (input.hasOutOfSample ?? false) : (input.has_out_of_sample ?? false),
+        hasSpreadSensitivity:
+          "hasSpreadSensitivity" in input
+            ? (input.hasSpreadSensitivity ?? false)
+            : (input.spread_slippage_documented ?? false),
+      })
     },
   }
 }
