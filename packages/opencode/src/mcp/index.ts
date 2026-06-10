@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { type Tool } from "ai"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
@@ -7,13 +7,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
-import {
-  CallToolResultSchema,
-  ListToolsResultSchema,
-  ToolSchema,
-  type Tool as MCPToolDef,
-  ToolListChangedNotificationSchema,
-} from "@modelcontextprotocol/sdk/types.js"
+import { type Tool as MCPToolDef, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "@/config/config"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -32,12 +26,9 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { McpCatalog } from "./catalog"
 
 const DEFAULT_TIMEOUT = 30_000
-
-const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
-  tools: ToolSchema.omit({ outputSchema: true }).array(),
-})
 
 export const Resource = Schema.Struct({
   name: Schema.String,
@@ -112,120 +103,8 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
   return typeof entry === "object" && entry !== null && "type" in entry
 }
 
-const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
-const MAX_LIST_PAGES = 1_000
-
 function remoteURL(value: string) {
   if (URL.canParse(value)) return new URL(value)
-}
-
-function isOutputSchemaValidationError(error: Error) {
-  return /can't resolve reference|resolves to more than one schema|outputSchema|schema.*reference|reference.*schema/i.test(
-    error.message,
-  )
-}
-
-async function paginate<T, R extends { nextCursor?: string }>(
-  list: (cursor?: string) => Promise<R>,
-  items: (result: R) => T[],
-) {
-  const result: T[] = []
-  const cursors = new Set<string>()
-  let cursor: string | undefined
-
-  for (let page = 0; page < MAX_LIST_PAGES; page++) {
-    const page = await list(cursor)
-    result.push(...items(page))
-    if (page.nextCursor === undefined) return result
-    if (cursors.has(page.nextCursor)) throw new Error(`MCP list returned duplicate cursor: ${page.nextCursor}`)
-    cursors.add(page.nextCursor)
-    cursor = page.nextCursor
-  }
-
-  throw new Error(`MCP list exceeded ${MAX_LIST_PAGES} pages`)
-}
-
-function listTools(client: MCPClient, timeout: number) {
-  return Effect.tryPromise({
-    try: () =>
-      paginate(
-        async (cursor) => {
-          const params = cursor === undefined ? undefined : { cursor }
-          try {
-            return await client.listTools(params, { timeout })
-          } catch (error) {
-            if (!(error instanceof Error) || !isOutputSchemaValidationError(error)) throw error
-            return client.request({ method: "tools/list", params }, TolerantListToolsResultSchema, { timeout })
-          }
-        },
-        (result) => result.tools,
-      ),
-    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-  })
-}
-
-// Convert MCP tool definition to AI SDK Tool type
-function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
-  const inputSchema = mcpTool.inputSchema
-
-  // Spread first, then override type to ensure it's always "object"
-  const schema: JSONSchema7 = {
-    ...(inputSchema as JSONSchema7),
-    type: "object",
-    properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
-    additionalProperties: false,
-  }
-
-  return dynamicTool({
-    description: mcpTool.description ?? "",
-    inputSchema: jsonSchema(schema),
-    execute: async (args: unknown, options) => {
-      return client.callTool(
-        {
-          name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
-        },
-        CallToolResultSchema,
-        {
-          resetTimeoutOnProgress: true,
-          signal: options.abortSignal,
-          timeout,
-        },
-      )
-    },
-  })
-}
-
-function defs(client: MCPClient, timeout?: number) {
-  return listTools(client, timeout ?? DEFAULT_TIMEOUT).pipe(Effect.catch(() => Effect.void))
-}
-
-function fetchFromClient<T extends { name: string }>(
-  clientName: string,
-  client: Client,
-  listFn: (c: Client) => Promise<T[]>,
-  label: string,
-) {
-  return Effect.tryPromise({
-    try: () => listFn(client),
-    catch: (error) => error,
-  }).pipe(
-    Effect.tapError((error) =>
-      Effect.logWarning(`failed to get ${label}`, {
-        clientName,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    ),
-    Effect.map((items) => {
-      const out: Record<string, T & { client: string }> = {}
-      const sanitizedClient = sanitize(clientName)
-      for (const item of items) {
-        out[sanitizedClient + ":" + sanitize(item.name)] = { ...item, client: clientName }
-      }
-      return out
-    }),
-    Effect.orElseSucceed(() => undefined),
-  )
 }
 
 interface CreateResult {
@@ -465,7 +344,7 @@ export const layer = Layer.effect(
         }
 
         return yield* Effect.gen(function* () {
-          const listed = mcpClient.getServerCapabilities()?.tools ? yield* defs(mcpClient, mcp.timeout) : []
+          const listed = mcpClient.getServerCapabilities()?.tools ? yield* McpCatalog.defs(mcpClient, mcp.timeout) : []
           if (!listed) {
             return yield* Effect.fail(new Error("Failed to get tools"))
           }
@@ -516,7 +395,7 @@ export const layer = Layer.effect(
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-        const listed = await bridge.promise(defs(client, timeout))
+        const listed = await bridge.promise(McpCatalog.defs(client, timeout))
         if (!listed) return
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
@@ -693,7 +572,11 @@ export const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const mcpTool of listed) {
-          result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+          result[McpCatalog.sanitize(clientName) + "_" + McpCatalog.sanitize(mcpTool.name)] = McpCatalog.convertTool(
+            mcpTool,
+            client,
+            timeout,
+          )
         }
       }
       return result
@@ -709,7 +592,7 @@ export const layer = Layer.effect(
         return yield* Effect.forEach(
           Object.entries(s.clients).filter(([name]) => s.status[name]?.status === "connected"),
           ([clientName, client]) =>
-            fetchFromClient(
+            McpCatalog.fetch(
               clientName,
               client,
               (c) => listFn(c, requestTimeout(s, clientName, cfg.mcp?.[clientName], cfg.experimental?.mcp_timeout)),
@@ -726,7 +609,7 @@ export const layer = Layer.effect(
         s,
         (c, timeout) =>
           c.getServerCapabilities()?.prompts
-            ? paginate(
+            ? McpCatalog.paginate(
                 (cursor) => c.listPrompts(cursor === undefined ? undefined : { cursor }, { timeout }),
                 (result) => result.prompts,
               )
@@ -741,7 +624,7 @@ export const layer = Layer.effect(
         s,
         (c, timeout) =>
           c.getServerCapabilities()?.resources
-            ? paginate(
+            ? McpCatalog.paginate(
                 (cursor) => c.listResources(cursor === undefined ? undefined : { cursor }, { timeout }),
                 (result) => result.resources,
               )
@@ -887,7 +770,7 @@ export const layer = Layer.effect(
 
         const listed = client
           ? client.getServerCapabilities()?.tools
-            ? yield* defs(client, mcpConfig.timeout)
+            ? yield* McpCatalog.defs(client, mcpConfig.timeout)
             : []
           : undefined
         if (!client || !listed) {
