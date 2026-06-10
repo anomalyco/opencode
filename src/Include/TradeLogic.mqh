@@ -110,16 +110,17 @@ public:
 
       double last_close = GetLastClosedM15Close();
       double prev_close = GetPreviousClosedM15Close();
-      if(last_close == 0.0 || prev_close == 0.0)
+      double third_close = GetThirdClosedM15Close();
+      if(last_close == 0.0 || prev_close == 0.0 || third_close == 0.0)
          return 0.0;
 
-      if(CanTakeDirection(1) && last_close > breakout_high && prev_close <= breakout_high && IsTrendAligned(1, last_close))
+      if(CanTakeDirection(1) && prev_close > breakout_high && third_close <= breakout_high && last_close > breakout_high && IsTrendAligned(1, last_close))
         {
          m_last_direction = 1;
          return 0.8;
-        }
+         }
 
-      if(CanTakeDirection(-1) && last_close < breakout_low && prev_close >= breakout_low && IsTrendAligned(-1, last_close))
+      if(CanTakeDirection(-1) && prev_close < breakout_low && third_close >= breakout_low && last_close < breakout_low && IsTrendAligned(-1, last_close))
         {
          m_last_direction = -1;
          return -0.8;
@@ -237,10 +238,10 @@ private:
       ArraySetAsSeries(highs, true);
       ArraySetAsSeries(lows, true);
 
-      if(CopyHigh(_Symbol, PERIOD_M15, 2, m_lookback_bars, highs) != m_lookback_bars)
-         return false;
-      if(CopyLow(_Symbol, PERIOD_M15, 2, m_lookback_bars, lows) != m_lookback_bars)
-         return false;
+       if(CopyHigh(_Symbol, PERIOD_M15, 3, m_lookback_bars, highs) != m_lookback_bars)
+          return false;
+       if(CopyLow(_Symbol, PERIOD_M15, 3, m_lookback_bars, lows) != m_lookback_bars)
+          return false;
 
       int high_index = ArrayMaximum(highs, 0, WHOLE_ARRAY);
       int low_index = ArrayMinimum(lows, 0, WHOLE_ARRAY);
@@ -260,6 +261,11 @@ private:
    double GetPreviousClosedM15Close()
       {
       return iClose(_Symbol, PERIOD_M15, 2);
+      }
+
+   double GetThirdClosedM15Close()
+      {
+      return iClose(_Symbol, PERIOD_M15, 3);
       }
   };
 
