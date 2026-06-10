@@ -61,7 +61,7 @@ export const WriteTool = Tool.define(
             },
           })
 
-          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
+          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom), 0o644)
           if (yield* format.file(filepath)) {
             yield* Bom.syncFile(fs, filepath, desiredBom)
           }
