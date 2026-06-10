@@ -721,8 +721,9 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   if (notFound) {
+    const preview = content.split("\n").slice(0, 15).join("\n")
     throw new Error(
-      "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.",
+      `Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.\n\nFile preview (first 15 lines):\n${preview}`,
     )
   }
   throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")

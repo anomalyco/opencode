@@ -163,9 +163,10 @@ export const layer = Layer.effectDiscard(
                 const newString = convertToLineEnding(input.newString, ending)
                 const replacements = countOccurrences(source.text, oldString)
                 if (replacements === 0) {
+                  const preview = source.text.split("\n").slice(0, 15).join("\n")
                   return yield* new ToolFailure({
                     message:
-                      "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                      `Could not find oldString in the file. It must match exactly, including whitespace and indentation.\n\nFile preview (first 15 lines):\n${preview}`,
                   })
                 }
                 if (replacements > 1 && input.replaceAll !== true) {

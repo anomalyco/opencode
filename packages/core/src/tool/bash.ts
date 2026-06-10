@@ -2,6 +2,7 @@ export * as BashTool from "./bash"
 
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
+import { execSync } from "node:child_process"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Config } from "../config"
@@ -49,6 +50,19 @@ const Output = Schema.Struct({
 type Output = typeof Output.Type
 
 const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
+
+const winDecode = (() => {
+  if (process.platform !== "win32") return (buf: Buffer) => buf.toString()
+  let cp: string | undefined
+  try {
+    const s = execSync("chcp.com", { encoding: "latin1" })
+    const m = s.match(/(\d+)/)
+    if (m) cp = { "932": "shift-jis", "936": "gbk", "949": "euc-kr", "950": "big5" }[m[1]] ?? "utf-8"
+  } catch {}
+  if (!cp) cp = "utf-8"
+  const dec = new TextDecoder(cp === "utf-8" ? undefined : cp as any)
+  return (buf: Buffer) => dec.decode(buf)
+})()
 
 const compactOutput = (stdout: string, stderr: string) => {
   const output = stdout && stderr ? `${stdout}\n\nstderr:\n${stderr}` : stderr ? `stderr:\n${stderr}` : stdout
@@ -186,7 +200,7 @@ export const layer = Layer.effectDiscard(
                 }
               }
 
-              const compact = compactOutput(result.stdout.toString("utf8"), result.stderr.toString("utf8"))
+              const compact = compactOutput(winDecode(result.stdout), winDecode(result.stderr))
               const notice = captureNotice(result.stdoutTruncated, result.stderrTruncated)
               return {
                 command: input.command,

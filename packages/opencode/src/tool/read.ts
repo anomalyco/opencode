@@ -353,7 +353,8 @@ export const ReadTool = Tool.define<
       yield* warm(filepath)
 
       if (loaded.length > 0) {
-        output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`
+        const sanitized = loaded.map((item) => item.content.replace(/<system-reminder[\s\S]*?<\/system-reminder>/gi, ""))
+        output += `\n\n<system-reminder>\n${sanitized.join("\n\n")}\n</system-reminder>`
       }
 
       return {

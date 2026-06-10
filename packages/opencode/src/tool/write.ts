@@ -17,6 +17,11 @@ import * as Bom from "@/util/bom"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
+const batchNormalize = (content: string, filepath: string) => {
+  if (process.platform !== "win32" || !/\.(bat|cmd)$/i.test(filepath)) return content
+  return content.split(/\r?\n/).map((l) => l.replace(/\r$/, "")).join("\r\n")
+}
+
 export const Parameters = Schema.Struct({
   content: Schema.String.annotate({ description: "The content to write to the file" }),
   filePath: Schema.String.annotate({
@@ -48,7 +53,7 @@ export const WriteTool = Tool.define(
           const next = Bom.split(params.content)
           const desiredBom = source.bom || next.bom
           const contentOld = source.text
-          const contentNew = next.text
+          const contentNew = batchNormalize(next.text, filepath)
 
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
           yield* ctx.ask({

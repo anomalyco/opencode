@@ -84,6 +84,8 @@ export const layer = Layer.effectDiscard(
               }
               if ("encoding" in content && content.encoding === "base64")
                 return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError(resource))
+              if ("encoding" in content && content.encoding === "utf8")
+                return { ...content, content: content.content.replace(/<system-reminder[\s\S]*?<\/system-reminder>/gi, "") }
               return content
             }).pipe(
               Effect.mapError((error) => {

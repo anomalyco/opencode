@@ -1,9 +1,11 @@
 export * as FileMutation from "./file-mutation"
 
+import { execSync } from "node:child_process"
 import { Context, Effect, Layer, Schema } from "effect"
 import { dirname } from "path"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { FSUtil } from "./fs-util"
+import iconv from "iconv-lite"
 
 export interface Target {
   readonly canonical: string
@@ -107,14 +109,17 @@ export const layer = Layer.effect(
     const writeTextPreservingBom = Effect.fn("FileMutation.writeTextPreservingBom")((input: TextWriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const next = splitBom(input.content)
+          const text = normalizeLineEndings(input)
+          const encoded = encodeBatchFile(input, text)
+          if (typeof encoded !== "string") {
+            yield* fs.writeWithDirs(input.target.canonical, encoded)
+            return writeResult(input.target, yield* fs.exists(input.target.canonical))
+          }
+          const next = splitBom(text)
           const current = yield* fs
             .readFile(input.target.canonical)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
-          yield* fs.writeWithDirs(
-            input.target.canonical,
-            joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom),
-          )
+          yield* fs.writeWithDirs(input.target.canonical, joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom))
           return writeResult(input.target, current !== undefined)
         }),
       ),
@@ -170,6 +175,24 @@ export const layer = Layer.effect(
     return Service.of({ create, write, writeTextPreservingBom, writeIfUnchanged, remove })
   }),
 )
+
+function normalizeLineEndings(input: TextWriteInput): string {
+  if (process.platform !== "win32" || !/\.(bat|cmd)$/i.test(input.target.canonical)) return input.content
+  return input.content.split(/\r?\n/).map((l) => l.replace(/\r$/, "")).join("\r\n")
+}
+
+function encodeBatchFile(input: TextWriteInput, content: string): string | Uint8Array {
+  if (process.platform !== "win32" || !/\.(bat|cmd)$/i.test(input.target.canonical)) return content
+  if (content === "" || !/[\x80-\uFFFF]/.test(content)) return content
+  try {
+    const s = execSync("chcp.com", { encoding: "latin1", timeout: 3000 })
+    const m = s.match(/(\d+)/)
+    const cp = m ? m[1] : "65001"
+    if (cp === "65001") return content
+    const map: Record<string, string> = { "936": "gbk", "932": "shift-jis", "949": "euc-kr", "950": "big5" }
+    return map[cp] ? iconv.encode(content, map[cp]) : content
+  } catch { return content }
+}
 
 function splitBom(text: string) {
   const stripped = text.replace(/^\uFEFF+/, "")
