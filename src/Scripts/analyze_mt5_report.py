@@ -15,12 +15,18 @@ from typing import Any
 def main() -> int:
     args = parse_args()
     config = load_json(Path(args.config))
-    rules = config.get("default", {})
-    report_text = re.sub(r'<[^>]+>', '', read_text(Path(args.report)))
     log_text = read_text(Path(args.log))
+    rules = {
+        **config.get("default", {}),
+        **config.get(args.scenario, {}),
+    }
+    log_text, log_window_selected = select_log_window(log_text, rules)
+    require_report_metrics = rules.get("require_report_metrics", True)
+    report_text = read_report_text(args.report) if args.report else ""
     metrics = {
-        "report_path": str(Path(args.report)),
+        "report_path": str(Path(args.report)) if args.report else None,
         "log_path": str(Path(args.log)),
+        "log_window_selected": log_window_selected,
         "risk_version_marker": first_match(log_text, [r"(RISK_V\d+_[A-Z0-9_]+)"]),
         "no_money_count": count_patterns(log_text, [r"\bNo money\b", r"\bTRADE_RETCODE_NO_MONEY\b", r"\b10019\b"]),
         "margin_error_count": count_patterns(
@@ -44,50 +50,73 @@ def main() -> int:
         "total_trades": extract_int(report_text, [r"Total Trades:\s*(\d+)"]),
         "win_count": extract_int(report_text, [r"Profit Trades \(% of total\):\s*(\d+)"]),
         "loss_count": extract_int(report_text, [r"Loss Trades \(% of total\):\s*(\d+)"]),
+        "global_stop_count": count_patterns(log_text, [r"CRITICAL: Global Drawdown limit reached"]),
+        "global_close_count": count_patterns(log_text, [r"GLOBAL STOP: closed position"]),
+        "test_passed_count": count_patterns(log_text, [r"\bTest passed\b"]),
+        "test_thread_finished_count": count_patterns(log_text, [r"test Experts\\opencode-trade\\Expert_Main\.ex5 on XAUUSD,M15 thread finished"]),
+        "orders_after_global_stop_count": count_orders_after_global_stop(log_text),
     }
     metrics["win_rate"] = calculate_win_rate(metrics["win_count"], metrics["loss_count"])
     failed_rules: list[str] = []
     warnings: list[str] = []
 
+    if require_report_metrics and args.report is None:
+        failed_rules.append("missing required report")
+    if log_window_selected is False and rules.get("log_window_start_pattern"):
+        failed_rules.append("missing log window start pattern")
+
     append_trade_consistency_warning(metrics, warnings)
     append_drawdown_gap_warning(metrics, warnings, rules)
 
-    for marker in rules.get("required_log_markers", []):
-        if marker not in log_text:
-            failed_rules.append(f"missing log marker: {marker}")
+    if log_window_selected is not False:
+        for marker in rules.get("required_log_markers", []):
+            if marker not in log_text:
+                failed_rules.append(f"missing log marker: {marker}")
 
-    if rules.get("reject_no_money", False) and metrics["no_money_count"] > 0:
-        failed_rules.append("log contains 'No money'")
+        if rules.get("reject_no_money", False) and metrics["no_money_count"] > 0:
+            failed_rules.append("log contains 'No money'")
 
-    if rules.get("reject_margin_error", False) and metrics["margin_error_count"] > 0:
-        failed_rules.append("log contains margin-related errors")
+        if rules.get("reject_margin_error", False) and metrics["margin_error_count"] > 0:
+            failed_rules.append("log contains margin-related errors")
 
-    require_metric(metrics, "profit_factor", failed_rules)
-    require_metric(metrics, "sharpe_ratio", failed_rules)
-    require_metric(metrics, "total_trades", failed_rules)
+        for pattern in rules.get("required_log_patterns", []):
+            if not re.search(pattern, log_text, flags=re.IGNORECASE | re.MULTILINE):
+                failed_rules.append(f"missing log pattern: {pattern}")
 
-    min_profit_factor = rules.get("min_profit_factor")
-    if isinstance(min_profit_factor, (int, float)) and metrics["profit_factor"] is not None:
-        if metrics["profit_factor"] < float(min_profit_factor):
-            failed_rules.append(f"profit factor below minimum: {metrics['profit_factor']}")
+        for pattern in rules.get("forbidden_log_patterns", []):
+            if re.search(pattern, log_text, flags=re.IGNORECASE | re.MULTILINE):
+                failed_rules.append(f"forbidden log pattern matched: {pattern}")
 
-    min_sharpe = rules.get("min_sharpe")
-    if isinstance(min_sharpe, (int, float)) and metrics["sharpe_ratio"] is not None:
-        if metrics["sharpe_ratio"] < float(min_sharpe):
-            failed_rules.append(f"sharpe ratio below minimum: {metrics['sharpe_ratio']}")
+        if rules.get("reject_orders_after_global_stop", False) and metrics["orders_after_global_stop_count"] > 0:
+            failed_rules.append(f"orders placed after global stop: {metrics['orders_after_global_stop_count']}")
 
-    min_trades = rules.get("min_trades")
-    if isinstance(min_trades, int) and metrics["total_trades"] is not None:
-        if metrics["total_trades"] < min_trades:
-            failed_rules.append(f"total trades below minimum: {metrics['total_trades']}")
+    if require_report_metrics:
+        require_metric(metrics, "profit_factor", failed_rules)
+        require_metric(metrics, "sharpe_ratio", failed_rules)
+        require_metric(metrics, "total_trades", failed_rules)
 
-    max_drawdown_pct = rules.get("max_drawdown_pct")
-    if isinstance(max_drawdown_pct, (int, float)):
-        drawdown_values = [value for value in (metrics["balance_drawdown_relative_pct"], metrics["equity_drawdown_relative_pct"]) if value is not None]
-        if not drawdown_values:
-            failed_rules.append("missing drawdown percent")
-        elif max(drawdown_values) > float(max_drawdown_pct):
-            failed_rules.append(f"drawdown percent above maximum: {max(drawdown_values)}")
+        min_profit_factor = rules.get("min_profit_factor")
+        if isinstance(min_profit_factor, (int, float)) and metrics["profit_factor"] is not None:
+            if metrics["profit_factor"] < float(min_profit_factor):
+                failed_rules.append(f"profit factor below minimum: {metrics['profit_factor']}")
+
+        min_sharpe = rules.get("min_sharpe")
+        if isinstance(min_sharpe, (int, float)) and metrics["sharpe_ratio"] is not None:
+            if metrics["sharpe_ratio"] < float(min_sharpe):
+                failed_rules.append(f"sharpe ratio below minimum: {metrics['sharpe_ratio']}")
+
+        min_trades = rules.get("min_trades")
+        if isinstance(min_trades, int) and metrics["total_trades"] is not None:
+            if metrics["total_trades"] < min_trades:
+                failed_rules.append(f"total trades below minimum: {metrics['total_trades']}")
+
+        max_drawdown_pct = rules.get("max_drawdown_pct")
+        if isinstance(max_drawdown_pct, (int, float)):
+            drawdown_values = [value for value in (metrics["balance_drawdown_relative_pct"], metrics["equity_drawdown_relative_pct"]) if value is not None]
+            if not drawdown_values:
+                failed_rules.append("missing drawdown percent")
+            elif max(drawdown_values) > float(max_drawdown_pct):
+                failed_rules.append(f"drawdown percent above maximum: {max(drawdown_values)}")
 
     warn_largest_lot_above = rules.get("warn_largest_lot_above")
     if isinstance(warn_largest_lot_above, (int, float)) and metrics["largest_lot"] is not None:
@@ -100,7 +129,7 @@ def main() -> int:
         "metrics": metrics,
         "failed_rules": failed_rules,
         "warnings": warnings,
-        "report_path": str(Path(args.report)),
+        "report_path": str(Path(args.report)) if args.report else None,
         "log_path": str(Path(args.log)),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -114,7 +143,7 @@ def main() -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze MT5 backtest report/log with minimal safety gates")
-    parser.add_argument("--report", required=True, help="Path to MT5 HTML report")
+    parser.add_argument("--report", required=False, help="Path to MT5 HTML report")
     parser.add_argument("--log", required=True, help="Path to MT5 tester log")
     parser.add_argument("--scenario", required=True, help="Scenario name")
     parser.add_argument("--config", required=True, help="Gate config JSON path")
@@ -126,6 +155,10 @@ def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def read_report_text(report_path: str) -> str:
+    return re.sub(r'<[^>]+>', '', read_text(Path(report_path)))
+
+
 def read_text(path: Path) -> str:
     data = path.read_bytes()
     encodings = ("utf-16le", "utf-8", "utf-8-sig", "cp932") if looks_like_utf16le(data) else ("utf-8", "utf-8-sig", "cp932", "utf-16le")
@@ -135,6 +168,24 @@ def read_text(path: Path) -> str:
         except UnicodeDecodeError:
             continue
     raise UnicodeDecodeError("unknown", b"", 0, 1, f"unable to decode {path}")
+
+
+def select_log_window(log_text: str, rules: dict[str, Any]) -> tuple[str, bool | None]:
+    start_pattern = rules.get("log_window_start_pattern")
+    if not start_pattern:
+        return log_text, None
+    matches = list(re.finditer(start_pattern, log_text, flags=re.IGNORECASE | re.MULTILINE))
+    if not matches:
+        return "", False
+    return log_text[matches[-1].start():], True
+
+
+def count_orders_after_global_stop(text: str) -> int:
+    match = re.search(r"CRITICAL: Global Drawdown limit reached", text, flags=re.IGNORECASE | re.MULTILINE)
+    if not match:
+        return 0
+    tail = text[match.end():]
+    return len(re.findall(r"Order placed successfully", tail, flags=re.IGNORECASE))
 
 
 def extract_largest_lot(text: str) -> float | None:

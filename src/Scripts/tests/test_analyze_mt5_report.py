@@ -45,6 +45,20 @@ PASS_LOG = """RiskManager Version: RISK_V3_ORDER_CALC_PROFIT
 market buy 0.05 XAUUSD
 """
 
+STEP2_LOG = """CS\t0\t12:52:42.438\tTester\tXAUUSD,M15: testing of Experts\\opencode-trade\\Expert_Main.ex5 from 2024.06.01 00:00 to 2024.12.31 00:00 started with inputs:
+CS\t0\t12:52:42.438\tTester\t  InpGlobalDDLimit=-0.0005
+CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:00   RiskManager Version: RISK_V3_ORDER_CALC_PROFIT
+CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:00   Order placed successfully: 0 0.14 lots at 2330.54
+CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:20   CRITICAL: Global Drawdown limit reached: -0.09%
+CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:20   GLOBAL STOP: closed position 2 on XAUUSD
+CS\t0\t12:52:42.796\tTester\tXAUUSD,M15: 823720 ticks, 13756 bars generated. Test passed in 0:00:00.392 (including ticks preprocessing 0:00:00.031).
+CS\t0\t12:52:42.796\tTester\ttest Experts\\opencode-trade\\Expert_Main.ex5 on XAUUSD,M15 thread finished
+"""
+
+STEP2_OLD_ERROR_LOG = """CS\t2\t12:10:00.027\tTrades\t2024.12.24 22:00:00   failed market sell 0.2 XAUUSD sl: 2616.98 tp: 2610.78 [Invalid stops]
+CS\t0\t12:10:00.027\tExpert_Main (XAUUSD,M15)\t2024.12.24 22:00:00   Order failed (attempt 1): 10016 - Invalid stops
+"""
+
 NO_MONEY_LOG = """No money
 """
 
@@ -85,6 +99,7 @@ DRAWDOWN_WARNING_REPORT = """<!DOCTYPE html>
 def default_config() -> dict:
     return {
         "default": {
+            "require_report_metrics": True,
             "min_sharpe": 1.5,
             "min_profit_factor": 1.2,
             "max_drawdown_pct": 15.0,
@@ -94,36 +109,53 @@ def default_config() -> dict:
             "reject_margin_error": True,
             "warn_largest_lot_above": 1.0,
             "warn_drawdown_gap_pct": 3.0,
+        },
+        "step2_operational_stop": {
+            "require_report_metrics": False,
+            "log_window_start_pattern": r"XAUUSD,M15: testing of Experts\\opencode-trade\\Expert_Main\.ex5 .* started with inputs:",
+            "required_log_markers": [
+                "RISK_V3_ORDER_CALC_PROFIT",
+                "InpGlobalDDLimit=-0.0005",
+                "CRITICAL: Global Drawdown limit reached",
+                "GLOBAL STOP: closed position",
+                "Test passed",
+                "test Experts\\opencode-trade\\Expert_Main.ex5 on XAUUSD,M15 thread finished",
+            ],
+            "reject_no_money": True,
+            "reject_margin_error": True,
+            "reject_orders_after_global_stop": True,
+            "warn_largest_lot_above": 1.0,
         }
     }
 
 
 class AnalyzeMt5ReportTest(unittest.TestCase):
-    def run_parser(self, report: str, log: str, scenario: str, config: dict | None = None, report_encoding: str = "utf-8"):
+    def run_parser(self, report: str | None, log: str, scenario: str, config: dict | None = None, report_encoding: str = "utf-8"):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             report_path = tmp / "report.html"
             log_path = tmp / "tester.log"
             out_path = tmp / "out.json"
             config_path = tmp / "gate_config.json"
-            report_path.write_text(report, encoding=report_encoding)
             log_path.write_text(log, encoding="utf-8")
             config_path.write_text(json.dumps(config or default_config()), encoding="utf-8")
+            command = [
+                sys.executable,
+                str(SCRIPT),
+                "--log",
+                str(log_path),
+                "--scenario",
+                scenario,
+                "--config",
+                str(config_path),
+                "--out",
+                str(out_path),
+            ]
+            if report is not None:
+                report_path.write_text(report, encoding=report_encoding)
+                command[2:2] = ["--report", str(report_path)]
             result = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "--report",
-                    str(report_path),
-                    "--log",
-                    str(log_path),
-                    "--scenario",
-                    scenario,
-                    "--config",
-                    str(config_path),
-                    "--out",
-                    str(out_path),
-                ],
+                command,
                 cwd=ROOT,
                 check=False,
                 capture_output=True,
@@ -218,6 +250,57 @@ class AnalyzeMt5ReportTest(unittest.TestCase):
         self.assertIn("log contains 'No money'", payload["failed_rules"])
         self.assertIn("log contains margin-related errors", payload["failed_rules"])
 
+    def test_default_scenario_requires_report(self):
+        result, payload = self.run_parser(None, PASS_LOG, "default-no-report")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing required report", payload["failed_rules"])
+
+    def test_step2_log_only_passes_without_report(self):
+        result, payload = self.run_parser(None, STEP2_LOG, "step2_operational_stop")
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(payload["passed"])
+        self.assertTrue(payload["metrics"]["log_window_selected"])
+        self.assertEqual(payload["metrics"]["global_stop_count"], 1)
+        self.assertEqual(payload["metrics"]["global_close_count"], 1)
+        self.assertEqual(payload["metrics"]["orders_after_global_stop_count"], 0)
+
+    def test_step2_ignores_old_errors_outside_selected_window(self):
+        result, payload = self.run_parser(None, STEP2_OLD_ERROR_LOG + STEP2_LOG, "step2_operational_stop")
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(payload["passed"])
+
+    def test_step2_fails_when_global_close_marker_missing(self):
+        result, payload = self.run_parser(None, STEP2_LOG.replace("GLOBAL STOP: closed position 2 on XAUUSD\n", ""), "step2_operational_stop")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing log marker: GLOBAL STOP: closed position", payload["failed_rules"])
+
+    def test_step2_fails_when_order_is_placed_after_global_stop(self):
+        log = STEP2_LOG + "CS\t0\t12:52:42.900\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:46:00   Order placed successfully: 0 0.10 lots at 2331.00\n"
+        result, payload = self.run_parser(None, log, "step2_operational_stop")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("orders placed after global stop: 1", payload["failed_rules"])
+
+    def test_step2_fails_when_order_is_placed_after_first_global_stop(self):
+        log = STEP2_LOG + (
+            "CS\t0\t12:52:42.900\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:46:00   Order placed successfully: 0 0.10 lots at 2331.00\n"
+            "CS\t0\t12:52:43.000\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:46:20   CRITICAL: Global Drawdown limit reached: -0.10%\n"
+        )
+        result, payload = self.run_parser(None, log, "step2_operational_stop")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["metrics"]["orders_after_global_stop_count"], 1)
+        self.assertIn("orders placed after global stop: 1", payload["failed_rules"])
+
+    def test_step2_fails_when_margin_error_is_in_selected_window(self):
+        result, payload = self.run_parser(None, STEP2_LOG + "margin check failed\n", "step2_operational_stop")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("log contains margin-related errors", payload["failed_rules"])
+
+    def test_step2_missing_window_does_not_report_old_noise(self):
+        result, payload = self.run_parser(None, STEP2_OLD_ERROR_LOG, "step2_operational_stop")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing log window start pattern", payload["failed_rules"])
+        self.assertNotIn("log contains margin-related errors", payload["failed_rules"])
+        self.assertNotIn("missing log marker: RISK_V3_ORDER_CALC_PROFIT", payload["failed_rules"])
 
     def test_utf16le_report_is_supported(self):
         result, payload = self.run_parser(PASS_REPORT, PASS_LOG, "utf16", report_encoding="utf-16le")
