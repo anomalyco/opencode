@@ -1,4 +1,4 @@
-import { Layer, LayerMap } from "effect"
+import { Effect, Layer, LayerMap } from "effect"
 import { Location } from "./location"
 import { Policy } from "./policy"
 import { Config } from "./config"
@@ -23,6 +23,7 @@ import { Watcher } from "./filesystem/watcher"
 import { LocationMutation } from "./location-mutation"
 import { FileMutation } from "./file-mutation"
 import { Reference } from "./reference"
+import { ReferenceGuidance } from "./reference/guidance"
 import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
@@ -45,6 +46,9 @@ import { FetchHttpClient } from "effect/unstable/http"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
+    const boot = Layer.effectDiscard(
+      Effect.logInfo("booting location services", { directory: ref.directory, workspaceID: ref.workspaceID }),
+    )
     const location = Location.layer(ref)
     const systemContext = SystemContextBuiltIns.locationLayer
     const base = Layer.mergeAll(
@@ -74,6 +78,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const image = Image.layer.pipe(Layer.provide(services))
     const mutation = FileMutation.locationLayer.pipe(Layer.provide(services))
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
+    const referenceGuidance = ReferenceGuidance.locationLayer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
@@ -89,10 +94,21 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(services),
       Layer.provide(model),
       Layer.provide(skillGuidance),
+      Layer.provide(referenceGuidance),
     )
-    return Layer.mergeAll(services, image, mutation, resources, todos, questions, model, runner, builtInTools).pipe(
-      Layer.fresh,
-    )
+    return Layer.mergeAll(
+      boot,
+      services,
+      image,
+      mutation,
+      resources,
+      todos,
+      questions,
+      model,
+      runner,
+      builtInTools,
+      referenceGuidance,
+    ).pipe(Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
   dependencies: [

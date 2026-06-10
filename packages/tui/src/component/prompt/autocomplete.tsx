@@ -278,7 +278,7 @@ export function Autocomplete(props: {
     const { baseQuery } = extractLineRange(search())
     const slash = baseQuery.indexOf("/")
     const alias = slash === -1 ? baseQuery : baseQuery.slice(0, slash)
-    return syncV2.data.reference.find((item) => item.name === alias)
+    return syncV2.data.reference.find((item) => !item.hidden && item.name === alias)
   })
 
   function normalizeMentionPath(filePath: string) {
@@ -411,25 +411,27 @@ export function Autocomplete(props: {
   })
 
   const referenceAliases = createMemo(() =>
-    syncV2.data.reference.map(
-      (reference): AutocompleteOption => ({
-        display: "@" + reference.name,
-        description: " dir",
-        onSelect: () => {
-          insertPart(reference.name, {
-            type: "file",
-            mime: "application/x-directory",
-            filename: reference.name,
-            url: pathToFileURL(reference.path).href,
-            source: {
+    syncV2.data.reference
+      .filter((reference) => !reference.hidden)
+      .map(
+        (reference): AutocompleteOption => ({
+          display: "@" + reference.name,
+          description: ` ${reference.source.type === "git" ? reference.source.repository : reference.source.path}`,
+          onSelect: () => {
+            insertPart(reference.name, {
               type: "file",
-              text: { start: 0, end: 0, value: "" },
-              path: reference.name,
-            },
-          })
-        },
-      }),
-    ),
+              mime: "application/x-directory",
+              filename: reference.name,
+              url: pathToFileURL(reference.path).href,
+              source: {
+                type: "file",
+                text: { start: 0, end: 0, value: "" },
+                path: reference.name,
+              },
+            })
+          },
+        }),
+      ),
   )
 
   const commands = createMemo((): AutocompleteOption[] => {
