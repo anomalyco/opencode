@@ -83,9 +83,14 @@ const truncate = (value: string) =>
 
 export const serializeToolContent = (content: SessionMessage.ToolStateCompleted["content"]) =>
   content
-    .map((item) =>
-      item.type === "text" ? item.text : `[Attached ${item.mime}${item.name === undefined ? "" : `: ${item.name}`}]`,
-    )
+    .map((item) => {
+      if (item.type === "text") {
+        return item.text.length > TOOL_OUTPUT_MAX_CHARS
+          ? item.text.slice(0, TOOL_OUTPUT_MAX_CHARS) + "\n[truncated]"
+          : item.text
+      }
+      return `[Attached ${item.mime}${item.name === undefined ? "" : `: ${item.name}`}]`
+    })
     .join("\n")
 
 const serialize = (message: SessionMessage.Message) => {

@@ -149,6 +149,10 @@ export const layer = Layer.effectDiscard(
                 source,
               })
 
+              if (/^rm\s+-rf\s+(\/|~[/\\]|[*?])/i.test(input.command.trim()))
+                return yield* Effect.fail(new ToolFailure({ message: "Destructive command blocked: rm -rf on root/home/glob. Use targeted paths instead." }))
+              if (process.platform === "win32" && /^del\s+\/f\s+\/s/i.test(input.command.trim()))
+                return yield* Effect.fail(new ToolFailure({ message: "Destructive command blocked: del /f /s on Windows. Use targeted paths instead." }))
               if ((yield* fs.stat(target.canonical)).type !== "Directory")
                 return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
 
