@@ -34,40 +34,16 @@ W przypadku ścieżek lokalnych projektu opencode przechodzi od bieżącego kata
 ## Tworzenie frontmatter
 
 Każdy `SKILL.md` musi zaczynać się od treści YAML.
-Rozpoznawane są tylko te pola:
+| Field         | Type     | Required | Notes                                                                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `name`        | `string` | yes      | Powinno mieć od 1 do 64 znaków.                                                                   |
+| `description` | `string` | yes      | Powinno mieć od 1 do 1024 znaków. Wyświetlane agentowi, aby mógł zdecydować, kiedy załadować umiejętność. |
 
-- `name` (wymagane)
-- `description` (wymagane)
-- `license` (opcjonalnie)
-- `compatibility` (opcjonalnie)
-- `metadata` (opcjonalnie, mapa string-to-string)
+Wszystkie pozostałe pola frontmatter są bezpiecznie ignorowane.
 
-Nieznane pola frontmatter są ignorowane.
-
----
-
-## Walidacja nazw
-
-`name` musi:
-
-- Mieć od 1 do 64 znaków
-- Należy używać małych liter alfanumerycznych i oddzielać je pojedynczym łącznikiem
-- Nie zaczyna się ani nie kończy na `-`
-- Nie może zawierać następujących po sobie `--`
-- Dopasuj nazwę katalogu zawierającą `SKILL.md`
-
-Odpowiednik wyrażenia regularnego:
-
-```text
-^[a-z0-9]+(-[a-z0-9]+)*$
-```
-
----
-
-## Zasady dotyczące długości
-
-`description` musi mieć od 1 do 1024 znaków.
-Zadbaj o to, aby agent mógł dokonać prawidłowego wyboru.
+:::tip
+Zadbaj o to, aby opis był wystarczająco konkretny, by agent mógł dokonać prawidłowego wyboru.
+:::
 
 ---
 

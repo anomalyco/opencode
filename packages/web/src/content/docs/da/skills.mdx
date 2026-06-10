@@ -34,40 +34,16 @@ Globale definisjoner lastes også inn fra `~/.config/opencode/skills/*/SKILL.md`
 ## Skriv frontmatter
 
 Hver `SKILL.md` må starte med YAML frontmatter.
-Bare disse feltene gjenkjennes:
+| Field         | Type     | Required | Notes                                                                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `name`        | `string` | yes      | Skal være 1-64 tegn langt.                                                                       |
+| `description` | `string` | yes      | Skal være 1-1024 tegn langt. Vises til agenten, så den kan beslutte, hvornår færdigheden skal indlæses. |
 
-- `name` (påkrevd)
-- `description` (påkrevd)
-- `license` (valgfritt)
-- `compatibility` (valgfritt)
-- `metadata` (valgfritt, streng-til-streng kart)
+Alle andre frontmatter-felter ignoreres sikkert.
 
-Ukjente frontmatter-felter ignoreres.
-
----
-
-## Bekræft navn
-
-`name` må:
-
-- Bestå av 1–64 tegn
-- Vær alfanumerisk med små bokstaver med skilletegn med enkelt bindestrek
-- Ikke begynne eller slutte med `-`
-- Ikke inneholde påfølgende `--`
-- Match katalognavnet som inneholder `SKILL.md`
-
-Ekvivalent regulært uttrykk:
-
-```text
-^[a-z0-9]+(-[a-z0-9]+)*$
-```
-
----
-
-## Følg længdereglerne
-
-`description` må bestå av 1-1024 tegn.
-Hold det spesifikt nok til at agenten kan velge riktig.
+:::tip
+Hold beskrivelsen specifik nok til, at agenten kan vælge korrekt.
+:::
 
 ---
 

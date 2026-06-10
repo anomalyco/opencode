@@ -34,40 +34,16 @@ Genel tanimlar da `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SK
 ## Frontmatter yazin
 
 Her `SKILL.md`, YAML frontmatter ile baslamalidir.
-Sadece su alanlar taninir:
+| Field         | Type     | Required | Notes                                                                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `name`        | `string` | yes      | 1-64 karakter uzunluğunda olmalıdır.                                                              |
+| `description` | `string` | yes      | 1-1024 karakter uzunluğunda olmalıdır. Ajanın beceriyi ne zaman yükleyeceğine karar verebilmesi için gösterilir. |
 
-- `name` (zorunlu)
-- `description` (zorunlu)
-- `license` (istege bagli)
-- `compatibility` (istege bagli)
-- `metadata` (istege bagli, string-to-string map)
+Diğer tüm frontmatter alanları güvenle yok sayılır.
 
-Bilinmeyen frontmatter alanlari yok sayilir.
-
----
-
-## Adlari dogrulayin
-
-`name` su kurallari saglamalidir:
-
-- 1-64 karakter olmali
-- Kucuk harf alfanumerik ve tekli tire ayirici kullanmali
-- `-` ile baslamamali veya bitmemeli
-- Ardisik `--` icermemeli
-- `SKILL.md` dosyasini barindiran klasor adi ile ayni olmali
-
-Esdeger regex:
-
-```text
-^[a-z0-9]+(-[a-z0-9]+)*$
-```
-
----
-
-## Uzunluk kurallarina uyun
-
-`description` 1-1024 karakter arasinda olmali.
-Ajanin dogru secim yapmasi icin yeterince acik yazin.
+:::tip
+Ajanın doğru seçim yapması için açıklamayı yeterince spesifik tutun.
+:::
 
 ---
 

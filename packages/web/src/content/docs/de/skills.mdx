@@ -34,40 +34,16 @@ Globale Definitionen kommen zusaetzlich aus `~/.config/opencode/skills/*/SKILL.m
 ## Frontmatter schreiben
 
 Jede `SKILL.md` muss mit YAML-Frontmatter beginnen.
-Nur diese Felder werden ausgewertet:
+| Field         | Type     | Required | Notes                                                                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `name`        | `string` | yes      | Sollte 1-64 Zeichen lang sein.                                                                    |
+| `description` | `string` | yes      | Sollte 1-1024 Zeichen lang sein. Wird dem Agenten angezeigt, damit er entscheiden kann, wann der Skill geladen werden soll. |
 
-- `name` (erforderlich)
-- `description` (erforderlich)
-- `license` (optional)
-- `compatibility` (optional)
-- `metadata` (optional, String-zu-String-Map)
+Alle anderen Frontmatter-Felder werden sicher ignoriert.
 
-Unbekannte Frontmatter-Felder werden ignoriert.
-
----
-
-## Namen validieren
-
-`name` muss:
-
-- 1-64 Zeichen lang sein
-- nur Kleinbuchstaben und Ziffern mit einzelnen Bindestrichen enthalten
-- nicht mit `-` beginnen oder enden
-- kein `--` enthalten
-- zum Verzeichnisnamen passen, in dem `SKILL.md` liegt
-
-Entsprechender Regex:
-
-```text
-^[a-z0-9]+(-[a-z0-9]+)*$
-```
-
----
-
-## Längenregeln beachten
-
-`description` muss 1-1024 Zeichen lang sein.
-Formuliere sie so konkret, dass Agenten den Skill eindeutig auswaehlen koennen.
+:::tip
+Formuliere die Beschreibung so konkret, dass der Agent den Skill eindeutig auswaehlen kann.
+:::
 
 ---
 

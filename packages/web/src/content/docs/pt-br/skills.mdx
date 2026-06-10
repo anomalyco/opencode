@@ -34,40 +34,16 @@ As definições globais também são carregadas de `~/.config/opencode/skills/*/
 ## Escrever frontmatter
 
 Cada `SKILL.md` deve começar com frontmatter YAML.
-Somente estes campos são reconhecidos:
+| Field         | Type     | Required | Notes                                                                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `name`        | `string` | yes      | Deve ter de 1 a 64 caracteres.                                                                    |
+| `description` | `string` | yes      | Deve ter de 1 a 1024 caracteres. Exibida ao agente para que ele possa decidir quando carregar a habilidade. |
 
-- `name` (obrigatório)
-- `description` (obrigatório)
-- `license` (opcional)
-- `compatibility` (opcional)
-- `metadata` (opcional, mapa de string para string)
+Todos os outros campos de frontmatter são ignorados com segurança.
 
-Campos de frontmatter desconhecidos são ignorados.
-
----
-
-## Validar nomes
-
-`name` deve:
-
-- Ter de 1 a 64 caracteres
-- Ser alfanumérico em minúsculas com separadores de hífen simples
-- Não começar ou terminar com `-`
-- Não conter `--` consecutivos
-- Combinar com o nome do diretório que contém `SKILL.md`
-
-Regex equivalente:
-
-```text
-^[a-z0-9]+(-[a-z0-9]+)*$
-```
-
----
-
-## Seguir regras de comprimento
-
-`description` deve ter de 1 a 1024 caracteres.
-Mantenha-a específica o suficiente para que o agente escolha corretamente.
+:::tip
+Mantenha a descrição específica o suficiente para que o agente escolha corretamente.
+:::
 
 ---
 

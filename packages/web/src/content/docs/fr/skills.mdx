@@ -34,40 +34,16 @@ Les définitions globales sont également chargées à partir de `~/.config/open
 ## Écrire un texte de présentation
 
 Chaque `SKILL.md` doit commencer par YAML frontmatter.
-Seuls ces champs sont reconnus :
+| Field         | Type     | Required | Notes                                                                                                           |
+| ------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `name`        | `string` | yes      | Doit comporter entre 1 et 64 caractères.                                                                        |
+| `description` | `string` | yes      | Doit comporter entre 1 et 1024 caractères. Affiché à l'agent pour qu'il puisse décider quand charger la compétence. |
 
-- `name` (obligatoire)
-- `description` (obligatoire)
-- `license` (facultatif)
-- `compatibility` (facultatif)
-- `metadata` (facultatif, mappage chaîne à chaîne)
+Tous les autres champs de frontmatter sont ignorés en toute sécurité.
 
-Les champs de contenu inconnus sont ignorés.
-
----
-
-## Valider les noms
-
-`name` doit :
-
-- Comprenant entre 1 et 64 caractères
-- Être alphanumérique en minuscules avec des séparateurs à tiret unique
-- Ne commence ni ne termine par `-`
-- Ne contient pas de `--` consécutifs
-- Faites correspondre le nom du répertoire qui contient `SKILL.md`
-
-Expression régulière équivalente :
-
-```text
-^[a-z0-9]+(-[a-z0-9]+)*$
-```
-
----
-
-## Suivez les règles de longueur
-
-`description` doit comporter entre 1 et 1 024 caractères.
-Gardez-le suffisamment précis pour que l'agent puisse choisir correctement.
+:::tip
+Gardez la description suffisamment précise pour que l'agent puisse choisir correctement.
+:::
 
 ---
 

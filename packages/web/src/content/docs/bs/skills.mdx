@@ -34,40 +34,16 @@ Globalne definicije se takoder ucitavaju iz `~/.config/opencode/skills/*/SKILL.m
 ## Pisanje frontmatter-a
 
 Svaki `SKILL.md` mora poceti YAML frontmatter-om.
-Prepoznaju se samo ova polja:
+| Field         | Type     | Required | Notes                                                                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `name`        | `string` | yes      | Treba imati 1-64 karaktera.                                                                       |
+| `description` | `string` | yes      | Treba imati 1-1024 karaktera. Prikazuje se agentu kako bi mogao odlučiti kada da učita skill.     |
 
-- `name` (obavezno)
-- `description` (obavezno)
-- `license` (opcionalno)
-- `compatibility` (opcionalno)
-- `metadata` (opcionalno, mapa string->string)
+Sva ostala frontmatter polja se sigurno ignoriraju.
 
-Nepoznata frontmatter polja se ignorisu.
-
----
-
-## Validirajte nazive
-
-`name` mora:
-
-- Imati 1-64 karaktera
-- Biti malim slovima i brojevima sa jednim crticama kao razdvajacima
-- Ne pocinjati ni zavrsavati sa `-`
-- Ne sadrzavati uzastopno `--`
-- Odgovarati nazivu direktorija koji sadrzi `SKILL.md`
-
-Ekvivalentni regex:
-
-```text
-^[a-z0-9]+(-[a-z0-9]+)*$
-```
-
----
-
-## Pravila dužine
-
-`description` mora imati 1-1024 karaktera.
-Neka bude dovoljno precizan da agent moze pravilno odabrati.
+:::tip
+Neka opis bude dovoljno precizan da agent može pravilno odabrati.
+:::
 
 ---
 
