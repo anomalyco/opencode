@@ -20,7 +20,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
-import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type OpencodeClient, type Part as SessionPart, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
@@ -610,6 +610,19 @@ export const RunCommand = effectCmd({
         }
         const sessionID = sess.id
 
+        // Track which part IDs we've already written to stdout so we don't
+        // double-print when both deltas and the final part.updated arrive.
+        // Hoisted to the execute() scope so the post-prompt belt-and-suspenders
+        // flush (flushFinalParts) can see what the event loop already covered.
+        const emitted = new Set<string>()
+        // Set when ANY assistant text or reasoning has reached stdout. Used to
+        // distinguish a genuinely-empty assistant response (LLM returned no
+        // content — common with thinking-mode models when max_tokens is small,
+        // or when an upstream provider returns 2xx + empty body) from a normal
+        // successful turn. We surface a stderr warning when this stays false,
+        // because silent exit-0 is the worst possible UX for CLI callers.
+        let anyTextEmitted = false
+
         function emit(type: string, data: Record<string, unknown>) {
           if (args.format === "json") {
             process.stdout.write(
@@ -623,6 +636,119 @@ export const RunCommand = effectCmd({
             return true
           }
           return false
+        }
+
+        // Emit one streaming delta — called from the message.part.delta branch.
+        // In json mode we forward each delta as its own NDJSON line so JSON
+        // consumers can render text token-by-token. In default text mode we
+        // print the raw delta directly to stdout with no decoration (this is
+        // what a terminal user expects: progressive output as it generates).
+        // Reasoning deltas are printed dimmed in TTY mode and only when
+        // --thinking is set, otherwise they're suppressed (json consumers
+        // still get them because they explicitly subscribed to the JSON stream).
+        function emitDelta(partID: string, messageID: string, field: string, delta: string) {
+          if (args.format === "json") {
+            process.stdout.write(
+              JSON.stringify({
+                type: "delta",
+                timestamp: Date.now(),
+                sessionID,
+                messageID,
+                partID,
+                field,
+                delta,
+              }) + EOL,
+            )
+            emitted.add(partID)
+            if (field === "text") anyTextEmitted = true
+            return
+          }
+          if (field === "text") {
+            process.stdout.write(delta)
+            emitted.add(partID)
+            anyTextEmitted = true
+            return
+          }
+          if (field === "reasoning" && thinking) {
+            if (process.stdout.isTTY) {
+              process.stdout.write(`${UI.Style.TEXT_DIM}${delta}${UI.Style.TEXT_NORMAL}`)
+            } else {
+              process.stdout.write(delta)
+            }
+            emitted.add(partID)
+            return
+          }
+        }
+
+        // Belt-and-suspenders: after session.prompt/command returns, walk the
+        // assistant message's final parts list and print anything we didn't
+        // already cover via deltas/updates. This catches the race where the
+        // server emits the final text part right at (or after) session.idle —
+        // sometimes the part-updated event arrives just after our loop breaks
+        // on the idle status, and we'd otherwise drop the answer on the floor.
+        function flushFinalParts(parts: SessionPart[] | undefined) {
+          if (!parts) return
+          for (const part of parts) {
+            if (emitted.has(part.id)) continue
+            if (part.type === "text") {
+              const text = (part.text ?? "").trim()
+              if (!text) continue
+              if (emit("text", { part })) {
+                emitted.add(part.id)
+                anyTextEmitted = true
+                continue
+              }
+              if (!process.stdout.isTTY) {
+                process.stdout.write(text + EOL)
+              } else {
+                UI.empty()
+                UI.println(text)
+                UI.empty()
+              }
+              emitted.add(part.id)
+              anyTextEmitted = true
+              continue
+            }
+            if (part.type === "reasoning" && thinking) {
+              const text = (part.text ?? "").trim()
+              if (!text) continue
+              if (emit("reasoning", { part })) {
+                emitted.add(part.id)
+                continue
+              }
+              const line = `Thinking: ${text}`
+              if (process.stdout.isTTY) {
+                UI.empty()
+                UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
+                UI.empty()
+              } else {
+                process.stdout.write(line + EOL)
+              }
+              emitted.add(part.id)
+            }
+          }
+        }
+
+        // Surface the silent-empty case to stderr. We intentionally do NOT
+        // change process.exitCode here by default — that's a behavior change
+        // existing callers might not expect. Operators can opt into a non-zero
+        // exit via OPENCODE_RUN_EXIT_ON_EMPTY=1, which is useful for CI/CD
+        // pipelines that want to fail loudly when the model returned nothing.
+        function warnIfEmpty() {
+          if (anyTextEmitted) return
+          // Json consumers can detect the no-text case themselves; skip the
+          // warning to keep their stdout/stderr clean and machine-parseable.
+          if (args.format === "json") return
+          process.stderr.write(
+            "[opencode run] WARNING: model returned no assistant text. " +
+              "This usually means the provider responded with an empty completion " +
+              "(thinking-mode models can consume the full max_tokens on internal reasoning " +
+              "leaving no budget for output, and some upstream proxies return 2xx-empty " +
+              "on transient backend errors). Retry, raise max_tokens, or check the provider.\n",
+          )
+          if (process.env.OPENCODE_RUN_EXIT_ON_EMPTY === "1") {
+            process.exitCode = 2
+          }
         }
 
         // Consume one subscribed event stream for the active session and mirror it
@@ -645,6 +771,21 @@ export const RunCommand = effectCmd({
               UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
               UI.empty()
               toggles.set("start", true)
+            }
+
+            // Streaming deltas: write each chunk to stdout as it arrives so
+            // CLI users see progressive output during long generations instead
+            // of staring at a blank terminal until the part finalizes. emitDelta
+            // marks the partID in `emitted` so the matching part.updated branch
+            // below knows the content was already shown and skips re-printing.
+            if (event.type === "message.part.delta") {
+              const props = event.properties
+              if (props.sessionID !== sessionID) continue
+              if (typeof props.partID !== "string") continue
+              if (typeof props.field !== "string") continue
+              if (typeof props.delta !== "string" || props.delta === "") continue
+              emitDelta(props.partID, props.messageID, props.field, props.delta)
+              continue
             }
 
             if (event.type === "message.part.updated") {
@@ -681,20 +822,43 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "text" && part.time?.end) {
-                if (emit("text", { part })) continue
+                // If we already streamed the body via deltas, the part-updated
+                // event is a no-op for stdout. We still emit the json line so
+                // json consumers get the canonical part-completion record.
+                if (args.format === "json") {
+                  emit("text", { part })
+                  emitted.add(part.id)
+                  if (part.text && part.text.trim()) anyTextEmitted = true
+                  continue
+                }
+                if (emitted.has(part.id)) {
+                  process.stdout.write(EOL)
+                  continue
+                }
                 const text = part.text.trim()
                 if (!text) continue
                 if (!process.stdout.isTTY) {
                   process.stdout.write(text + EOL)
-                  continue
+                } else {
+                  UI.empty()
+                  UI.println(text)
+                  UI.empty()
                 }
-                UI.empty()
-                UI.println(text)
-                UI.empty()
+                emitted.add(part.id)
+                anyTextEmitted = true
+                continue
               }
 
               if (part.type === "reasoning" && part.time?.end && thinking) {
-                if (emit("reasoning", { part })) continue
+                if (args.format === "json") {
+                  emit("reasoning", { part })
+                  emitted.add(part.id)
+                  continue
+                }
+                if (emitted.has(part.id)) {
+                  process.stdout.write(EOL)
+                  continue
+                }
                 const text = part.text.trim()
                 if (!text) continue
                 const line = `Thinking: ${text}`
@@ -702,9 +866,11 @@ export const RunCommand = effectCmd({
                   UI.empty()
                   UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
                   UI.empty()
-                  continue
+                } else {
+                  process.stdout.write(line + EOL)
                 }
-                process.stdout.write(line + EOL)
+                emitted.add(part.id)
+                continue
               }
             }
 
@@ -787,6 +953,12 @@ export const RunCommand = effectCmd({
               return
             }
             await finish()
+            // Belt-and-suspenders flush: emit any final parts the loop may have
+            // missed because session.idle fired before the matching part.updated
+            // event reached our subscription. Without this the model's final
+            // answer can race past the loop break and end up only in the DB.
+            flushFinalParts(result.data?.parts)
+            warnIfEmpty()
             return
           }
 
@@ -804,6 +976,8 @@ export const RunCommand = effectCmd({
             return
           }
           await finish()
+          flushFinalParts(result.data?.parts)
+          warnIfEmpty()
           return
         }
 
