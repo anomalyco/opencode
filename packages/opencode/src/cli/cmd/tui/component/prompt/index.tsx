@@ -9,7 +9,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, untrack } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -37,7 +37,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import * as Editor from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import * as Clipboard from "../../util/clipboard"
-import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Agent, AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -94,6 +94,33 @@ const DRAFT_RETENTION_MIN_CHARS = 20
 function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
+}
+
+export function syncPromptMetadataFromUserMessage(input: {
+  sessionID: string | undefined
+  message: UserMessage | undefined
+  syncedKey: string | undefined
+  agents: Pick<Agent, "name">[]
+  argsAgent: string | undefined
+  setAgent: (name: string) => void
+  setModel: (model: UserMessage["model"]) => void
+  setVariant: (variant: string | undefined) => void
+}) {
+  if (!input.sessionID || !input.message) return input.syncedKey
+
+  const key = `${input.sessionID}:${input.message.id}`
+  if (key === input.syncedKey) return input.syncedKey
+
+  const isPrimaryAgent = input.agents.some((x) => x.name === input.message?.agent)
+  if (input.message.agent && isPrimaryAgent) {
+    if (!input.argsAgent) input.setAgent(input.message.agent)
+    if (input.message.model) {
+      input.setModel(input.message.model)
+      input.setVariant(input.message.model.variant)
+    }
+  }
+
+  return key
 }
 
 function fadeColor(color: RGBA, alpha: number) {
@@ -290,28 +317,24 @@ export function Prompt(props: PromptProps) {
     ),
   )
 
-  // Initialize agent/model/variant from last user message when session changes
-  let syncedSessionID: string | undefined
+  // Initialize agent/model/variant from last user message when session/message changes
+  let syncedMessageKey: string | undefined
   createEffect(() => {
     const sessionID = props.sessionID
     const msg = lastUserMessage()
 
-    if (sessionID !== syncedSessionID) {
-      if (!sessionID || !msg) return
-
-      syncedSessionID = sessionID
-
-      // Only set agent if it's a primary agent (not a subagent)
-      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
-      if (msg.agent && isPrimaryAgent) {
-        // Keep command line --agent if specified.
-        if (!args.agent) local.agent.set(msg.agent)
-        if (msg.model) {
-          local.model.set(msg.model)
-          local.model.variant.set(msg.model.variant)
-        }
-      }
-    }
+    syncedMessageKey = untrack(() =>
+      syncPromptMetadataFromUserMessage({
+        sessionID,
+        message: msg,
+        syncedKey: syncedMessageKey,
+        agents: local.agent.list(),
+        argsAgent: args.agent,
+        setAgent: local.agent.set,
+        setModel: local.model.set,
+        setVariant: local.model.variant.set,
+      }),
+    )
   })
 
   const promptCommands = createMemo(() =>
