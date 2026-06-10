@@ -722,6 +722,26 @@ it.instance("migrates mode field to agent field", () =>
   }),
 )
 
+it.instance("accepts the deprecated reference field", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      reference: {
+        local: { path: "../library" },
+        sdk: { repository: "github.com/example/sdk", branch: "main" },
+        shorthand: "github.com/example/docs",
+      },
+    })
+    const config = yield* Config.use.get()
+    expect(config.reference).toEqual({
+      local: { path: "../library" },
+      sdk: { repository: "github.com/example/sdk", branch: "main" },
+      shorthand: "github.com/example/docs",
+    })
+  }),
+)
+
 it.instance("loads config from .opencode directory", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
