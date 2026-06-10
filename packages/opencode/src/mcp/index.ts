@@ -27,7 +27,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { TuiEvent } from "@/server/tui-event"
 import open from "open"
-import { Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -446,31 +446,45 @@ export const layer = Layer.effect(
       )
     })
 
-    const create = Effect.fn("MCP.create")(function* (key: string, mcp: ConfigMCPV1.Info) {
-      if (mcp.enabled === false) {
-        return DISABLED_RESULT
-      }
-
-      const { client: mcpClient, status } =
-        mcp.type === "remote"
-          ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
-          : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
-
-      if (!mcpClient) {
-        if (status.status !== "connected" && status.status !== "disabled") {
-          yield* Effect.logWarning("server unavailable", { key, type: mcp.type, status: status.status })
+    const create = Effect.fn("MCP.create")(
+      function* (key: string, mcp: ConfigMCPV1.Info) {
+        if (mcp.enabled === false) {
+          return DISABLED_RESULT
         }
-        return { status } satisfies CreateResult
-      }
 
-      const listed = mcpClient.getServerCapabilities()?.tools ? yield* defs(mcpClient, mcp.timeout) : []
-      if (!listed) {
-        yield* Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore)
-        return { status: { status: "failed", error: "Failed to get tools" } } satisfies CreateResult
-      }
+        const { client: mcpClient, status } =
+          mcp.type === "remote"
+            ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
+            : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
 
-      return { mcpClient, status, defs: listed } satisfies CreateResult
-    })
+        if (!mcpClient) {
+          if (status.status !== "connected" && status.status !== "disabled") {
+            yield* Effect.logWarning("server unavailable", { key, type: mcp.type, status: status.status })
+          }
+          return { status } satisfies CreateResult
+        }
+
+        return yield* Effect.gen(function* () {
+          const listed = mcpClient.getServerCapabilities()?.tools ? yield* defs(mcpClient, mcp.timeout) : []
+          if (!listed) {
+            return yield* Effect.fail(new Error("Failed to get tools"))
+          }
+          return { mcpClient, status, defs: listed } satisfies CreateResult
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
+          ),
+        )
+      },
+      Effect.map((result): CreateResult => result),
+      Effect.catchCause((cause) => {
+        if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+        const error = Cause.squash(cause)
+        return Effect.succeed<CreateResult>({
+          status: { status: "failed", error: error instanceof Error ? error.message : String(error) },
+        })
+      }),
+    )
     const cfgSvc = yield* Config.Service
 
     const descendants = Effect.fnUntraced(
@@ -537,9 +551,7 @@ export const layer = Layer.effect(
                 return
               }
 
-              const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.void))
-              if (!result) return
-
+              const result = yield* create(key, mcp)
               s.status[key] = result.status
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
