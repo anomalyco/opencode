@@ -7,10 +7,11 @@ import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
+import { Provider } from "@/provider/provider"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -49,6 +50,10 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  model: Schema.optional(Schema.String).annotate({
+    description:
+      'The model the subagent should use, in "providerID/modelID" form (e.g. "anthropic/claude-sonnet-4"). Overrides the subagent\'s default/inherited model.',
+  }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -88,6 +93,10 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    // Provider is resolved optionally so the tool still constructs in contexts
+    // that do not wire it up; it is only consulted when an explicit `model`
+    // param needs validation.
+    const providerOption = yield* Effect.serviceOption(Provider.Service)
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -168,10 +177,36 @@ export const TaskTool = Tool.define(
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
       const variant = msg.info.variant
 
-      const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
+      // An explicit `model` param overrides BOTH the agent's own model and the
+      // parent assistant inheritance. Parse "providerID/modelID" and validate it
+      // through Provider.getModel before spawning the subagent so an unknown or
+      // malformed value fails fast (and never reaches ops.prompt).
+      const override = params.model
+        ? yield* Effect.gen(function* () {
+            const requested = params.model!
+            const resolver = Option.getOrUndefined(providerOption)
+            if (!resolver)
+              return yield* Effect.fail(
+                new Error(`Cannot resolve task model "${requested}": the provider service is unavailable.`),
+              )
+            const parsed = Provider.parseModel(requested)
+            yield* resolver.getModel(parsed.providerID, parsed.modelID).pipe(
+              Effect.mapError(
+                () =>
+                  new Error(
+                    `Invalid task model "${requested}": expected "providerID/modelID" naming a known provider and model.`,
+                  ),
+              ),
+            )
+            return parsed
+          })
+        : undefined
+
+      const model = override ??
+        next.model ?? {
+          modelID: msg.info.modelID,
+          providerID: msg.info.providerID,
+        }
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
@@ -196,7 +231,7 @@ export const TaskTool = Tool.define(
             modelID: model.modelID,
             providerID: model.providerID,
           },
-          variant: next.model ? undefined : variant,
+          variant: override || next.model ? undefined : variant,
           agent: next.name,
           parts,
         })
