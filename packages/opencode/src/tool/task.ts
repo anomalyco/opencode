@@ -342,7 +342,16 @@ export const TaskTool = Tool.define(
       parameters: Parameters,
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(Effect.orDie),
+        run(params, ctx).pipe(
+          Effect.catch((error) => {
+            const text = error instanceof Error ? error.message : String(error)
+            return Effect.succeed({
+              title: params.description,
+              metadata: {} as any,
+              output: renderOutput({ sessionID: "" as any, state: "error", text }),
+            } as any)
+          }),
+        ),
     }
   }),
 )
