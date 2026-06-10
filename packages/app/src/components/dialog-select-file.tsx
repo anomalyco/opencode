@@ -261,10 +261,7 @@ function createSessionEntries(props: {
   return { sessions }
 }
 
-export function DialogSelectFile(props: {
-  mode?: DialogSelectFileMode
-  onOpenFile?: (path: string) => void
-}) {
+export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
