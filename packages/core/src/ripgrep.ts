@@ -2,20 +2,23 @@ export * as Ripgrep from "./ripgrep"
 
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { Ripgrep as FileSystemRipgrep } from "./filesystem/ripgrep"
+import path from "path"
+import { Entry, Match } from "./filesystem/schema"
+import { FSUtil } from "./fs-util"
 import { AppProcess, collectStream, waitForAbort } from "./process"
-import { NonNegativeInt, PositiveInt } from "./schema"
+import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
+import { RipgrepBinary } from "./ripgrep/binary"
 
 /**
  * Small core-owned ripgrep execution adapter. It deliberately exposes raw
- * process-oriented rows, not model text or permission behavior. LocationSearch
- * supplies read authority and bounded substrate results; future leaf tools own
+ * process-oriented rows, not model text or permission behavior. Search maps
+ * these rows into filesystem results; leaf tools own
  * presentation and permission prompts.
  */
 
 const ERROR_BYTES = 8 * 1024
-export const MAX_RECORD_BYTES = 64 * 1024
-export const MAX_SUBMATCHES = 100
+const MAX_RECORD_BYTES = 64 * 1024
+const MAX_SUBMATCHES = 100
 
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
@@ -34,7 +37,7 @@ const RawMatch = Schema.Struct({
   }),
 })
 
-export type Match = (typeof RawMatch.Type)["data"]
+type RawMatchData = (typeof RawMatch.Type)["data"]
 
 export class Error extends Schema.TaggedErrorClass<Error>()("Ripgrep.Error", {
   message: Schema.String,
@@ -46,16 +49,21 @@ export class InvalidPatternError extends Schema.TaggedErrorClass<InvalidPatternE
   message: Schema.String,
 }) {}
 
-export interface Result<A> {
-  readonly items: A[]
-  readonly truncated: boolean
-  readonly partial: boolean
-}
-
-export interface FilesInput {
+export interface FindInput {
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
+  readonly hidden?: boolean
+  readonly follow?: boolean
+  readonly signal?: AbortSignal
+}
+
+export interface GlobInput {
+  readonly cwd: string
+  readonly pattern: string
+  readonly limit: number
+  readonly hidden?: boolean
+  readonly follow?: boolean
   readonly signal?: AbortSignal
 }
 
@@ -69,8 +77,9 @@ export interface GrepInput {
 }
 
 export interface Interface {
-  readonly files: (input: FilesInput) => Effect.Effect<Result<string>, Error>
-  readonly grep: (input: GrepInput) => Effect.Effect<Result<Match>, Error | InvalidPatternError>
+  readonly find: (input: FindInput) => Effect.Effect<readonly Entry[], Error>
+  readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[], Error>
+  readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[], Error | InvalidPatternError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Ripgrep") {}
@@ -84,7 +93,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const process = yield* AppProcess.Service
-    const binary = yield* FileSystemRipgrep.Service
+    const binary = yield* RipgrepBinary.Service
 
     const run = <A>(input: {
       readonly cwd: string
@@ -137,31 +146,84 @@ export const layer = Layer.effect(
     }
 
     return Service.of({
-      files: (input) =>
+      glob: (input) =>
         run<string>({
-          ...input,
+          cwd: input.cwd,
+          limit: input.limit,
+          signal: input.signal,
           args: [
             "--no-config",
             "--files",
-            "--glob=!.git/*", // TODO: Review .git exclusion policy before leaf tool exposure.
+            "--glob=!**/.git/**",
+            ...(input.hidden ? ["--hidden"] : []),
+            ...(input.follow ? ["--follow"] : []),
             `--glob=${input.pattern}`,
-            "--glob=!.*",
-            "--glob=!**/.*",
             ".",
           ],
-          parse: (line) => Effect.succeed(line.replace(/^\.\//, "")),
-        }).pipe(Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause)))),
+          parse: (line) =>
+            Effect.succeed(
+              line
+                .replace(/^(?:\.[\\/])+/u, "")
+                .replace(/^[\\/]+/u, "")
+                .replaceAll("\\", "/"),
+            ),
+        }).pipe(
+          Effect.map((result) =>
+            result.items.map((relative) => {
+              const absolute = path.resolve(input.cwd, relative)
+              return new Entry({
+                path: RelativePath.make(relative),
+                type: "file",
+                mime: FSUtil.mimeType(absolute),
+              })
+            }),
+          ),
+          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
+        ),
+      find: (input) =>
+        run<string>({
+          cwd: input.cwd,
+          limit: input.limit,
+          signal: input.signal,
+          args: [
+            "--no-config",
+            "--files",
+            "--glob=!**/.git/**",
+            ...(input.hidden ? ["--hidden"] : []),
+            ...(input.follow ? ["--follow"] : []),
+            `--glob=${input.pattern}`,
+            ".",
+          ],
+          parse: (line) =>
+            Effect.succeed(
+              line
+                .replace(/^(?:\.[\\/])+/u, "")
+                .replace(/^[\\/]+/u, "")
+                .replaceAll("\\", "/"),
+            ),
+        }).pipe(
+          Effect.map((result) =>
+            result.items.map((relative) => {
+              const absolute = path.resolve(input.cwd, relative)
+              return new Entry({
+                path: RelativePath.make(relative),
+                type: "file",
+                mime: FSUtil.mimeType(absolute),
+              })
+            }),
+          ),
+          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
+        ),
       grep: (input) =>
-        run<Match>({
+        run<RawMatchData>({
           ...input,
           args: [
             "--no-config",
             "--json",
-            "--glob=!.git/*", // TODO: Review .git exclusion policy before leaf tool exposure.
+            "--hidden",
+            "--glob=!**/.git/**",
             "--no-messages",
             ...(input.include ? [`--glob=${input.include}`] : []),
-            "--glob=!.*",
-            "--glob=!**/.*",
             "--",
             input.pattern,
             input.file ?? ".",
@@ -180,13 +242,43 @@ export const layer = Layer.effect(
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
                   Effect.map((match) => ({
                     ...match.data,
+                    path: { text: match.data.path.text.replace(/^\.[\\/]/, "") },
                     submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
                   })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
                 )
               }),
             ),
-        }),
+        }).pipe(
+          Effect.map((result) =>
+            result.items.map((match) => {
+              const relative = match.path.text
+                .replace(/^(?:\.[\\/])+/u, "")
+                .replace(/^[\\/]+/u, "")
+                .replaceAll("\\", "/")
+              const absolute = path.resolve(input.cwd, relative)
+              return new Match({
+                entry: new Entry({
+                  path: RelativePath.make(relative),
+                  type: "file",
+                  mime: FSUtil.mimeType(absolute),
+                }),
+                line: match.line_number,
+                offset: match.absolute_offset,
+                text: match.lines.text.length > 2_000 ? match.lines.text.slice(0, 2_000) + "..." : match.lines.text,
+                submatches: match.submatches.map((submatch) => ({
+                  text: submatch.match.text,
+                  start: submatch.start,
+                  end: submatch.end,
+                })),
+              })
+            }),
+          ),
+        ),
     })
   }),
-).pipe(Layer.provide(FileSystemRipgrep.defaultLayer))
+)
+
+export const defaultLayer = layer.pipe(
+  Layer.provide(Layer.merge(RipgrepBinary.defaultLayer, AppProcess.defaultLayer)),
+)

@@ -318,6 +318,7 @@ export function Autocomplete(props: {
       // Get files from SDK
       const result = await sdk.client.v2.fs.find({
         query: baseQuery,
+        limit: "20",
         location: { workspace: project.workspace.current() },
       })
 
