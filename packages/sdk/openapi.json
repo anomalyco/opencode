@@ -17628,44 +17628,6 @@
         "additionalProperties": false,
         "description": "Server configuration for opencode serve and web commands"
       },
-      "ReferenceConfigEntry": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "repository": {
-                "type": "string",
-                "description": "Git repository URL, host/path reference, or GitHub owner/repo shorthand"
-              },
-              "branch": {
-                "type": "string"
-              }
-            },
-            "required": ["repository"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Absolute path, ~/ path, or workspace-relative path to a local reference directory"
-              }
-            },
-            "required": ["path"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "ReferenceConfig": {
-        "type": "object",
-        "additionalProperties": {
-          "$ref": "#/components/schemas/ReferenceConfigEntry"
-        }
-      },
       "PermissionActionConfig": {
         "type": "string",
         "enum": ["ask", "allow", "deny"]
@@ -18256,8 +18218,21 @@
             },
             "additionalProperties": false
           },
-          "reference": {
-            "$ref": "#/components/schemas/ReferenceConfig"
+          "references": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceGit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceLocal"
+                }
+              ]
+            }
           },
           "watcher": {
             "type": "object",
@@ -23918,6 +23893,41 @@
         "required": ["type", "id", "syncEvent"],
         "additionalProperties": false
       },
+      "ConfigV2ReferenceGit": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["repository"],
+        "additionalProperties": false
+      },
+      "ConfigV2ReferenceLocal": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
       "PolicyEffect": {
         "type": "string",
         "enum": ["allow", "deny"]
@@ -25190,6 +25200,12 @@
           },
           "path": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           }
         },
         "required": ["type", "path"],
@@ -25207,6 +25223,12 @@
           },
           "branch": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           }
         },
         "required": ["type", "repository"],
@@ -25220,6 +25242,12 @@
           },
           "path": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           },
           "source": {
             "anyOf": [
