@@ -414,11 +414,30 @@ describe("session.llm-native.request", () => {
     })
     expect(
       LLMNativeRuntime.status({
+        model: {
+          ...baseModel,
+          providerID: ProviderV2.ID.make("vllm"),
+          api: { ...baseModel.api, url: "", npm: "@ai-sdk/openai-compatible" },
+        },
+        provider: {
+          ...providerInfo,
+          id: ProviderV2.ID.make("vllm"),
+          options: { apiKey: "test-vllm-key", baseURL: "http://localhost:8000/v1" },
+        },
+        auth: undefined,
+      }),
+    ).toMatchObject({
+      type: "supported",
+      apiKey: "test-vllm-key",
+      baseURL: "http://localhost:8000/v1",
+    })
+    expect(
+      LLMNativeRuntime.status({
         model: { ...baseModel, providerID: ProviderV2.ID.make("google") },
         provider: { ...providerInfo, id: ProviderV2.ID.make("google") },
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, or anthropic" })
+    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, anthropic, or OpenAI-compatible" })
     expect(
       LLMNativeRuntime.status({
         model: baseModel,

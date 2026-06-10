@@ -6,7 +6,7 @@ import { Auth, LLMClient } from "../../src/route"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
+import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
 const Json = Schema.fromJsonString(Schema.Unknown)
@@ -233,6 +233,43 @@ describe("OpenAI-compatible Chat route", () => {
       expect(response.text).toBe("Hello!")
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+    }),
+  )
+
+  it.effect("parses streaming tool-call chunks with null function names", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query"' } }],
+        }),
+        deltaChunk({ tool_calls: [{ index: 0, id: null, function: { name: null, arguments: ':"weather"}' } }] }),
+        deltaChunk({}, "tool_calls"),
+      )
+
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: undefined },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage: undefined, providerMetadata: undefined },
+        { type: "finish", reason: "tool-calls", usage: undefined },
+      ])
     }),
   )
 })
