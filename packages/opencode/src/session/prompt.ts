@@ -25,6 +25,8 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
+import { SessionGoal } from "@opencode-ai/core/session/goal"
+import { GoalEvaluator } from "./goal-evaluator"
 import { pathToFileURL, fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
@@ -124,6 +126,8 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const sessionGoal = yield* SessionGoal.Service
+    const goalEvaluator = yield* GoalEvaluator.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1178,6 +1182,62 @@ export const layer = Layer.effect(
                 callID: orphan.callID,
               })
             }
+
+            const activeGoal = yield* sessionGoal.get(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            if (activeGoal?.status === "active") {
+              const evaluation = yield* goalEvaluator
+                .evaluate({
+                  condition: activeGoal.condition,
+                  messages: msgs,
+                  evaluatorModel: activeGoal.evaluatorModel,
+                  defaultProviderID: lastUser.model.providerID,
+                  defaultModelID: lastUser.model.modelID,
+                })
+                .pipe(Effect.catch(() => Effect.succeed({ met: false, reason: "Evaluation failed" })))
+
+              yield* sessionGoal
+                .update({
+                  sessionID,
+                  iterations: activeGoal.iterations + 1,
+                  lastReason: evaluation.reason,
+                })
+                .pipe(Effect.catch(() => Effect.void))
+
+              if (evaluation.met) {
+                yield* sessionGoal.achieve(sessionID, evaluation.reason).pipe(Effect.catch(() => Effect.void))
+                yield* Effect.logInfo("goal achieved", {
+                  "session.id": sessionID,
+                  condition: activeGoal.condition,
+                  reason: evaluation.reason,
+                })
+              } else {
+                const goalMsg: SessionV1.User = {
+                  id: MessageID.ascending(),
+                  sessionID,
+                  role: "user",
+                  time: { created: Date.now() },
+                  agent: lastUser.agent,
+                  model: lastUser.model,
+                }
+                yield* sessions.updateMessage(goalMsg)
+                yield* sessions.updatePart({
+                  id: PartID.ascending(),
+                  messageID: goalMsg.id,
+                  sessionID,
+                  type: "text",
+                  text: `<system-reminder>
+The goal condition has not been met yet.
+Condition: ${activeGoal.condition}
+Reason: ${evaluation.reason}
+
+Please continue working toward the goal. Focus on addressing the reason above.
+</system-reminder>`,
+                  synthetic: true,
+                } satisfies SessionV1.TextPart)
+                continue
+              }
+            }
+
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
             break
           }
@@ -1416,6 +1476,88 @@ export const layer = Layer.effect(
         yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
         throw error
       }
+
+      if (input.command === Command.Default.GOAL) {
+        const goalArgs = input.arguments.trim()
+        if (!goalArgs) {
+          const activeGoal = yield* sessionGoal.get(input.sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (activeGoal?.status === "active") {
+            const durationMs = Date.now() - activeGoal.setAt
+            const statusText = [
+              `Goal: ${activeGoal.condition}`,
+              `Status: ${activeGoal.status}`,
+              `Iterations: ${activeGoal.iterations}`,
+              `Duration: ${Math.round(durationMs / 1000)}s`,
+              activeGoal.lastReason ? `Last evaluation: ${activeGoal.lastReason}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n")
+            const userMsg: SessionV1.User = {
+              id: MessageID.ascending(),
+              sessionID: input.sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: input.agent ?? (yield* agents.defaultInfo()).name,
+              model: yield* currentModel(input.sessionID),
+            }
+            yield* sessions.updateMessage(userMsg)
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: userMsg.id,
+              sessionID: input.sessionID,
+              type: "text",
+              text: statusText,
+              synthetic: true,
+            } satisfies SessionV1.TextPart)
+            return { info: userMsg, parts: [] }
+          }
+          const userMsg: SessionV1.User = {
+            id: MessageID.ascending(),
+            sessionID: input.sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: input.agent ?? (yield* agents.defaultInfo()).name,
+            model: yield* currentModel(input.sessionID),
+          }
+          yield* sessions.updateMessage(userMsg)
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: userMsg.id,
+            sessionID: input.sessionID,
+            type: "text",
+            text: "No active goal. Use /goal <condition> to set one.",
+            synthetic: true,
+          } satisfies SessionV1.TextPart)
+          return { info: userMsg, parts: [] }
+        }
+        if (goalArgs === "clear") {
+          yield* sessionGoal.clear(input.sessionID).pipe(Effect.catch(() => Effect.void))
+          const userMsg: SessionV1.User = {
+            id: MessageID.ascending(),
+            sessionID: input.sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: input.agent ?? (yield* agents.defaultInfo()).name,
+            model: yield* currentModel(input.sessionID),
+          }
+          yield* sessions.updateMessage(userMsg)
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: userMsg.id,
+            sessionID: input.sessionID,
+            type: "text",
+            text: "Goal cleared.",
+            synthetic: true,
+          } satisfies SessionV1.TextPart)
+          return { info: userMsg, parts: [] }
+        }
+        yield* sessionGoal.set({
+          sessionID: input.sessionID,
+          condition: goalArgs,
+          evaluatorModel: undefined,
+        })
+      }
+
       const agentName = cmd.agent ?? input.agent
 
       const raw = input.arguments.match(argsRegex) ?? []
@@ -1555,6 +1697,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(Image.defaultLayer),
+    Layer.provide(SessionGoal.defaultLayer),
+    Layer.provide(GoalEvaluator.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
         Agent.defaultLayer,
@@ -1699,6 +1843,8 @@ export const node = LayerNode.make(layer, [
   EventV2Bridge.node,
   RuntimeFlags.node,
   Database.node,
+  SessionGoal.node,
+  GoalEvaluator.node,
 ])
 
 export * as SessionPrompt from "./prompt"

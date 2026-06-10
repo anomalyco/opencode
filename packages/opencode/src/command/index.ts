@@ -10,6 +10,7 @@ import { Skill } from "../skill"
 import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_GOAL from "./template/goal.txt"
 
 type State = {
   commands: Record<string, Info>
@@ -54,6 +55,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  GOAL: "goal",
 } as const
 
 export interface Interface {
@@ -93,6 +95,15 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.GOAL] = {
+        name: Default.GOAL,
+        description: "set a goal condition and work until it's met, or show status/clear",
+        source: "command",
+        get template() {
+          return PROMPT_GOAL
+        },
+        hints: hints(PROMPT_GOAL),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

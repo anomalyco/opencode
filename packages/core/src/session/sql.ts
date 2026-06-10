@@ -115,6 +115,27 @@ export const TodoTable = sqliteTable(
   ],
 )
 
+export const GoalTable = sqliteTable(
+  "goal",
+  {
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .primaryKey()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    condition: text().notNull(),
+    status: text().notNull().default("active"),
+    iterations: integer().notNull().default(0),
+    tokens_at_start: integer().notNull().default(0),
+    set_at: integer()
+      .notNull()
+      .$default(() => Date.now()),
+    evaluator_model: text(),
+    last_reason: text(),
+    ...Timestamps,
+  },
+  (table) => [index("goal_session_idx").on(table.session_id)],
+)
+
 export const SessionMessageTable = sqliteTable(
   "session_message",
   {

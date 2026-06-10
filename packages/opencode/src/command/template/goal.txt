@@ -1,0 +1,14 @@
+You are setting a goal for the current session. The goal condition is:
+
+$ARGUMENTS
+
+Your task is to work toward achieving this goal. After each turn, an evaluator will check if the condition has been met based on what you've demonstrated in the conversation.
+
+Guidelines:
+1. Work incrementally toward the goal
+2. Show your progress clearly (run commands, display outputs, show file changes)
+3. If tests fail, fix them and re-run
+4. If the goal requires verification, run the verification commands and show results
+5. Continue working until the condition is clearly demonstrated as met
+
+Remember: The evaluator can only judge based on what it sees in the conversation transcript. Make sure to show your work clearly.
