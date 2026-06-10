@@ -80,12 +80,12 @@ describe("transcript", () => {
 
     test("includes metadata when enabled", () => {
       const result = formatAssistantHeader(baseMsg, true)
-      expect(result).toBe("## Assistant (Build · claude-sonnet-4-20250514 · 5.4s)\n\n")
+      expect(result).toBe("## Assistant (Build · anthropic/claude-sonnet-4-20250514 · 5.4s)\n\n")
     })
 
-    test("uses model display name when available", () => {
+    test("uses provider and model display name when available", () => {
       const result = formatAssistantHeader(baseMsg, true, providers)
-      expect(result).toBe("## Assistant (Build · Claude Sonnet 4 · 5.4s)\n\n")
+      expect(result).toBe("## Assistant (Build · Anthropic/Claude Sonnet 4 · 5.4s)\n\n")
     })
 
     test("excludes metadata when disabled", () => {
@@ -96,7 +96,7 @@ describe("transcript", () => {
     test("handles missing completed time", () => {
       const msg = { ...baseMsg, time: { created: 1000000 } }
       const result = formatAssistantHeader(msg as AssistantMessage, true)
-      expect(result).toBe("## Assistant (Build · claude-sonnet-4-20250514)\n\n")
+      expect(result).toBe("## Assistant (Build · anthropic/claude-sonnet-4-20250514)\n\n")
     })
 
     test("titlecases agent name", () => {
@@ -289,7 +289,7 @@ describe("transcript", () => {
       }
       const parts: Part[] = [{ id: "p1", sessionID: "ses_123", messageID: "msg_123", type: "text", text: "Hi there" }]
       const result = formatMessage(msg, parts, options)
-      expect(result).toContain("## Assistant (Build · Claude Sonnet 4 · 5.4s)")
+      expect(result).toContain("## Assistant (Build · Anthropic/Claude Sonnet 4 · 5.4s)")
       expect(result).toContain("Hi there")
     })
   })
@@ -344,7 +344,7 @@ describe("transcript", () => {
       expect(result).toContain("**Session ID:** ses_abc123")
       expect(result).toContain("## User")
       expect(result).toContain("Hello")
-      expect(result).toContain("## Assistant (Build · Claude Sonnet 4 · 0.5s)")
+      expect(result).toContain("## Assistant (Build · Anthropic/Claude Sonnet 4 · 0.5s)")
       expect(result).toContain("Hi!")
       expect(result).toContain("---")
     })
@@ -381,7 +381,7 @@ describe("transcript", () => {
         assistantMetadata: true,
       })
 
-      expect(result).toContain("## Assistant (Build · claude-sonnet-4-20250514 · 0.5s)")
+      expect(result).toContain("## Assistant (Build · anthropic/claude-sonnet-4-20250514 · 0.5s)")
     })
 
     test("formats transcript without assistant metadata", () => {
