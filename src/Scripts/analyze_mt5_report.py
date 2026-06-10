@@ -28,6 +28,14 @@ def main() -> int:
         "log_path": str(Path(args.log)),
         "log_window_selected": log_window_selected,
         "risk_version_marker": first_match(log_text, [r"(RISK_V\d+_[A-Z0-9_]+)"]),
+        "strategy_version_marker": first_match(
+            log_text,
+            [r"(?:Strategy Version|STRATEGY_VERSION)\s*[:=]\s*([A-Z0-9_./-]+)"],
+        ),
+        "broker_symbol_profile_marker": first_match(
+            log_text,
+            [r"(BROKER_SYMBOL_PROFILE:[^\r\n]+)", r"(BrokerSymbolProfile:[^\r\n]+)"],
+        ),
         "no_money_count": count_patterns(log_text, [r"\bNo money\b", r"\bTRADE_RETCODE_NO_MONEY\b", r"\b10019\b"]),
         "margin_error_count": count_patterns(
             log_text,
@@ -55,7 +63,22 @@ def main() -> int:
         "test_passed_count": count_patterns(log_text, [r"\bTest passed\b"]),
         "test_thread_finished_count": count_patterns(log_text, [r"test Experts\\opencode-trade\\Expert_Main\.ex5 on XAUUSD,M15 thread finished"]),
         "orders_after_global_stop_count": count_orders_after_global_stop(log_text),
+        "invalid_stops_count": count_matching_lines(
+            log_text,
+            [r"\bInvalid stops\b", r"\bTRADE_RETCODE_INVALID_STOPS\b", r"\b10016\b"],
+        ),
+        "order_rejection_count": count_matching_lines(
+            log_text,
+            [r"\bOrder failed\b", r"\bfailed market (?:buy|sell)\b", r"\bTRADE_RETCODE_(?!DONE\b|PLACED\b|DONE_PARTIAL\b|REQUOTE\b)[A-Z_]+\b"],
+        ),
+        "jpy_risk_breach_count": count_matching_lines(
+            log_text,
+            [r"\bJPY_RISK_BREACH\b", r"\bJPY risk breach\b", r"\bRisk exceeds JPY cap\b"],
+        ),
     }
+    metrics["skip_reason_counts"] = extract_skip_reason_counts(log_text)
+    metrics["skip_reason_count"] = sum(metrics["skip_reason_counts"].values())
+    metrics["skip_without_reason_count"] = count_skip_without_reason(log_text)
     metrics["win_rate"] = calculate_win_rate(metrics["win_count"], metrics["loss_count"])
     failed_rules: list[str] = []
     warnings: list[str] = []
@@ -78,6 +101,18 @@ def main() -> int:
 
         if rules.get("reject_margin_error", False) and metrics["margin_error_count"] > 0:
             failed_rules.append("log contains margin-related errors")
+
+        if rules.get("reject_invalid_stops", False) and metrics["invalid_stops_count"] > 0:
+            failed_rules.append(f"log contains invalid stops: {metrics['invalid_stops_count']}")
+
+        if rules.get("reject_order_rejection", False) and metrics["order_rejection_count"] > 0:
+            failed_rules.append(f"log contains order rejections: {metrics['order_rejection_count']}")
+
+        if rules.get("reject_jpy_risk_breach", False) and metrics["jpy_risk_breach_count"] > 0:
+            failed_rules.append(f"log contains JPY risk breaches: {metrics['jpy_risk_breach_count']}")
+
+        if rules.get("reject_skip_without_reason", False) and metrics["skip_without_reason_count"] > 0:
+            failed_rules.append(f"log contains skipped trades without reason: {metrics['skip_without_reason_count']}")
 
         for pattern in rules.get("required_log_patterns", []):
             if not re.search(pattern, log_text, flags=re.IGNORECASE | re.MULTILINE):
@@ -205,6 +240,27 @@ def looks_like_utf16le(data: bytes) -> bool:
 
 def count_patterns(text: str, patterns: list[str]) -> int:
     return sum(len(re.findall(pattern, text, flags=re.IGNORECASE)) for pattern in patterns)
+
+
+def count_matching_lines(text: str, patterns: list[str]) -> int:
+    return sum(1 for line in text.splitlines() if any(re.search(pattern, line, flags=re.IGNORECASE) for pattern in patterns))
+
+
+def extract_skip_reason_counts(text: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for pattern in [r"\bSKIP_REASON\s*[:=]\s*([A-Z0-9_./-]+)", r"\bTrade skipped\s*[:=]\s*([A-Z0-9_./-]+)"]:
+        for reason in re.findall(pattern, text, flags=re.IGNORECASE):
+            counts[reason] = counts.get(reason, 0) + 1
+    return counts
+
+
+def count_skip_without_reason(text: str) -> int:
+    return sum(
+        1
+        for line in text.splitlines()
+        if re.search(r"\bSKIPPED_TRADE\b|\bTrade skipped\b", line, flags=re.IGNORECASE)
+        and not re.search(r"\bTrade skipped\s*[:=]\s*[A-Z0-9_./-]+|\bSKIP_REASON\s*[:=]\s*[A-Z0-9_./-]+", line, flags=re.IGNORECASE)
+    )
 
 
 def extract_number(text: str, patterns: list[str]) -> float | None:

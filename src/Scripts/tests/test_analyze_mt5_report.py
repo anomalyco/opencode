@@ -45,6 +45,27 @@ PASS_LOG = """RiskManager Version: RISK_V3_ORDER_CALC_PROFIT
 market buy 0.05 XAUUSD
 """
 
+SENTINEL_PASS_LOG = """RiskManager Version: RISK_V3_ORDER_CALC_PROFIT
+STRATEGY_VERSION: SENTINEL_BREAKOUT_XAUUSD_M15_V1
+BROKER_SYMBOL_PROFILE: symbol=XAUUSD account=JPY digits=2 point=0.01 spread_points=25 stop_level=50 freeze_level=30
+SKIP_REASON: SPREAD_TOO_WIDE
+Trade skipped: SESSION_CLOSED
+market buy 0.05 XAUUSD
+"""
+
+SENTINEL_INVALID_STOPS_LOG = SENTINEL_PASS_LOG + """failed market buy 0.05 XAUUSD sl: 2330.00 tp: 2340.00 [Invalid stops]
+Order failed (attempt 1): 10016 - Invalid stops
+"""
+
+SENTINEL_ORDER_REJECTION_LOG = SENTINEL_PASS_LOG + """Order failed (attempt 1): 10030 - TRADE_RETCODE_INVALID_FILL
+"""
+
+SENTINEL_JPY_RISK_BREACH_LOG = SENTINEL_PASS_LOG + """JPY_RISK_BREACH: requested risk 7500 exceeds cap 5000
+"""
+
+SENTINEL_SKIP_WITHOUT_REASON_LOG = SENTINEL_PASS_LOG + """SKIPPED_TRADE
+"""
+
 STEP2_LOG = """CS\t0\t12:52:42.438\tTester\tXAUUSD,M15: testing of Experts\\opencode-trade\\Expert_Main.ex5 from 2024.06.01 00:00 to 2024.12.31 00:00 started with inputs:
 CS\t0\t12:52:42.438\tTester\t  InpGlobalDDLimit=-0.0005
 CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:00   RiskManager Version: RISK_V3_ORDER_CALC_PROFIT
@@ -124,6 +145,20 @@ def default_config() -> dict:
             "reject_no_money": True,
             "reject_margin_error": True,
             "reject_orders_after_global_stop": True,
+            "warn_largest_lot_above": 1.0,
+        },
+        "sentinel_xauusd_m15": {
+            "required_log_markers": ["RISK_V3_ORDER_CALC_PROFIT"],
+            "required_log_patterns": [
+                r"(?:Strategy Version|STRATEGY_VERSION)\s*[:=]\s*SENTINEL_BREAKOUT_XAUUSD_M15_V\d+",
+                r"BROKER_SYMBOL_PROFILE:",
+            ],
+            "reject_no_money": True,
+            "reject_margin_error": True,
+            "reject_invalid_stops": True,
+            "reject_order_rejection": True,
+            "reject_jpy_risk_breach": True,
+            "reject_skip_without_reason": True,
             "warn_largest_lot_above": 1.0,
         }
     }
@@ -306,6 +341,48 @@ class AnalyzeMt5ReportTest(unittest.TestCase):
         result, payload = self.run_parser(PASS_REPORT, PASS_LOG, "utf16", report_encoding="utf-16le")
         self.assertEqual(result.returncode, 0)
         self.assertTrue(payload["passed"])
+
+    def test_sentinel_pass_case_extracts_strategy_and_skip_metrics(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_PASS_LOG, "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(payload["metrics"]["strategy_version_marker"], "SENTINEL_BREAKOUT_XAUUSD_M15_V1")
+        self.assertEqual(payload["metrics"]["skip_reason_count"], 2)
+        self.assertEqual(payload["metrics"]["skip_reason_counts"]["SPREAD_TOO_WIDE"], 1)
+        self.assertEqual(payload["metrics"]["skip_reason_counts"]["SESSION_CLOSED"], 1)
+        self.assertEqual(payload["metrics"]["skip_without_reason_count"], 0)
+
+    def test_sentinel_fails_when_strategy_version_marker_missing(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_PASS_LOG.replace("STRATEGY_VERSION: SENTINEL_BREAKOUT_XAUUSD_M15_V1\n", ""), "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "missing log pattern: (?:Strategy Version|STRATEGY_VERSION)\\s*[:=]\\s*SENTINEL_BREAKOUT_XAUUSD_M15_V\\d+",
+            payload["failed_rules"],
+        )
+
+    def test_sentinel_fails_when_broker_profile_marker_missing(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_PASS_LOG.replace("BROKER_SYMBOL_PROFILE: symbol=XAUUSD account=JPY digits=2 point=0.01 spread_points=25 stop_level=50 freeze_level=30\n", ""), "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing log pattern: BROKER_SYMBOL_PROFILE:", payload["failed_rules"])
+
+    def test_sentinel_fails_on_invalid_stops(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_INVALID_STOPS_LOG, "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("log contains invalid stops: 2", payload["failed_rules"])
+
+    def test_sentinel_fails_on_order_rejection(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_ORDER_REJECTION_LOG, "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("log contains order rejections: 1", payload["failed_rules"])
+
+    def test_sentinel_fails_on_jpy_risk_breach(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_JPY_RISK_BREACH_LOG, "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("log contains JPY risk breaches: 1", payload["failed_rules"])
+
+    def test_sentinel_fails_on_skip_without_reason(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_SKIP_WITHOUT_REASON_LOG, "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("log contains skipped trades without reason: 1", payload["failed_rules"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,5 +26,19 @@
     "reject_margin_error": true,
     "reject_orders_after_global_stop": true,
     "warn_largest_lot_above": 1.0
+  },
+  "sentinel_xauusd_m15": {
+    "required_log_markers": ["RISK_V3_ORDER_CALC_PROFIT"],
+    "required_log_patterns": [
+      "(?:Strategy Version|STRATEGY_VERSION)\\s*[:=]\\s*SENTINEL_BREAKOUT_XAUUSD_M15_V\\d+",
+      "BROKER_SYMBOL_PROFILE:"
+    ],
+    "reject_no_money": true,
+    "reject_margin_error": true,
+    "reject_invalid_stops": true,
+    "reject_order_rejection": true,
+    "reject_jpy_risk_breach": true,
+    "reject_skip_without_reason": true,
+    "warn_largest_lot_above": 1.0
   }
 }
