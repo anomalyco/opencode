@@ -78,7 +78,7 @@
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@ff-labs/fff-bun": "0.9.3",
+    "@ff-labs/fff-bun": "0.9.4",
     "@gitlab/opencode-gitlab-auth": "1.3.3",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@octokit/graphql": "9.0.2",
