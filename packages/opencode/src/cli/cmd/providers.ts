@@ -1,3 +1,4 @@
+import type { Argv } from "yargs"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import { CliError, effectCmd, fail } from "../effect-cmd"
@@ -298,7 +299,11 @@ export const ProvidersListCommand = effectCmd({
 export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to a provider",
-  builder: (yargs) =>
+  // URL-based login mints a fresh credential and must not bootstrap an instance first: loading config
+  // fetches enterprise remote config with the (possibly expired) stored token, which would fail and
+  // block the very re-login meant to fix it. The interactive path still needs the instance for config.
+  instance: (args) => !args.url,
+  builder: (yargs: Argv) =>
     yargs
       .positional("url", {
         describe: "opencode auth provider",
