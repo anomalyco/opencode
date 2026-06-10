@@ -26,6 +26,7 @@ const keys = new Set([
   "tools",
   "attachment",
   "layout",
+  "compaction",
 ])
 
 export function isV1(input: unknown) {
