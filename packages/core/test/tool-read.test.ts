@@ -1,3 +1,4 @@
+import path from "path"
 import { beforeEach, describe, expect } from "bun:test"
 import { Effect, Exit, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
@@ -145,7 +146,7 @@ describe("ReadTool", () => {
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
-      expect(readCalls).toEqual([{ input: AbsolutePath.make(`${process.cwd()}/README.md`), page: {} }])
+      expect(readCalls).toEqual([{ input: AbsolutePath.make(path.resolve(process.cwd(), "README.md")), page: { offset: undefined, limit: undefined } }])
     }),
   )
 
@@ -174,7 +175,7 @@ describe("ReadTool", () => {
           { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "pixel.png" },
         ],
       })
-      expect(readCalls).toEqual([{ input: AbsolutePath.make(`${process.cwd()}/pixel.png`), page: {} }])
+      expect(readCalls).toEqual([{ input: AbsolutePath.make(path.resolve(process.cwd(), "pixel.png")), page: { offset: undefined, limit: undefined } }])
 
       const settled = yield* settleTool(registry, {
         sessionID,

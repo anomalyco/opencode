@@ -118,7 +118,7 @@ describe("WriteTool", () => {
     ),
   )
 
-  it.live("overwrites a relative existing file and reports that it wrote the file", () =>
+  it.live("rejects overwriting an existing file and tells the AI to use Edit instead", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -129,12 +129,7 @@ describe("WriteTool", () => {
           ),
           Effect.andThen((settled) =>
             Effect.gen(function* () {
-              expect(settled.result).toEqual({ type: "text", value: "Wrote file successfully: existing.txt" })
-              expect(settled.output?.structured).toMatchObject({ resource: "existing.txt", existed: true })
-              expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "existing.txt"), "utf8"))).toBe(
-                "after",
-              )
-              expect(writes).toHaveLength(1)
+              expect(settled.result).toEqual({ type: "error", value: "File already exists: existing.txt. Use edit to modify existing files." })
             }),
           ),
         )
@@ -278,9 +273,7 @@ test("keeps the locked write schema, semantics docstring, and deferred UX TODOs 
   const schema = definition[0]?.inputSchema as { readonly properties?: Record<string, unknown> }
 
   expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["content", "path"])
-  expect(source).toContain(
-    "Named project references\n * are read-oriented and deliberately are not accepted by mutation tools.",
-  )
+  expect(source).toContain("Write content to one file. Relative paths resolve within the active Location.")
   for (const todo of [
     "Revisit whether model-facing mutation schemas should prefer absolute `filePath` naming for trained-in compatibility after evaluating model behavior.",
     "Add formatter integration after V2 formatter runtime exists.",
