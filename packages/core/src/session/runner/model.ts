@@ -48,6 +48,7 @@ export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Servic
 const apiKey = (model: ModelV2.Info, provider?: ProviderV2.Info) => {
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey
   if (typeof value === "string") return Auth.value(value)
+  if (Array.isArray(value) && value.length > 0) return Auth.pool(value, "apiKey")
   return provider?.enabled !== false && provider?.enabled.via === "env" ? Auth.config(provider.enabled.name) : undefined
 }
 

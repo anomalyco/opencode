@@ -84,7 +84,9 @@ OpenAI.configure({
 // @ts-expect-error OpenAI model selectors only accept model ids.
 OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini", {})
 
-// @ts-expect-error apiKey only accepts string, Redacted<string>, or Config<string | Redacted<string>>.
+OpenAI.configure({ apiKey: ["sk-key-1", "sk-key-2"] })
+
+// @ts-expect-error apiKey only accepts string, string[], Redacted<string>, or Config<string | Redacted<string>>.
 OpenAI.configure({ apiKey: 123 })
 
 // @ts-expect-error provider helpers reject unknown top-level options.

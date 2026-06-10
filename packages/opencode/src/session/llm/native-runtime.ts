@@ -20,7 +20,7 @@ import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
 
 export type RuntimeStatus =
-  | { readonly type: "supported"; readonly apiKey: string; readonly baseURL?: string }
+  | { readonly type: "supported"; readonly apiKey: string | readonly string[]; readonly baseURL?: string }
   | { readonly type: "unsupported"; readonly reason: string }
 export type StreamResult =
   | { readonly type: "supported"; readonly stream: Stream.Stream<LLMEvent, unknown> }
@@ -61,7 +61,13 @@ function statusWithFetch(
     return { type: "unsupported", reason: "OAuth auth requires a provider fetch override" }
   }
 
-  const apiKey = typeof input.provider.options.apiKey === "string" ? input.provider.options.apiKey : input.provider.key
+  const rawKey = input.provider.options.apiKey
+  const apiKey: string | readonly string[] | undefined =
+    typeof rawKey === "string"
+      ? rawKey
+      : Array.isArray(rawKey) && rawKey.length > 0
+        ? rawKey
+        : input.provider.key
   if (!apiKey) return { type: "unsupported", reason: "API key is not configured" }
 
   return {

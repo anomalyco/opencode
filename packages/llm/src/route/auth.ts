@@ -93,6 +93,18 @@ export const config = (name: string) => credentialFromSecret(Config.redacted(nam
 
 export const effect = (load: Effect.Effect<Redacted.Redacted, CredentialError>) => credential(load)
 
+export const pool = (secrets: readonly (string | Redacted.Redacted)[], source = "pool") => {
+  if (secrets.length === 0) return credential(Effect.fail(new MissingCredentialError(source)))
+  let index = 0
+  return credential(
+    Effect.sync(() => {
+      const secret = secrets[index % secrets.length]!
+      index++
+      return typeof secret === "string" ? Redacted.make(secret) : secret
+    }),
+  )
+}
+
 export const none = auth((input) => Effect.succeed(input.headers))
 
 export const headers = (input: Headers.Input) =>

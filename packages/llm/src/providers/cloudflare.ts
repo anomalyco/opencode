@@ -39,15 +39,19 @@ export const aiGatewayBaseURL = (input: GatewayURL) => {
   return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(input.accountId)}/${encodeURIComponent(input.gatewayId?.trim() || "default")}/compat`
 }
 
+const resolveApiKeyCredential = (apiKey: AIGatewayOptions["apiKey"]) =>
+  Array.isArray(apiKey) ? Auth.pool(apiKey, "apiKey") : Auth.optional(apiKey as CloudflareSecret | undefined, "apiKey")
+
 const aiGatewayAuth = (input: AIGatewayOptions) => {
   if ("auth" in input && input.auth) return input.auth
   const gateway = Auth.optional(input.gatewayApiKey, "gatewayApiKey")
     .orElse(Auth.config("CLOUDFLARE_API_TOKEN"))
     .orElse(Auth.config("CF_AIG_TOKEN"))
     .pipe(Auth.bearerHeader("cf-aig-authorization"))
-  if (!("apiKey" in input) || input.apiKey === undefined) return gateway
-  if (input.gatewayApiKey === undefined) return Auth.bearer(input.apiKey)
-  return Auth.bearerHeader("cf-aig-authorization", input.gatewayApiKey).andThen(Auth.bearer(input.apiKey))
+  const apiKey = "apiKey" in input ? input.apiKey : undefined
+  if (apiKey === undefined) return gateway
+  if (input.gatewayApiKey === undefined) return resolveApiKeyCredential(apiKey).bearer()
+  return Auth.bearerHeader("cf-aig-authorization", input.gatewayApiKey).andThen(resolveApiKeyCredential(apiKey).bearer())
 }
 
 export const workersAIBaseURL = (input: WorkersAIURL) => {

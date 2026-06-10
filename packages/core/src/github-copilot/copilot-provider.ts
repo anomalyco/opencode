@@ -59,7 +59,7 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
   // Merge headers: defaults first, then user overrides
   const headers = {
     // Default OpenAI Compatible headers (can be overridden by user)
-    ...(options.apiKey && { Authorization: `Bearer ${options.apiKey}` }),
+    ...(typeof options.apiKey === "string" && { Authorization: `Bearer ${options.apiKey}` }),
     ...options.headers,
   }
 

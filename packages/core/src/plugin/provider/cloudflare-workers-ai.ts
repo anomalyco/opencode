@@ -52,7 +52,7 @@ function sdkOptions(options: Record<string, any>) {
   return {
     ...options,
     baseURL: expandAccountId(options.baseURL),
-    apiKey: process.env.CLOUDFLARE_API_KEY ?? options.apiKey,
+    apiKey: process.env.CLOUDFLARE_API_KEY ?? (typeof options.apiKey === "string" ? options.apiKey : undefined),
     headers: {
       "User-Agent": `opencode/${InstallationVersion} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
       ...options.headers,

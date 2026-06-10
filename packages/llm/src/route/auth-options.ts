@@ -8,13 +8,15 @@ export type AuthOverride = {
   readonly apiKey?: never
 }
 
+type SingleApiKey = string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>>
+
 export type OptionalApiKeyAuth = {
-  readonly apiKey?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>>
+  readonly apiKey?: SingleApiKey | readonly string[]
   readonly auth?: never
 }
 
 export type RequiredApiKeyAuth = {
-  readonly apiKey: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>>
+  readonly apiKey: SingleApiKey | readonly string[]
   readonly auth?: never
 }
 
@@ -46,12 +48,12 @@ export type AtLeastOne<T> = {
  */
 export const bearer = (options: ProviderAuthOption<"optional">, envVar: string | ReadonlyArray<string>): Auth => {
   if ("auth" in options && options.auth) return options.auth
-  return (Array.isArray(envVar) ? envVar : [envVar])
-    .reduce(
-      (auth, name) => auth.orElse(Auth.config(name)),
-      Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey"),
-    )
-    .bearer()
+  const apiKey = "apiKey" in options ? options.apiKey : undefined
+  const base =
+    Array.isArray(apiKey) && apiKey.length > 0
+      ? Auth.pool(apiKey, "apiKey")
+      : Auth.optional(apiKey as SingleApiKey | undefined, "apiKey")
+  return (Array.isArray(envVar) ? envVar : [envVar]).reduce((auth, name) => auth.orElse(Auth.config(name)), base).bearer()
 }
 
 export * as AuthOptions from "./auth-options"

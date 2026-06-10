@@ -854,7 +854,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         (auth?.type === "api" ? auth.metadata?.account : undefined) ??
         input.options?.account
 
-      const pat = env["SNOWFLAKE_CORTEX_PAT"] ?? (auth?.type === "api" ? auth.key : undefined) ?? input.options?.apiKey
+      const rawPat = env["SNOWFLAKE_CORTEX_PAT"] ?? (auth?.type === "api" ? auth.key : undefined) ?? input.options?.apiKey
+      const pat = typeof rawPat === "string" ? rawPat : undefined
 
       if (!account || !pat) {
         const missing = [!account && "SNOWFLAKE_ACCOUNT", !pat && "SNOWFLAKE_CORTEX_PAT"].filter(Boolean).join(", ")
@@ -1605,6 +1606,26 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
+    function authHeaderForNpm(npm: string): { name: string; format: (key: string) => string } {
+      if (npm.includes("anthropic")) return { name: "x-api-key", format: (k) => k }
+      if (npm.includes("google")) return { name: "x-goog-api-key", format: (k) => k }
+      if (npm.includes("azure")) return { name: "api-key", format: (k) => k }
+      return { name: "authorization", format: (k) => `Bearer ${k}` }
+    }
+
+    function apiKeyRotator(
+      pool: { keys: readonly string[]; index: number },
+      header: { name: string; format: (key: string) => string },
+    ) {
+      return (opts: Record<string, any>) => {
+        const key = pool.keys[pool.index % pool.keys.length]!
+        pool.index++
+        const headers = new Headers(opts.headers as HeadersInit | undefined)
+        headers.set(header.name, header.format(key))
+        opts.headers = headers
+      }
+    }
+
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
         const provider = s.providers[model.providerID]
@@ -1659,6 +1680,12 @@ export const layer = Layer.effect(
             ...model.headers,
           }
 
+        let apiKeyPool: { keys: readonly string[]; index: number } | undefined
+        if (Array.isArray(options["apiKey"]) && options["apiKey"].length > 0) {
+          apiKeyPool = { keys: options["apiKey"] as string[], index: 0 }
+          options["apiKey"] = options["apiKey"][0]
+        }
+
         const key = Hash.fast(
           JSON.stringify({
             providerID: model.providerID,
@@ -1675,9 +1702,16 @@ export const layer = Layer.effect(
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
+        const rotateAuthHeader = apiKeyPool
+          ? apiKeyRotator(apiKeyPool, authHeaderForNpm(model.api.npm))
+          : undefined
+
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
+
+          if (rotateAuthHeader) rotateAuthHeader(opts)
+
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined

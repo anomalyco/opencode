@@ -64,10 +64,12 @@ const defaults = (input: Config) => {
 
 const auth = (input: Config) => {
   if ("auth" in input && input.auth) return input.auth
+  const apiKey = "apiKey" in input ? input.apiKey : undefined
+  const base = Array.isArray(apiKey)
+    ? Auth.pool(apiKey, "apiKey")
+    : Auth.optional(apiKey as Exclude<typeof apiKey, readonly string[]>, "apiKey")
   return Auth.remove("authorization").andThen(
-    Auth.optional("apiKey" in input ? input.apiKey : undefined, "apiKey")
-      .orElse(Auth.config("AZURE_OPENAI_API_KEY"))
-      .pipe(Auth.header("api-key")),
+    base.orElse(Auth.config("AZURE_OPENAI_API_KEY")).pipe(Auth.header("api-key")),
   )
 }
 

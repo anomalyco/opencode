@@ -100,4 +100,41 @@ describe("Auth", () => {
       expect(headers["x-existing"]).toBe("yes")
     }),
   )
+
+  it.effect("pool credential rotates through keys", () =>
+    Effect.gen(function* () {
+      const cred = Auth.pool(["key-a", "key-b", "key-c"], "test-pool")
+      const h1 = yield* cred.bearer().apply(input)
+      const h2 = yield* cred.bearer().apply(input)
+      const h3 = yield* cred.bearer().apply(input)
+      const h4 = yield* cred.bearer().apply(input)
+
+      expect(h1.authorization).toBe("Bearer key-a")
+      expect(h2.authorization).toBe("Bearer key-b")
+      expect(h3.authorization).toBe("Bearer key-c")
+      expect(h4.authorization).toBe("Bearer key-a")
+    }),
+  )
+
+  it.effect("pool credential with single key behaves like a regular credential", () =>
+    Effect.gen(function* () {
+      const cred = Auth.pool(["only-key"], "single")
+      const h1 = yield* cred.bearer().apply(input)
+      const h2 = yield* cred.bearer().apply(input)
+
+      expect(h1.authorization).toBe("Bearer only-key")
+      expect(h2.authorization).toBe("Bearer only-key")
+    }),
+  )
+
+  it.effect("pool credential as custom header rotates correctly", () =>
+    Effect.gen(function* () {
+      const cred = Auth.pool(["k1", "k2"], "pool-header")
+      const h1 = yield* cred.header("x-api-key").apply(input)
+      const h2 = yield* cred.header("x-api-key").apply(input)
+
+      expect(h1["x-api-key"]).toBe("k1")
+      expect(h2["x-api-key"]).toBe("k2")
+    }),
+  )
 })

@@ -20,7 +20,7 @@ type ToolInput = {
 
 export type RequestInput = {
   readonly model: Provider.Model
-  readonly apiKey?: string
+  readonly apiKey?: string | readonly string[]
   readonly baseURL?: string
   readonly system?: readonly string[]
   readonly messages: readonly ModelMessage[]
@@ -153,8 +153,9 @@ const requireBaseURL = (model: Provider.Model, url: string | undefined) => {
 export const model = (input: Provider.Model | RequestInput, headers?: Record<string, string>) => {
   const model = "model" in input ? input.model : input
   const url = baseURL(input)
+  const rawApiKey = "model" in input ? input.apiKey : undefined
   const options = {
-    ...("model" in input && input.apiKey ? { apiKey: input.apiKey } : {}),
+    ...(rawApiKey ? { apiKey: rawApiKey } : {}),
     ...(url ? { baseURL: url } : {}),
     headers: Object.keys({ ...model.headers, ...headers }).length === 0 ? undefined : { ...model.headers, ...headers },
     limits: {
@@ -167,7 +168,10 @@ export const model = (input: Provider.Model | RequestInput, headers?: Record<str
     return Azure.configure({ ...options, baseURL: requireBaseURL(model, url) }).responses(model.api.id)
   if (model.api.npm === "@ai-sdk/anthropic") return Anthropic.configure(options).model(model.api.id)
   if (model.api.npm === "@ai-sdk/google") return Google.configure(options).model(model.api.id)
-  if (model.api.npm === "@ai-sdk/amazon-bedrock") return AmazonBedrock.configure(options).model(model.api.id)
+  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
+    const singleKey = Array.isArray(rawApiKey) ? rawApiKey[0] : rawApiKey
+    return AmazonBedrock.configure({ ...options, apiKey: singleKey }).model(model.api.id)
+  }
   if (model.api.npm === "@ai-sdk/openai-compatible")
     return OpenAICompatible.configure({
       ...options,

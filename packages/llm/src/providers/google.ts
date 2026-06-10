@@ -12,9 +12,11 @@ export type Config = RouteDefaultsInput & ProviderAuthOption<"optional"> & { rea
 
 const auth = (options: ProviderAuthOption<"optional">) => {
   if ("auth" in options && options.auth) return options.auth
-  return Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey")
-    .orElse(Auth.config("GOOGLE_GENERATIVE_AI_API_KEY"))
-    .pipe(Auth.header("x-goog-api-key"))
+  const apiKey = "apiKey" in options ? options.apiKey : undefined
+  const base = Array.isArray(apiKey)
+    ? Auth.pool(apiKey, "apiKey")
+    : Auth.optional(apiKey as Exclude<typeof apiKey, readonly string[]>, "apiKey")
+  return base.orElse(Auth.config("GOOGLE_GENERATIVE_AI_API_KEY")).pipe(Auth.header("x-goog-api-key"))
 }
 
 const configuredRoute = (input: Config) => {
