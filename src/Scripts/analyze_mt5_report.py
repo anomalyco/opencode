@@ -114,6 +114,11 @@ def main() -> int:
         if rules.get("reject_skip_without_reason", False) and metrics["skip_without_reason_count"] > 0:
             failed_rules.append(f"log contains skipped trades without reason: {metrics['skip_without_reason_count']}")
 
+        for reason in rules.get("reject_skip_reasons", []):
+            count = metrics["skip_reason_counts"].get(reason, 0)
+            if count > 0:
+                failed_rules.append(f"log contains rejected skip reason {reason}: {count}")
+
         for pattern in rules.get("required_log_patterns", []):
             if not re.search(pattern, log_text, flags=re.IGNORECASE | re.MULTILINE):
                 failed_rules.append(f"missing log pattern: {pattern}")

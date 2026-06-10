@@ -80,6 +80,12 @@ public:
          if(invalid_limit)
             return(INIT_FAILED);
 
+         if(!IsValidTradeExecutionInput())
+           {
+            Print("TradeExecutor initialization failed: invalid trade execution inputs");
+            return(INIT_FAILED);
+           }
+
          if(!m_profile.Init(InpExpectedSymbolFragment, InpExpectedAccountCurrency, InpRequireExpectedAccountCurrency))
            {
             Print("BrokerSymbolProfile initialization failed: ", m_profile.FailureReason());
@@ -164,7 +170,12 @@ private:
      {
       return limit < 0.0 && limit > -1.0;
      }
-   };
+
+   bool IsValidTradeExecutionInput()
+     {
+      return InpMaxSpreadPoints > 0 && InpTradeDeviationPoints >= 0 && InpTradeMaxRetries > 0;
+     }
+    };
 
 //+------------------------------------------------------------------+
 //| Global expert instance                                            |

@@ -39,6 +39,7 @@
     "reject_order_rejection": true,
     "reject_jpy_risk_breach": true,
     "reject_skip_without_reason": true,
+    "reject_skip_reasons": ["INVALID_STOPS"],
     "warn_largest_lot_above": 1.0
   }
 }

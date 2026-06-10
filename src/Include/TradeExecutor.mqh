@@ -190,12 +190,25 @@ private:
       double point_value = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
       if(point_value <= 0.0)
          return false;
+
+      double bid = NormalizePrice(SymbolInfoDouble(_Symbol, SYMBOL_BID));
+      double ask = NormalizePrice(SymbolInfoDouble(_Symbol, SYMBOL_ASK));
+      if(bid <= 0.0 || ask <= 0.0)
+         return false;
+
       int stop_level = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
       int freeze_level = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL);
       double min_distance = MathMax(stop_level, freeze_level) * point_value;
       if(type == ORDER_TYPE_BUY)
-         return (entry_price - sl) >= min_distance && (tp - entry_price) >= min_distance;
-      return (sl - entry_price) >= min_distance && (entry_price - tp) >= min_distance;
+        {
+         if(sl >= entry_price || tp <= entry_price)
+            return false;
+         return sl < bid && tp > ask && (bid - sl) >= min_distance && (tp - ask) >= min_distance;
+        }
+
+      if(sl <= entry_price || tp >= entry_price)
+         return false;
+      return sl > ask && tp < bid && (sl - ask) >= min_distance && (bid - tp) >= min_distance;
      }
 
    bool HasValidMargin(ENUM_ORDER_TYPE type, double lot, double entry_price)

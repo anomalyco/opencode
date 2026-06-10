@@ -66,6 +66,9 @@ SENTINEL_JPY_RISK_BREACH_LOG = SENTINEL_PASS_LOG + """JPY_RISK_BREACH: requested
 SENTINEL_SKIP_WITHOUT_REASON_LOG = SENTINEL_PASS_LOG + """SKIPPED_TRADE
 """
 
+SENTINEL_SKIP_INVALID_STOPS_LOG = SENTINEL_PASS_LOG + """SKIP_REASON: INVALID_STOPS
+"""
+
 STEP2_LOG = """CS\t0\t12:52:42.438\tTester\tXAUUSD,M15: testing of Experts\\opencode-trade\\Expert_Main.ex5 from 2024.06.01 00:00 to 2024.12.31 00:00 started with inputs:
 CS\t0\t12:52:42.438\tTester\t  InpGlobalDDLimit=-0.0005
 CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:00   RiskManager Version: RISK_V3_ORDER_CALC_PROFIT
@@ -159,6 +162,7 @@ def default_config() -> dict:
             "reject_order_rejection": True,
             "reject_jpy_risk_breach": True,
             "reject_skip_without_reason": True,
+            "reject_skip_reasons": ["INVALID_STOPS"],
             "warn_largest_lot_above": 1.0,
         }
     }
@@ -383,6 +387,17 @@ class AnalyzeMt5ReportTest(unittest.TestCase):
         result, payload = self.run_parser(PASS_REPORT, SENTINEL_SKIP_WITHOUT_REASON_LOG, "sentinel_xauusd_m15")
         self.assertEqual(result.returncode, 1)
         self.assertIn("log contains skipped trades without reason: 1", payload["failed_rules"])
+
+    def test_sentinel_fails_on_rejected_invalid_stops_skip_reason(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_SKIP_INVALID_STOPS_LOG, "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["metrics"]["skip_reason_counts"]["INVALID_STOPS"], 1)
+        self.assertIn("log contains rejected skip reason INVALID_STOPS: 1", payload["failed_rules"])
+
+    def test_sentinel_allows_spread_skip_reason(self):
+        result, payload = self.run_parser(PASS_REPORT, SENTINEL_PASS_LOG, "sentinel_xauusd_m15")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(payload["metrics"]["skip_reason_counts"]["SPREAD_TOO_WIDE"], 1)
 
 if __name__ == "__main__":
     unittest.main()
