@@ -54,7 +54,6 @@
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
-    "@solid-primitives/scheduled": "1.5.2",
     "clipboardy": "4.0.0",
     "diff": "catalog:",
     "effect": "catalog:",
