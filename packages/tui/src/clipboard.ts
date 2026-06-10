@@ -22,8 +22,29 @@ function command(command: string, args: string[] = [], input?: string) {
 
 function writeOsc52(text: string) {
   if (!process.stdout.isTTY) return
-  const sequence = `\x1b]52;c;${Buffer.from(text).toString("base64")}\x07`
-  process.stdout.write(process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence)
+  const base64 = Buffer.from(text).toString("base64")
+
+  if (process.env["TMUX"]) {
+    const osc52 = `\x1b]52;c;${base64}\x07`
+    process.stdout.write(`\x1bPtmux;\x1b${osc52}\x1b\\`)
+    return
+  }
+
+  if (process.env["STY"]) {
+    const chunkSize = 700
+    let sequence = `\x1bP\x1b]52;c;`
+
+    for (let i = 0; i < base64.length; i += chunkSize) {
+      if (i > 0) sequence += `\x1b\\\x1bP`
+      sequence += base64.slice(i, i + chunkSize)
+    }
+
+    sequence += `\x07\x1b\\`
+    process.stdout.write(sequence)
+    return
+  }
+
+  process.stdout.write(`\x1b]52;c;${base64}\x07`)
 }
 
 export async function read() {
