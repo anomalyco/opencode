@@ -752,7 +752,7 @@ export const layer = Layer.effect(
       }
       const cfg = yield* cfgSvc.get()
       const configured = cfg.mcp?.[clientName]
-      const entry = configured && isMcpConfigured(configured) ? configured : s.config[clientName]
+      const entry = s.config[clientName] ?? (configured && isMcpConfigured(configured) ? configured : undefined)
       return yield* Effect.tryPromise({
         try: () => fn(client, entry?.timeout ?? cfg.experimental?.mcp_timeout),
         catch: (error) => error,

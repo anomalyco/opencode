@@ -816,6 +816,39 @@ it.instance(
 )
 
 it.instance(
+  "uses the active runtime server timeout over static config",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "replaced-server"
+        const serverState = getOrCreateClientState("replaced-server")
+
+        yield* mcp.add("replaced-server", {
+          type: "local",
+          command: ["echo", "runtime"],
+          timeout: 2500,
+        })
+        yield* mcp.getPrompt("replaced-server", "test")
+        yield* mcp.readResource("replaced-server", "test://resource")
+
+        expect(serverState.getPromptTimeout).toBe(2500)
+        expect(serverState.readResourceTimeout).toBe(2500)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "replaced-server": {
+          type: "local",
+          command: ["echo", "static"],
+          timeout: 1000,
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "resource-only servers connect without listing tools",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
