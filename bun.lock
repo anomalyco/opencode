@@ -29,7 +29,7 @@
     },
     "packages/app": {
       "name": "@opencode-ai/app",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -85,7 +85,7 @@
     },
     "packages/cli": {
       "name": "@opencode-ai/cli",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "bin": {
         "lildax": "./bin/lildax.cjs",
       },
@@ -110,7 +110,7 @@
     },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -146,7 +146,7 @@
     },
     "packages/console/core": {
       "name": "@opencode-ai/console-core",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -173,7 +173,7 @@
     },
     "packages/console/function": {
       "name": "@opencode-ai/console-function",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@ai-sdk/anthropic": "3.0.64",
         "@ai-sdk/openai": "3.0.48",
@@ -195,7 +195,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode-ai/console-mail",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -219,7 +219,7 @@
     },
     "packages/console/support": {
       "name": "@opencode-ai/console-support",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@opencode-ai/console-core": "workspace:*",
@@ -239,7 +239,7 @@
     },
     "packages/core": {
       "name": "@opencode-ai/core",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -268,7 +268,7 @@
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
         "@effect/sql-sqlite-bun": "catalog:",
-        "@ff-labs/fff-bun": "0.9.3",
+        "@ff-labs/fff-bun": "0.9.4",
         "@lydell/node-pty": "catalog:",
         "@npmcli/arborist": "9.4.0",
         "@npmcli/config": "10.8.1",
@@ -330,7 +330,7 @@
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@zip.js/zip.js": "2.7.62",
         "effect": "catalog:",
@@ -384,7 +384,7 @@
     },
     "packages/effect-drizzle-sqlite": {
       "name": "@opencode-ai/effect-drizzle-sqlite",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
@@ -398,7 +398,7 @@
     },
     "packages/effect-sqlite-node": {
       "name": "@opencode-ai/effect-sqlite-node",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "effect": "catalog:",
       },
@@ -410,7 +410,7 @@
     },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@hono/standard-validator": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -441,7 +441,7 @@
     },
     "packages/function": {
       "name": "@opencode-ai/function",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -457,7 +457,7 @@
     },
     "packages/http-recorder": {
       "name": "@opencode-ai/http-recorder",
-      "version": "0.0.0",
+      "version": "1.17.0",
       "dependencies": {
         "@effect/platform-node": "4.0.0-beta.74",
         "@effect/platform-node-shared": "4.0.0-beta.74",
@@ -476,7 +476,7 @@
     },
     "packages/llm": {
       "name": "@opencode-ai/llm",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",
@@ -494,7 +494,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -525,7 +525,7 @@
         "@clack/prompts": "1.0.0-alpha.1",
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
-        "@ff-labs/fff-bun": "0.9.3",
+        "@ff-labs/fff-bun": "0.9.4",
         "@gitlab/opencode-gitlab-auth": "1.3.3",
         "@modelcontextprotocol/sdk": "1.29.0",
         "@octokit/graphql": "9.0.2",
@@ -622,7 +622,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "effect": "catalog:",
@@ -660,7 +660,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "cross-spawn": "catalog:",
       },
@@ -675,7 +675,7 @@
     },
     "packages/server": {
       "name": "@opencode-ai/server",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@opencode-ai/core": "workspace:*",
         "drizzle-orm": "catalog:",
@@ -689,7 +689,7 @@
     },
     "packages/slack": {
       "name": "@opencode-ai/slack",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "@slack/bolt": "^3.17.1",
@@ -702,7 +702,7 @@
     },
     "packages/stats/app": {
       "name": "@opencode-ai/stats-app",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@ibm/plex": "6.4.1",
         "@opencode-ai/stats-core": "workspace:*",
@@ -735,7 +735,7 @@
     },
     "packages/stats/core": {
       "name": "@opencode-ai/stats-core",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@aws-sdk/client-athena": "3.933.0",
         "@planetscale/database": "1.19.0",
@@ -754,7 +754,7 @@
     },
     "packages/stats/server": {
       "name": "@opencode-ai/stats-server",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@aws-sdk/client-firehose": "3.933.0",
         "@effect/platform-node": "catalog:",
@@ -794,7 +794,7 @@
     },
     "packages/tui": {
       "name": "@opencode-ai/tui",
-      "version": "0.0.0",
+      "version": "1.17.0",
       "dependencies": {
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
@@ -822,7 +822,7 @@
     },
     "packages/ui": {
       "name": "@opencode-ai/ui",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -871,7 +871,7 @@
     },
     "packages/web": {
       "name": "@opencode-ai/web",
-      "version": "1.16.2",
+      "version": "1.17.0",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -915,7 +915,6 @@
   "patchedDependencies": {
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "virtua@0.49.1": "patches/virtua@0.49.1.patch",
-    "@ff-labs/fff-bun@0.9.3": "patches/@ff-labs%2Ffff-bun@0.9.3.patch",
     "gcp-metadata@8.1.2": "patches/gcp-metadata@8.1.2.patch",
     "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch",
     "@ai-sdk/xai@3.0.82": "patches/@ai-sdk%2Fxai@3.0.82.patch",
@@ -1447,23 +1446,23 @@
 
     "@fastify/rate-limit": ["@fastify/rate-limit@10.3.0", "", { "dependencies": { "@lukeed/ms": "^2.0.2", "fastify-plugin": "^5.0.0", "toad-cache": "^3.7.0" } }, "sha512-eIGkG9XKQs0nyynatApA3EVrojHOuq4l6fhB4eeCk4PIOeadvOJz9/4w3vGI44Go17uaXOWEcPkaD8kuKm7g6Q=="],
 
-    "@ff-labs/fff-bin-darwin-arm64": ["@ff-labs/fff-bin-darwin-arm64@0.9.3", "", { "os": "darwin", "cpu": "arm64" }, "sha512-isGuuEbAo7D6psAllm4+TRONxmDfhlmm548IjsG5hEH4I/pwTTTtrRg4lpMDwQ/cD5I3kEL2KVEYdlwuyFod8w=="],
+    "@ff-labs/fff-bin-darwin-arm64": ["@ff-labs/fff-bin-darwin-arm64@0.9.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-xyivu2xB++O5xXDx5Qm50JsU2aXt8YgXlGVhH/HE7UMYDrE6L6f1RYdYs8Y0bn0D3D0+bFBrN5ELPszK9E4Wbw=="],
 
-    "@ff-labs/fff-bin-darwin-x64": ["@ff-labs/fff-bin-darwin-x64@0.9.3", "", { "os": "darwin", "cpu": "x64" }, "sha512-vJMyCHtE5/CqCmvH7kEDSkUK9/YImoGZuIrRd6yLBjpSTtwyr0QIYjXDsFSj8a4eyxP3ieZWBw9z+uekPZ4YHw=="],
+    "@ff-labs/fff-bin-darwin-x64": ["@ff-labs/fff-bin-darwin-x64@0.9.4", "", { "os": "darwin", "cpu": "x64" }, "sha512-xLooAhCnTDCipPSMMZz7kGF3lhRHx6aP5fb6DJ0Ipyw/w/UWJb+xITJFszUl/QnIBoJ/qjDc93/FZMo1dk6gVA=="],
 
-    "@ff-labs/fff-bin-linux-arm64-gnu": ["@ff-labs/fff-bin-linux-arm64-gnu@0.9.3", "", { "os": "linux", "cpu": "arm64" }, "sha512-bapVTzIJZ40WmGYpAN+X3hIOqeynNTH1WPTp6S2pDMj6WQIG0lO4zWboNRAhVxIdsBq7vJwiBm4BKN+8Wp4wzg=="],
+    "@ff-labs/fff-bin-linux-arm64-gnu": ["@ff-labs/fff-bin-linux-arm64-gnu@0.9.4", "", { "os": "linux", "cpu": "arm64" }, "sha512-m5+8vA+1veaUUWonwva1WsU6m1HRm8CpYUzr06KDB65mewlmPbqz7+Fh7hjEfiD8C4mHVHe6RysULvAH1yhsdw=="],
 
-    "@ff-labs/fff-bin-linux-arm64-musl": ["@ff-labs/fff-bin-linux-arm64-musl@0.9.3", "", { "os": "linux", "cpu": "arm64" }, "sha512-opdtJbCmDB/SjHx+IaM6DF6UpYUZ8saXbwiAHamqg8ywhBWQoGzTo66BBwbaf6kd7sv7hJsYrUVBqLJhZGfL4A=="],
+    "@ff-labs/fff-bin-linux-arm64-musl": ["@ff-labs/fff-bin-linux-arm64-musl@0.9.4", "", { "os": "linux", "cpu": "arm64" }, "sha512-EMeWm7CSTVkizy4ZEzUkLDP024tVcbCUthduuIhekFQRDsiaAze0YboIylWb9HBHJCZlCCoZrWAl4nnJbsX7AA=="],
 
-    "@ff-labs/fff-bin-linux-x64-gnu": ["@ff-labs/fff-bin-linux-x64-gnu@0.9.3", "", { "os": "linux", "cpu": "x64" }, "sha512-74kucsnuCsp0daZQGtg0YYJL8h8ypt/efzSQjEuja2GPLdZrW9zVO1p+EWP9FZIt0bAf1o71W3PWjSEa3dTLUQ=="],
+    "@ff-labs/fff-bin-linux-x64-gnu": ["@ff-labs/fff-bin-linux-x64-gnu@0.9.4", "", { "os": "linux", "cpu": "x64" }, "sha512-pglE0uLkhnlE6bStXqfgUjYTSj+2sVwXaPfoA0QksidAsQor6NRt8004mygzC9DPubgHq5B9QezPfEwigKaP9Q=="],
 
-    "@ff-labs/fff-bin-linux-x64-musl": ["@ff-labs/fff-bin-linux-x64-musl@0.9.3", "", { "os": "linux", "cpu": "x64" }, "sha512-zgbzi24qWaE1l8bFweApM8Zd1ymxfP5tf9yX9k+PqmOGdGQhGWwbWTxB6UCUu+BiLPd+78Lxzp4oIBoSsZzejA=="],
+    "@ff-labs/fff-bin-linux-x64-musl": ["@ff-labs/fff-bin-linux-x64-musl@0.9.4", "", { "os": "linux", "cpu": "x64" }, "sha512-VNKxgl8qs3aTfXViX7lqRK1aLu311h8dtBFqG4Scv+9Oi7WprybUp5L7IZ8sxKERaDAaiJMXHodXa1c90QdK8w=="],
 
-    "@ff-labs/fff-bin-win32-arm64": ["@ff-labs/fff-bin-win32-arm64@0.9.3", "", { "os": "win32", "cpu": "arm64" }, "sha512-2ZB3LgEXWY0BJVpN6zr2JeuGYQbOZhNVZYYkKGY9g48L/nUuuB2X1HzQTLQ0zPipmFoPG7dUFlTjl+qmQhJPRw=="],
+    "@ff-labs/fff-bin-win32-arm64": ["@ff-labs/fff-bin-win32-arm64@0.9.4", "", { "os": "win32", "cpu": "arm64" }, "sha512-uFEt0aNL54vQxq1ivjxRuo+thnhS4wLqa4INl4VXnXJUmwB42XXxD+gsj7vzhBLLx4cFf0aWgy/+TVDR8yjZtQ=="],
 
-    "@ff-labs/fff-bin-win32-x64": ["@ff-labs/fff-bin-win32-x64@0.9.3", "", { "os": "win32", "cpu": "x64" }, "sha512-K6PycT3FluRUEtOqsySbq8oHxP8XeyvdWtnxMlnaSSLc5LKlWg3CKvc+kxfq7UkpySA9LlPk+Qp/C1IvJ890QA=="],
+    "@ff-labs/fff-bin-win32-x64": ["@ff-labs/fff-bin-win32-x64@0.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-Yd2Eyxj+slWv+0QDW9/xBpu9FXq+hwD0rXQD5184/88d+xwWCLKhEP2w8I6OO9XCg+kLT79UJb+k0WwXUtBtMw=="],
 
-    "@ff-labs/fff-bun": ["@ff-labs/fff-bun@0.9.3", "", { "optionalDependencies": { "@ff-labs/fff-bin-darwin-arm64": "0.9.3", "@ff-labs/fff-bin-darwin-x64": "0.9.3", "@ff-labs/fff-bin-linux-arm64-gnu": "0.9.3", "@ff-labs/fff-bin-linux-arm64-musl": "0.9.3", "@ff-labs/fff-bin-linux-x64-gnu": "0.9.3", "@ff-labs/fff-bin-linux-x64-musl": "0.9.3", "@ff-labs/fff-bin-win32-arm64": "0.9.3", "@ff-labs/fff-bin-win32-x64": "0.9.3" }, "os": [ "linux", "win32", "darwin", ], "cpu": [ "x64", "arm64", ] }, "sha512-PPSsmSf1+xD/8eLelBDYFcmlmQUPRCm+GO4K/PgtuLtLu0CWsoxyStykgjw+0GP3bTUVNdHK1FYwESk0hmY6lg=="],
+    "@ff-labs/fff-bun": ["@ff-labs/fff-bun@0.9.4", "", { "optionalDependencies": { "@ff-labs/fff-bin-darwin-arm64": "0.9.4", "@ff-labs/fff-bin-darwin-x64": "0.9.4", "@ff-labs/fff-bin-linux-arm64-gnu": "0.9.4", "@ff-labs/fff-bin-linux-arm64-musl": "0.9.4", "@ff-labs/fff-bin-linux-x64-gnu": "0.9.4", "@ff-labs/fff-bin-linux-x64-musl": "0.9.4", "@ff-labs/fff-bin-win32-arm64": "0.9.4", "@ff-labs/fff-bin-win32-x64": "0.9.4" }, "os": [ "linux", "win32", "darwin", ], "cpu": [ "x64", "arm64", ] }, "sha512-7HUraaK/g5dStAnuKAuzsXVOQvqqX0ylo5G+DxYwsCjCDc42bjoEAAHqz/3Sn3raUNw97KMoz87XR9QyrLEfVw=="],
 
     "@floating-ui/core": ["@floating-ui/core@1.7.5", "", { "dependencies": { "@floating-ui/utils": "^0.2.11" } }, "sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ=="],
 

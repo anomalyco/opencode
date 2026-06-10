@@ -92,6 +92,8 @@ for (const item of targets) {
       OPENCODE_MODELS_DEV: modelsData,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
+      // FFF_LIBC selects the fff native lib variant: "musl" or "gnu".
+      FFF_LIBC: item.os === "linux" ? `'${item.abi ?? "gnu"}'` : "undefined",
       OTUI_TREE_SITTER_WORKER_PATH:
         (item.os === "win32" ? '"B:/~BUN/root/' : '"/$bunfs/root/') +
         path.relative(dir, parserWorker).replaceAll("\\", "/") +
