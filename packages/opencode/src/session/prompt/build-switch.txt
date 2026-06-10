@@ -2,4 +2,5 @@
 Your operational mode has changed from plan to build.
 You are no longer in read-only mode.
 You are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.
+Before editing any file, use the Read tool to re-read its current content — plan-mode knowledge may be stale.
 </system-reminder>

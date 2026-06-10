@@ -56,11 +56,11 @@ export const layer = Layer.effectDiscard(
               const absolute = path.resolve(location.directory, input.path)
               const selected = path.isAbsolute(input.path) ? path.dirname(absolute) : location.directory
               if (!path.isAbsolute(input.path) && !FSUtil.contains(location.directory, absolute))
-                return yield* Effect.die(new Error("Path escapes the allowed read root"))
+                return yield* Effect.fail(new Error("Path escapes the allowed read root"))
               const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
               const root = yield* fs.realPath(selected).pipe(Effect.orDie)
               if (!FSUtil.contains(root, real))
-                return yield* Effect.die(new Error("Path escapes the allowed read root"))
+                return yield* Effect.fail(new Error("Path escapes the allowed read root"))
               const resource = path.relative(root, real).replaceAll("\\", "/") || "."
               const target = AbsolutePath.make(real)
               const type = yield* reader.inspect(target)
@@ -93,7 +93,7 @@ export const layer = Layer.effectDiscard(
                   error instanceof Image.DecodeError ||
                   error instanceof Image.SizeError
                     ? error.message
-                    : `Unable to read ${input.path}`
+                    : error.message ?? `Unable to read ${input.path}`
                 return new ToolFailure({ message })
               }),
             )
