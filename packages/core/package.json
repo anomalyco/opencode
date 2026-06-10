@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.16.2",
+  "version": "1.17.0",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -9,8 +9,7 @@
     "db": "bun drizzle-kit",
     "migration": "bun run script/migration.ts",
     "fix-node-pty": "bun run script/fix-node-pty.ts",
-    "test": "bun test",
-    "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "test": "bun test --only-failures",
     "typecheck": "tsgo --noEmit"
   },
   "bin": {
@@ -63,7 +62,7 @@
   "dependencies": {
     "@ai-sdk/alibaba": "1.0.17",
     "@ai-sdk/amazon-bedrock": "4.0.112",
-    "@ai-sdk/anthropic": "3.0.71",
+    "@ai-sdk/anthropic": "3.0.82",
     "@ai-sdk/azure": "3.0.49",
     "@ai-sdk/cerebras": "2.0.41",
     "@ai-sdk/cohere": "3.0.27",
@@ -86,7 +85,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@lydell/node-pty": "catalog:",
-    "@ff-labs/fff-bun": "0.9.3",
+    "@ff-labs/fff-bun": "0.9.4",
     "@npmcli/arborist": "9.4.0",
     "@npmcli/config": "10.8.1",
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",

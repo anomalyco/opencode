@@ -63,7 +63,7 @@ export function DialogMoveSession(props: {
       try {
         await sdk.client.experimental.projectCopy.refresh({ projectID }, { throwOnError: true })
         const directories = await sdk.client.project.directories({ projectID }, { throwOnError: true })
-        return directories.data ?? []
+        return directories.data?.map((item) => item.directory) ?? []
       } finally {
         setWorking(false)
       }

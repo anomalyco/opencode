@@ -2,14 +2,14 @@ import { EOL } from "os"
 import { Effect } from "effect"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 
 const filesystem = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(process.cwd()) })),
+    Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(process.cwd()) }))),
     Effect.provide(LocationServiceMap.layer),
   )
 
@@ -23,7 +23,7 @@ const FileSearchCommand = effectCmd({
       description: "Search query",
     }),
   handler: Effect.fn("Cli.debug.file.search")(function* (args) {
-    const results = yield* filesystem(FileSystem.Service.use((svc) => svc.find({ query: args.query })))
+    const results = yield* Effect.orDie(filesystem(FileSystem.Service.use((svc) => svc.find({ query: args.query }))))
     process.stdout.write(results.map((item) => item.path).join(EOL) + EOL)
   }),
 })
@@ -58,30 +58,10 @@ const FileListCommand = effectCmd({
   }),
 })
 
-const FileTreeCommand = effectCmd({
-  command: "tree [dir]",
-  describe: "show directory tree",
-  builder: (yargs) =>
-    yargs.positional("dir", {
-      type: "string",
-      description: "Directory to tree",
-      default: process.cwd(),
-    }),
-  handler: Effect.fn("Cli.debug.file.tree")(function* (args) {
-    const tree = yield* Effect.orDie(Search.Service.use((svc) => svc.tree({ cwd: args.dir, limit: 200 })))
-    console.log(JSON.stringify(tree, null, 2))
-  }),
-})
-
 export const FileCommand = cmd({
   command: "file",
   describe: "file system debugging utilities",
   builder: (yargs) =>
-    yargs
-      .command(FileReadCommand)
-      .command(FileListCommand)
-      .command(FileSearchCommand)
-      .command(FileTreeCommand)
-      .demandCommand(),
+    yargs.command(FileReadCommand).command(FileListCommand).command(FileSearchCommand).demandCommand(),
   async handler() {},
 })

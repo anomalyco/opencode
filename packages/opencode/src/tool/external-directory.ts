@@ -1,6 +1,5 @@
 import path from "path"
 import { Effect } from "effect"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import type * as Tool from "./tool"
 import { containsPath } from "../project/instance-context"
@@ -18,13 +17,13 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   target?: string,
   options?: Options,
 ) {
-  if (!target) return
+  if (!target) return false
 
-  if (options?.bypass) return
+  if (options?.bypass) return false
 
   const ins = yield* InstanceState.context
   const full = process.platform === "win32" ? FSUtil.normalizePath(target) : target
-  if (containsPath(full, ins)) return
+  if (containsPath(full, ins)) return false
 
   const kind = options?.kind ?? "file"
   const dir = kind === "directory" ? full : path.dirname(full)
@@ -42,8 +41,9 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
       parentDir: dir,
     },
   })
+  return true
 })
 
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
-  return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options).pipe(Effect.provide(EffectLogger.layer)))
+  return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options))
 }

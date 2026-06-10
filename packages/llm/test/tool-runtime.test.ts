@@ -9,7 +9,6 @@ import {
   ToolChoice,
   ToolContent,
   ToolOutput,
-  toolFileSourceFromUri,
   toDefinitions,
 } from "../src"
 import { Auth, LLMClient } from "../src/route"
@@ -217,7 +216,7 @@ describe("LLMClient tools", () => {
         execute: () => Effect.succeed({ mime: "image/png", data: "AAECAw==" }),
         toStructuredOutput: (output) => ({ mime: output.mime }),
         toModelOutput: ({ output }) => [
-          { type: "file", source: { type: "data", data: output.data }, mime: output.mime },
+          { type: "file", uri: `data:${output.mime};base64,${output.data}`, mime: output.mime },
         ],
       })
 
@@ -228,90 +227,79 @@ describe("LLMClient tools", () => {
 
       expect(dispatched.output).toEqual({
         structured: { mime: "image/png" },
-        content: [{ type: "file", source: { type: "data", data: "AAECAw==" }, mime: "image/png" }],
+        content: [{ type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" }],
       })
     }),
   )
 
-  it.effect("models canonical tool files with explicit data, url, and file sources", () =>
+  it.effect("models canonical tool files with URIs", () =>
     Effect.sync(() => {
       const decode = Schema.decodeUnknownSync(ToolContent)
 
-      expect(decode({ type: "file", source: { type: "data", data: "AAAA" }, mime: "image/png" })).toEqual({
+      expect(decode({ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" })).toEqual({
         type: "file",
-        source: { type: "data", data: "AAAA" },
+        uri: "data:image/png;base64,AAAA",
         mime: "image/png",
       })
-      expect(
-        decode({ type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" }),
-      ).toEqual({
+      expect(decode({ type: "file", uri: "https://example.test/image.png", mime: "image/png" })).toEqual({
         type: "file",
-        source: { type: "url", url: "https://example.test/image.png" },
+        uri: "https://example.test/image.png",
         mime: "image/png",
       })
-      expect(
-        decode({ type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" }),
-      ).toEqual({
+      expect(decode({ type: "file", uri: "file:///tmp/image.png", mime: "image/png" })).toEqual({
         type: "file",
-        source: { type: "file", uri: "file:///tmp/image.png" },
+        uri: "file:///tmp/image.png",
         mime: "image/png",
       })
     }),
   )
 
-  it.effect("converts canonical data files deliberately and rejects unmaterialized sources", () =>
+  it.effect("preserves canonical tool file URIs", () =>
     Effect.sync(() => {
       expect(
         ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", source: { type: "data", data: "AAAA" }, mime: "image/png" }]),
-        ),
-      ).toEqual({ type: "content", value: [{ type: "media", mediaType: "image/png", data: "AAAA" }] })
-      expect(
-        ToolOutput.toResultValue(
-          ToolOutput.make({}, [
-            { type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" },
-          ]),
+          ToolOutput.make({}, [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }]),
         ),
       ).toEqual({
-        type: "error",
-        value: 'Tool file source "url" must be materialized to inline data before provider conversion',
+        type: "content",
+        value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
       })
       expect(
         ToolOutput.toResultValue(
-          ToolOutput.make({}, [
-            { type: "file", source: { type: "file", uri: "file:///tmp/image.png" }, mime: "image/png" },
-          ]),
+          ToolOutput.make({}, [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }]),
         ),
       ).toEqual({
-        type: "error",
-        value: 'Tool file source "file" must be materialized to inline data before provider conversion',
+        type: "content",
+        value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
       })
-      expect(toolFileSourceFromUri("data:image/png;base64,AAAA")).toEqual({ type: "data", data: "AAAA" })
-      expect(toolFileSourceFromUri("https://example.test/image.png")).toEqual({
-        type: "url",
-        url: "https://example.test/image.png",
+      expect(
+        ToolOutput.toResultValue(
+          ToolOutput.make({}, [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }]),
+        ),
+      ).toEqual({
+        type: "content",
+        value: [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }],
       })
-      expect(toolFileSourceFromUri("file:///tmp/image.png")).toEqual({ type: "file", uri: "file:///tmp/image.png" })
-      expect(() => toolFileSourceFromUri("opaque-value")).toThrow("Unsupported tool file URI")
-      expect(() =>
+      expect(
         ToolOutput.fromResultValue({
           type: "content",
-          value: [{ type: "media", mediaType: "image/png", data: "https://example.test/image.png" }],
+          value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
         }),
-      ).toThrow("Legacy tool-result media must contain raw base64 bytes or a base64 data URI")
+      ).toEqual({
+        structured: {},
+        content: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
+      })
     }),
   )
 
-  it.effect("settles projected url files as materialization errors", () =>
+  it.effect("settles projected URL files as canonical tool results", () =>
     Effect.gen(function* () {
       const remote = Tool.make({
         description: "Return a remote file.",
         parameters: Schema.Struct({}),
         success: Schema.Struct({ ok: Schema.Boolean }),
         execute: () => Effect.succeed({ ok: true }),
-        toModelOutput: () => [
-          { type: "file", source: { type: "url", url: "https://example.test/image.png" }, mime: "image/png" },
-        ],
+        toModelOutput: () => [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
       })
 
       const dispatched = yield* ToolRuntime.dispatch(
@@ -319,12 +307,15 @@ describe("LLMClient tools", () => {
         LLMEvent.toolCall({ id: "call_remote", name: "remote", input: {} }),
       )
 
-      expect(dispatched.output).toBeUndefined()
-      expect(dispatched.result).toEqual({
-        type: "error",
-        value: 'Tool file source "url" must be materialized to inline data before provider conversion',
+      expect(dispatched.output).toEqual({
+        structured: { ok: true },
+        content: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
       })
-      expect(dispatched.events.map((event) => event.type)).toEqual(["tool-error", "tool-result"])
+      expect(dispatched.result).toEqual({
+        type: "content",
+        value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
+      })
+      expect(dispatched.events.map((event) => event.type)).toEqual(["tool-result"])
     }),
   )
 
@@ -357,7 +348,7 @@ describe("LLMClient tools", () => {
             type: "content" as const,
             value: [
               { type: "text" as const, text: "Screenshot captured." },
-              { type: "media" as const, mediaType: "image/png", data: "AAAA" },
+              { type: "file" as const, uri: "data:image/png;base64,AAAA", mime: "image/png" },
             ],
           }),
       })
@@ -379,7 +370,7 @@ describe("LLMClient tools", () => {
           type: "content",
           value: [
             { type: "text", text: "Screenshot captured." },
-            { type: "media", mediaType: "image/png", data: "AAAA" },
+            { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" },
           ],
         },
       })

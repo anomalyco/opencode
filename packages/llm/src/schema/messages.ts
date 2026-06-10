@@ -39,67 +39,23 @@ export const MediaPart = Schema.Struct({
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
-export const ToolResultMediaPart = Schema.Struct({
-  type: Schema.Literal("media"),
-  mediaType: Schema.String,
-  data: Schema.String,
-  filename: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.ToolResult.Media" })
-export type ToolResultMediaPart = Schema.Schema.Type<typeof ToolResultMediaPart>
-
-export const ToolResultContentPart = Schema.Union([TextPart, ToolResultMediaPart])
-export type ToolResultContentPart = Schema.Schema.Type<typeof ToolResultContentPart>
-
-export class ToolTextContent extends Schema.Class<ToolTextContent>("Tool.TextContent")({
+export const ToolTextContent = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
-}) {}
+}).annotate({ identifier: "Tool.TextContent" })
+export type ToolTextContent = typeof ToolTextContent.Type
 
-export const ToolFileSource = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("data"), data: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("url"), url: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("file"), uri: Schema.String }),
-]).pipe(Schema.toTaggedUnion("type"))
-export type ToolFileSource = Schema.Schema.Type<typeof ToolFileSource>
-
-export class ToolFileContent extends Schema.Class<ToolFileContent>("Tool.FileContent")({
+export const ToolFileContent = Schema.Struct({
   type: Schema.Literal("file"),
-  source: ToolFileSource,
+  uri: Schema.String,
   mime: Schema.String,
   name: Schema.optional(Schema.String),
-}) {}
+}).annotate({ identifier: "Tool.FileContent" })
+export type ToolFileContent = typeof ToolFileContent.Type
 
 /** Ordered, provider-independent content shown to models and UIs after a tool succeeds. */
 export const ToolContent = Schema.Union([ToolTextContent, ToolFileContent]).pipe(Schema.toTaggedUnion("type"))
 export type ToolContent = Schema.Schema.Type<typeof ToolContent>
-
-export const toolText = (value: ConstructorParameters<typeof ToolTextContent>[0]) => new ToolTextContent(value)
-export const toolFile = (value: ConstructorParameters<typeof ToolFileContent>[0]) => new ToolFileContent(value)
-
-const inlineData = (uri: string) => {
-  if (!uri.startsWith("data:")) return undefined
-  const match = /^data:[^;,]+;base64,(.*)$/s.exec(uri)
-  if (!match) throw new Error("Tool file data URI must contain raw base64 bytes")
-  return match[1]!
-}
-
-const legacyInlineData = (value: string) => {
-  const data = inlineData(value)
-  if (data !== undefined) return data
-  if (/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) return value
-  throw new Error("Legacy tool-result media must contain raw base64 bytes or a base64 data URI")
-}
-
-/** Convert a legacy attachment URI without guessing unknown string semantics. */
-export const toolFileSourceFromUri = (uri: string): ToolFileSource => {
-  const data = inlineData(uri)
-  if (data !== undefined) return { type: "data", data }
-  const url = URL.parse(uri)
-  if (url?.protocol === "file:") return { type: "file", uri }
-  if (url?.protocol === "http:" || url?.protocol === "https:") return { type: "url", url: uri }
-  throw new Error(`Unsupported tool file URI: ${uri}`)
-}
 
 const isToolResultValue = (value: unknown): value is ToolResultValue =>
   isRecord(value) &&
@@ -122,7 +78,7 @@ export const ToolResultValue = Object.assign(
     }),
     Schema.Struct({
       type: Schema.Literal("content"),
-      value: Schema.Array(ToolResultContentPart),
+      value: Schema.Array(ToolContent),
     }),
   ]).annotate({ identifier: "LLM.ToolResult" }),
   {
@@ -147,34 +103,15 @@ export const ToolOutput = Object.assign(
     content: Schema.Array(ToolContent),
   }).annotate({ identifier: "LLM.ToolOutput" }),
   {
-    make: (structured: unknown, content: ReadonlyArray<ToolContent> = []): ToolOutput => ({
-      structured,
-      content: content.map((item) =>
-        item.type === "text"
-          ? toolText({ type: "text", text: item.text })
-          : toolFile({ type: "file", source: item.source, mime: item.mime, name: item.name }),
-      ),
-    }),
+    make: (structured: unknown, content: ReadonlyArray<ToolContent> = []): ToolOutput => ({ structured, content }),
     fromResultValue: (result: ToolResultValue): ToolOutput | undefined => {
       switch (result.type) {
         case "json":
           return { structured: result.value, content: [] }
         case "text":
-          return { structured: {}, content: [toolText({ type: "text", text: toolResultText(result.value) })] }
+          return { structured: {}, content: [{ type: "text", text: toolResultText(result.value) }] }
         case "content":
-          return {
-            structured: {},
-            content: result.value.map((item) =>
-              item.type === "text"
-                ? toolText({ type: "text", text: item.text })
-                : toolFile({
-                    type: "file",
-                    source: { type: "data", data: legacyInlineData(item.data) },
-                    mime: item.mediaType,
-                    name: item.filename,
-                  }),
-            ),
-          }
+          return { structured: {}, content: result.value }
         case "error":
           return undefined
       }
@@ -183,21 +120,7 @@ export const ToolOutput = Object.assign(
       if (output.content.length === 0) return { type: "json", value: output.structured }
       if (output.content.length === 1 && output.content[0]?.type === "text")
         return { type: "text", value: output.content[0].text }
-      const unsupported = output.content.find((item) => item.type === "file" && item.source.type !== "data")
-      if (unsupported?.type === "file")
-        return {
-          type: "error",
-          value: `Tool file source "${unsupported.source.type}" must be materialized to inline data before provider conversion`,
-        }
-      return {
-        type: "content",
-        value: output.content.map((item) => {
-          if (item.type === "text") return { type: "text", text: item.text }
-          if (item.source.type !== "data")
-            throw new Error("Unmaterialized tool file source reached provider conversion")
-          return { type: "media", mediaType: item.mime, data: item.source.data, filename: item.name }
-        }),
-      }
+      return { type: "content", value: output.content }
     },
   },
 )
