@@ -108,6 +108,8 @@ const cli = yargs(args)
       msg?.startsWith("Invalid values:")
     ) {
       if (err) throw err
+      process.stderr.write(UI.logo() + EOL + EOL)
+      process.stderr.write(msg + EOL + EOL)
       cli.showHelp(show)
     }
     if (err) throw err
