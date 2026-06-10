@@ -15,7 +15,7 @@ function mimeToModality(mime: string): Modality | undefined {
   return undefined
 }
 
-export const OUTPUT_TOKEN_MAX = 32_000
+export const OUTPUT_TOKEN_MAX = Number.MAX_SAFE_INTEGER
 
 // OpenAI Responses `include` value that returns the encrypted reasoning state
 // needed for stateless multi-turn reasoning (store: false). Hoisted so every
