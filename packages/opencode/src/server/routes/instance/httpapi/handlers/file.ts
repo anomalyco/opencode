@@ -1,8 +1,7 @@
 import * as InstanceState from "@/effect/instance-state"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
-import { Search } from "@opencode-ai/core/search"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
@@ -25,8 +24,18 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
 
     const findText = Effect.fn("FileHttpApi.findText")(function* (ctx: { query: { pattern: string } }) {
       return (yield* ripgrep
-        .search({ cwd: (yield* InstanceState.context).directory, pattern: ctx.query.pattern, limit: 10 })
-        .pipe(Effect.orDie)).items
+        .grep({ cwd: (yield* InstanceState.context).directory, pattern: ctx.query.pattern, limit: 10 })
+        .pipe(Effect.orDie)).map((match) => ({
+        path: { text: match.entry.path },
+        lines: { text: match.text },
+        line_number: match.line,
+        absolute_offset: match.offset,
+        submatches: match.submatches.map((submatch) => ({
+          match: { text: submatch.text },
+          start: submatch.start,
+          end: submatch.end,
+        })),
+      }))
     })
 
     const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
@@ -71,10 +80,10 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
           return (yield* fs.list({ path: RelativePath.make(ctx.query.path) })).map((item) => ({
             name: path.basename(item.path),
             path: item.path,
-            absolute: path.join(directory, item.path),
+            absolute: path.resolve(location.directory, item.path),
             type: item.type,
             ignored: ignored.ignores(
-              path.relative(location.project.directory, path.join(location.directory, item.path)) +
+              path.relative(location.project.directory, path.resolve(location.directory, item.path)) +
                 (item.type === "directory" ? "/" : ""),
             ),
           }))
@@ -110,4 +119,4 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       .handle("content", content)
       .handle("status", status)
   }),
-).pipe(Layer.provide(Search.defaultLayer), Layer.provide(LocationServiceMap.layer))
+).pipe(Layer.provide(LocationServiceMap.layer))

@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -20,13 +21,17 @@ describe("Ripgrep", () => {
           yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, ".git", "config"), "needle\n"))
           const ripgrep = yield* Ripgrep.Service
 
-          const files = yield* ripgrep.files({ cwd: tmp.path, pattern: "**/*", limit: 10 })
-          expect(files.items).toContain(".opencode/config")
-          expect(files.items).toContain(".git/config")
+          const files = yield* ripgrep.find({ cwd: tmp.path, pattern: "**/*", limit: 10 })
+          expect(files.map((item) => item.path)).toContain(RelativePath.make(".opencode/config"))
+          expect(files.map((item) => item.path)).toContain(RelativePath.make(".git/config"))
 
           const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", include: "config", limit: 10 })
-          expect(matches.items.map((item) => item.path.text)).toContain(".opencode/config")
-          expect(matches.items.map((item) => item.path.text)).toContain(".git/config")
+          expect(matches.map((item) => item.entry.path)).toContain(
+            RelativePath.make(".opencode/config"),
+          )
+          expect(matches.map((item) => item.entry.path)).toContain(
+            RelativePath.make(".git/config"),
+          )
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),

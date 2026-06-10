@@ -2,8 +2,7 @@ import path from "path"
 import { Effect, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Search } from "@opencode-ai/core/search"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
@@ -19,8 +18,7 @@ export const GlobTool = Tool.define(
   "glob",
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const searchSvc = yield* Search.Service
-
+    const ripgrep = yield* Ripgrep.Service
     return {
       description: DESCRIPTION,
       parameters: Parameters,
@@ -49,17 +47,13 @@ export const GlobTool = Tool.define(
           })
 
           const limit = 100
-          const files = yield* searchSvc.glob({
-            cwd: AbsolutePath.make(search),
-            pattern: params.pattern,
-            limit,
-          })
+          const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit })
           const truncated = files.length === limit
 
           const output = []
           if (files.length === 0) output.push("No files found")
           if (files.length > 0) {
-            output.push(...files.map((file) => path.join(search, file.path)))
+            output.push(...files.map((file) => path.resolve(search, file.path)))
             if (truncated) {
               output.push("")
               output.push(

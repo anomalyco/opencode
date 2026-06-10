@@ -6,11 +6,10 @@ import { Context, Effect, Layer, Option, Schema } from "effect"
 import { EventV2 } from "./event"
 import { FSUtil } from "./fs-util"
 import { Location } from "./location"
-import { Ripgrep } from "./ripgrep"
-import { RelativePath } from "./schema"
-import { FileSystemFind } from "./filesystem/find"
-
-export { Input as FindInput } from "./filesystem/find"
+import { PositiveInt, RelativePath } from "./schema"
+import { FileSystemSearch } from "./filesystem/search"
+import { Entry, Match } from "./filesystem/schema"
+export { Entry, Match, Submatch } from "./filesystem/schema"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
@@ -31,11 +30,23 @@ export const ListInput = Schema.Struct({
 })
 export type ListInput = typeof ListInput.Type
 
-export class Entry extends Schema.Class<Entry>("FileSystem.Entry")({
-  path: RelativePath,
-  uri: Schema.String,
-  type: Schema.Literals(["file", "directory"]),
-  mime: Schema.String,
+export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
+  query: Schema.String,
+  type: Schema.Literals(["file", "directory"]).pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
+}) {}
+
+export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
+  pattern: Schema.String,
+  path: RelativePath.pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
+}) {}
+
+export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
+  pattern: Schema.String,
+  path: RelativePath.pipe(Schema.optional),
+  include: Schema.String.pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
 }) {}
 
 export const Event = {
@@ -50,7 +61,9 @@ export const Event = {
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<Content>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
-  readonly find: (input: FileSystemFind.Input) => Effect.Effect<Entry[]>
+  readonly find: (input: FindInput) => Effect.Effect<Entry[]>
+  readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[]>
+  readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem") {}
@@ -60,7 +73,7 @@ const baseLayer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const find = yield* FileSystemFind.Service
+    const search = yield* FileSystemSearch.Service
     const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
     const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
       const absolute = path.resolve(location.directory, input ?? ".")
@@ -71,7 +84,9 @@ const baseLayer = Layer.effect(
       return { absolute, real, directory: location.directory, root }
     })
     return Service.of({
-      find: find.find,
+      find: search.find,
+      glob: search.glob,
+      grep: search.grep,
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(Effect.orDie)
@@ -110,10 +125,10 @@ const baseLayer = Layer.effect(
               .flatMap((item) => {
                 if (item.type !== "file" && item.type !== "directory") return []
                 const absolute = path.join(target.absolute, item.name)
+                const relative = path.relative(target.directory, absolute)
                 return [
                   new Entry({
-                    path: RelativePath.make(path.relative(target.directory, absolute)),
-                    uri: pathToFileURL(absolute).href,
+                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                     type: item.type,
                     mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
                   }),
@@ -127,6 +142,6 @@ const baseLayer = Layer.effect(
   }),
 )
 
-export const layer = baseLayer.pipe(Layer.provide(FileSystemFind.layer), Layer.provide(Ripgrep.defaultLayer))
+export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.defaultLayer), Layer.provide(FSUtil.defaultLayer))
 
 export const locationLayer = layer

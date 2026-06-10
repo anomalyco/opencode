@@ -1,7 +1,6 @@
 import { EOL } from "os"
 import { Effect } from "effect"
 import { FileSystem } from "@opencode-ai/core/filesystem"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
@@ -62,21 +61,6 @@ const FileListCommand = effectCmd({
   }),
 })
 
-const FileTreeCommand = effectCmd({
-  command: "tree [dir]",
-  describe: "show directory tree",
-  builder: (yargs) =>
-    yargs.positional("dir", {
-      type: "string",
-      description: "Directory to tree",
-      default: process.cwd(),
-    }),
-  handler: Effect.fn("Cli.debug.file.tree")(function* (args) {
-    const tree = yield* Effect.orDie(Ripgrep.Service.use((svc) => svc.tree({ cwd: args.dir, limit: 200 })))
-    console.log(JSON.stringify(tree, null, 2))
-  }),
-})
-
 export const FileCommand = cmd({
   command: "file",
   describe: "file system debugging utilities",
@@ -85,7 +69,6 @@ export const FileCommand = cmd({
       .command(FileReadCommand)
       .command(FileListCommand)
       .command(FileSearchCommand)
-      .command(FileTreeCommand)
       .demandCommand(),
   async handler() {},
 })

@@ -6,6 +6,7 @@ import { Effect, Exit, Layer } from "effect"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
@@ -17,6 +18,7 @@ const provide = (directory: string) =>
       Layer.provide(
         Layer.mergeAll(
           FSUtil.defaultLayer,
+          Ripgrep.defaultLayer,
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
         ),
       ),
@@ -52,7 +54,7 @@ describe("FileSystem", () => {
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "README.md"), "# Test"))
         const entries = yield* (yield* FileSystem.Service).list()
         expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
-          { path: RelativePath.make("src"), type: "directory" },
+          { path: RelativePath.make("src" + path.sep), type: "directory" },
           { path: RelativePath.make("README.md"), type: "file" },
         ])
       }).pipe(provide(directory)),

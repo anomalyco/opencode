@@ -8,8 +8,7 @@ import { Auth } from "@/auth"
 import { Account } from "@/account/account"
 import { Config } from "@/config/config"
 import { Git } from "@/git"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
-import { Search } from "@opencode-ai/core/search"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
@@ -101,7 +100,7 @@ export const AppLayer = Layer.mergeAll(
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
 ).pipe(
-  Layer.provideMerge(Layer.merge(Ripgrep.defaultLayer, Search.defaultLayer)),
+  Layer.provideMerge(Ripgrep.defaultLayer),
   Layer.provideMerge(InstanceLayer.layer),
   Layer.provideMerge(Observability.layer),
 )

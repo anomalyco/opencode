@@ -1,7 +1,6 @@
 import { Effect } from "effect"
 import { Fff } from "@opencode-ai/core/filesystem/fff.bun"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Search } from "@opencode-ai/core/search"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceStore } from "@/project/instance-store"
@@ -68,7 +67,7 @@ console.log(`[Search] init file (runtime + picker + scan): ${(performance.now() 
 
 // 2) grep warmup (content index cold-start inside the Search service picker)
 const tGrepWarmup = performance.now()
-await run(Search.Service.use((svc) => svc.grep({ cwd: dir, pattern: "_warmup_grep_", limit: 1 })))
+await run(FileSystem.Service.use((svc) => svc.grep({ pattern: "_warmup_grep_", limit: 1 })))
 console.log(`[Search] init grep (content index warmup):    ${(performance.now() - tGrepWarmup).toFixed(1)}ms`)
 
 console.log()
@@ -82,13 +81,13 @@ for (const q of FILE_QUERIES) {
 
 for (const q of GREP_QUERIES) {
   const t = performance.now()
-  const r = await run(Search.Service.use((svc) => svc.grep({ cwd: dir, pattern: q, limit: GREP_LIMIT })))
+  const r = await run(FileSystem.Service.use((svc) => svc.grep({ pattern: q, limit: GREP_LIMIT })))
   console.log(`[Search.grep] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} matches)`)
 }
 
 for (const q of GLOB_QUERIES) {
   const t = performance.now()
-  const r = await run(Search.Service.use((svc) => svc.glob({ cwd: dir, pattern: q, limit: GLOB_LIMIT })))
+  const r = await run(FileSystem.Service.use((svc) => svc.glob({ pattern: q, limit: GLOB_LIMIT })))
   console.log(`[Search.glob] "${q}": ${(performance.now() - t).toFixed(1)}ms (${r.length} files)`)
 }
 

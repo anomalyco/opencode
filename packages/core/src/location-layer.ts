@@ -18,7 +18,7 @@ import { Database } from "./database/database"
 import { PermissionV2 } from "./permission"
 import { PermissionSaved } from "./permission/saved"
 import { FileSystem } from "./filesystem"
-import { Search } from "./search"
+import { Ripgrep } from "./ripgrep"
 import { Watcher } from "./filesystem/watcher"
 import { LocationMutation } from "./location-mutation"
 import { FileMutation } from "./file-mutation"
@@ -58,7 +58,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       AgentV2.locationLayer,
       PluginBoot.locationLayer,
       FileSystem.locationLayer,
-      Search.defaultLayer,
       Watcher.locationLayer,
       Pty.locationLayer,
       SkillV2.locationLayer,
@@ -91,17 +90,9 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(model),
       Layer.provide(skillGuidance),
     )
-    return Layer.mergeAll(
-      services,
-      image,
-      mutation,
-      resources,
-      todos,
-      questions,
-      model,
-      runner,
-      builtInTools,
-    ).pipe(Layer.fresh)
+    return Layer.mergeAll(services, image, mutation, resources, todos, questions, model, runner, builtInTools).pipe(
+      Layer.fresh,
+    )
   },
   idleTimeToLive: "60 minutes",
   dependencies: [
@@ -113,6 +104,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     FSUtil.defaultLayer,
     AppProcess.defaultLayer,
     Global.defaultLayer,
+    Ripgrep.defaultLayer,
     Database.defaultLayer,
     SessionStore.layer.pipe(Layer.provide(Database.defaultLayer)),
     PermissionSaved.defaultLayer,

@@ -2,8 +2,7 @@ import path from "path"
 import { Effect, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Search } from "@opencode-ai/core/search"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
@@ -22,8 +21,7 @@ export const GrepTool = Tool.define(
   "grep",
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const searchSvc = yield* Search.Service
-
+    const ripgrep = yield* Ripgrep.Service
     return {
       description: DESCRIPTION,
       parameters: Parameters,
@@ -62,8 +60,8 @@ export const GrepTool = Tool.define(
           const search = FSUtil.resolve(requested)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           const cwd = info?.type === "Directory" ? search : path.dirname(search)
-          const result = yield* searchSvc.grep({
-            cwd: AbsolutePath.make(cwd),
+          const result = yield* ripgrep.grep({
+            cwd,
             pattern: params.pattern,
             include: params.include,
             limit: 100,
@@ -71,7 +69,7 @@ export const GrepTool = Tool.define(
           if (result.length === 0) return empty
 
           const rows = result.map((item) => ({
-            path: FSUtil.resolve(path.join(cwd, item.entry.path)),
+            path: path.resolve(cwd, item.entry.path),
             line: item.line,
             text: item.text,
           }))
