@@ -1,7 +1,7 @@
 export * as FileSystemSearch from "./search"
 
 import path from "path"
-import { Context, Effect, Fiber, Layer, Scope } from "effect"
+import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
@@ -28,22 +28,20 @@ export const ripgrepLayer = Layer.effect(
     const state = {
       files: [] as string[],
       directories: [] as string[],
-      scan: undefined as Fiber.Fiber<void, never> | undefined,
     }
-    state.scan = yield* ripgrep.find({ cwd: location.directory, pattern: "*", limit: 100_000 }).pipe(
-      Effect.tap((result) =>
+    const directories = new Set<string>()
+    yield* ripgrep.find({
+      cwd: location.directory,
+      pattern: "*",
+      limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
+      onEntry: (entry) =>
         Effect.sync(() => {
-          state.files = result.map((item) => item.path)
-          state.directories = Array.from(
-            new Set(
-              state.files.flatMap((file) => {
-                const parts = file.split("/")
-                return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/") + path.sep)
-              }),
-            ),
-          )
+          state.files.push(entry.path)
+          const parts = entry.path.split("/")
+          parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
+          state.directories = Array.from(directories)
         }),
-      ),
+    }).pipe(
       Effect.orDie,
       Effect.asVoid,
       Effect.forkIn(scope),
@@ -104,7 +102,6 @@ export const ripgrepLayer = Layer.effect(
         }),
       find: (input) =>
         Effect.gen(function* () {
-          if (input.query) yield* Fiber.join(state.scan!)
           const items =
             input.type === "file"
               ? state.files
