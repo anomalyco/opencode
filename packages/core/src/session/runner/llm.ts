@@ -298,6 +298,10 @@ export const layer = Layer.effect(
             return yield* Effect.die(continueAfterOverflowCompaction)
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
+          const networkError = failure instanceof TypeError ? failure : undefined
+          if (networkError) {
+            yield* withPublication(publisher.failUnsettledTools(`Network error: ${networkError.message}. Retrying...`, true))
+          }
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(
