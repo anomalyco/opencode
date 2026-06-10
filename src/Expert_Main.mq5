@@ -6,6 +6,7 @@
 #property version   "1.00"
 
 #include "Include/TradeLogic.mqh"
+#include "Include/BrokerSymbolProfile.mqh"
 #include "Include/RiskManagement.mqh"
 #include "Include/DataFeed.mqh"
 
@@ -21,6 +22,9 @@ input double InpGlobalDDLimit = -0.25;
 input double InpMonthlyDDLimit = -0.20;
 input double InpDailyDDLimit = -0.03;
 input bool   InpEnableGlobalEmergencyClose = true;
+input string InpExpectedSymbolFragment = "XAUUSD";
+input string InpExpectedAccountCurrency = "JPY";
+input bool   InpRequireExpectedAccountCurrency = true;
 
 //+------------------------------------------------------------------+
 //| CExpertAdvisor class                                              |
@@ -33,8 +37,11 @@ private:
    CPullbackSignal_SP500   m_sig_pullback;
    CMLModel_Universal      m_sig_ml;
    
-   // Risk management
-   CRiskManager            m_risk;
+    // Risk management
+    CRiskManager            m_risk;
+
+    // Broker / symbol profile
+    CBrokerSymbolProfile    m_profile;
    
    // Data feed
    CDataFeed               m_data;
@@ -69,6 +76,14 @@ public:
            }
          if(invalid_limit)
             return(INIT_FAILED);
+
+         if(!m_profile.Init(InpExpectedSymbolFragment, InpExpectedAccountCurrency, InpRequireExpectedAccountCurrency))
+           {
+            Print("BrokerSymbolProfile initialization failed: ", m_profile.FailureReason());
+            return(INIT_FAILED);
+           }
+
+         m_profile.PrintProfileMarker();
 
          m_risk.SetMagicNumber(InpMagicNumber);
 
