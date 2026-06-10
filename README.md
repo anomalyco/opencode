@@ -43,6 +43,27 @@
 
 ---
 
+### EA Lab Memory System (fork)
+
+This fork includes **EA Lab Memory System - Phase 1: Memory Foundations**, a repo-local memory foundation for evidence-gated MT5 EA research and development.
+
+Phase 1 adds a separate EA Lab memory layer without modifying OpenCode core:
+
+- SQLite schema and schema health checks under `.opencode/ea-lab-core`
+- redaction before storing searchable research notes
+- evidence records for backtests, logs, commits, URLs, messages, and manual notes
+- experiment ledger for hypotheses, test conditions, metrics, stages, and outcomes
+- experience memory for reusable successes, failures, near misses, and rejection rules
+- deterministic similar-experience search through SQLite FTS
+- conservative risk gate parsing and checks from `risk/gates.yaml`
+- repo-local MCP/HTTP entrypoints under `.opencode/mcp/ea-lab-*`
+
+The existing `trade-memory` components still hold conversation and handoff context. EA Lab Memory is the new structured layer for trading evidence, experiment decisions, and risk constraints. It is intentionally separate in Phase 1 so it can be tested and reviewed before deeper handoff injection or model-switch integration.
+
+Phase 1 does **not** enable live trading, automatic lot-size changes, risk-gate relaxation, MT5 execution, Context7 integration, wiki automation, or automatic injection into every OpenCode session.
+
+See [EA Lab Memory Foundations](./docs/ea-lab-memory-foundations.md) for details.
+
 ### Installation
 
 ```bash
