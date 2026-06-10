@@ -82,8 +82,15 @@ export const layer = Layer.effectDiscard(
                   agent: context.agent,
                   source,
                 })
-                return yield* files.writeTextPreservingBom({ target, content: input.content })
-              }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to write ${input.path}` }))),
+                const result = yield* files.writeTextPreservingBom({ target, content: input.content })
+                if (result.existed)
+                  return yield* new ToolFailure({ message: `File already exists: ${target.resource}. Use edit to modify existing files.` })
+                return result
+              }).pipe(
+                Effect.mapError((error) =>
+                  error instanceof ToolFailure ? error : new ToolFailure({ message: `Unable to write ${input.path}` }),
+                ),
+              ) as Effect.Effect<Output, ToolFailure>,
           }),
           "edit",
         ),
