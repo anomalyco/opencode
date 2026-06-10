@@ -43,17 +43,17 @@ const runHook = async (
   return output.status
 }
 
-// Tools whose ctx.ask calls actually flow through the `permission.ask` hook.
-// See packages/opencode/src/tool/* (read.ts, bash.ts, edit.ts, etc.).
+// Tools whose ctx.ask calls actually flow through the `permission.ask` hook
+// AND are NOT in EXEMPT_PERMISSIONS, so the policy plugin should escalate
+// allow → ask when the user has not explicitly opted in.
+// See packages/opencode/src/tool/* (bash.ts, edit.ts, etc.).
+// Local read-only tools (read, grep, glob) are exempt — see EXEMPT_PERMISSIONS.
 const HOOKED_PERMISSIONS = [
   "bash",
   "edit",
   "task",
   "webfetch",
   "websearch",
-  "read",
-  "grep",
-  "glob",
 ] as const
 
 describe("shouldEnforce", () => {
@@ -99,7 +99,6 @@ describe("shouldEnforce", () => {
     expect(shouldEnforce("bash", "*", "allow", cfg)).toBe(false)
     expect(shouldEnforce("webfetch", "*", "allow", cfg)).toBe(true)
     expect(shouldEnforce("edit", "*", "allow", cfg)).toBe(true)
-    expect(shouldEnforce("read", "*", "allow", cfg)).toBe(true)
   })
 
   test("user-explicit ask is still treated as 'no opt-in' (escalation continues)", () => {
@@ -109,16 +108,12 @@ describe("shouldEnforce", () => {
     expect(shouldEnforce("bash", "*", "allow", { bash: "ask" })).toBe(true)
   })
 
-  test("user allow for read permission honors per-path patterns", () => {
-    const cfg: ConfigPermission.Info = { read: "allow" }
-    expect(shouldEnforce("read", "/some/file.txt", "allow", cfg)).toBe(false)
-    expect(shouldEnforce("read", "/another/path.md", "allow", cfg)).toBe(false)
-  })
-
-  test("read permission still requires explicit user opt-in", () => {
-    expect(shouldEnforce("read", "/some/file.txt", "allow", {})).toBe(true)
-    expect(shouldEnforce("read", "/some/file.txt", "allow", { read: { "/some/*": "allow" } })).toBe(false)
-    expect(shouldEnforce("read", "/other/file.txt", "allow", { read: { "/some/*": "allow" } })).toBe(true)
+  test("local read-only tools (read/grep/glob) are exempt — Layer 2 sandbox bounds them", () => {
+    // No user opt-in, agent-default allow stays allow because these tools'
+    // blast radius is already capped by the OS-level filesystem sandbox.
+    expect(shouldEnforce("read", "/some/file.txt", "allow", {})).toBe(false)
+    expect(shouldEnforce("grep", "TODO", "allow", {})).toBe(false)
+    expect(shouldEnforce("glob", "**/*.ts", "allow", {})).toBe(false)
   })
 })
 
@@ -146,11 +141,13 @@ describe("PermissionPolicyPlugin permission.ask hook", () => {
     expect(await runHook({ bash: { "git *": "allow" } }, "bash", "rm", "allow")).toBe("ask")
   })
 
-  test("rewrites allow -> ask for read when user has not opted in", async () => {
-    expect(await runHook({}, "read", "/some/file.txt", "allow")).toBe("ask")
+  test("leaves allow alone for read/grep/glob even when user has not opted in", async () => {
+    expect(await runHook({}, "read", "/some/file.txt", "allow")).toBe("allow")
+    expect(await runHook({}, "grep", "TODO", "allow")).toBe("allow")
+    expect(await runHook({}, "glob", "**/*.ts", "allow")).toBe("allow")
   })
 
-  test("leaves allow alone for exempt permissions (todowrite, lsp, external_directory)", async () => {
+  test("leaves allow alone for every exempt permission", async () => {
     for (const tool of EXEMPT_PERMISSIONS) {
       expect(await runHook({}, tool, "*", "allow")).toBe("allow")
     }
@@ -158,12 +155,12 @@ describe("PermissionPolicyPlugin permission.ask hook", () => {
 
   test("leaves deny untouched for any permission", async () => {
     expect(await runHook({}, "bash", "*", "deny")).toBe("deny")
-    expect(await runHook({}, "read", "*", "deny")).toBe("deny")
+    expect(await runHook({}, "edit", "*", "deny")).toBe("deny")
   })
 
   test("leaves ask untouched for any permission", async () => {
     expect(await runHook({}, "bash", "*", "ask")).toBe("ask")
-    expect(await runHook({}, "read", "*", "ask")).toBe("ask")
+    expect(await runHook({}, "edit", "*", "ask")).toBe("ask")
   })
 
   test("falls back to escalation when SDK call fails", async () => {

@@ -3,16 +3,19 @@
 // opencode's built-in agents (notably `build`) ship `"*": "allow"` in their
 // permission defaults (see packages/opencode/src/agent/agent.ts), so during
 // interactive (TUI) use every tool that does not have a more specific rule
-// — bash, edit, write, task, webfetch, websearch, read, grep, glob, … —
-// runs without ever stopping at the approval prompt.
+// — bash, edit, write, task, webfetch, websearch, … — runs without ever
+// stopping at the approval prompt.
 //
 // securecode raises a floor: a tool only bypasses the approval prompt when
 // the USER has explicitly written an `allow` rule for it in their own config
 // file (`opencode.json`). The agent's wildcard `"*": "allow"` is not enough
-// on its own — the user has to opt in. A small set of internal-mechanics
-// permission keys (`EXEMPT_PERMISSIONS` below) is excluded so that the agent
-// can keep maintaining its own todo list, LSP cache, etc. without prompting
-// the user about actions the user did not initiate.
+// on its own — the user has to opt in. `EXEMPT_PERMISSIONS` below carves
+// out two groups that bypass this rule: (a) internal-mechanics keys
+// (`todowrite`, `lsp`, `external_directory`) where the user did not
+// initiate the action, and (b) local read-only access (`read`, `grep`,
+// `glob`) whose blast radius is already capped by Layer 2's filesystem
+// sandbox — prompting for in-workdir reads would bury the user without
+// adding safety.
 //
 // Mechanism: the `permission.ask` hook receives a (tool, pattern) pair
 // together with the action that the agent+session ruleset resolved to. When
@@ -47,7 +50,10 @@ const log = Log.create({ service: "securecode.permission-policy" })
 /**
  * Permission keys exempted from the "user must explicitly allow" rule.
  *
- * These cover internal mechanics where the user did not initiate the action,
+ * Two groups, kept in one set because the enforcement logic is identical
+ * (skip the allow → ask escalation).
+ *
+ * Group A — internal mechanics where the user did not initiate the action,
  * so a prompt would be confusing:
  *   - `todowrite`  — the LLM-private todo list maintained automatically
  *     across a session; the user does not invoke it directly.
@@ -58,11 +64,29 @@ const log = Log.create({ service: "securecode.permission-policy" })
  *     itself agent-default, and asking the user about those paths would be
  *     confusing. The deny/ask side of the same key still works as usual
  *     because this plugin never relaxes deny/ask, only raises `allow`.
+ *
+ * Group B — local read-only file access that Layer 2 (the OS sandbox)
+ * already confines to the working directory and a minimal set of OS paths.
+ * Confirming every read inside the workdir buries the user in prompts for
+ * no real safety benefit, since the sandbox blocks anything outside that
+ * boundary regardless of what Layer 1 decides:
+ *   - `read`  — file read
+ *   - `grep`  — content search
+ *   - `glob`  — path-pattern listing
+ *
+ * Mutation tools (`edit`, `write` → permission key `edit`), shell (`bash`),
+ * sub-agent dispatch (`task`), and outbound network (`webfetch`,
+ * `websearch`) are intentionally NOT in this set: those either modify state
+ * or reach out beyond the sandbox file boundary, so user opt-in still
+ * applies.
  */
 export const EXEMPT_PERMISSIONS: ReadonlySet<string> = new Set([
   "todowrite",
   "lsp",
   "external_directory",
+  "read",
+  "grep",
+  "glob",
 ])
 
 /**
