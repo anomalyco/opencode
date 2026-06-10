@@ -75,7 +75,7 @@ jobs:
         run: bun run test:httpapi
 
       - name: Setup Python
-        uses: actions/setup-python@42375524a0ff495b1635e79d6175a73cd50a1d5f # v5.4.0
+        uses: actions/setup-python@v5.4.0
         with:
           python-version: "3.11"
 
