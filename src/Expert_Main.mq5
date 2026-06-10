@@ -25,6 +25,9 @@ input bool   InpEnableGlobalEmergencyClose = true;
 input string InpExpectedSymbolFragment = "XAUUSD";
 input string InpExpectedAccountCurrency = "JPY";
 input bool   InpRequireExpectedAccountCurrency = true;
+input int    InpMaxSpreadPoints = 80;
+input int    InpTradeDeviationPoints = 10;
+input int    InpTradeMaxRetries = 3;
 
 //+------------------------------------------------------------------+
 //| CExpertAdvisor class                                              |
@@ -96,11 +99,14 @@ public:
         m_sig_breakout.SetSessionHours(InpSessionStartHour, InpSessionEndHour);
         
        m_risk.SetGlobalDDLimit(InpGlobalDDLimit);
-      m_risk.SetMonthlyDDLimit(InpMonthlyDDLimit);
-      m_risk.SetDailyDDLimit(InpDailyDDLimit);
-      m_risk.SetRiskPerTrade(0.005);
-      
-      m_data.Init();
+        m_risk.SetMonthlyDDLimit(InpMonthlyDDLimit);
+       m_risk.SetDailyDDLimit(InpDailyDDLimit);
+       m_risk.SetRiskPerTrade(0.005);
+       m_risk.SetMaxSpreadPoints(InpMaxSpreadPoints);
+       m_risk.SetTradeDeviationPoints(InpTradeDeviationPoints);
+       m_risk.SetTradeMaxRetries(InpTradeMaxRetries);
+       
+       m_data.Init();
       
       return(INIT_SUCCEEDED);
      }

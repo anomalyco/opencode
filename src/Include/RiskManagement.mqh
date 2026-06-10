@@ -5,6 +5,8 @@
 
 #define RISK_VERSION "RISK_V3_ORDER_CALC_PROFIT"
 
+#include "TradeExecutor.mqh"
+
 enum ERiskState
   {
    RISK_STATE_OK = 0,
@@ -43,6 +45,7 @@ private:
    bool     m_daily_stop_latched;
    bool     m_global_stop_latched;
    bool     m_risk_version_logged;
+   CTradeExecutor m_executor;
 
 public:
    CRiskManager(ulong magic_number = 0) : m_magic_number(magic_number),
@@ -74,11 +77,18 @@ public:
    void SetMonthlyDDLimit(double limit) { m_monthly_dd_limit = limit; }
    void SetDailyDDLimit(double limit)   { m_daily_dd_limit = limit; }
    void SetKellyFraction(double frac)   { m_kelly_fraction = frac; }
-   void SetMagicNumber(ulong magic_number) { m_magic_number = magic_number; }
+   void SetMagicNumber(ulong magic_number)
+     {
+      m_magic_number = magic_number;
+      m_executor.Init(magic_number);
+     }
    void SetRiskPerTrade(double risk_pct){ m_risk_per_trade_pct = risk_pct; }
    void SetWinRate(double rate)         { m_win_rate = rate; }
    void SetAvgWinLossRatio(double ratio){ m_avg_win_loss_ratio = ratio; }
    void SetDefaultSLTicks(int ticks)    { m_default_sl_ticks = ticks; }
+   void SetMaxSpreadPoints(int max_spread_points) { m_executor.SetMaxSpreadPoints(max_spread_points); }
+   void SetTradeDeviationPoints(int deviation_points) { m_executor.SetDeviationPoints(deviation_points); }
+   void SetTradeMaxRetries(int max_retries) { m_executor.SetMaxRetries(max_retries); }
    
      bool IsHealthy()
        {
@@ -386,52 +396,8 @@ private:
 public:
     bool PlaceOrder(ENUM_ORDER_TYPE type, double lot, double price, double sl, double tp)
       {
-       if(m_magic_number == 0)
-          return false;
-
-       MqlTradeRequest request = {};
-       MqlTradeResult result = {};
-       
-       request.action       = TRADE_ACTION_DEAL;
-       request.symbol       = _Symbol;
-      request.volume       = lot;
-      request.type         = type;
-       request.price        = price;
-       request.sl           = sl;
-       request.tp           = tp;
-       request.deviation    = 10;
-       request.magic        = m_magic_number;
-       request.type_filling = ORDER_FILLING_IOC;
-       request.comment      = "opencode-trade";
-      
-      int max_retries = 3;
-      for(int i = 0; i < max_retries; i++)
-        {
-         if(OrderSend(request, result))
-           {
-            if(result.retcode == TRADE_RETCODE_DONE)
-              {
-               Print("Order placed successfully: ", type, " ", lot, " lots at ", price);
-               return true;
-              }
-           }
-         
-         // Handle requote
-         if(result.retcode == TRADE_RETCODE_REQUOTE)
-           {
-            Sleep(100);
-            request.price = (type == ORDER_TYPE_BUY) ? 
-                            SymbolInfoDouble(_Symbol, SYMBOL_ASK) : 
-                            SymbolInfoDouble(_Symbol, SYMBOL_BID);
-            continue;
-           }
-         
-         Print("Order failed (attempt ", i + 1, "): ", result.retcode, " - ", result.comment);
-         break;
-        }
-      
-      return false;
-     }
+       return m_executor.PlaceMarketOrder(type, lot, price, sl, tp);
+      }
    
     void UpdateTrailingStop()
       {
