@@ -25,6 +25,15 @@ describe("Ripgrep", () => {
           expect(files.map((item) => item.path)).toContain(RelativePath.make(".opencode/config"))
           expect(files.map((item) => item.path)).toContain(RelativePath.make(".git/config"))
 
+          const observed: string[] = []
+          const limited = yield* ripgrep.find({
+            cwd: tmp.path,
+            pattern: "**/*",
+            limit: 1,
+            onEntry: (entry) => Effect.sync(() => observed.push(entry.path)),
+          })
+          expect(observed).toEqual(limited.map((item) => item.path))
+
           const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", include: "config", limit: 10 })
           expect(matches.map((item) => item.entry.path)).toContain(RelativePath.make(".opencode/config"))
           expect(matches.map((item) => item.entry.path)).toContain(RelativePath.make(".git/config"))

@@ -56,6 +56,7 @@ export interface FindInput {
   readonly hidden?: boolean
   readonly follow?: boolean
   readonly signal?: AbortSignal
+  readonly onEntry?: (entry: Entry) => Effect.Effect<void>
 }
 
 export interface GlobInput {
@@ -102,6 +103,7 @@ export const layer = Layer.effect(
       readonly signal?: AbortSignal
       readonly parse: (line: string) => Effect.Effect<A | undefined, Error>
       readonly pattern?: string
+      readonly onItem?: (item: A) => Effect.Effect<void>
     }) => {
       const program = Effect.scoped(
         Effect.gen(function* () {
@@ -112,11 +114,16 @@ export const layer = Layer.effect(
             Effect.map((output) => output.buffer.toString("utf8")),
             Effect.forkScoped,
           )
+          let observed = 0
           const rows = yield* Stream.decodeText(handle.stdout).pipe(
             Stream.splitLines,
             Stream.filter((line) => line.length > 0),
             Stream.mapEffect(input.parse),
             Stream.filter((row): row is A => row !== undefined),
+            Stream.tap((row) => {
+              if (!input.onItem || observed++ >= input.limit) return Effect.void
+              return input.onItem(row)
+            }),
             Stream.take(input.limit + 1),
             Stream.runCollect,
             Effect.map((chunk) => [...chunk]),
@@ -181,7 +188,7 @@ export const layer = Layer.effect(
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
       find: (input) =>
-        run<string>({
+        run<Entry>({
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
@@ -194,24 +201,22 @@ export const layer = Layer.effect(
             `--glob=${input.pattern}`,
             ".",
           ],
-          parse: (line) =>
-            Effect.succeed(
-              line
-                .replace(/^(?:\.[\\/])+/u, "")
-                .replace(/^[\\/]+/u, "")
-                .replaceAll("\\", "/"),
-            ),
-        }).pipe(
-          Effect.map((result) =>
-            result.items.map((relative) => {
-              const absolute = path.resolve(input.cwd, relative)
-              return new Entry({
+          parse: (line) => {
+            const relative = line
+              .replace(/^(?:\.[\\/])+/u, "")
+              .replace(/^[\\/]+/u, "")
+              .replaceAll("\\", "/")
+            return Effect.succeed(
+              new Entry({
                 path: RelativePath.make(relative),
                 type: "file",
-                mime: FSUtil.mimeType(absolute),
-              })
-            }),
-          ),
+                mime: FSUtil.mimeType(path.resolve(input.cwd, relative)),
+              }),
+            )
+          },
+          onItem: input.onEntry,
+        }).pipe(
+          Effect.map((result) => result.items),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
       grep: (input) =>
