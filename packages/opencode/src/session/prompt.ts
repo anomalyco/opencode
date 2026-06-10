@@ -10,7 +10,7 @@ import { Session } from "./session"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 
-import { type Tool as AITool, tool, jsonSchema } from "ai"
+import { type ModelMessage, type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
@@ -83,6 +83,48 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+export type PromptModelSnapshot = {
+  modelKey: string
+  messageIDs: Set<MessageID>
+  modelMessages: ModelMessage[]
+}
+
+function promptModelKey(model: Provider.Model) {
+  return `${model.providerID}/${model.id}`
+}
+
+export function appendOnlyModelMessages(input: {
+  snapshot: PromptModelSnapshot | undefined
+  messages: SessionV1.WithParts[]
+  model: Provider.Model
+}) {
+  return Effect.gen(function* () {
+    const modelKey = promptModelKey(input.model)
+    if (!input.snapshot || input.snapshot.modelKey !== modelKey) {
+      const modelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(input.messages, input.model))
+      return {
+        modelMessages,
+        snapshot: {
+          modelKey,
+          messageIDs: new Set(input.messages.map((message) => message.info.id)),
+          modelMessages: structuredClone(modelMessages),
+        },
+      }
+    }
+
+    const newMessages = input.messages.filter((message) => !input.snapshot?.messageIDs.has(message.info.id))
+    const newModelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(newMessages, input.model))
+    const modelMessages = [...structuredClone(input.snapshot.modelMessages), ...newModelMessages]
+    return {
+      modelMessages,
+      snapshot: {
+        modelKey,
+        messageIDs: new Set(input.messages.map((message) => message.info.id)),
+        modelMessages: structuredClone(modelMessages),
+      },
+    }
+  })
+}
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
@@ -1136,6 +1178,7 @@ export const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let promptSnapshot: PromptModelSnapshot | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1196,6 +1239,7 @@ export const layer = Layer.effect(
 
           if (task?.type === "subtask") {
             yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+            promptSnapshot = undefined
             continue
           }
 
@@ -1208,6 +1252,7 @@ export const layer = Layer.effect(
               overflow: task.overflow,
             })
             if (result === "stop") break
+            promptSnapshot = undefined
             continue
           }
 
@@ -1217,6 +1262,7 @@ export const layer = Layer.effect(
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            promptSnapshot = undefined
             continue
           }
 
@@ -1324,12 +1370,14 @@ export const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+            const [skills, env, instructions, promptMessages] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
-              MessageV2.toModelMessagesEffect(msgs, model),
+              appendOnlyModelMessages({ snapshot: promptSnapshot, messages: msgs, model }),
             ])
+            promptSnapshot = promptMessages.snapshot
+            const modelMsgs = promptMessages.modelMessages
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -1374,6 +1422,7 @@ export const layer = Layer.effect(
                 auto: true,
                 overflow: !handle.message.finish,
               })
+              promptSnapshot = undefined
             }
             return "continue" as const
           }).pipe(
