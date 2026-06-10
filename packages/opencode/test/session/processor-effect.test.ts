@@ -1102,7 +1102,7 @@ itMinimaxLeak.live("session.processor strips MiniMax trailing tool_call leak suf
         const baseModel = yield* provider.getModel(ref.providerID, ref.modelID)
         const minimaxModel = {
           ...baseModel,
-          id: "minimax-m3-free",
+          id: ModelV2.ID.make("minimax-m3-free"),
           api: {
             ...baseModel.api,
             id: "minimax-m3-free",
