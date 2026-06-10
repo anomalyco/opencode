@@ -85,7 +85,7 @@ import { toLLMMessages } from "./to-llm-message"
  */
 
 // QUESTION: Did this exist previously, or did we add this limit? Does it make sense?
-const MAX_STEPS = 25
+const DEFAULT_STEPS = 25
 
 export const layer = Layer.effect(
   Service,
@@ -373,6 +373,7 @@ export const layer = Layer.effect(
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force?: boolean
+      readonly maxSteps?: number
     }) {
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
@@ -380,16 +381,17 @@ export const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
+      const maxSteps = input.maxSteps ?? DEFAULT_STEPS
       while (openActivity) {
         let needsContinuation = true
-        for (let step = 0; step < MAX_STEPS; step++) {
+        for (let step = 0; step < maxSteps; step++) {
           needsContinuation = yield* runTurn(input.sessionID, promotion)
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break
         }
         if (needsContinuation)
-          return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
+          return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: maxSteps })
         openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }

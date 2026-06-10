@@ -1,4 +1,5 @@
 import { Effect, Layer } from "effect"
+import { AgentV2 } from "../../agent"
 import { LocationServiceMap } from "../../location-layer"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
@@ -12,12 +13,14 @@ export const layer = Layer.effect(
   SessionExecution.Service,
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
+    const agents = yield* AgentV2.Service
     const locations = yield* LocationServiceMap
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, void, SessionRunner.RunError>({
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, mode) {
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
-        return yield* SessionRunner.Service.use((runner) => runner.run({ sessionID, force: mode === "run" })).pipe(
+        const selection = yield* agents.select(session.agent)
+        return yield* SessionRunner.Service.use((runner) => runner.run({ sessionID, force: mode === "run", maxSteps: selection.info?.steps })).pipe(
           Effect.provide(locations.get(session.location)),
         )
       }),
