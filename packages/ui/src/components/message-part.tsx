@@ -58,6 +58,7 @@ import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 import { readPartText } from "./message-part-text"
+import { formatModelLabel } from "./message-part-model"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -1071,7 +1072,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     const modelID = props.message.model?.modelID
     if (!providerID || !modelID) return ""
     const match = data.store.provider?.all?.get(providerID)
-    return match?.models?.[modelID]?.name ?? modelID
+    return formatModelLabel(providerID, modelID, match)
   })
   const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
 
@@ -1479,7 +1480,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
     const match = data.store.provider?.all?.get(message.providerID)
-    return match?.models?.[message.modelID]?.name ?? message.modelID
+    return formatModelLabel(message.providerID, message.modelID, match)
   })
 
   const duration = createMemo(() => {
