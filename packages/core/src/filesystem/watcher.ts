@@ -3,14 +3,17 @@ export * as Watcher from "./watcher"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
-import { Cause, Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Layer, LayerMap, Schema } from "effect"
 import path from "path"
 import { Config } from "../config"
+import { LayerNode } from "../effect/layer-node"
 import { EventV2 } from "../event"
 import { Flag } from "../flag/flag"
 import { FSUtil } from "../fs-util"
 import { Git } from "../git"
+import { Global } from "../global"
 import { Location } from "../location"
+import { Project } from "../project"
 import { lazy } from "../util/lazy"
 import { Ignore } from "./ignore"
 import { Protected } from "./protected"
@@ -140,3 +143,20 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer), Layer.provide(Git.defaultLayer))
+
+// Watchers keyed by location so every consumer of a directory shares one
+// subscription. Entries are refcounted: holders keep them alive (e.g. an
+// instance holding its .git/HEAD watch) and idle entries expire.
+export class ServiceMap extends LayerMap.Service<ServiceMap>()("@opencode/v2/FileWatcherMap", {
+  lookup: (ref: Location.Ref) => locationLayer.pipe(Layer.provide(Location.layer(ref))),
+  idleTimeToLive: "60 minutes",
+  dependencies: [
+    Project.defaultLayer,
+    EventV2.defaultLayer,
+    FSUtil.defaultLayer,
+    Global.defaultLayer,
+    Git.defaultLayer,
+  ],
+}) {}
+
+export const node = LayerNode.make(ServiceMap.layer, [])

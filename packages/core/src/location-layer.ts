@@ -58,7 +58,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       AgentV2.locationLayer,
       PluginBoot.locationLayer,
       FileSystem.locationLayer,
-      Watcher.locationLayer,
+      Watcher.ServiceMap.get({ directory: ref.directory }),
       Pty.locationLayer,
       SkillV2.locationLayer,
       systemContext,
@@ -113,5 +113,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
     ApplicationTools.layer,
+    Watcher.ServiceMap.layer,
   ],
 }) {}

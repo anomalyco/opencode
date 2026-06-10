@@ -25,7 +25,11 @@ import { testEffect } from "../lib/effect"
 const weird = process.platform === "win32" ? "space file.txt" : "tab\tfile.txt"
 
 const layer = Layer.mergeAll(
-  Vcs.layer.pipe(Layer.provideMerge(Git.defaultLayer), Layer.provideMerge(EventV2Bridge.defaultLayer)),
+  Vcs.layer.pipe(
+    Layer.provideMerge(Git.defaultLayer),
+    Layer.provideMerge(EventV2Bridge.defaultLayer),
+    Layer.provideMerge(Watcher.ServiceMap.layer),
+  ),
   CrossSpawnSpawner.defaultLayer,
   FSUtil.defaultLayer,
 )

@@ -6,6 +6,7 @@ import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Git } from "@/git"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const PATCH_CONTEXT_LINES = 2_147_483_647
 const MAX_PATCH_BYTES = 10_000_000
@@ -301,11 +302,14 @@ interface State {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
-export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = Layer.effect(
+type Requirements = Git.Service | EventV2Bridge.Service | Watcher.ServiceMap
+
+export const layer: Layer.Layer<Service, never, Requirements> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const git = yield* Git.Service
     const events = yield* EventV2Bridge.Service
+    const watchers = yield* Watcher.ServiceMap
     const scope = yield* Scope.Scope
 
     const state = yield* InstanceState.make<State>(
@@ -313,6 +317,13 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
         if (ctx.project.vcs !== "git") {
           return { current: undefined, root: undefined }
         }
+
+        // Nothing builds the file watcher for an idle instance, so hold one for
+        // the instance lifetime to keep .git/HEAD updates flowing (#30956).
+        yield* watchers.contextEffect({ directory: AbsolutePath.make(ctx.directory) }).pipe(
+          Effect.catchCause((cause) => Effect.logWarning("failed to start file watcher", { cause })),
+          Effect.forkScoped,
+        )
 
         const get = Effect.fnUntraced(function* () {
           return yield* git.branch(ctx.directory)
@@ -424,8 +435,12 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Git.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
+  Layer.provide(Watcher.ServiceMap.layer),
+)
 
-export const node = LayerNode.make(layer, [Git.node, EventV2Bridge.node])
+export const node = LayerNode.make(layer, [Git.node, EventV2Bridge.node, Watcher.node])
 
 export * as Vcs from "./vcs"
