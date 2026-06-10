@@ -198,7 +198,7 @@ export const layer = Layer.effectDiscard(
                 ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
                 ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
               }
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),
+            }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to execute command: ${input.command}${error instanceof Error ? `\nReason: ${error.message}` : ""}` }))),
         }),
       })
       .pipe(Effect.orDie)
