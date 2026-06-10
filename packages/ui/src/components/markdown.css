@@ -161,6 +161,8 @@
   [data-slot="markdown-math-viewport"] {
     max-width: 100%;
     overflow-x: auto;
+    overflow-y: hidden;
+    padding-block: 0.35em;
     scrollbar-width: none;
 
     &::-webkit-scrollbar {
