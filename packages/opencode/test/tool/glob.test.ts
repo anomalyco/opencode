@@ -5,7 +5,7 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import { GlobTool } from "../../src/tool/glob"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
@@ -23,7 +23,7 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
     FSUtil.defaultLayer,
-    Search.defaultLayer,
+    Ripgrep.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
     Git.defaultLayer,
