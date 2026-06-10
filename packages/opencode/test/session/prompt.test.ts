@@ -2280,8 +2280,6 @@ noLLMServer.instance(
   30_000,
 )
 
-// Mimics a plugin using the v1 SDK that rejects every permission ask as soon
-// as it is published. A reject with a message produces CorrectedError.
 const autoRejectAsks = Effect.fn("test.autoRejectAsks")(function* (message?: string) {
   const events = yield* EventV2Bridge.Service
   const permission = yield* Permission.Service

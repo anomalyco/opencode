@@ -238,7 +238,6 @@ export const layer = Layer.effect(
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
-        // Rejects end the turn even with feedback (CorrectedError); otherwise the model retries and re-asks in a loop.
         if (
           error instanceof PermissionV1.RejectedError ||
           error instanceof PermissionV1.CorrectedError ||
