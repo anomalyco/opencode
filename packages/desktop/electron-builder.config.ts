@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -7,6 +8,8 @@ import type { Configuration } from "electron-builder"
 
 const execFileAsync = promisify(execFile)
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
+const require = createRequire(import.meta.url)
+const electronDist = path.join(path.dirname(require.resolve("electron/package.json")), "dist")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 async function signWindows(configuration: { path: string }) {
@@ -27,6 +30,7 @@ const channel = (() => {
 })()
 
 const getBase = (): Configuration => ({
+  electronDist,
   artifactName: "opencode-desktop-${os}-${arch}.${ext}",
   directories: {
     output: "dist",

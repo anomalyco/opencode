@@ -6,6 +6,7 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
+import { MAX_DIFF_PATCH_BYTES } from "@opencode-ai/core/diff-constants"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -136,6 +137,9 @@ export const layer = Layer.effect(
       return diffs.map((item) => {
         if (item.file === undefined) return item
         const file = unquoteGitPath(item.file)
+        if (item.patch !== undefined && Buffer.byteLength(item.patch) > MAX_DIFF_PATCH_BYTES) {
+          return { ...item, file, patch: undefined }
+        }
         if (file === item.file) return item
         return { ...item, file }
       })

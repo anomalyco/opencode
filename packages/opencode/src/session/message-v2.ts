@@ -88,12 +88,24 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) =>
-  ({
-    ...row.data,
+import { MAX_INFO_DIFF_PATCH_BYTES } from "@opencode-ai/core/diff-constants"
+
+const info = (row: typeof MessageTable.$inferSelect) => {
+  const data = { ...row.data }
+  if (typeof data.summary === "object" && data.summary?.diffs) {
+    data.summary.diffs = data.summary.diffs.map((d) => {
+      if (d.patch !== undefined && Buffer.byteLength(d.patch) > MAX_INFO_DIFF_PATCH_BYTES) {
+        return { ...d, patch: undefined }
+      }
+      return d
+    })
+  }
+  return {
+    ...data,
     id: row.id,
     sessionID: row.session_id,
-  }) as Info
+  } as Info
+}
 
 const part = (row: typeof PartTable.$inferSelect) =>
   ({

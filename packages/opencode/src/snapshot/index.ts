@@ -9,6 +9,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
+import { MAX_DIFF_PATCH_BYTES, ABSOLUTE_MAX_DIFF_BYTES } from "@opencode-ai/core/diff-constants"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
@@ -686,8 +687,24 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               }
 
               const step = 100
-              const patch = (file: string, before: string, after: string) =>
-                formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
+              // Dedicated diff endpoint serves one file at a time, so 1MB is acceptable.
+              const patch = (file: string, before: string, after: string) => {
+                const tryContext = (ctx: number) => {
+                  const p = formatPatch(structuredPatch(file, file, before, after, "", "", { context: ctx }))
+                  return Buffer.byteLength(p) <= MAX_DIFF_PATCH_BYTES ? p : undefined
+                }
+                if (before.length + after.length <= MAX_DIFF_PATCH_BYTES * 2) {
+                  const full = tryContext(Number.MAX_SAFE_INTEGER)
+                  if (full !== undefined) return full
+                }
+                for (let ctx = 100; ctx >= 0; ctx -= 10) {
+                  const p = tryContext(ctx)
+                  if (p !== undefined) return p
+                }
+                const minimal = formatPatch(structuredPatch(file, file, before, after, "", "", { context: 0 }))
+                if (Buffer.byteLength(minimal) <= ABSOLUTE_MAX_DIFF_BYTES) return minimal
+                return ""
+              }
 
               for (let i = 0; i < rows.length; i += step) {
                 const run = rows.slice(i, i + step)

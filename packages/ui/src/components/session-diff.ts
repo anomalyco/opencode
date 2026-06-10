@@ -1,6 +1,7 @@
 import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
 import { parsePatch } from "diff"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import { MAX_RECONSTRUCT_BYTES } from "@opencode-ai/core/diff-constants"
 
 type LegacyDiff = {
   file: string
@@ -26,6 +27,10 @@ export type ViewDiff = {
 
 const diffCacheLimit = 16
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
+const utf8ByteLength = (s: string) => {
+  if (typeof Buffer !== "undefined") return Buffer.byteLength(s)
+  return new TextEncoder().encode(s).length
+}
 
 export function resolveFileDiff(diff: DiffSource) {
   if (typeof diff.patch === "string") return fileDiffFromPatch(diff.file, diff.patch)
@@ -60,7 +65,7 @@ function fileDiffFromPatch(file: string, patch: string) {
     return hit
   }
 
-  const contents = completePatchContents(patch)
+  const contents = utf8ByteLength(patch) <= MAX_RECONSTRUCT_BYTES ? completePatchContents(patch) : undefined
   const input = contents ? undefined : patchInput(file, patch)
   const value = contents
     ? fileDiffFromContent(file, contents.before, contents.after)
