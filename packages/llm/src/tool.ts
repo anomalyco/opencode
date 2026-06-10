@@ -5,7 +5,7 @@ import type {
   ToolDefinition as ToolDefinitionClass,
   ToolOutput as ToolOutputType,
 } from "./schema"
-import { ToolDefinition, ToolFailure, ToolOutput, toolText } from "./schema"
+import { ToolDefinition, ToolFailure, ToolOutput } from "./schema"
 
 /**
  * Schema constraint for tool parameters / success values: no decoding or
@@ -245,7 +245,7 @@ const project = (
   ToolOutput.make(
     toStructuredOutput?.(output) ?? output,
     toModelOutput?.({ callID, parameters, output }) ??
-      (typeof output === "string" ? [toolText({ type: "text", text: output })] : []),
+      (typeof output === "string" ? [{ type: "text", text: output }] : []),
   )
 
 export { ToolFailure }

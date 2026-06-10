@@ -1,3 +1,4 @@
+import type { Argv } from "yargs"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import { CliError, effectCmd, fail } from "../effect-cmd"
@@ -298,7 +299,9 @@ export const ProvidersListCommand = effectCmd({
 export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to a provider",
-  builder: (yargs) =>
+  // URL login skips instance bootstrap, which would load remote config with the stale token and crash before re-auth.
+  instance: (args) => !args.url,
+  builder: (yargs: Argv) =>
     yargs
       .positional("url", {
         describe: "opencode auth provider",

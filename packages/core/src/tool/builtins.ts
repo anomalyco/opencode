@@ -8,6 +8,7 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { QuestionTool } from "./question"
 import { ReadTool } from "./read"
+import { ReadToolFileSystem } from "./read-filesystem"
 import { SkillTool } from "./skill"
 import { TodoWriteTool } from "./todowrite"
 import { WebFetchTool } from "./webfetch"
@@ -34,7 +35,7 @@ export const locationLayer = Layer.mergeAll(
   GlobTool.layer,
   GrepTool.layer,
   QuestionTool.layer,
-  ReadTool.layer,
+  ReadTool.layer.pipe(Layer.provide(ReadToolFileSystem.layer)),
   SkillTool.layer,
   TodoWriteTool.layer,
   WebFetchTool.layer,

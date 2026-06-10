@@ -1,5 +1,6 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -54,10 +55,12 @@ export const sessionLocationLayer = Layer.effect(
 
         return yield* effect.pipe(
           Effect.provide(
-            locations.get({
-              directory: AbsolutePath.make(row.directory),
-              workspaceID: row.workspaceID ? WorkspaceV2.ID.make(row.workspaceID) : undefined,
-            }),
+            locations.get(
+              Location.Ref.make({
+                directory: AbsolutePath.make(row.directory),
+                workspaceID: row.workspaceID ? WorkspaceV2.ID.make(row.workspaceID) : undefined,
+              }),
+            ),
           ),
         )
       }),
