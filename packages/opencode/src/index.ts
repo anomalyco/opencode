@@ -34,12 +34,13 @@ const args = hideBin(process.argv)
 
 function show(out: string) {
   const text = out.trimStart()
+  const newline = out.endsWith(EOL) ? "" : EOL
   if (!text.startsWith("opencode ")) {
     process.stderr.write(UI.logo() + EOL + EOL)
-    process.stderr.write(text + EOL)
+    process.stderr.write(text + newline)
     return
   }
-  process.stderr.write(out)
+  process.stderr.write(out + newline)
 }
 
 const cli = yargs(args)
