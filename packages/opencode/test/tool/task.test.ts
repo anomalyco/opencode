@@ -24,10 +24,15 @@
  *   5. model = "" (empty string) → FAIL with a clear error. Empty is NOT treated as
  *      "omitted": the gate is `params.model !== undefined`, not a truthiness check, so an
  *      empty string never silently inherits. ops.prompt is never called.
- *   6. model = prototype-polluting key, e.g. "anthropic/__proto__" or "__proto__/x" →
- *      FAIL with a clear, actionable error naming the offending value. Must NOT bypass
- *      validation (treating Object.prototype as a "found" model) and must NOT surface a
- *      raw "Cannot read properties of undefined" TypeError. ops.prompt is never called.
+ *   6. model = prototype-polluting key, e.g. "anthropic/__proto__" or "__proto__/x", OR an
+ *      inherited Object.prototype method name as the modelID, e.g. "anthropic/toString" or
+ *      "anthropic/valueOf" (valid provider + a method reachable only via the prototype
+ *      chain) → FAIL with a clear, actionable error naming the offending value. Must NOT
+ *      bypass validation (treating an inherited Object.prototype member as a "found" model)
+ *      and must NOT surface a raw "Cannot read properties of undefined" TypeError.
+ *      ops.prompt is never called and NO child session is created. A denylist of specific
+ *      keys is insufficient — validation must use a prototype-membership check (own-property
+ *      lookup) so inherited members like toString/valueOf are rejected too.
  *   7. model = VALID multi-slash modelID, e.g. "openrouter/anthropic/claude-3.5" →
  *      providerID is the FIRST segment ("openrouter"); modelID is the remainder joined
  *      back with "/" ("anthropic/claude-3.5"). Resolves and is passed through to ops.prompt
@@ -1045,8 +1050,7 @@ describe("tool.task model override", () => {
       let seen: SessionPrompt.PromptInput | undefined
       const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 
-      // Stored in a const so the extra `model` key is accepted by width subtyping
-      // until task.ts adds it to the schema (RED phase).
+      // Stored in a const so the extra `model` key is accepted by width subtyping.
       const params = {
         description: "inspect bug",
         prompt: "look into the cache key path",
@@ -1147,10 +1151,9 @@ describe("tool.task model override", () => {
     }),
   )
 
-  // Behavior 5 (M1) — RED until the gate becomes `params.model !== undefined`. An empty
-  // string is currently falsy, so the impl silently inherits and reaches ops.prompt. The
-  // spec is the opposite: an empty model string is PRESENT, so it must validate and fail,
-  // and ops.prompt must never be called.
+  // Behavior 5 (M1) — the gate is `params.model !== undefined`, so an empty string counts
+  // as PRESENT: it validates and fails rather than silently inheriting, and ops.prompt is
+  // never called.
   withModel.instance("empty-string model param fails instead of silently inheriting", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -1180,15 +1183,17 @@ describe("tool.task model override", () => {
         .pipe(Effect.exit)
 
       expect(Exit.isFailure(exit)).toBe(true)
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("Invalid task model")
       expect(prompted).toBe(false)
     }),
   )
 
-  // Behavior 6 (M3) — RED until prototype keys are rejected. The provider mock resolves
-  // models with the same unguarded record lookup the real Provider.getModel uses, so
-  // "anthropic/__proto__" currently resolves Object.prototype as a "found" model and
-  // BYPASSES validation, reaching ops.prompt. The spec is that a prototype-polluting key
-  // fails with a clear error naming the offending value, and ops.prompt is never called.
+  // Behavior 6 (M3) — prototype-polluting keys are rejected. The provider mock resolves
+  // models with the same unguarded record lookup the real Provider.getModel uses, so a
+  // naive lookup would resolve Object.prototype as a "found" model for "anthropic/__proto__".
+  // Validation rejects it with a clear error naming the offending value, and ops.prompt is
+  // never called.
   withModel.instance("prototype-key model param (anthropic/__proto__) fails clearly", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -1224,11 +1229,11 @@ describe("tool.task model override", () => {
     }),
   )
 
-  // Behavior 6 (M3) — RED until prototype keys are rejected. With "__proto__" as the
-  // providerID the real record lookup resolves Object.prototype as the provider, then
-  // reads `provider.models` (undefined) and indexes it, surfacing a raw
-  // "Cannot read properties of undefined" TypeError instead of an actionable error. The
-  // spec is a clear error naming the offending value, with ops.prompt never called.
+  // Behavior 6 (M3) — prototype-polluting keys are rejected. With "__proto__" as the
+  // providerID a naive record lookup would resolve Object.prototype as the provider, then
+  // read `provider.models` (undefined) and index it, surfacing a raw
+  // "Cannot read properties of undefined" TypeError. Validation instead fails with a clear
+  // error naming the offending value, and ops.prompt is never called.
   withModel.instance("prototype-key model param (__proto__/x) fails with an actionable error", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -1351,10 +1356,9 @@ describe("tool.task model override", () => {
     },
   )
 
-  // Behavior 3/5 (M5) — RED until model validation moves BEFORE child-session creation.
-  // The impl currently creates the child session (task.ts:155-171) before validating the
-  // override (task.ts:184-203), so an invalid model leaves an orphan child session behind.
-  // The spec is that an invalid model short-circuits before any child session is created.
+  // Behavior 3/5 (M5) — model validation runs BEFORE child-session creation, so an invalid
+  // model short-circuits before any child session is created and never leaves an orphan
+  // child session behind.
   withModel.instance("invalid model param creates no child session (validates first)", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
@@ -1391,4 +1395,55 @@ describe("tool.task model override", () => {
       expect(kids).toHaveLength(0)
     }),
   )
+
+  // Behavior 6 (F1) — inherited Object.prototype method names as the modelID must be
+  // rejected. "anthropic" is a known provider, but "toString"/"valueOf" are NOT real models:
+  // an unguarded `provider.models[modelID]` lookup resolves the inherited Object.prototype
+  // method (a truthy function) and a denylist of only ""/__proto__/constructor/prototype
+  // would treat it as a "found" model, BYPASSING validation. The spec requires a
+  // prototype-membership check (e.g. Object.hasOwn) so these fail with the actionable
+  // "Invalid task model" error, ops.prompt is never called, and no child session is created.
+  for (const inherited of ["toString", "valueOf"]) {
+    withModel.instance(
+      `inherited-prototype-method modelID (anthropic/${inherited}) fails and creates no child session`,
+      () =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const { chat, assistant } = yield* seed()
+          const tool = yield* TaskTool
+          const def = yield* tool.init()
+          let prompted = false
+          const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+          const params = {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            model: `anthropic/${inherited}`,
+          }
+
+          const exit = yield* def
+            .execute(params, {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            })
+            .pipe(Effect.exit)
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+          expect(rendered).toContain("Invalid task model")
+          expect(rendered).toContain(`anthropic/${inherited}`)
+          expect(prompted).toBe(false)
+          // A bypassed validation would spawn an orphan child — assert zero directly.
+          const kids = yield* sessions.children(chat.id)
+          expect(kids).toHaveLength(0)
+        }),
+    )
+  }
 })

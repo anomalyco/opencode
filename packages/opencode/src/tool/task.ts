@@ -147,11 +147,7 @@ export const TaskTool = Tool.define(
               // lookup. An unguarded record index on these keys would otherwise resolve
               // Object.prototype as a "found" model, or throw a raw TypeError that leaks
               // "Cannot read properties of undefined" instead of an actionable error.
-              const unsafe = (segment: string) =>
-                segment === "" ||
-                segment === "__proto__" ||
-                segment === "constructor" ||
-                segment === "prototype"
+              const unsafe = (segment: string) => segment === "" || segment in {}
               if (unsafe(parsed.providerID) || unsafe(parsed.modelID))
                 return yield* Effect.fail(
                   new Error(
