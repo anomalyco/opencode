@@ -273,14 +273,24 @@ export namespace Config {
 
   async function loadPlugin(dir: string) {
     const plugins: PluginSpec[] = []
+    const seen = new Set<string>()
+    const patterns = [
+      "{plugin,plugins}/*.{ts,js}",
+      "{plugin,plugins}/*/index.{ts,js}",
+      "{plugin,plugins}/*/*/index.{ts,js}",
+    ]
 
-    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      plugins.push(pathToFileURL(item).href)
+    for (const pattern of patterns) {
+      for (const item of await Glob.scan(pattern, {
+        cwd: dir,
+        absolute: true,
+        dot: true,
+        symlink: true,
+      })) {
+        if (seen.has(item)) continue
+        seen.add(item)
+        plugins.push(pathToFileURL(item).href)
+      }
     }
     return plugins
   }

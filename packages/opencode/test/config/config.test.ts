@@ -2047,6 +2047,38 @@ describe("deduplicatePluginOrigins", () => {
       },
     })
   })
+
+  test("loads nested plugin entrypoints from subdirectories", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const projectDir = path.join(dir, "project")
+        const pluginDir = path.join(projectDir, ".opencode", "plugin", "cloud-runner")
+        await fs.mkdir(pluginDir, { recursive: true })
+
+        await Filesystem.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+          }),
+        )
+
+        await Filesystem.write(path.join(pluginDir, "index.js"), "export default {}")
+        await Filesystem.write(path.join(pluginDir, "helper.js"), "export const helper = 1")
+      },
+    })
+
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await load()
+        const plugins = config.plugin ?? []
+        const specs = plugins.map((p) => Config.pluginSpecifier(p))
+
+        expect(specs.some((spec) => spec.endsWith("/cloud-runner/index.js"))).toBe(true)
+        expect(specs.some((spec) => spec.endsWith("/helper.js"))).toBe(false)
+      },
+    })
+  })
 })
 
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
