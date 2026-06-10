@@ -19,7 +19,6 @@ function extract(messages: SessionV1.WithParts[]) {
   for (const msg of messages) {
     for (const part of msg.parts) {
       if (part.type === "tool" && part.tool === "read" && part.state.status === "completed") {
-        if (part.state.time.compacted) continue
         const loaded = part.state.metadata?.loaded
         if (!loaded || !Array.isArray(loaded)) continue
         for (const p of loaded) {
