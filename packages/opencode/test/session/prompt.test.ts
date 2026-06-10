@@ -2280,16 +2280,8 @@ noLLMServer.instance(
   30_000,
 )
 
-// Permission deny / reject loop semantics
-//
-// A permission ask inside a tool's execute fails the tool call; the error
-// reaches SessionProcessor.failToolCall with its identity intact (Effect.orDie
-// does not destroy it: runPromise rejects with the squashed cause, the original
-// error object). Only explicit user rejections (PermissionV1.RejectedError)
-// block the loop, subject to experimental.continue_loop_on_deny.
-//
-// autoRejectAsks mimics a plugin using the v1 SDK that rejects every
-// permission ask as soon as it is published (e.g. subagent auto-reject).
+// Mimics a plugin using the v1 SDK that rejects every permission ask as soon
+// as it is published. A reject with a message produces CorrectedError.
 const autoRejectAsks = Effect.fn("test.autoRejectAsks")(function* (message?: string) {
   const events = yield* EventV2Bridge.Service
   const permission = yield* Permission.Service
@@ -2302,126 +2294,6 @@ const autoRejectAsks = Effect.fn("test.autoRejectAsks")(function* (message?: str
   )
   yield* Effect.addFinalizer(() => off)
 })
-
-unix(
-  "rejected permission continues loop when continue_loop_on_deny is true",
-  () =>
-    withSh(() =>
-      Effect.gen(function* () {
-        const { llm, dir } = yield* useServerConfig((url) => ({
-          ...providerCfg(url),
-          experimental: { continue_loop_on_deny: true },
-        }))
-        yield* autoRejectAsks()
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({
-          title: "RejectContinue",
-          permission: [{ permission: "bash", pattern: "*", action: "ask" }],
-        })
-        yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [{ type: "text", text: "run a command" }],
-        })
-        yield* llm.tool("bash", { command: "rm -rf /tmp/reject-continue", workdir: dir, description: "Remove dir" })
-        yield* llm.text("understood, command is restricted")
-
-        const result = yield* prompt.loop({ sessionID: session.id })
-        expect(result.info.role).toBe("assistant")
-        expect(yield* llm.calls).toBe(2)
-
-        const msgs = yield* MessageV2.filterCompactedEffect(session.id)
-        const parts = msgs.flatMap((m) => m.parts)
-        const tool = parts.find((p): p is SessionV1.ToolPart => p.type === "tool")
-        expect(tool?.state.status).toBe("error")
-        if (tool?.state.status === "error") expect(tool.state.error).toContain("rejected permission")
-        expect(parts.some((p) => p.type === "text" && p.text === "understood, command is restricted")).toBe(true)
-      }),
-    ),
-  15_000,
-)
-
-unix(
-  "rejected permission blocks loop by default",
-  () =>
-    withSh(() =>
-      Effect.gen(function* () {
-        const { llm, dir } = yield* useServerConfig((url) => ({
-          ...providerCfg(url),
-          experimental: { continue_loop_on_deny: false },
-        }))
-        yield* autoRejectAsks()
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({
-          title: "RejectStop",
-          permission: [{ permission: "bash", pattern: "*", action: "ask" }],
-        })
-        yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [{ type: "text", text: "run a command" }],
-        })
-        yield* llm.tool("bash", { command: "rm -rf /tmp/reject-stop", workdir: dir, description: "Remove dir" })
-        yield* llm.text("should never be requested")
-
-        const result = yield* prompt.loop({ sessionID: session.id })
-        expect(result.info.role).toBe("assistant")
-        if (result.info.role === "assistant") expect(result.info.finish).toBe("tool-calls")
-        expect(yield* llm.calls).toBe(1)
-      }),
-    ),
-  15_000,
-)
-
-unix(
-  "repeated identical rejected calls trigger doom loop guard across messages",
-  () =>
-    withSh(() =>
-      Effect.gen(function* () {
-        // With continue_loop_on_deny: true and an auto-rejecting permission
-        // handler, every rejection lands the retry in a NEW assistant message,
-        // so the per-message doom loop scan never accumulated and the model
-        // could ping-pong against the same denied call forever. The
-        // cross-message guard asks doom_loop permission on the fourth
-        // identical attempt; the auto-rejecting handler rejects that too,
-        // which ends the loop instead of letting it run unbounded.
-        const { llm, dir } = yield* useServerConfig((url) => ({
-          ...providerCfg(url),
-          experimental: { continue_loop_on_deny: true },
-        }))
-        yield* autoRejectAsks()
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({
-          title: "DoomLoop",
-          permission: [{ permission: "bash", pattern: "*", action: "ask" }],
-        })
-        yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [{ type: "text", text: "run a command" }],
-        })
-        const call = { command: "rm -rf /tmp/doom-loop", workdir: dir, description: "Remove dir" }
-        for (let i = 0; i < 6; i++) yield* llm.tool("bash", call)
-        yield* llm.text("gave up")
-
-        const result = yield* prompt.loop({ sessionID: session.id })
-        expect(result.info.role).toBe("assistant")
-        // 3 rejected attempts; the 4th triggers the doom_loop ask, whose
-        // rejection errors the turn instead of looping through all 6 pushes.
-        expect(yield* llm.calls).toBe(4)
-        if (result.info.role === "assistant") {
-          expect(JSON.stringify(result.info.error)).toContain("rejected permission")
-        }
-      }),
-    ),
-  20_000,
-)
 
 unix(
   "rejected permission with feedback blocks loop by default",

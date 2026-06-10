@@ -514,28 +514,6 @@ export function parts(messageID: MessageID) {
   })
 }
 
-/**
- * Most recent parts of a session across all messages, oldest first. Part IDs
- * ascend globally within a session, so ordering by id is chronological.
- * Used by doom-loop detection, which must look across assistant messages:
- * a denied tool call ends the provider step, so the model's retry always
- * lands in a new assistant message and a per-message scan never sees it.
- */
-export function lastParts(input: { sessionID: SessionID; limit: number }) {
-  return Effect.gen(function* () {
-    const { db } = yield* Database.Service
-    const rows = yield* db
-      .select()
-      .from(PartTable)
-      .where(eq(PartTable.session_id, input.sessionID))
-      .orderBy(desc(PartTable.id))
-      .limit(input.limit)
-      .all()
-      .pipe(Effect.orDie)
-    return rows.map(part).reverse()
-  })
-}
-
 export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: SessionID; messageID: MessageID }) {
   const { db } = yield* Database.Service
   const row = yield* db

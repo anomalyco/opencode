@@ -335,13 +335,6 @@ export const layer = Layer.effect(
           Effect.catchCause((cause) => {
             const defect = Cause.squash(cause)
             error = defect instanceof Error ? defect : new Error(String(defect))
-            if (
-              defect instanceof PermissionV1.RejectedError ||
-              defect instanceof PermissionV1.CorrectedError ||
-              defect instanceof PermissionV1.DeniedError
-            ) {
-              return Effect.logInfo("subtask permission denied", { agent: task.agent, description: task.description })
-            }
             return Effect.logError("subtask execution failed", {
               error,
               agent: task.agent,
