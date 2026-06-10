@@ -15,24 +15,54 @@
  *      The `model` passed to ops.prompt equals the parsed { providerID, modelID }, and
  *      `variant` becomes undefined (treated like an explicit agent-model override). The
  *      override beats the subagent's OWN configured model, not just parent inheritance.
- *   3. model = unknown provider OR unknown model → Provider.getModel raises
- *      ModelNotFoundError; the tool FAILS with a clear, actionable error whose message
- *      contains the offending "providerID/modelID". ops.prompt is never called and NO
+ *   --- DIFFERENTIATED failure messages (replaces the single generic "Invalid task model
+ *       …: expected \"providerID/modelID\" naming a known provider and model." string). A
+ *       failed override surfaces exactly ONE of three messages, chosen by the impl from the
+ *       FAILURE SHAPE, never by matching on message substrings:
+ *
+ *       (A) FORMAT — malformed input caught by the LOCAL format guard BEFORE any provider
+ *           lookup: no-slash (parseModel yields an empty modelID), empty string, empty
+ *           segment ("anthropic/"), or a prototype-chain key ("anthropic/__proto__",
+ *           "__proto__/x", "anthropic/toString", "anthropic/valueOf"). Message:
+ *             Invalid task model "<requested>": expected "provider/model" format, e.g. "anthropic/claude-sonnet-4".
+ *           Contains "format"; must NOT read as "unavailable"; must NOT leak a raw
+ *           "Cannot read properties of undefined" TypeError. The guard uses a
+ *           prototype-membership check (`segment in {}`), so inherited members like
+ *           toString/valueOf are rejected too — a fixed denylist is insufficient.
+ *
+ *       (B) UNAVAILABLE provider — a WELL-FORMED string whose providerID is NOT among the
+ *           configured providers (Provider.list() membership). getModel raises
+ *           ModelNotFoundError; the impl confirms the providerID is ABSENT from list() and
+ *           emits:
+ *             Model unavailable: provider "<providerID>" is not configured.
+ *           plus, when the error carries suggestions, ` Did you mean: <s1, s2, …>?`.
+ *           Contains "is not configured" + the provider name + suggestion names; NOT "format".
+ *
+ *       (C) UNAVAILABLE model — a WELL-FORMED string whose providerID IS configured
+ *           (PRESENT in Provider.list()) but whose modelID is missing. getModel raises
+ *           ModelNotFoundError; the impl confirms the providerID is PRESENT in list() and
+ *           emits:
+ *             Model unavailable: model "<modelID>" is not available for provider "<providerID>".
+ *           plus the same ` Did you mean: <s1, s2, …>?` suggestions clause. Contains
+ *           "is not available for provider" + the model + provider names + suggestion names.
+ *
+ *       Discrimination is by the ModelNotFoundError TAG ("ProviderModelNotFoundError") plus
+ *       Provider.list() membership on the impl side — NOT by message substrings. Tests
+ *       assert only the user-facing message TEXT (the contract the user sees).
+ *
+ *   3. model = unknown provider (well-formed) → case (B). ops.prompt is never called and NO
  *      child subagent session is created (validation short-circuits before spawning).
- *   4. model = malformed string with no "/" → FAIL with a clear error mentioning the bad
- *      string. No silent fallthrough to the inherited model.
- *   5. model = "" (empty string) → FAIL with a clear error. Empty is NOT treated as
- *      "omitted": the gate is `params.model !== undefined`, not a truthiness check, so an
- *      empty string never silently inherits. ops.prompt is never called.
- *   6. model = prototype-polluting key, e.g. "anthropic/__proto__" or "__proto__/x", OR an
- *      inherited Object.prototype method name as the modelID, e.g. "anthropic/toString" or
- *      "anthropic/valueOf" (valid provider + a method reachable only via the prototype
- *      chain) → FAIL with a clear, actionable error naming the offending value. Must NOT
- *      bypass validation (treating an inherited Object.prototype member as a "found" model)
- *      and must NOT surface a raw "Cannot read properties of undefined" TypeError.
- *      ops.prompt is never called and NO child session is created. A denylist of specific
- *      keys is insufficient — validation must use a prototype-membership check (own-property
- *      lookup) so inherited members like toString/valueOf are rejected too.
+ *   4. model = unknown model in a KNOWN provider (well-formed) → case (C). ops.prompt is
+ *      never called and NO child session is created.
+ *   5. model = malformed string with no "/", "" (empty string), or empty segment → case (A).
+ *      Empty is NOT treated as "omitted": the gate is `params.model !== undefined`, not a
+ *      truthiness check, so an empty string never silently inherits. ops.prompt is never
+ *      called.
+ *   6. model = prototype-polluting key ("anthropic/__proto__", "__proto__/x") OR an inherited
+ *      Object.prototype method name as the modelID ("anthropic/toString", "anthropic/valueOf")
+ *      → case (A). Must NOT bypass validation (treating an inherited Object.prototype member
+ *      as a "found" model) and must NOT surface a raw "Cannot read properties of undefined"
+ *      TypeError. ops.prompt is never called and NO child session is created.
  *   7. model = VALID multi-slash modelID, e.g. "openrouter/anthropic/claude-3.5" →
  *      providerID is the FIRST segment ("openrouter"); modelID is the remainder joined
  *      back with "/" ("anthropic/claude-3.5"). Resolves and is passed through to ops.prompt
@@ -45,8 +75,14 @@
  *     and BEFORE ops.prompt — a failed validation must short-circuit so neither happens.
  *   - The error message must surface the user-supplied model string for actionability,
  *     including for prototype-polluting keys (no raw TypeError leakage).
+ *   - Case (B) vs (C) is decided by Provider.list() membership of the parsed providerID, NOT
+ *     by inspecting the ModelNotFoundError fields or message text. The mock harness therefore
+ *     EXCLUDES the case-(B) providerID from list() and INCLUDES the case-(C) providerID.
+ *   - ModelNotFoundError raised for cases (B)/(C) must carry a NON-EMPTY `suggestions` array
+ *     (real strings) so the ` Did you mean: …?` clause is exercised — an empty array is an
+ *     assertion vacuum.
  *
- * @helpers Provider.parseModel, Provider.getModel, Provider.ModelNotFoundError
+ * @helpers Provider.parseModel, Provider.getModel, Provider.list, Provider.ModelNotFoundError
  * @see src/provider/provider.ts (getModel record lookup: provider.ts:1747-1768;
  *      parseModel split-on-"/": provider.ts:1944)
  */
@@ -141,17 +177,51 @@ const knownModels: Record<string, { models: Record<string, Provider.Model> }> = 
   },
 }
 
-// Mirror Provider.getModel (provider.ts:1747-1768): a missing provider OR a missing
-// model raises ModelNotFoundError; whatever the records resolve is treated as a found
-// model — including anything reachable via the prototype chain. The record lookups are
-// deliberately unguarded so prototype-polluting keys behave as they do in production.
+// Real, NON-EMPTY suggestion strings the mock attaches to ModelNotFoundError. The impl
+// surfaces these in the " Did you mean: …?" clause; tests assert their presence by name.
+// Leaving these empty/undefined would make the suggestion assertions vacuous.
+const providerSuggestions = ["anthropic", "openrouter"]
+const modelSuggestions = ["claude-sonnet-4", "claude-haiku-4"]
+
+// What resolver.list() reports as CONFIGURED. The impl discriminates UNAVAILABLE case B
+// (provider ABSENT here → "provider … is not configured") from case C (provider PRESENT
+// here but the model missing → "model … is not available for provider …") by list()
+// MEMBERSHIP — not by message substrings. So "anthropic"/"openrouter" are present (case C
+// source: e.g. "anthropic/ghost-model") and "bogus" is absent (case B source).
+const configuredProviders: Record<ProviderV2.ID, Provider.Info> = {
+  [overrideRef.providerID]: ProviderTest.info(
+    { id: overrideRef.providerID },
+    knownModels.anthropic.models[overrideRef.modelID],
+  ),
+  [multiSlashRef.providerID]: ProviderTest.info(
+    { id: multiSlashRef.providerID },
+    knownModels.openrouter.models[multiSlashRef.modelID],
+  ),
+}
+
+// Mirror Provider.getModel (provider.ts:1747-1768): a missing provider OR a missing model
+// raises a REAL ModelNotFoundError (tag "ProviderModelNotFoundError") carrying a NON-EMPTY
+// suggestions array; whatever the records resolve is treated as a found model — including
+// anything reachable via the prototype chain. The record lookups are deliberately unguarded
+// so prototype-polluting keys behave as they do in production (they never reach here anyway:
+// the impl's local format guard rejects them first — case A). `list()` returns the configured
+// providers so the impl can tell case B (absent) from case C (present) by membership.
 const providerMock = Layer.mock(Provider.Service)({
+  list: () => Effect.succeed(configuredProviders),
   getModel: (providerID, modelID) =>
     Effect.gen(function* () {
       const provider = knownModels[providerID]
-      if (!provider) return yield* Effect.fail(new Provider.ModelNotFoundError({ providerID, modelID, suggestions: [] }))
+      // Case B source: provider not in the catalog → suggest known provider names.
+      if (!provider)
+        return yield* Effect.fail(
+          new Provider.ModelNotFoundError({ providerID, modelID, suggestions: providerSuggestions }),
+        )
       const info = provider.models[modelID]
-      if (!info) return yield* Effect.fail(new Provider.ModelNotFoundError({ providerID, modelID, suggestions: [] }))
+      // Case C source: provider known, model missing → suggest known model names.
+      if (!info)
+        return yield* Effect.fail(
+          new Provider.ModelNotFoundError({ providerID, modelID, suggestions: modelSuggestions }),
+        )
       return info
     }),
 })
@@ -1074,10 +1144,12 @@ describe("tool.task model override", () => {
     }),
   )
 
-  // Behavior 3 — a well-formed "providerID/modelID" that Provider.getModel rejects fails
-  // the tool with a clear, actionable error mentioning the offending model; ops.prompt is
-  // never called.
-  withModel.instance("unknown model param fails with an actionable error", () =>
+  // Case B — UNAVAILABLE provider. A well-formed "providerID/modelID" whose providerID is
+  // NOT among the configured providers (resolver.list()). getModel raises a real
+  // ModelNotFoundError; the impl, seeing the providerID ABSENT from list(), surfaces the
+  // "provider … is not configured" message plus a " Did you mean: …?" suggestion clause.
+  // It is NOT a FORMAT error (the string is well-formed).
+  withModel.instance("unavailable provider fails with a 'not configured' message and suggestions", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
@@ -1107,15 +1179,63 @@ describe("tool.task model override", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
-      expect(rendered).toContain("Invalid task model")
-      expect(rendered).toContain("bogus/does-not-exist")
+      expect(rendered).toContain("is not configured")
+      expect(rendered).toContain("bogus")
+      expect(rendered).toContain("Did you mean")
+      for (const suggestion of providerSuggestions) expect(rendered).toContain(suggestion)
+      expect(rendered).not.toContain("format")
       expect(prompted).toBe(false)
     }),
   )
 
-  // Behavior 4 — a string with no "/" fails with a clear error mentioning the bad value —
-  // no silent fallthrough to the inherited model.
-  withModel.instance("malformed model param without a slash fails clearly", () =>
+  // Case C — UNAVAILABLE model in a KNOWN provider. "anthropic" IS configured (present in
+  // resolver.list()), but "ghost-model" is not one of its models. getModel raises a real
+  // ModelNotFoundError; the impl, seeing the providerID PRESENT in list(), surfaces the
+  // "model … is not available for provider …" message plus a " Did you mean: …?" clause.
+  withModel.instance("unavailable model in a known provider fails with a model-level message and suggestions", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "anthropic/ghost-model",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("is not available for provider")
+      expect(rendered).toContain("ghost-model")
+      expect(rendered).toContain("anthropic")
+      expect(rendered).toContain("Did you mean")
+      for (const suggestion of modelSuggestions) expect(rendered).toContain(suggestion)
+      expect(rendered).not.toContain("format")
+      expect(prompted).toBe(false)
+    }),
+  )
+
+  // Case A — FORMAT error. A string with no "/" makes parseModel yield an empty modelID,
+  // caught by the LOCAL format guard BEFORE any provider lookup. The message names the bad
+  // value and the expected "provider/model" format; it must NOT read as "unavailable".
+  withModel.instance("malformed model without a slash fails with a FORMAT error", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
@@ -1145,16 +1265,17 @@ describe("tool.task model override", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
-      expect(rendered).toContain("Invalid task model")
-      expect(rendered).toContain("not-a-valid-model")
+      expect(rendered).toContain('Invalid task model "not-a-valid-model"')
+      expect(rendered).toContain("format")
+      expect(rendered).not.toContain("unavailable")
       expect(prompted).toBe(false)
     }),
   )
 
-  // Behavior 5 (M1) — the gate is `params.model !== undefined`, so an empty string counts
-  // as PRESENT: it validates and fails rather than silently inheriting, and ops.prompt is
-  // never called.
-  withModel.instance("empty-string model param fails instead of silently inheriting", () =>
+  // Case A (M1) — the gate is `params.model !== undefined`, so an empty string counts as
+  // PRESENT: it hits the FORMAT guard (empty segments) and fails rather than silently
+  // inheriting. ops.prompt is never called.
+  withModel.instance("empty-string model fails with a FORMAT error instead of inheriting", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
@@ -1184,7 +1305,48 @@ describe("tool.task model override", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
-      expect(rendered).toContain("Invalid task model")
+      expect(rendered).toContain("format")
+      expect(rendered).not.toContain("unavailable")
+      expect(prompted).toBe(false)
+    }),
+  )
+
+  // Case A — FORMAT error. An empty trailing segment ("anthropic/") leaves modelID empty;
+  // the format guard rejects it BEFORE any provider lookup, even though "anthropic" is a
+  // configured provider. This is a FORMAT failure, not an UNAVAILABLE one.
+  withModel.instance("empty-segment model (anthropic/) fails with a FORMAT error", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "anthropic/",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain('Invalid task model "anthropic/"')
+      expect(rendered).toContain("format")
+      expect(rendered).not.toContain("unavailable")
       expect(prompted).toBe(false)
     }),
   )
@@ -1225,6 +1387,8 @@ describe("tool.task model override", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
       expect(rendered).toContain("anthropic/__proto__")
+      expect(rendered).toContain("format")
+      expect(rendered).not.toContain("unavailable")
       expect(prompted).toBe(false)
     }),
   )
@@ -1265,6 +1429,8 @@ describe("tool.task model override", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
       expect(rendered).toContain("__proto__/x")
+      expect(rendered).toContain("format")
+      expect(rendered).not.toContain("unavailable")
       expect(rendered).not.toContain("Cannot read properties of undefined")
       expect(prompted).toBe(false)
     }),
@@ -1438,6 +1604,8 @@ describe("tool.task model override", () => {
           expect(Exit.isFailure(exit)).toBe(true)
           const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
           expect(rendered).toContain("Invalid task model")
+          expect(rendered).toContain("format")
+          expect(rendered).not.toContain("unavailable")
           expect(rendered).toContain(`anthropic/${inherited}`)
           expect(prompted).toBe(false)
           // A bypassed validation would spawn an orphan child — assert zero directly.
@@ -1446,4 +1614,44 @@ describe("tool.task model override", () => {
         }),
     )
   }
+
+  // GREEN no-regression — a VALID override still routes to ops.prompt AND creates the child
+  // subagent session. Differentiating the FAILURE messages (cases A/B/C) must not regress
+  // the happy path: the parsed { providerID, modelID } reaches ops.prompt and exactly one
+  // child session is spawned under the parent.
+  withModel.instance("valid model override routes to ops.prompt and creates the child session", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "anthropic/claude-sonnet-4",
+      }
+
+      const result = yield* def.execute(params, {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
+
+      // Routed to ops.prompt with the parsed override model.
+      expect(seen?.model).toEqual(overrideRef)
+      // And a single child subagent session was created under the parent.
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(1)
+      expect(kids[0]?.id).toBe(result.metadata.sessionId)
+    }),
+  )
 })

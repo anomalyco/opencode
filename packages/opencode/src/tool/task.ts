@@ -143,35 +143,46 @@ export const TaskTool = Tool.define(
                   new Error(`Cannot resolve task model "${requested}": the provider service is unavailable.`),
                 )
               const parsed = Provider.parseModel(requested)
-              // Reject empty segments and prototype-polluting keys BEFORE any provider
-              // lookup. An unguarded record index on these keys would otherwise resolve
-              // Object.prototype as a "found" model, or throw a raw TypeError that leaks
-              // "Cannot read properties of undefined" instead of an actionable error.
-              const unsafe = (segment: string) => segment === "" || segment in {}
-              if (unsafe(parsed.providerID) || unsafe(parsed.modelID))
-                return yield* Effect.fail(
-                  new Error(
-                    `Invalid task model "${requested}": expected "providerID/modelID" naming a known provider and model.`,
-                  ),
+              // FORMAT guard (case A): reject empty segments and prototype-polluting keys
+              // BEFORE any provider lookup. An unguarded record index on these keys would
+              // otherwise resolve Object.prototype as a "found" model, or throw a raw
+              // TypeError that leaks "Cannot read properties of undefined" instead of an
+              // actionable error. `segment in {}` rejects inherited members (toString,
+              // valueOf, __proto__) too — a fixed denylist is insufficient.
+              const formatError = () =>
+                new Error(
+                  `Invalid task model "${requested}": expected "provider/model" format, e.g. "anthropic/claude-sonnet-4".`,
                 )
+              const unsafe = (segment: string) => segment === "" || segment in {}
+              if (unsafe(parsed.providerID) || unsafe(parsed.modelID)) return yield* Effect.fail(formatError())
               yield* resolver.getModel(parsed.providerID, parsed.modelID).pipe(
-                Effect.mapError(
-                  () =>
-                    new Error(
-                      `Invalid task model "${requested}": expected "providerID/modelID" naming a known provider and model.`,
-                    ),
+                // UNAVAILABLE (cases B/C): the well-formed string named a provider/model
+                // the resolver could not find. Discriminate by list() membership of the
+                // parsed providerID — ABSENT → case B (provider not configured), PRESENT
+                // → case C (model missing for a known provider) — never by message text.
+                Effect.catchTag("ProviderModelNotFoundError", (error) =>
+                  Effect.gen(function* () {
+                    const configured = yield* resolver.list()
+                    const suffix =
+                      error.suggestions && error.suggestions.length
+                        ? ` Did you mean: ${error.suggestions.join(", ")}?`
+                        : ""
+                    if (Object.hasOwn(configured, parsed.providerID))
+                      return yield* Effect.fail(
+                        new Error(
+                          `Model unavailable: model "${parsed.modelID}" is not available for provider "${parsed.providerID}".${suffix}`,
+                        ),
+                      )
+                    return yield* Effect.fail(
+                      new Error(`Model unavailable: provider "${parsed.providerID}" is not configured.${suffix}`),
+                    )
+                  }),
                 ),
-                // Defensive: the local guard above should make this unreachable, but a
-                // raw DEFECT (e.g. a TypeError from unguarded record indexing) is NOT
-                // caught by mapError. Convert any defect to the same actionable error so
-                // no raw "Cannot read properties of undefined" can leak.
-                Effect.catchDefect(() =>
-                  Effect.fail(
-                    new Error(
-                      `Invalid task model "${requested}": expected "providerID/modelID" naming a known provider and model.`,
-                    ),
-                  ),
-                ),
+                // Defensive: the FORMAT guard above should make this unreachable, but a raw
+                // DEFECT (e.g. a TypeError from unguarded record indexing) is NOT caught by
+                // catchTag. Convert any defect to the FORMAT error so no raw "Cannot read
+                // properties of undefined" can leak.
+                Effect.catchDefect(() => Effect.fail(formatError())),
               )
               return parsed
             })
