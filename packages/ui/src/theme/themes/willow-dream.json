@@ -1,0 +1,49 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Willow Dream",
+  "id": "willow-dream",
+  "light": {
+    "palette": {
+      "neutral": "#f1f1f1",
+      "ink": "#022f27",
+      "primary": "#dd6258",
+      "accent": "#a5d5fe",
+      "success": "#b4fa72",
+      "warning": "#fefdc2",
+      "error": "#dd6258",
+      "info": "#a5d5fe",
+      "diffAdd": "#b4fa72",
+      "diffDelete": "#dd6258"
+    },
+    "overrides": {
+      "syntax-comment": "#616161",
+      "syntax-keyword": "#dd6258",
+      "syntax-string": "#b4fa72",
+      "syntax-primitive": "#206169",
+      "syntax-property": "#022f27",
+      "syntax-constant": "#d0d1fe"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#022f27",
+      "ink": "#f1f1f1",
+      "primary": "#f9aea8",
+      "accent": "#f9aea8",
+      "success": "#b4fa72",
+      "warning": "#fefdc2",
+      "error": "#dd6258",
+      "info": "#a5d5fe",
+      "diffAdd": "#b4fa72",
+      "diffDelete": "#dd6258"
+    },
+    "overrides": {
+      "syntax-comment": "#8e8e8e",
+      "syntax-keyword": "#f9aea8",
+      "syntax-string": "#b4fa72",
+      "syntax-primitive": "#a5d5fe",
+      "syntax-property": "#a5d5fe",
+      "syntax-constant": "#d0d1fe"
+    }
+  }
+}
