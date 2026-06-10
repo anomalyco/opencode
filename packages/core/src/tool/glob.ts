@@ -1,13 +1,14 @@
 export * as GlobTool from "./glob"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import { Effect, Layer, Schema } from "effect"
 import path from "path"
+import { Effect, Layer, Schema } from "effect"
 import { FileSystem } from "../filesystem"
+import { FSUtil } from "../fs-util"
 import { Location } from "../location"
-import { Ripgrep } from "../ripgrep"
-import { RelativePath } from "../schema"
 import { PermissionV2 } from "../permission"
+import { AbsolutePath, RelativePath } from "../schema"
+import { Ripgrep } from "../ripgrep"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -70,12 +71,14 @@ export const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
-              const cwd = path.resolve(location.directory, input.path ?? ".")
+              const searchRoot = path.resolve(location.directory, input.path ?? ".")
+              if (!FSUtil.contains(location.directory, searchRoot))
+                return yield* Effect.fail(new ToolFailure({ message: `Search path escapes the allowed root: ${searchRoot}` }))
               return yield* ripgrep
                 .glob({
-                  cwd,
+                  cwd: searchRoot,
                   pattern: input.pattern,
-                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                  limit: input.limit ?? 100,
                 })
                 .pipe(
                   Effect.map((result) =>
@@ -83,7 +86,7 @@ export const layer = Layer.effectDiscard(
                       (entry) =>
                         new FileSystem.Entry({
                           ...entry,
-                          path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                          path: RelativePath.make(path.relative(location.directory, path.resolve(searchRoot, entry.path))),
                         }),
                     ),
                   ),

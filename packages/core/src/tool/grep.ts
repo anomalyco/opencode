@@ -90,15 +90,17 @@ export const layer = Layer.effectDiscard(
                 agent: context.agent,
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
-              const target = path.resolve(location.directory, input.path ?? ".")
-              const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              const searchRoot = path.resolve(location.directory, input.path ?? ".")
+              if (!FSUtil.contains(location.directory, searchRoot))
+                return yield* Effect.fail(new ToolFailure({ message: `Search path escapes the allowed root: ${searchRoot}` }))
+              const info = yield* fs.stat(searchRoot).pipe(Effect.catch(() => Effect.succeed(undefined)))
               return yield* ripgrep
                 .grep({
-                  cwd: info?.type === "Directory" ? target : path.dirname(target),
+                  cwd: info?.type === "Directory" ? searchRoot : path.dirname(searchRoot),
                   pattern: input.pattern,
-                  file: info?.type === "File" ? path.basename(target) : undefined,
+                  file: info?.type === "File" ? path.basename(searchRoot) : undefined,
                   include: input.include,
-                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                  limit: input.limit ?? 100,
                 })
                 .pipe(
                   Effect.map((result) =>
@@ -112,7 +114,7 @@ export const layer = Layer.effectDiscard(
                               path.relative(
                                 location.directory,
                                 path.resolve(
-                                  info?.type === "Directory" ? target : path.dirname(target),
+                                  info?.type === "Directory" ? searchRoot : path.dirname(searchRoot),
                                   match.entry.path,
                                 ),
                               ),
