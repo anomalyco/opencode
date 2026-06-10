@@ -22,10 +22,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import * as Log from "@opencode-ai/core/util/log"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
-
-void Log.init({ print: false })
 
 const it = testEffect(Layer.mergeAll(Session.defaultLayer, Storage.defaultLayer, httpApiLayer))
 
