@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { filterResponseFrame } from "@opencode-ai/core/util/sse"
 
 const log = Log.create({ service: "provider" })
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
@@ -1689,8 +1690,10 @@ export const layer = Layer.effect(
         const customFetch = options["fetch"]
         const chunkTimeout = options["chunkTimeout"]
         const headerTimeout = options["headerTimeout"]
+        const filterSseFrame: string[] | undefined = options["filterSseFrame"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
+        delete options["filterSseFrame"]
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
@@ -1735,37 +1738,16 @@ export const layer = Layer.effect(
             timeout: false,
           }).finally(() => headerTimeoutCtl?.clear())
 
-          // Filter out synthetic `chatcmpl-dummy` SSE frames that some
+          // Filter out synthetic SSE frames that some
           // OpenAI-compatible proxies emit before the real Responses API events.
-          if (res.ok && res.body) {
+          if (filterSseFrame?.length) {
             const url = typeof input === "string" ? input : input instanceof Request ? input.url : ""
-            if (url.includes("/responses") && res.headers.get("content-type")?.includes("text/event-stream")) {
-              const filtered = res.body.pipeThrough(
-                new TransformStream({
-                  decoder: new TextDecoder(),
-                  encoder: new TextEncoder(),
-                  buffer: "",
-                  transform(chunk, controller) {
-                    this.buffer += this.decoder.decode(chunk, { stream: true })
-                    const parts = this.buffer.split("\n\n")
-                    this.buffer = parts.pop() ?? ""
-                    for (const part of parts) {
-                      const dataLine = part.startsWith("data:") ? part.slice(5).trim() : ""
-                      const skip = dataLine && (() => {
-                        try { return JSON.parse(dataLine)?.id === "chatcmpl-dummy" }
-                        catch { return false }
-                      })()
-                      if (!skip) controller.enqueue(this.encoder.encode(part + "\n\n"))
-                    }
-                  },
-                  flush(controller) {
-                    if (this.buffer) controller.enqueue(this.encoder.encode(this.buffer))
-                  },
-                }),
-              )
-              const filteredRes = new Response(filtered, res)
-              if (!chunkAbortCtl) return filteredRes
-              return wrapSSE(filteredRes, chunkTimeout, chunkAbortCtl)
+            if (url.includes("/responses")) {
+              const filtered = filterResponseFrame(res, filterSseFrame)
+              if (filtered) {
+                if (!chunkAbortCtl) return filtered
+                return wrapSSE(filtered, chunkTimeout, chunkAbortCtl)
+              }
             }
           }
 

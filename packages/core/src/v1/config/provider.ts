@@ -112,6 +112,12 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        filterSseFrame: Schema.optional(
+          Schema.mutable(Schema.Array(Schema.String)),
+        ).annotate({
+          description:
+            "List of SSE event id values to filter out from streaming responses. Used to skip synthetic frames from OpenAI-compatible proxies.",
+        }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),

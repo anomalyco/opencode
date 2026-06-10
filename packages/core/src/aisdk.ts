@@ -6,6 +6,7 @@ import { ModelV2 } from "./model"
 import { EventV2 } from "./event"
 import { PluginV2 } from "./plugin"
 import { ProviderV2 } from "./provider"
+import { filterResponseFrame } from "./util/sse"
 
 type SDK = any
 
@@ -67,7 +68,9 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
 
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
+  const filterSseFrame: string[] | undefined = options.filterSseFrame
   delete options.chunkTimeout
+  delete options.filterSseFrame
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     const signals = [
@@ -100,6 +103,18 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
       ...opts,
       timeout: false,
     })
+
+    if (filterSseFrame?.length) {
+      const url = typeof input === "string" ? input : input instanceof Request ? input.url : ""
+      if (url.includes("/responses")) {
+        const filtered = filterResponseFrame(res, filterSseFrame)
+        if (filtered) {
+          if (!chunkAbortCtl || typeof chunkTimeout !== "number") return filtered
+          return wrapSSE(filtered, chunkTimeout, chunkAbortCtl)
+        }
+      }
+    }
+
     if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
     return wrapSSE(res, chunkTimeout, chunkAbortCtl)
   }
