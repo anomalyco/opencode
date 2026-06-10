@@ -1,0 +1,94 @@
+import { Database } from "bun:sqlite"
+import {
+  ExperimentStages,
+  ExperimentStatuses,
+  OverfitRisks,
+  type ExperimentRow,
+  type ExperimentStage,
+  type ExperimentStatus,
+  type OverfitRisk,
+} from "./types"
+
+export type StoreExperimentInput = {
+  title: string
+  symbol: string
+  timeframe: string
+  strategy: string
+  hypothesis: string
+  implementation_summary: string
+  test_conditions_json: string
+  metrics_json: string
+  result_status: ExperimentStatus
+  stage: ExperimentStage
+  overfit_risk: OverfitRisk
+}
+
+export type UpdateExperimentResultInput = {
+  metrics_json: string
+  result_status: ExperimentStatus
+  overfit_risk: OverfitRisk
+}
+
+export function storeExperiment(db: Database, input: StoreExperimentInput) {
+  validateExperimentEnums(input)
+  const id = crypto.randomUUID()
+  const now = Date.now()
+  db.query(
+    "insert into experiment (id, title, symbol, timeframe, strategy, hypothesis, implementation_summary, test_conditions_json, metrics_json, result_status, stage, overfit_risk, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(
+    id,
+    requireText(input.title, "title"),
+    requireText(input.symbol, "symbol"),
+    requireText(input.timeframe, "timeframe"),
+    requireText(input.strategy, "strategy"),
+    requireText(input.hypothesis, "hypothesis"),
+    requireText(input.implementation_summary, "implementation_summary"),
+    requireJsonObject(input.test_conditions_json, "test_conditions_json"),
+    requireJsonObject(input.metrics_json, "metrics_json"),
+    input.result_status,
+    input.stage,
+    input.overfit_risk,
+    now,
+    now,
+  )
+  return getExperiment(db, id)
+}
+
+export function updateExperimentResult(db: Database, id: string, input: UpdateExperimentResultInput) {
+  if (!ExperimentStatuses.includes(input.result_status)) throw new Error("invalid result_status")
+  if (!OverfitRisks.includes(input.overfit_risk)) throw new Error("invalid overfit_risk")
+  db.query("update experiment set metrics_json = ?, result_status = ?, overfit_risk = ?, updated_at = ? where id = ?").run(
+    requireJsonObject(input.metrics_json, "metrics_json"),
+    input.result_status,
+    input.overfit_risk,
+    Date.now(),
+    requireText(id, "id"),
+  )
+  return getExperiment(db, id)
+}
+
+function getExperiment(db: Database, id: string) {
+  const row = db.query<ExperimentRow, [string]>("select * from experiment where id = ? limit 1").get(id)
+  if (!row) throw new Error(`experiment not found: ${id}`)
+  return row
+}
+
+function validateExperimentEnums(input: StoreExperimentInput) {
+  if (!ExperimentStatuses.includes(input.result_status)) throw new Error("invalid result_status")
+  if (!ExperimentStages.includes(input.stage)) throw new Error("invalid stage")
+  if (!OverfitRisks.includes(input.overfit_risk)) throw new Error("invalid overfit_risk")
+}
+
+function requireText(input: string, field: string) {
+  const value = input.trim()
+  if (!value) throw new Error(`${field} must not be empty`)
+  return value
+}
+
+function requireJsonObject(input: string, field: string) {
+  const value = input.trim()
+  if (!value) throw new Error(`${field} must not be empty`)
+  const decoded = JSON.parse(value)
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error(`${field} must be a JSON object`)
+  return value
+}
