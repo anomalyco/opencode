@@ -126,11 +126,12 @@ export const EditTool = Tool.define(
               const source = yield* Bom.readFile(afs, filePath)
               contentOld = source.text
 
-              const ending = detectLineEnding(contentOld)
-              const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
-              const replacement = convertToLineEnding(normalizeLineEndings(params.newString), ending)
+              const normalized = contentOld.normalize("NFC")
+              const ending = detectLineEnding(normalized)
+              const old = convertToLineEnding(normalizeLineEndings(params.oldString.normalize("NFC")), ending)
+              const replacement = convertToLineEnding(normalizeLineEndings(params.newString.normalize("NFC")), ending)
 
-              const next = Bom.split(replace(contentOld, old, replacement, params.replaceAll))
+              const next = Bom.split(replace(normalized, old, replacement, params.replaceAll))
               const desiredBom = source.bom || next.bom
               contentNew = next.text
 
@@ -732,6 +733,5 @@ function isDisproportionateMatch(search: string, oldString: string) {
   const oldLines = oldString.split("\n").length
   const searchLines = search.split("\n").length
   if (searchLines >= Math.max(oldLines + 3, oldLines * 2)) return true
-  if (oldLines === 1) return false
   return search.trim().length > Math.max(oldString.trim().length + 500, oldString.trim().length * 4)
 }

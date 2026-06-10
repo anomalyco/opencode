@@ -116,9 +116,16 @@ export const layer = Layer.effect(
       }
     })
 
+    const devicePath = (p: string) => {
+      if (process.platform !== "win32") return /^\/dev\//.test(p)
+      const normalized = p.replace(/\\/g, "/").toLowerCase()
+      return normalized.startsWith("//./") || normalized.startsWith("\\\\.\\")
+    }
+
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
       const relative = !path.isAbsolute(input.path)
       const absolute = path.resolve(location.directory, input.path)
+      if (devicePath(absolute)) return yield* new PathError({ path: input.path, reason: "relative_escape" })
       const lexicallyInternal = FSUtil.contains(location.directory, absolute)
       if (relative && !lexicallyInternal) return yield* new PathError({ path: input.path, reason: "relative_escape" })
 

@@ -158,8 +158,9 @@ export const layer = Layer.effectDiscard(
                   }),
                 )
                 const source = decodeUtf8(yield* unableToEdit(fs.readFile(target.canonical)))
-                const ending = detectLineEnding(source.text)
-                const oldString = convertToLineEnding(input.oldString, ending)
+                const normalized = source.text.normalize("NFC")
+                const ending = detectLineEnding(normalized)
+                const oldString = convertToLineEnding(input.oldString.normalize("NFC"), ending)
                 const newString = convertToLineEnding(input.newString, ending)
                 const replacements = countOccurrences(source.text, oldString)
                 if (replacements === 0) {
