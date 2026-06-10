@@ -39,7 +39,7 @@ export const toModelOutput = (
         `"${question.question}"="${answers[index]?.length ? answers[index].join(", ") : "Unanswered"}"`,
     )
     .join(", ")
-  return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`
+  return `[ANSWERS FROM QUESTION TOOL - NOT FILE CONTENT] User has answered your questions: ${formatted}.`
 }
 
 export const layer = Layer.effectDiscard(
