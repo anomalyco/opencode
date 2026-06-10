@@ -22,11 +22,7 @@ const FileSearchCommand = effectCmd({
       description: "Search query",
     }),
   handler: Effect.fn("Cli.debug.file.search")(function* (args) {
-    const results = yield* Effect.orDie(
-      filesystem(
-        FileSystem.Service.use((svc) => svc.find({ query: args.query })),
-      ),
-    )
+    const results = yield* Effect.orDie(filesystem(FileSystem.Service.use((svc) => svc.find({ query: args.query }))))
     process.stdout.write(results.map((item) => item.path).join(EOL) + EOL)
   }),
 })
@@ -65,10 +61,6 @@ export const FileCommand = cmd({
   command: "file",
   describe: "file system debugging utilities",
   builder: (yargs) =>
-    yargs
-      .command(FileReadCommand)
-      .command(FileListCommand)
-      .command(FileSearchCommand)
-      .demandCommand(),
+    yargs.command(FileReadCommand).command(FileListCommand).command(FileSearchCommand).demandCommand(),
   async handler() {},
 })

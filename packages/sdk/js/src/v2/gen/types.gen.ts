@@ -4129,7 +4129,6 @@ export type FileSystemContent = {
 
 export type FileSystemEntry = {
   path: string
-  uri: string
   type: "file" | "directory"
   mime: string
 }

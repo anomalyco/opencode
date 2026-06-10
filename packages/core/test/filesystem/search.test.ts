@@ -40,5 +40,4 @@ describe("Ripgrep", () => {
       }),
     ),
   )
-
 })

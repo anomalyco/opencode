@@ -279,6 +279,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Layer.merge(RipgrepBinary.defaultLayer, AppProcess.defaultLayer)),
-)
+export const defaultLayer = layer.pipe(Layer.provide(Layer.merge(RipgrepBinary.defaultLayer, AppProcess.defaultLayer)))

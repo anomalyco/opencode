@@ -25071,9 +25071,6 @@
           "path": {
             "type": "string"
           },
-          "uri": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": ["file", "directory"]
@@ -25082,7 +25079,7 @@
             "type": "string"
           }
         },
-        "required": ["path", "uri", "type", "mime"],
+        "required": ["path", "type", "mime"],
         "additionalProperties": false
       },
       "CommandV2Info": {

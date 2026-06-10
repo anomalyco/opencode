@@ -50,7 +50,9 @@ export const layer = Layer.effectDiscard(
           toModelOutput: ({ output }) => [
             {
               type: "text",
-              text: toModelOutput(output.map((entry) => ({ ...entry, path: path.resolve(location.directory, entry.path) }))),
+              text: toModelOutput(
+                output.map((entry) => ({ ...entry, path: path.resolve(location.directory, entry.path) })),
+              ),
             },
           ],
           execute: (input, context) =>
@@ -69,21 +71,23 @@ export const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               const cwd = path.resolve(location.directory, input.path ?? ".")
-              return yield* ripgrep.glob({
-                cwd,
-                pattern: input.pattern,
-                limit: input.limit ?? Number.MAX_SAFE_INTEGER,
-              }).pipe(
-                Effect.map((result) =>
-                  result.map(
-                    (entry) =>
-                      new FileSystem.Entry({
-                        ...entry,
-                        path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
-                      }),
+              return yield* ripgrep
+                .glob({
+                  cwd,
+                  pattern: input.pattern,
+                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                })
+                .pipe(
+                  Effect.map((result) =>
+                    result.map(
+                      (entry) =>
+                        new FileSystem.Entry({
+                          ...entry,
+                          path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                        }),
+                    ),
                   ),
-                ),
-              )
+                )
             }).pipe(
               Effect.mapError(() => new ToolFailure({ message: `Unable to find files matching ${input.pattern}` })),
             ),

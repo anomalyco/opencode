@@ -61,12 +61,18 @@ export namespace RipgrepBinary {
             "-Command",
             `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
           ])
-          if (result.code !== 0) throw new Error(result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`)
+          if (result.code !== 0)
+            throw new Error(
+              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+            )
         }
 
         if (config.extension === "tar.gz") {
           const result = yield* run("tar", ["-xzf", archive, "-C", dir])
-          if (result.code !== 0) throw new Error(result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`)
+          if (result.code !== 0)
+            throw new Error(
+              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+            )
         }
 
         const extracted = path.join(

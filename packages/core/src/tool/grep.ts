@@ -92,34 +92,37 @@ export const layer = Layer.effectDiscard(
               })
               const target = path.resolve(location.directory, input.path ?? ".")
               const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
-              return yield* ripgrep.grep({
-                cwd: info?.type === "Directory" ? target : path.dirname(target),
-                pattern: input.pattern,
-                file: info?.type === "File" ? path.basename(target) : undefined,
-                include: input.include,
-                limit: input.limit ?? Number.MAX_SAFE_INTEGER,
-              }).pipe(
-                Effect.map((result) =>
-                  result.map(
-                    (match) =>
-                      new FileSystem.Match({
-                        ...match,
-                        entry: new FileSystem.Entry({
-                          ...match.entry,
-                          path: RelativePath.make(
-                            path.relative(
-                              location.directory,
-                              path.resolve(info?.type === "Directory" ? target : path.dirname(target), match.entry.path),
+              return yield* ripgrep
+                .grep({
+                  cwd: info?.type === "Directory" ? target : path.dirname(target),
+                  pattern: input.pattern,
+                  file: info?.type === "File" ? path.basename(target) : undefined,
+                  include: input.include,
+                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                })
+                .pipe(
+                  Effect.map((result) =>
+                    result.map(
+                      (match) =>
+                        new FileSystem.Match({
+                          ...match,
+                          entry: new FileSystem.Entry({
+                            ...match.entry,
+                            path: RelativePath.make(
+                              path.relative(
+                                location.directory,
+                                path.resolve(
+                                  info?.type === "Directory" ? target : path.dirname(target),
+                                  match.entry.path,
+                                ),
+                              ),
                             ),
-                          ),
+                          }),
                         }),
-                      }),
+                    ),
                   ),
-                ),
-              )
-            }).pipe(
-              Effect.mapError(() => new ToolFailure({ message: `Unable to grep for ${input.pattern}` })),
-            ),
+                )
+            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to grep for ${input.pattern}` }))),
         }),
       })
       .pipe(Effect.orDie)
