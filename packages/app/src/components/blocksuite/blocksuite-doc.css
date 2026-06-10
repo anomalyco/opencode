@@ -43,6 +43,20 @@
   overflow-y: auto;
 }
 
+/* The drag preview (affine-drag-preview) and drop indicator are appended to affine-page-root as
+   absolutely positioned children. Their containing block is the scroll viewport, so dragging a
+   block downward extends the viewport's scrollable overflow and the scrollbar grows endlessly.
+   Make the root span the full content (min panel height) and clip it, so out-of-flow drag
+   elements can never enlarge the scroll area. */
+[data-component="prompt-doc"] affine-page-root {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 100%;
+  position: relative;
+  overflow: clip;
+}
+
 [data-component="prompt-doc"] .affine-page-root-block-container {
   width: 100%;
   max-width: none;
