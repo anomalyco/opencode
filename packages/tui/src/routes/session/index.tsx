@@ -978,11 +978,11 @@ export function Session() {
           )
 
           if (options.openWithoutSaving) {
-            // Just open in editor without saving
+            // Just open in editor without saving — use os.tmpdir() not user-configured temp dir
             await openEditor({
               renderer,
               value: transcript,
-              config: tuiConfig.editor,
+              config: { ...tuiConfig.editor, editor_temp_dir: undefined },
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
