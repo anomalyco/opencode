@@ -13,6 +13,8 @@ import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { ReviewFs } from "@/effect/review-fs-layer"
 import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
 import { forceEnableForAcp, reset, setClientWriteTextFileSupported } from "@/acp/review-mode"
@@ -154,22 +156,21 @@ describe("review mode tools", () => {
 // stage instead of writing to disk. The direct-tool tests above can pass even
 // when ToolRegistry injects the plain FSUtil layer, so this exercises the real
 // path that ACP prompts go through.
-const registryIt = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, Agent.defaultLayer))
+const registryIt = testEffect(
+  Layer.mergeAll(ToolRegistry.defaultLayer, CrossSpawnSpawner.defaultLayer).pipe(Layer.provide(Ripgrep.defaultLayer)),
+)
 
 describe("review mode via ToolRegistry", () => {
   registryIt.instance("edit staged through registry does not touch disk", () =>
     Effect.gen(function* () {
       enableReview()
       const test = yield* TestInstance
-      const agent = yield* Agent.Service
-      const build = yield* agent.get("build")
-      if (!build) throw new Error("build agent not found")
 
       const registry = yield* ToolRegistry.Service
       const tools = yield* registry.tools({
         providerID: ProviderV2.ID.opencode,
         modelID: ModelV2.ID.make("test"),
-        agent: build,
+        agent: { name: "build", mode: "primary", permission: [], options: {} },
       })
       const edit = tools.find((tool) => tool.id === "edit")
       if (!edit) throw new Error("edit tool not registered")
