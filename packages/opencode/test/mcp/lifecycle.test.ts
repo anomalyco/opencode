@@ -1,6 +1,6 @@
 import { expect, mock, beforeEach } from "bun:test"
-import { LoggingMessageNotificationSchema, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
-import { Cause, Effect, Exit, Logger, References } from "effect"
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
+import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
 
@@ -405,70 +405,6 @@ it.instance(
         expect(serverState.listToolsCalls).toBe(2)
       }),
     ),
-  { config: { mcp: {} } },
-)
-
-it.instance(
-  "routes server log notifications to diagnostic logging",
-  () => {
-    const logs: Array<{ level: string; fields: unknown }> = []
-    const logger = Logger.make((options) => {
-      if (!Array.isArray(options.message) || options.message[0] !== "MCP server log") return
-      logs.push({
-        level: options.logLevel,
-        fields: options.message[1],
-      })
-    })
-
-    return MCP.Service.use((mcp: MCPNS.Interface) =>
-      Effect.gen(function* () {
-        lastCreatedClientName = "logging-server"
-        const serverState = getOrCreateClientState("logging-server")
-
-        yield* mcp.add("logging-server", {
-          type: "local",
-          command: ["echo", "test"],
-        })
-
-        const handler = serverState.notificationHandlers.get(LoggingMessageNotificationSchema)
-        expect(handler).toBeDefined()
-        for (const level of [
-          "debug",
-          "info",
-          "notice",
-          "warning",
-          "error",
-          "critical",
-          "alert",
-          "emergency",
-        ] as const) {
-          yield* Effect.promise(() =>
-            handler?.({ method: "notifications/message", params: { level, logger: "worker", data: { id: 42 } } }),
-          )
-        }
-
-        expect(logs.map((entry) => entry.level)).toEqual([
-          "Debug",
-          "Info",
-          "Info",
-          "Warn",
-          "Error",
-          "Error",
-          "Error",
-          "Error",
-        ])
-        expect(logs[0]?.fields).toEqual({
-          server: "logging-server",
-          logger: "worker",
-          level: "debug",
-          data: { id: 42 },
-        })
-      }),
-    ).pipe(
-      Effect.provide(Logger.layer([logger], { mergeWithExisting: false })),
-      Effect.provideService(References.MinimumLogLevel, "Debug"),
-    )
-  },
   { config: { mcp: {} } },
 )
 

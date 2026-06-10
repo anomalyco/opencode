@@ -415,10 +415,20 @@ export const layer = Layer.effect(
 
     function serverLog(name: string, params: LoggingMessageNotification["params"]) {
       const fields = { server: name, logger: params.logger, level: params.level, data: params.data }
-      if (params.level === "debug") return Effect.logDebug("MCP server log", fields)
-      if (params.level === "info" || params.level === "notice") return Effect.logInfo("MCP server log", fields)
-      if (params.level === "warning") return Effect.logWarning("MCP server log", fields)
-      return Effect.logError("MCP server log", fields)
+      switch (params.level) {
+        case "debug":
+          return Effect.logDebug("MCP server log", fields)
+        case "info":
+        case "notice":
+          return Effect.logInfo("MCP server log", fields)
+        case "warning":
+          return Effect.logWarning("MCP server log", fields)
+        case "error":
+        case "critical":
+        case "alert":
+        case "emergency":
+          return Effect.logError("MCP server log", fields)
+      }
     }
 
     const state = yield* InstanceState.make<State>(
