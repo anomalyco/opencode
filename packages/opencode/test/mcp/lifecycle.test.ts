@@ -849,6 +849,39 @@ it.instance(
 )
 
 it.instance(
+  "uses the static timeout when the runtime server does not override it",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "replaced-server"
+        const serverState = getOrCreateClientState("replaced-server")
+
+        yield* mcp.add("replaced-server", {
+          type: "local",
+          command: ["echo", "runtime"],
+        })
+        yield* mcp.getPrompt("replaced-server", "test")
+        yield* mcp.readResource("replaced-server", "test://resource")
+
+        expect(serverState.getPromptTimeout).toBe(1000)
+        expect(serverState.readResourceTimeout).toBe(1000)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "replaced-server": {
+          type: "local",
+          command: ["echo", "static"],
+          timeout: 1000,
+        },
+      },
+      experimental: { mcp_timeout: 5000 },
+    },
+  },
+)
+
+it.instance(
   "resource-only servers connect without listing tools",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
