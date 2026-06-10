@@ -1,546 +1,239 @@
+export * as FileSystemSearch from "./search"
+
 import path from "path"
-import { Context, Deferred, Effect, Layer, Option, Stream } from "effect"
-import type { PlatformError } from "effect/PlatformError"
-import { FSUtil } from "../fs-util"
-import { Glob } from "../util/glob"
-import { Global } from "../global"
-import { serviceUse } from "../effect/service-use"
-import { makeRuntime } from "../effect/runtime"
+import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
-import { Ripgrep } from "./ripgrep"
-
-const root = path.join(Global.Path.cache, "fff")
-
-export type Item = Ripgrep.Item
-export type SearchError = PlatformError | globalThis.Error
-
-export interface Result {
-  readonly items: Item[]
-  readonly partial: boolean
-  readonly hasNextPage: boolean
-  readonly engine: "fff" | "ripgrep"
-  readonly regexFallbackError?: string
-}
-
-export interface FileInput {
-  readonly cwd: string
-  readonly query: string
-  readonly limit?: number
-  readonly current?: string
-  readonly kind?: "file" | "directory" | "all"
-}
-
-export interface GlobInput {
-  readonly cwd: string
-  readonly pattern: string
-  readonly limit?: number
-  readonly signal?: AbortSignal
-}
-
-interface Query {
-  readonly dir: string
-  readonly text: string
-  readonly files: string[]
-}
-
-// A created picker plus its cached scan-readiness gate. The picker is created
-// (and its native background scan kicked off) eagerly; `ready` is only awaited
-// when the picker is actually used.
-interface Picker {
-  readonly pick: Fff.Picker
-  readonly ready: Effect.Effect<void, Error>
-}
-
-interface State {
-  readonly pick: Map<string, Picker>
-  readonly wait: Map<string, Deferred.Deferred<Picker, Error>>
-  readonly recent: Query[]
-}
+import fuzzysort from "fuzzysort"
+import { FileSystem } from "../filesystem"
+import { FSUtil } from "../fs-util"
+import { Location } from "../location"
+import { Ripgrep } from "../ripgrep"
+import { RelativePath } from "../schema"
 
 export interface Interface {
-  readonly files: Ripgrep.Interface["files"]
-  readonly tree: Ripgrep.Interface["tree"]
-  readonly search: (input: Ripgrep.SearchInput) => Effect.Effect<Result, SearchError>
-  readonly file: (input: FileInput) => Effect.Effect<string[] | undefined, SearchError>
-  readonly glob: (input: GlobInput) => Effect.Effect<{ files: string[]; truncated: boolean }, SearchError>
-  readonly open: (input: { cwd?: string; file: string }) => Effect.Effect<void, SearchError>
-  readonly warm: (cwd: string) => Effect.Effect<void>
-  // Destroy the picker for a directory and drop its cached state. Called when a
-  // directory's instance is disposed so fff's native watcher thread is torn
-  // down instead of leaking until process exit.
-  readonly release: (cwd: string) => Effect.Effect<void>
+  readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
+  readonly glob: (input: FileSystem.GlobInput) => Effect.Effect<readonly FileSystem.Entry[]>
+  readonly grep: (input: FileSystem.GrepInput) => Effect.Effect<readonly FileSystem.Match[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Search") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem/Search") {}
 
-export const use = serviceUse(Service)
-
-function key(dir: string) {
-  return Buffer.from(dir).toString("base64url")
-}
-
-function fffSync<A>(action: string, run: () => A) {
-  return Effect.try({
-    try: run,
-    catch: (cause) => new Error(`fff ${action} failed`, { cause }),
-  })
-}
-
-function normalize(text: string) {
-  return text.replaceAll("\\", "/")
-}
-
-// fff supports glob narrowing for any search out of the box
-function fffGlobbedQuery(query: string, glob?: string | string[]) {
-  if (query && glob) {
-    const resolvedGlob = Array.isArray(glob) ? glob.join(" ") : glob
-    return `${resolvedGlob} ${query}`
-  }
-
-  return query ?? glob
-}
-
-function remember(state: State, dir: string, text: string, files: string[]) {
-  if (!files.length) return
-  const next = Array.from(new Set(files.map(FSUtil.resolve))).slice(0, 64)
-  if (!next.length) return
-  const idx = state.recent.findIndex((item) => item.dir === dir && item.text === text)
-  if (idx >= 0) state.recent.splice(idx, 1)
-  state.recent.unshift({ dir, text, files: next })
-  if (state.recent.length > 32) state.recent.length = 32
-}
-
-function item(hit: Fff.Hit): Item {
-  const line = Buffer.from(hit.lineContent)
-  return {
-    path: { text: normalize(hit.relativePath) },
-    lines: { text: hit.lineContent },
-    line_number: hit.lineNumber,
-    absolute_offset: hit.byteOffset,
-    submatches: hit.matchRanges
-      .map(([start, end]) => {
-        const text = line.subarray(start, end).toString("utf8")
-        if (!text) return undefined
-        return {
-          match: { text },
-          start,
-          end,
-        }
-      })
-      .filter((row): row is Item["submatches"][number] => Boolean(row)),
-  }
-}
-
-function collectPaths<T>(items: T[], scores: Array<{ total: number }>, toPath: (item: T) => string): string[] {
-  const rows = items.flatMap((item, index): Array<{ text: string; score: number }> => {
-    const text = toPath(item)
-    if (!text) return []
-    return [{ text, score: scores[index]?.total ?? 0 }]
-  })
-  rows.sort(
-    (a, b) => b.score - a.score || a.text.length - b.text.length || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0),
-  )
-
-  return Array.from(new Set(rows.map((item) => item.text)))
-}
-
-function searchFff(
-  pick: Fff.Picker,
-  kind: "file" | "directory" | "all",
-  query: string,
-  opts: { currentFile?: string; pageIndex?: number; pageSize?: number },
-): Fff.Result<string[]> {
-  if (kind === "directory") {
-    const out = pick.directorySearch(query, opts)
-    if (!out.ok) return out
-    return {
-      ok: true,
-      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
-    }
-  }
-  if (kind === "all") {
-    const out = pick.mixedSearch(query, opts)
-    if (!out.ok) return out
-    return {
-      ok: true,
-      value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.item.relativePath)),
-    }
-  }
-  const out = pick.fileSearch(query, opts)
-  if (!out.ok) return out
-  return {
-    ok: true,
-    value: collectPaths(out.value.items, out.value.scores, (entry) => normalize(entry.relativePath)),
-  }
-}
-
-export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service> = Layer.effect(
+export const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const rg = yield* Ripgrep.Service
-
-    const state: State = {
-      pick: new Map<string, Picker>(),
-      wait: new Map<string, Deferred.Deferred<Picker, Error>>(),
-      recent: [] as Query[],
+    const location = yield* Location.Service
+    const ripgrep = yield* Ripgrep.Service
+    const scope = yield* Scope.Scope
+    const state = {
+      files: [] as string[],
+      directories: [] as string[],
     }
-
-    yield* fs.ensureDir(root).pipe(Effect.ignore)
-    yield* Effect.addFinalizer(() =>
-      Effect.forEach(
-        state.pick.values(),
-        (entry) => fffSync("destroy picker", () => entry.pick.destroy()).pipe(Effect.ignore),
-        { discard: true },
-      ),
-    )
-
-    const rip = Effect.fn("Search.rip")(function* (input: Ripgrep.SearchInput) {
-      const out = yield* rg.search(input)
-      return {
-        items: out.items,
-        partial: out.partial,
-        hasNextPage: false,
-        engine: "ripgrep" as const,
-      }
-    })
-
-    // Lazy, shared scan-wait for a picker. Preserves the original behavior: if
-    // the scan does not finish within the budget the picker is destroyed and
-    // dropped from the cache so callers fall back to ripgrep (and the next
-    // request recreates a fresh picker).
-    const scanReady = (dir: string, pick: Fff.Picker) =>
-      Effect.gen(function* () {
-        const scanned = yield* Effect.tryPromise({
-          try: () => pick.waitForScan(5_000),
-          catch: (cause) => new Error("fff waitForScan failed", { cause }),
-        })
-        if (!scanned.ok || !scanned.value) {
-          yield* fffSync("destroy picker", () => pick.destroy()).pipe(Effect.ignore)
-          state.pick.delete(dir)
-          yield* Effect.logWarning("fff scan not ready", { dir })
-          return yield* Effect.fail(new Error(scanned.ok ? "fff scan timed out" : scanned.error))
-        }
-
-        const git = yield* fffSync("refresh git status", () => pick.refreshGitStatus())
-        if (!git.ok) {
-          yield* Effect.logWarning("fff git refresh failed", { dir, error: git.error })
-        }
+    const directories = new Set<string>()
+    yield* ripgrep
+      .find({
+        cwd: location.directory,
+        pattern: "*",
+        limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
+        onEntry: (entry) =>
+          Effect.sync(() => {
+            state.files.push(entry.path)
+            const parts = entry.path.split("/")
+            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
+            state.directories = Array.from(directories)
+          }),
       })
-
-    // Create (or return) the picker for a directory. Creation is synchronous
-    // and does not await the scan; the native background scan starts as soon as
-    // the picker exists. The `wait` gate dedupes concurrent creation.
-    const acquire = Effect.fn("Search.acquire")(function* (cwd: string) {
-      // The opencode test runtime owns an isolated XDG tree that Windows must
-      // remove before process exit, so use ripgrep instead of native FFF there.
-      if (process.env.OPENCODE_TEST_HOME) return undefined
-
-      const dir = FSUtil.resolve(cwd)
-      const existing = state.pick.get(dir)
-      if (existing) return existing
-
-      const pending = state.wait.get(dir)
-      if (pending) return yield* Deferred.await(pending)
-
-      const available = yield* fffSync("check availability", () => Fff.available()).pipe(
-        Effect.catch((error) => Effect.logWarning("fff availability check failed", { error }).pipe(Effect.as(false))),
-      )
-      if (!available) return undefined
-
-      const gate = yield* Deferred.make<Picker, Error>()
-      state.wait.set(dir, gate)
-      return yield* Effect.gen(function* () {
-        const id = key(dir)
-        const isFirstPicker = state.pick.size === 0
-        const made = yield* fffSync("create picker", () =>
-          Fff.create({
-            basePath: dir,
-            frecencyDbPath: path.join(root, `${id}.frecency.mdb`),
-            historyDbPath: path.join(root, `${id}.history.mdb`),
-            aiMode: true,
-            // only the first toolcall picker can accumulate resources to index
-            // home directory, if the user specifically opened opencode at the
-            // $HOME level or asked it to search there on purpose, otherwise fallback
-            enableHomeDirScanning: isFirstPicker,
-            // on unix system it is 99.9% that you do not need to search for the
-            // content at the / so make fff fail creation and fallback to rg
-            enableFsRootScanning: isFirstPicker && process.platform === "win32",
-          }),
-        )
-        if (!made.ok) {
-          yield* Effect.logWarning("fff init failed", { dir, error: made.error })
-          const err = new Error(made.error)
-          yield* Deferred.fail(gate, err)
-          return yield* Effect.fail(err)
-        }
-
-        const pick = made.value
-        const entry: Picker = { pick, ready: yield* Effect.cached(scanReady(dir, pick)) }
-        state.pick.set(dir, entry)
-        yield* Deferred.succeed(gate, entry)
-        return entry
-      }).pipe(
-        Effect.ensuring(
-          Effect.gen(function* () {
-            if (state.wait.get(dir) === gate) state.wait.delete(dir)
-            yield* Deferred.fail(gate, new Error("fff init interrupted")).pipe(Effect.ignore)
-          }),
-        ),
-      )
-    })
-
-    // Resolve a usable, scanned picker for a directory, or undefined when fff is
-    // unavailable or the scan did not become ready.
-    const picker = Effect.fn("Search.picker")(function* (cwd: string) {
-      const entry = yield* acquire(cwd).pipe(Effect.catch(() => Effect.succeed<Picker | undefined>(undefined)))
-      if (!entry) return undefined
-      const ready = yield* entry.ready.pipe(
-        Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
-      )
-      if (!ready) return undefined
-      return entry.pick
-    })
-
-    const files: Interface["files"] = (input) => rg.files(input)
-    const tree: Interface["tree"] = (input) => rg.tree(input)
-
-    // in 99% of use cases user that is opened opencode at certain directory will
-    // conduct a file search in this direcotry, it could be switched later but
-    // mostly always we will need a file picker for cwd
-    // so synchronously start FFF scan for a cwd so it is ready before first toolcall generated
-    const warm: Interface["warm"] = Effect.fn("Search.warm")(function* (cwd) {
-      yield* acquire(cwd).pipe(Effect.ignore)
-    })
-
-    // Tear down the picker for a directory. fff pickers own a native background
-    // watcher thread that otherwise lives until the runtime scope closes (i.e.
-    // process exit), so disposing the instance that warmed it must destroy it
-    // here or the thread leaks against a directory that may already be gone.
-    const release: Interface["release"] = Effect.fn("Search.release")(function* (cwd) {
-      const dir = FSUtil.resolve(cwd)
-
-      const pending = state.wait.get(dir)
-      if (pending) {
-        state.wait.delete(dir)
-        yield* Deferred.fail(pending, new Error("fff picker released")).pipe(Effect.ignore)
-      }
-
-      const entry = state.pick.get(dir)
-      if (entry) {
-        state.pick.delete(dir)
-        yield* fffSync("destroy picker", () => entry.pick.destroy()).pipe(Effect.ignore)
-      }
-
-      const remaining = state.recent.filter((item) => item.dir !== dir)
-      state.recent.splice(0, state.recent.length, ...remaining)
-    })
-
-    const file: Interface["file"] = Effect.fn("Search.file")(function* (input) {
-      const query = input.query.trim()
-      const kind = input.kind ?? "file"
-
-      const entry = yield* acquire(input.cwd).pipe(Effect.catch(() => Effect.succeed<Picker | undefined>(undefined)))
-      if (!entry) return undefined
-      const dir = FSUtil.resolve(input.cwd)
-      const limit = input.limit ?? 100
-      const fffResult = yield* fffSync(`${kind} search`, () =>
-        searchFff(entry.pick, kind, query, {
-          pageIndex: 0,
-          currentFile: input.current, // supports both relative and absolute (relative preferred)
-          pageSize: limit,
+      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
+    return Service.of({
+      glob: (input) =>
+        Effect.gen(function* () {
+          const target = path.resolve(location.directory, input.path ?? ".")
+          const info = yield* fs.stat(target).pipe(Effect.orDie)
+          const cwd = info.type === "File" ? path.dirname(target) : target
+          return yield* ripgrep
+            .glob({
+              cwd,
+              pattern: input.pattern,
+              limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+            })
+            .pipe(
+              Effect.map((result) =>
+                result.map(
+                  (entry) =>
+                    new FileSystem.Entry({
+                      ...entry,
+                      path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                    }),
+                ),
+              ),
+              Effect.orDie,
+            )
         }),
-      ).pipe(
-        Effect.catch((error) =>
-          Effect.logWarning(`fff ${kind} search failed`, { dir, query, error }).pipe(
-            Effect.as<Fff.Result<string[]> | undefined>(undefined),
-          ),
-        ),
-      )
-      if (!fffResult) return undefined
-      if (!fffResult.ok) {
-        yield* Effect.logWarning(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
-        return undefined
-      }
-
-      const rows = fffResult.value
-      remember(
-        state,
-        dir,
-        query,
-        rows.map((row) => path.join(dir, row)),
-      )
-      return rows.slice(0, limit)
-    })
-
-    const search: Interface["search"] = Effect.fn("Search.search")(function* (input) {
-      input.signal?.throwIfAborted()
-      if (input.file?.length) return yield* rip(input)
-
-      const pick = yield* picker(input.cwd)
-      if (!pick) return yield* rip(input)
-
-      const dir = FSUtil.resolve(input.cwd)
-      const limit = input.limit ?? 100
-
-      const fffGrep = yield* fffSync("grep", () =>
-        pick.grep(fffGlobbedQuery(input.pattern, input.glob), {
-          mode: "regex",
-          pageSize: limit,
-          timeBudgetMs: 1_500,
+      grep: (input) =>
+        Effect.gen(function* () {
+          const target = path.resolve(location.directory, input.path ?? ".")
+          const info = yield* fs.stat(target).pipe(Effect.orDie)
+          const cwd = info.type === "File" ? path.dirname(target) : target
+          return yield* ripgrep
+            .grep({
+              cwd,
+              pattern: input.pattern,
+              file: info.type === "File" ? path.basename(target) : undefined,
+              include: input.include,
+              limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+            })
+            .pipe(
+              Effect.map((result) =>
+                result.map(
+                  (match) =>
+                    new FileSystem.Match({
+                      ...match,
+                      entry: new FileSystem.Entry({
+                        ...match.entry,
+                        path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
+                      }),
+                    }),
+                ),
+              ),
+              Effect.orDie,
+            )
         }),
-      ).pipe(
-        Effect.catch((error) =>
-          Effect.logWarning("fff grep failed", { dir, pattern: input.pattern, error }).pipe(
-            Effect.as<Fff.Result<Fff.Grep> | undefined>(undefined),
-          ),
-        ),
-      )
-      if (!fffGrep) return yield* rip(input)
-      if (!fffGrep.ok) {
-        yield* Effect.logWarning("fff grep failed", { dir, pattern: input.pattern, error: fffGrep.error })
-        return yield* rip(input)
-      }
-
-      const rows: Item[] = fffGrep.value.items.map(item)
-      const regexFallbackError = fffGrep.value.regexFallbackError
-
-      remember(state, dir, input.pattern, Array.from(new Set(rows.map((row) => path.join(dir, row.path.text)))))
-
-      return {
-        items: rows,
-        partial: false,
-        hasNextPage: !!fffGrep.value.nextCursor,
-        engine: "fff" as const,
-        regexFallbackError,
-      }
-    })
-
-    const glob: Interface["glob"] = Effect.fn("Search.glob")(function* (input) {
-      input.signal?.throwIfAborted()
-
-      const dir = FSUtil.resolve(input.cwd)
-      const limit = input.limit ?? 100
-      const pick = yield* picker(dir)
-
-      if (pick) {
-        const fffGlob = yield* fffSync("glob file search", () =>
-          pick.glob(normalize(input.pattern), {
-            pageIndex: 0,
-            pageSize: limit,
-          }),
-        ).pipe(
-          Effect.catch((error) =>
-            Effect.logWarning("fff glob failed", { dir, pattern: input.pattern, error }).pipe(
-              Effect.as<Fff.Result<Fff.Search> | undefined>(undefined),
-            ),
-          ),
-        )
-
-        if (fffGlob?.ok) {
-          const rows: string[] = Array.from(new Set(fffGlob.value.items.map((item) => normalize(item.relativePath))))
-
-          remember(
-            state,
-            dir,
-            input.pattern,
-            rows.map((row) => path.join(dir, row)),
-          )
-
-          return {
-            files: rows.slice(0, limit).map((row) => path.join(dir, row)),
-            truncated: fffGlob.value.totalMatched > rows.length,
-          }
-        } else if (fffGlob) {
-          yield* Effect.logWarning("fff glob failed", { dir, pattern: input.pattern, error: fffGlob.error })
-          // fall through to the fallback
-        }
-      }
-
-      const rows = yield* rg.files({ cwd: dir, glob: [input.pattern], signal: input.signal }).pipe(
-        Stream.take(limit + 1),
-        Stream.runCollect,
-        Effect.map((chunk) => [...chunk]),
-      )
-      const truncated = rows.length > limit
-      if (truncated) rows.length = limit
-
-      const output = yield* Effect.forEach(
-        rows,
-        Effect.fnUntraced(function* (file) {
-          const full = path.join(dir, file)
-          const info = yield* fs.stat(full).pipe(Effect.catch(() => Effect.succeed(undefined)))
-          const time =
-            info?.mtime.pipe(
-              Option.map((item) => item.getTime()),
-              Option.getOrElse(() => 0),
-            ) ?? 0
-          return { file: full, time }
+      find: (input) =>
+        Effect.gen(function* () {
+          const items =
+            input.type === "file"
+              ? state.files
+              : input.type === "directory"
+                ? state.directories
+                : [...state.files, ...state.directories]
+          return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
+            const relative = item.target
+            const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
+            const clean = type === "directory" ? relative.slice(0, -path.sep.length) : relative
+            const absolute = path.resolve(location.directory, clean)
+            return new FileSystem.Entry({
+              path: RelativePath.make(relative),
+              type,
+              mime: type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
+            })
+          })
         }),
-        { concurrency: 16 },
-      )
-      output.sort((a, b) => b.time - a.time)
-      return {
-        files: output.map((item) => item.file),
-        truncated,
-      }
     })
-
-    const open: Interface["open"] = Effect.fn("Search.open")(function* (input) {
-      const file = input.cwd
-        ? FSUtil.resolve(path.isAbsolute(input.file) ? input.file : path.join(input.cwd, input.file))
-        : FSUtil.resolve(input.file)
-      const idx = state.recent.findIndex((item) => item.files.includes(file))
-      if (idx < 0) return
-
-      const row = state.recent[idx]
-      state.recent.splice(idx, 1)
-      const entry = state.pick.get(row.dir)
-      if (!entry) return
-
-      const out = yield* fffSync("track query", () => entry.pick.trackQuery(row.text, file)).pipe(
-        Effect.catch((error) =>
-          Effect.logWarning("fff track query failed", { dir: row.dir, query: row.text, file, error }).pipe(
-            Effect.as<Fff.Result<boolean> | undefined>(undefined),
-          ),
-        ),
-      )
-      if (!out) return
-      if (!out.ok) {
-        yield* Effect.logWarning("fff track query failed", { dir: row.dir, query: row.text, file, error: out.error })
-      }
-    })
-
-    return Service.of({ files, tree, search, file, glob, open, warm, release })
   }),
 )
 
-export const defaultLayer: Layer.Layer<Service> = layer.pipe(
-  Layer.provide(Ripgrep.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
+export const fffLayer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const location = yield* Location.Service
+    const result = yield* Effect.try({
+      try: () =>
+        Fff.create({
+          basePath: location.directory,
+          aiMode: true,
+          enableFsRootScanning: true,
+          enableHomeDirScanning: true,
+        }),
+      catch: (cause) => cause,
+    }).pipe(Effect.orDie)
+    if (!result.ok) return yield* Effect.die(result.error)
+    yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
+    const scanned = yield* Effect.tryPromise({
+      try: () => result.value.waitForScan(5_000),
+      catch: (cause) => cause,
+    }).pipe(Effect.orDie)
+    if (!scanned.ok || !scanned.value) return yield* Effect.die(scanned.ok ? "fff scan timed out" : scanned.error)
+    return Service.of({
+      glob: (input) =>
+        Effect.sync(() => {
+          const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")
+          const found = result.value.glob(prefix ? `${prefix}/${input.pattern}` : input.pattern, {
+            pageIndex: 0,
+            pageSize: input.limit,
+          })
+          if (!found.ok) throw found.error
+          return found.value.items.map((item) => {
+            const absolute = path.resolve(location.directory, item.relativePath)
+            return new FileSystem.Entry({
+              path: RelativePath.make(item.relativePath.replaceAll("\\", "/")),
+              type: "file",
+              mime: FSUtil.mimeType(absolute),
+            })
+          })
+        }),
+      grep: (input) =>
+        Effect.sync(() => {
+          const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")
+          const found = result.value.grep(
+            [prefix ? `${prefix}/**` : undefined, input.include, input.pattern]
+              .filter((value) => value !== undefined)
+              .join(" "),
+            { mode: "regex", pageSize: input.limit, timeBudgetMs: 1_500 },
+          )
+          if (!found.ok) throw found.error
+          return found.value.items.map((match) => {
+            const bytes = Buffer.from(match.lineContent)
+            return new FileSystem.Match({
+              entry: new FileSystem.Entry({
+                path: RelativePath.make(match.relativePath.replaceAll("\\", "/")),
+                type: "file",
+                mime: FSUtil.mimeType(match.relativePath),
+              }),
+              line: match.lineNumber,
+              offset: match.byteOffset,
+              text: match.lineContent.length > 2_000 ? match.lineContent.slice(0, 2_000) + "..." : match.lineContent,
+              submatches: match.matchRanges.map(([start, end]) => ({
+                text: bytes.subarray(start, end).toString("utf8"),
+                start,
+                end,
+              })),
+            })
+          })
+        }),
+      find: (input) =>
+        Effect.sync(() => {
+          const options = { pageIndex: 0, pageSize: input.limit ?? 50 }
+          const items = (() => {
+            if (input.type === "file") {
+              const found = result.value.fileSearch(input.query.trim(), options)
+              if (!found.ok) throw found.error
+              return found.value.items.map((item, index) => ({
+                path: item.relativePath,
+                type: "file" as const,
+                score: found.value.scores[index]?.total ?? 0,
+              }))
+            }
+            if (input.type === "directory") {
+              const found = result.value.directorySearch(input.query.trim(), options)
+              if (!found.ok) throw found.error
+              return found.value.items.map((item, index) => ({
+                path: item.relativePath,
+                type: "directory" as const,
+                score: found.value.scores[index]?.total ?? 0,
+              }))
+            }
+            const found = result.value.mixedSearch(input.query.trim(), options)
+            if (!found.ok) throw found.error
+            return found.value.items.map((item, index) => ({
+              path: item.item.relativePath,
+              type: item.type,
+              score: found.value.scores[index]?.total ?? 0,
+            }))
+          })()
+          return items
+            .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
+            .map((item) => {
+              const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
+              const absolute = path.resolve(location.directory, relative)
+              return new FileSystem.Entry({
+                path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                type: item.type,
+                mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
+              })
+            })
+        }),
+    })
+  }),
 )
 
-const { runPromise } = makeRuntime(Service, defaultLayer)
-
-export function tree(input: Ripgrep.TreeInput) {
-  return runPromise((svc) => svc.tree(input))
-}
-
-export function search(input: Ripgrep.SearchInput) {
-  return runPromise((svc) => svc.search(input))
-}
-
-export function file(input: FileInput) {
-  return runPromise((svc) => svc.file(input))
-}
-
-export function glob(input: GlobInput) {
-  return runPromise((svc) => svc.glob(input))
-}
-
-export function open(input: { cwd?: string; file: string }) {
-  return runPromise((svc) => svc.open(input))
-}
-
-export * as Search from "./search"
+export const defaultLayer = Layer.unwrap(Effect.sync(() => (Fff.available() ? fffLayer : ripgrepLayer)))

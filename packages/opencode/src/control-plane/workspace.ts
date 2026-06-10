@@ -1,3 +1,5 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
@@ -586,7 +588,13 @@ export const layer = Layer.effect(
 
             if (target.type === "remote") {
               yield* syncHistory(previous, target.url, target.headers).pipe(
-                Effect.catch((error) => Effect.sync(() => {})),
+                Effect.catch((error) =>
+                  Effect.logWarning("session warp final source sync failed", {
+                    workspaceID: previous.id,
+                    sessionID: input.sessionID,
+                    error: errorData(error),
+                  }),
+                ),
               )
             } else {
               yield* prompt.cancel(input.sessionID)
@@ -739,9 +747,7 @@ export const layer = Layer.effect(
         ([type, adapter]) =>
           WorkspaceAdapterRuntime.list(adapter).pipe(
             Effect.catchCause((error) =>
-              Effect.sync(() => {
-                return []
-              }),
+              Effect.logWarning("workspace adapter list failed", { type, error }).pipe(Effect.as([])),
             ),
           ),
         { concurrency: "unbounded" },
@@ -817,7 +823,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           yield* WorkspaceAdapterRuntime.remove(info)
         }),
-        () => Effect.sync(() => {}),
+        () => Effect.logError("adapter not available when removing workspace", { type: row.type }),
       )
 
       yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run().pipe(Effect.orDie)
@@ -967,5 +973,17 @@ function route(url: string | URL, path: string) {
   next.hash = ""
   return next
 }
+
+export const node = LayerNode.make(layer, [
+  Auth.node,
+  Session.node,
+  SessionPrompt.node,
+  httpClient,
+  EventV2Bridge.node,
+  Vcs.node,
+  RuntimeFlags.node,
+  FSUtil.node,
+  Database.node,
+])
 
 export * as Workspace from "./workspace"

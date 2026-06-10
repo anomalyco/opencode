@@ -18,11 +18,11 @@ import { Database } from "./database/database"
 import { PermissionV2 } from "./permission"
 import { PermissionSaved } from "./permission/saved"
 import { FileSystem } from "./filesystem"
+import { Ripgrep } from "./ripgrep"
 import { Watcher } from "./filesystem/watcher"
 import { LocationMutation } from "./location-mutation"
-import { LocationSearch } from "./location-search"
 import { FileMutation } from "./file-mutation"
-import { ProjectReference } from "./project-reference"
+import { Reference } from "./reference"
 import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
@@ -33,7 +33,6 @@ import { ToolRegistry } from "./tool/registry"
 import { ApplicationTools } from "./tool/application-tools"
 import { ToolOutputStore } from "./tool-output-store"
 import { AppProcess } from "./process"
-import { Ripgrep } from "./ripgrep"
 import { SessionStore } from "./session/store"
 import { SessionTodo } from "./session/todo"
 import { QuestionV2 } from "./question"
@@ -52,7 +51,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       location,
       Policy.locationLayer,
       Config.locationLayer,
-      ProjectReference.locationLayer,
+      Reference.locationLayer,
       PluginV2.locationLayer,
       Catalog.locationLayer,
       CommandV2.locationLayer,
@@ -74,14 +73,12 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const services = Layer.mergeAll(base, resources, permissionsAndTools)
     const image = Image.layer.pipe(Layer.provide(services))
     const mutation = FileMutation.locationLayer.pipe(Layer.provide(services))
-    const searches = LocationSearch.layer.pipe(Layer.provide(Ripgrep.layer), Layer.provide(services))
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
       Layer.provide(services),
       Layer.provide(mutation),
-      Layer.provide(searches),
       Layer.provide(resources),
       Layer.provide(todos),
       Layer.provide(questions),
@@ -93,18 +90,9 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(model),
       Layer.provide(skillGuidance),
     )
-    return Layer.mergeAll(
-      services,
-      image,
-      mutation,
-      searches,
-      resources,
-      todos,
-      questions,
-      model,
-      runner,
-      builtInTools,
-    ).pipe(Layer.fresh)
+    return Layer.mergeAll(services, image, mutation, resources, todos, questions, model, runner, builtInTools).pipe(
+      Layer.fresh,
+    )
   },
   idleTimeToLive: "60 minutes",
   dependencies: [
@@ -116,6 +104,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     FSUtil.defaultLayer,
     AppProcess.defaultLayer,
     Global.defaultLayer,
+    Ripgrep.defaultLayer,
     Database.defaultLayer,
     SessionStore.layer.pipe(Layer.provide(Database.defaultLayer)),
     PermissionSaved.defaultLayer,
