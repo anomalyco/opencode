@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite"
 import { openDatabase, resolveIndexDbPath, resolveSourceDbPath } from "./db"
 import { redactSecrets } from "./redaction"
-import { detectSourceMode, ensureIndexSchema, readSyncCursor, shouldFullResync, SourceSignature, upsertMeta } from "./schema"
+import { detectSourceMode, ensureIndexSchema, readSyncCursor, shouldFullResync, sourceSignature, upsertMeta } from "./schema"
 import type {
   ConversationRow,
   LegacyMessageRow,
@@ -24,7 +24,7 @@ export function syncTradeMemoryNow(args: { sourceDbPath?: string; indexDbPath?: 
     const sourceMode = detectSourceMode(sourceDb)
     ensureIndexSchema(indexDb)
     const syncedAt = Date.now()
-    const fullResync = args.fullResync ?? shouldFullResync(indexDb, sourceDbPath)
+    const fullResync = args.fullResync ?? shouldFullResync(indexDb, sourceDbPath, sourceMode)
     indexDb
       .query(
         "insert into sync_run (id, started_at, source_db_path, index_db_path, mode, source_mode, count) values (?, ?, ?, ?, ?, ?, 0)",
@@ -42,11 +42,11 @@ export function syncTradeMemoryNow(args: { sourceDbPath?: string; indexDbPath?: 
       streamConversationRows(sourceDb, sourceMode, lastCursor).forEach((row) => {
         insert.run(row.messageID, row.sessionID, row.seq, row.role, row.createdAt, row.text, row.checksum, syncedAt)
         count.value += 1
-        cursor.createdAt = row.createdAt
+        cursor.createdAt = row.cursorAt
         cursor.messageID = row.messageID
       })
       if (fullResync) indexDb.query("delete from conversation_index where stale = 1").run()
-      upsertMeta(indexDb, "source_signature", sourceMode === "session_message" ? SourceSignature.sessionMessage : SourceSignature.messagePart)
+      upsertMeta(indexDb, "source_signature", sourceSignature(sourceMode))
       upsertMeta(indexDb, "last_sync_at", String(syncedAt))
       upsertMeta(indexDb, "source_db_path", sourceDbPath)
       upsertMeta(indexDb, "source_mode", sourceMode)
@@ -148,7 +148,7 @@ function streamConversationRows(sourceDb: Database, sourceMode: SourceMode, last
   const batchSize = 500
   if (!lastCursor) {
     const query = sourceDb.query<SourceRow, [number]>(
-      "select id, session_id, seq, type, time_created, data from session_message where type in ('user', 'assistant') order by time_created asc, id asc limit ?",
+      "select id, session_id, seq, type, time_created, time_updated, data from session_message where type in ('user', 'assistant') order by time_updated asc, id asc limit ?",
     )
     let offsetCreatedAt = 0
     let offsetMessageID = ""
@@ -156,28 +156,28 @@ function streamConversationRows(sourceDb: Database, sourceMode: SourceMode, last
       const batch = offsetMessageID
         ? sourceDb
             .query<SourceRow, [number, number, string, number]>(
-              "select id, session_id, seq, type, time_created, data from session_message where type in ('user', 'assistant') and (time_created > ? or (time_created = ? and id > ?)) order by time_created asc, id asc limit ?",
+              "select id, session_id, seq, type, time_created, time_updated, data from session_message where type in ('user', 'assistant') and (time_updated > ? or (time_updated = ? and id > ?)) order by time_updated asc, id asc limit ?",
             )
             .all(offsetCreatedAt, offsetCreatedAt, offsetMessageID, batchSize)
         : query.all(batchSize)
       if (!batch.length) return rows
       batch.flatMap(toConversationRow).forEach((row) => rows.push(row))
       const last = batch[batch.length - 1]
-      offsetCreatedAt = last.time_created
+      offsetCreatedAt = last.time_updated
       offsetMessageID = last.id
     }
   }
   const query = sourceDb.query<SourceRow, [number, number, string, number]>(
-    "select id, session_id, seq, type, time_created, data from session_message where type in ('user', 'assistant') and (time_created > ? or (time_created = ? and id > ?)) order by time_created asc, id asc limit ?",
+    "select id, session_id, seq, type, time_created, time_updated, data from session_message where type in ('user', 'assistant') and (time_updated > ? or (time_updated = ? and id > ?)) order by time_updated asc, id asc limit ?",
   )
-  let createdAt = lastCursor.createdAt
-  let messageID = lastCursor.messageID
+  let createdAt = Math.max(0, lastCursor.createdAt - 1)
+  let messageID = ""
   while (true) {
     const batch = query.all(createdAt, createdAt, messageID, batchSize)
     if (!batch.length) return rows
     batch.flatMap(toConversationRow).forEach((row) => rows.push(row))
     const last = batch[batch.length - 1]
-    createdAt = last.time_created
+    createdAt = last.time_updated
     messageID = last.id
   }
 }
@@ -240,6 +240,7 @@ function toLegacyConversationRow(sourceDb: Database, row: LegacyMessageRow): Con
       seq: row.time_created,
       role,
       createdAt: row.time_created,
+      cursorAt: row.time_created,
       text,
       checksum: checksum(`${role}:${text}`),
     },
@@ -264,7 +265,7 @@ function readLegacyRole(input: string): ConversationRow["role"] | undefined {
 function readSessionMessageSource(sourceDb: Database, messageID: string) {
   return sourceDb
     .query<SourceRow, [string]>(
-      "select id, session_id, seq, type, time_created, data from session_message where id = ? limit 1",
+      "select id, session_id, seq, type, time_created, time_updated, data from session_message where id = ? limit 1",
     )
     .get(messageID)
 }
@@ -276,18 +277,17 @@ function makeConversationRow(row: SourceRow, role: "user" | "assistant", text: s
     seq: row.seq,
     role,
     createdAt: row.time_created,
+    cursorAt: row.time_updated,
     text,
     checksum: checksum(`${role}:${text}`),
   }
 }
 
 function fromUserMessage(input: object) {
-  if (!hasType(input, "user")) return ""
   return "text" in input && typeof input.text === "string" ? input.text : ""
 }
 
 function fromAssistantMessage(input: object) {
-  if (!hasType(input, "assistant")) return ""
   const content = "content" in input ? input.content : undefined
   if (!Array.isArray(content)) return ""
   return content
@@ -298,10 +298,6 @@ function fromAssistantMessage(input: object) {
       return [item.text]
     })
     .join("\n\n")
-}
-
-function hasType(input: object, expected: string) {
-  return "type" in input && input.type === expected
 }
 
 function decodeJson(input: string) {

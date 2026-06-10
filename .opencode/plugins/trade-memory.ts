@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin/tool"
-import { openDatabase, resolveIndexDbPath } from "../trade-memory-core/db"
+import { assertTrustedDbPath, openDatabase, resolveIndexDbPath } from "../trade-memory-core/db"
 import { storeMemoryNote, searchMemoryNotes, updateMemoryNoteStatus } from "../trade-memory-core/notes"
 import { decodeStringArray, runConversationSearch, truncate } from "../trade-memory-core/search"
 import { ensureIndexSchema } from "../trade-memory-core/schema"
@@ -76,6 +76,8 @@ export default (async () => {
           full_resync: tool.schema.boolean().optional().describe("Force a full resync and stale reconciliation."),
         },
         async execute(args) {
+          assertTrustedDbPath(args.source_db_path, "source_db_path")
+          assertTrustedDbPath(args.index_db_path, "index_db_path")
           const result = syncTradeMemoryNow({
             sourceDbPath: args.source_db_path,
             indexDbPath: args.index_db_path,
@@ -101,6 +103,7 @@ export default (async () => {
           index_db_path: tool.schema.string().optional().describe("Optional path to the external memory SQLite database."),
         },
         async execute(args) {
+          assertTrustedDbPath(args.index_db_path, "index_db_path")
           const indexDbPath = resolveIndexDbPath(args.index_db_path)
           const indexDb = openDatabase(indexDbPath, false)
 
@@ -132,6 +135,7 @@ export default (async () => {
           source_db_path: tool.schema.string().optional().describe("Optional path to the source opencode.db."),
         },
         async execute(args) {
+          assertTrustedDbPath(args.source_db_path, "source_db_path")
           const result = openTradeConversationSource({ sourceDbPath: args.source_db_path, messageID: args.message_id })
           if (result.kind === "not-found") return `source message not found: ${args.message_id}`
           if (result.kind === "not-indexed") return `source message is not indexed content: ${args.message_id}`
@@ -163,6 +167,7 @@ export default (async () => {
           index_db_path: tool.schema.string().optional().describe("Optional path to the external memory SQLite database."),
         },
         async execute(args) {
+          assertTrustedDbPath(args.index_db_path, "index_db_path")
           const indexDbPath = resolveIndexDbPath(args.index_db_path)
           const indexDb = openDatabase(indexDbPath, false)
 
@@ -189,6 +194,7 @@ export default (async () => {
           index_db_path: tool.schema.string().optional().describe("Optional path to the external memory SQLite database."),
         },
         async execute(args) {
+          assertTrustedDbPath(args.index_db_path, "index_db_path")
           const indexDbPath = resolveIndexDbPath(args.index_db_path)
           const indexDb = openDatabase(indexDbPath, false)
 
@@ -211,6 +217,7 @@ export default (async () => {
           index_db_path: tool.schema.string().optional().describe("Optional path to the external memory SQLite database."),
         },
         async execute(args) {
+          assertTrustedDbPath(args.index_db_path, "index_db_path")
           const indexDbPath = resolveIndexDbPath(args.index_db_path)
           const indexDb = openDatabase(indexDbPath, false)
 

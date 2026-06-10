@@ -5,6 +5,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { startTradeMemoryHttpServer } from "../../../../.opencode/mcp/http"
 import { createTradeMemoryService } from "../../../../.opencode/mcp/service"
+import { syncTradeMemoryNow } from "../../../../.opencode/trade-memory-core/sync"
 import { createTradeHandoffBridgeHooks, parseServiceCommand, readModelSwitchedEvent } from "../../../../.opencode/plugins/trade-handoff-bridge"
 import { tmpdir } from "../fixture/fixture"
 import type { Model } from "../../src/provider/provider"
@@ -211,16 +212,53 @@ describe("trade-handoff bridge", () => {
     }
   })
 
+  test("sync reads current session_message shape and updated assistant rows", async () => {
+    await using tmp = await tmpdir()
+    const sourceDbPath = path.join(tmp.path, "opencode.db")
+    const indexDbPath = path.join(tmp.path, "memory.sqlite3")
+    seedSourceDb(sourceDbPath)
+
+    syncTradeMemoryNow({ sourceDbPath, indexDbPath })
+    updateUserSourceDbAtCursorTimestamp(sourceDbPath)
+    updateAssistantSourceDb(sourceDbPath)
+    syncTradeMemoryNow({ sourceDbPath, indexDbPath })
+
+    const service = createTradeMemoryService({ indexDbPath, sourceDbPath })
+    const context = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.4" })
+
+    expect(context.block).toContain("hello updated")
+    expect(context.block).toContain("assistant final")
+  })
+
+  test("source signature changes force a full resync", async () => {
+    await using tmp = await tmpdir()
+    const sourceDbPath = path.join(tmp.path, "opencode.db")
+    const indexDbPath = path.join(tmp.path, "memory.sqlite3")
+    seedSourceDb(sourceDbPath)
+
+    syncTradeMemoryNow({ sourceDbPath, indexDbPath })
+    const db = new Database(indexDbPath)
+    try {
+      db.query("update schema_meta set value = ? where key = ?").run("session_message:v1:id,session_id,type,seq,time_created,data", "source_signature")
+    } finally {
+      db.close(false)
+    }
+
+    const report = syncTradeMemoryNow({ sourceDbPath, indexDbPath })
+
+    expect(report.fullResync).toBe(true)
+  })
+
   test("autostart attempts to spawn local service when enabled", async () => {
     await using tmp = await tmpdir()
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = "http://127.0.0.1:1"
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT = "1"
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_AUTOSTART = "true"
 
-    let started = 0
+    let token = ""
     const hooks = createTradeHandoffBridgeHooks(tmp.path, {
-      startService: () => {
-        started += 1
+      startService: (_directory, nextToken) => {
+        token = nextToken
         return {
           kill() {},
           exited: Promise.resolve(0),
@@ -232,7 +270,7 @@ describe("trade-handoff bridge", () => {
 
     try {
       await hooks["experimental.session.compacting"]?.({ sessionID: "ses_test" }, output)
-      expect(started).toBe(1)
+      expect(token).not.toBe("")
       expect(output.context).toContain("trade memory handoff unavailable")
     } finally {
       await hooks.dispose?.()
@@ -267,14 +305,55 @@ function makeModel(id: string): Model {
 function seedSourceDb(file: string) {
   const db = new Database(file)
   try {
-    db.exec("create table session_message (id text primary key, session_id text not null, type text not null, seq integer not null, time_created integer not null, data text not null)")
-    db.query("insert into session_message (id, session_id, type, seq, time_created, data) values (?, ?, ?, ?, ?, ?)").run(
+    db.exec("create table session_message (id text primary key, session_id text not null, type text not null, seq integer not null, time_created integer not null, time_updated integer not null, data text not null)")
+    db.query("insert into session_message (id, session_id, type, seq, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?, ?)").run(
       "msg-1",
       "ses_test",
       "user",
       1,
-      Date.now(),
-      JSON.stringify({ type: "user", text: "hello handoff" }),
+      90,
+      90,
+      JSON.stringify({ text: "hello handoff", files: [], agents: {}, references: [] }),
+    )
+    db.query("insert into session_message (id, session_id, type, seq, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?, ?)").run(
+      "msg-2",
+      "ses_test",
+      "assistant",
+      2,
+      100,
+      100,
+      JSON.stringify({ agent: "build", model: { providerID: "openai", modelID: "gpt-5.4" }, content: [], time: { created: 100 } }),
+    )
+  } finally {
+    db.close(false)
+  }
+}
+
+function updateUserSourceDbAtCursorTimestamp(file: string) {
+  const db = new Database(file)
+  try {
+    db.query("update session_message set time_updated = ?, data = ? where id = ?").run(
+      100,
+      JSON.stringify({ text: "hello updated", files: [], agents: {}, references: [] }),
+      "msg-1",
+    )
+  } finally {
+    db.close(false)
+  }
+}
+
+function updateAssistantSourceDb(file: string) {
+  const db = new Database(file)
+  try {
+    db.query("update session_message set time_updated = ?, data = ? where id = ?").run(
+      200,
+      JSON.stringify({
+        agent: "build",
+        model: { providerID: "openai", modelID: "gpt-5.4" },
+        content: [{ type: "text", id: "txt-1", text: "assistant final" }],
+        time: { created: 100, completed: 200 },
+      }),
+      "msg-2",
     )
   } finally {
     db.close(false)

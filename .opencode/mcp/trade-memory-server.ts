@@ -1,8 +1,5 @@
 import { createTradeMemoryService } from "./service"
 import { startTradeMemoryHttpServer } from "./http"
-import { McpServer } from "../../packages/opencode/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js"
-import { StdioServerTransport } from "../../packages/opencode/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js"
-import { z } from "../../packages/opencode/node_modules/zod/v4"
 
 const service = createTradeMemoryService()
 const args = new Set(process.argv.slice(2))
@@ -16,6 +13,9 @@ if (withHttp) {
 }
 
 if (!httpOnly) {
+  const { McpServer } = await import("../../packages/opencode/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js")
+  const { StdioServerTransport } = await import("../../packages/opencode/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js")
+  const { z } = await import("../../packages/opencode/node_modules/zod/v4")
   const mcp = new McpServer({ name: "trade-memory-service", version: "0.1.0" })
 
   mcp.registerTool(

@@ -14,9 +14,10 @@ const SYNC_RETRY_BACKOFF_MS = 5000
 
 export default (async ({ directory }) => createTradeHandoffBridgeHooks(directory)) satisfies Plugin
 
-export function createTradeHandoffBridgeHooks(directory: string, options?: { startService?: (directory: string) => ChildProcessLike }): Hooks {
+export function createTradeHandoffBridgeHooks(directory: string, options?: { startService?: (directory: string, token: string) => ChildProcessLike }): Hooks {
   let child: ChildProcessLike | undefined
   let starting: Promise<boolean> | undefined
+  const serviceToken = process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN?.trim() || crypto.randomUUID()
   const pendingSessions = new Map<string, PendingSession>()
   const sessionModelState = new Map<string, { lastInjectedModelID?: string }>()
 
@@ -26,7 +27,7 @@ export function createTradeHandoffBridgeHooks(directory: string, options?: { sta
       .then(async () => {
         if (await isHealthy()) return true
         if (!isAutostartEnabled()) return false
-        if (!child || child.exitCode !== null) child = (options?.startService ?? startService)(directory)
+        if (!child || child.exitCode !== null) child = (options?.startService ?? startService)(directory, serviceToken)
         await Bun.sleep(1200)
         return isHealthy()
       })
@@ -157,7 +158,7 @@ export function createTradeHandoffBridgeHooks(directory: string, options?: { sta
   async function isHealthy() {
     try {
       const response = await fetch(new URL("/health", serviceUrl()), {
-        headers: serviceHeaders(),
+        headers: serviceHeaders(undefined, serviceToken),
         signal: AbortSignal.timeout(timeoutMs()),
       })
       return response.ok
@@ -169,7 +170,7 @@ export function createTradeHandoffBridgeHooks(directory: string, options?: { sta
   async function postJson(pathname: string, body: Record<string, unknown>) {
     const response = await fetch(new URL(pathname, serviceUrl()), {
       method: "POST",
-      headers: serviceHeaders({ "content-type": "application/json" }),
+      headers: serviceHeaders({ "content-type": "application/json" }, serviceToken),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs()),
     })
@@ -229,10 +230,11 @@ function isFreshEnough(result: unknown, pendingSince: number | undefined, synced
   return false
 }
 
-function startService(directory: string) {
+function startService(directory: string, token: string) {
   const command = parseServiceCommand(process.env.OPENCODE_TRADE_MEMORY_SERVICE_COMMAND)
   const proc = Bun.spawn(command ?? ["bun", ".opencode/mcp/trade-memory-server.ts", "--http"], {
     cwd: directory,
+    env: { ...process.env, OPENCODE_TRADE_MEMORY_SERVICE_TOKEN: process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN?.trim() || token },
     stdin: "ignore",
     stdout: "ignore",
     stderr: "inherit",
@@ -264,12 +266,12 @@ export function readModelSwitchedEvent(input: object): { sessionID?: string; mod
   }
 }
 
-function serviceHeaders(headers?: Record<string, string>) {
-  const token = process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN?.trim()
-  if (!token) return headers ?? {}
+function serviceHeaders(headers?: Record<string, string>, token?: string) {
+  const value = process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN?.trim() || token
+  if (!value) return headers ?? {}
   return {
     ...headers,
-    authorization: `Bearer ${token}`,
+    authorization: `Bearer ${value}`,
   }
 }
 

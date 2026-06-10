@@ -10,6 +10,7 @@ export type SourceRow = {
   seq: number
   type: string
   time_created: number
+  time_updated: number
   data: string
 }
 
@@ -34,6 +35,7 @@ export type ConversationRow = {
   seq: number
   role: "user" | "assistant"
   createdAt: number
+  cursorAt: number
   text: string
   checksum: string
 }

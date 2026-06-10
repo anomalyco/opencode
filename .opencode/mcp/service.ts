@@ -1,4 +1,4 @@
-import { openDatabase, resolveIndexDbPath } from "../trade-memory-core/db"
+import { assertTrustedDbPath, openDatabase, resolveIndexDbPath } from "../trade-memory-core/db"
 import { searchMemoryNotes, storeMemoryNote, updateMemoryNoteStatus, type StoreMemoryNoteInput } from "../trade-memory-core/notes"
 import { decodeStringArray, runConversationSearch, truncate } from "../trade-memory-core/search"
 import { ensureIndexSchema, readMeta } from "../trade-memory-core/schema"
@@ -17,9 +17,14 @@ export class TradeMemoryInputError extends Error {}
 export function createTradeMemoryService(defaults?: { indexDbPath?: string; sourceDbPath?: string }) {
   const resolveServiceIndexDbPath = (input?: string) => resolveIndexDbPath(input ?? defaults?.indexDbPath)
   const resolveServiceSourceDbPath = (input?: string) => input ?? defaults?.sourceDbPath
+  const assertInputPaths = (input?: { sourceDbPath?: string; indexDbPath?: string }) => {
+    assertTrustedDbPath(input?.sourceDbPath, "source_db_path")
+    assertTrustedDbPath(input?.indexDbPath, "index_db_path")
+  }
 
   return {
     health(input?: { indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input?.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -42,6 +47,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     sync(input?: { sourceDbPath?: string; indexDbPath?: string; fullResync?: boolean }) {
+      assertInputPaths(input)
       return syncTradeMemoryNow({
         sourceDbPath: resolveServiceSourceDbPath(input?.sourceDbPath),
         indexDbPath: resolveServiceIndexDbPath(input?.indexDbPath),
@@ -50,6 +56,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     searchConversations(input: { query: string; limit?: number; indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -63,6 +70,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     openConversationSource(input: { messageID: string; sourceDbPath?: string }) {
+      assertInputPaths(input)
       return openTradeConversationSource({
         messageID: requireNonEmpty(input.messageID, "messageID"),
         sourceDbPath: resolveServiceSourceDbPath(input.sourceDbPath),
@@ -70,6 +78,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     storeNote(input: StoreMemoryNoteInput & { indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -92,6 +101,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     updateNoteStatus(input: { id: string; status: NoteStatus; indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -107,6 +117,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     searchNotes(input: { query?: string; limit?: number; indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -120,6 +131,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     pinNote(input: { noteID: string; priority?: number; alwaysInclude?: boolean; reason: string; indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -143,6 +155,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     unpinNote(input: { id: string; indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -156,6 +169,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     listPins(input?: { indexDbPath?: string; limit?: number }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input?.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -173,6 +187,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     markModelSwitched(input: { sessionID: string; providerID?: string; modelID?: string; pendingSince?: number; indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -209,6 +224,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     buildHandoffContext(input: { sessionID: string; modelID?: string; maxChars?: number; indexDbPath?: string }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -228,7 +244,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
         const fresh = !pendingSince || (!!lastSyncAt && lastSyncAt >= pendingSince)
         const pinned = indexDb
           .query<MemoryNoteRow & { pin_id: string; priority: number; always_include: number; reason: string }, [number]>(
-            "select memory_pin.id as pin_id, memory_pin.priority, memory_pin.always_include, memory_pin.reason, memory_note.id, memory_note.title, memory_note.body, memory_note.memory_type, memory_note.tags, memory_note.importance, memory_note.status, memory_note.scope, memory_note.source_session_id, memory_note.source_message_ids, memory_note.created_at, memory_note.updated_at from memory_pin join memory_note on memory_note.id = memory_pin.note_id where memory_note.status = 'active' order by memory_pin.priority desc, memory_pin.updated_at desc limit ?",
+            "select memory_pin.id as pin_id, memory_pin.priority, memory_pin.always_include, memory_pin.reason, memory_note.id, memory_note.title, memory_note.body, memory_note.memory_type, memory_note.tags, memory_note.importance, memory_note.status, memory_note.scope, memory_note.source_session_id, memory_note.source_message_ids, memory_note.created_at, memory_note.updated_at from memory_pin join memory_note on memory_note.id = memory_pin.note_id where memory_note.status = 'active' and memory_pin.always_include = 1 order by memory_pin.priority desc, memory_pin.updated_at desc limit ?",
           )
           .all(DEFAULT_HANDOFF_PIN_LIMIT)
         const recentNotes = indexDb
@@ -247,7 +263,6 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
         const lines = buildHandoffLines({
           sessionID,
           modelID: modelID ?? "-",
-          indexDbPath,
           lastSyncAt,
           warnings,
           pinned: formatPinnedNotes(pinned),
@@ -277,6 +292,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
       contentHash?: string
       indexDbPath?: string
     }) {
+      assertInputPaths(input)
       const indexDbPath = resolveServiceIndexDbPath(input.indexDbPath)
       const indexDb = openDatabase(indexDbPath, false)
 
@@ -291,6 +307,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
         if (!expectedPendingSince || !contentHash) {
           throw new TradeMemoryInputError("expectedPendingSince and contentHash are required")
         }
+        if (modelID !== expectedModelID) throw new TradeMemoryInputError("modelID must match expectedModelID")
         const cleared =
           indexDb
             .query(
@@ -309,6 +326,7 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
     },
 
     semanticSearch(input: { query: string; limit?: number; indexDbPath?: string }) {
+      assertInputPaths(input)
       return {
         indexDbPath: resolveServiceIndexDbPath(input.indexDbPath),
         enabled: false,
@@ -358,7 +376,6 @@ export function createTradeMemoryService(defaults?: { indexDbPath?: string; sour
 function buildHandoffLines(input: {
   sessionID: string
   modelID: string
-  indexDbPath: string
   lastSyncAt: number | null
   warnings: string[]
   pinned: string[]
@@ -375,7 +392,6 @@ function buildHandoffLines(input: {
     "## Trade Memory Handoff",
     `- session_id: ${input.sessionID}`,
     `- model_id: ${input.modelID}`,
-    `- index_db: ${input.indexDbPath}`,
     `- last_sync_at: ${input.lastSyncAt ?? "-"}`,
     ...(input.warnings.length ? ["", "## Warnings", ...input.warnings] : []),
   ]
@@ -479,10 +495,10 @@ function formatPinnedNotes(rows: Array<MemoryNoteRow & { priority: number; reaso
   return rows.flatMap((row, index) => {
     const tags = decodeStringArray(row.tags).join(", ") || "-"
     return [
-      `${index + 1}. ${row.title}`,
-      `   priority: ${row.priority} reason: ${row.reason}`,
-      `   tags: ${tags}`,
-      `   body: ${truncate(row.body, 240)}`,
+      `${index + 1}. ${quoteInline(row.title)}`,
+      `   priority: ${row.priority} reason: ${quoteInline(row.reason)}`,
+      `   tags: ${quoteInline(tags)}`,
+      `   body: ${quoteInline(truncate(row.body, 240))}`,
     ]
   })
 }
@@ -492,17 +508,21 @@ function formatActiveNotes(rows: MemoryNoteRow[]) {
   return rows.flatMap((row, index) => {
     const tags = decodeStringArray(row.tags).join(", ") || "-"
     return [
-      `${index + 1}. ${row.title}`,
-      `   type: ${row.memory_type} importance: ${row.importance} scope: ${row.scope}`,
-      `   tags: ${tags}`,
-      `   body: ${truncate(row.body, 200)}`,
+      `${index + 1}. ${quoteInline(row.title)}`,
+      `   type: ${quoteInline(row.memory_type)} importance: ${row.importance} scope: ${quoteInline(row.scope)}`,
+      `   tags: ${quoteInline(tags)}`,
+      `   body: ${quoteInline(truncate(row.body, 200))}`,
     ]
   })
 }
 
 function formatRecentMessages(rows: Array<{ role: string; text: string; created_at: number }>) {
   if (!rows.length) return ["- none"]
-  return rows.map((row, index) => `${index + 1}. [${row.role}] ${truncate(row.text, 160)}`)
+  return rows.map((row, index) => `${index + 1}. [${row.role}] ${quoteInline(truncate(row.text, 160))}`)
+}
+
+function quoteInline(input: string) {
+  return JSON.stringify(input.replace(/\r\n/g, "\n"))
 }
 
 export type TradeMemoryService = ReturnType<typeof createTradeMemoryService>

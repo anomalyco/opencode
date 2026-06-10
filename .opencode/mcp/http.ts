@@ -1,4 +1,5 @@
 import { createTradeMemoryService, TradeMemoryInputError, type TradeMemoryService } from "./service"
+import { TradeMemoryPathError } from "../trade-memory-core/db"
 
 const MAX_BODY_BYTES = readPositiveEnv("OPENCODE_TRADE_MEMORY_SERVICE_MAX_BODY_BYTES", 1024 * 1024)
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1"])
@@ -12,7 +13,7 @@ export function startTradeMemoryHttpServer(input?: {
   const hostname = input?.hostname ?? process.env.OPENCODE_TRADE_MEMORY_SERVICE_HOST ?? "127.0.0.1"
   const port = input?.port ?? readPositiveEnv("OPENCODE_TRADE_MEMORY_SERVICE_PORT", 19787)
 
-  requireTokenForRemoteHost(hostname)
+  requireToken(hostname)
 
   return Bun.serve({
     hostname,
@@ -46,6 +47,7 @@ export function startTradeMemoryHttpServer(input?: {
       } catch (error) {
         if (error instanceof HttpError) return json({ error: error.message }, error.status)
         if (error instanceof TradeMemoryInputError) return json({ error: error.message }, 400)
+        if (error instanceof TradeMemoryPathError) return json({ error: error.message }, 400)
         console.error("[trade-memory] request failed", error)
         return json({ error: "internal error" }, 500)
       }
@@ -67,7 +69,7 @@ async function readJson(request: Request) {
   if (!contentType.toLowerCase().includes("application/json")) throw new HttpError(415, "content-type must be application/json")
   const contentLength = Number(request.headers.get("content-length") ?? 0)
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) throw new HttpError(413, "request body too large")
-  const text = await request.text()
+  const text = await readBodyText(request)
   if (!text.trim()) throw new HttpError(400, "request body must not be empty")
   if (text.length > MAX_BODY_BYTES) throw new HttpError(413, "request body too large")
   try {
@@ -85,10 +87,31 @@ function authorize(request: Request) {
   throw new HttpError(401, "unauthorized")
 }
 
-function requireTokenForRemoteHost(hostname: string) {
-  if (LOCAL_HOSTS.has(hostname)) return
+function requireToken(hostname: string) {
+  if (LOCAL_HOSTS.has(hostname) && process.env.OPENCODE_TRADE_MEMORY_ALLOW_UNAUTH_LOCALHOST === "true") return
   if (process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN?.trim()) return
-  throw new Error("OPENCODE_TRADE_MEMORY_SERVICE_TOKEN is required when binding outside localhost")
+  throw new Error("OPENCODE_TRADE_MEMORY_SERVICE_TOKEN is required; set OPENCODE_TRADE_MEMORY_ALLOW_UNAUTH_LOCALHOST=true only for local tests")
+}
+
+async function readBodyText(request: Request) {
+  const reader = request.body?.getReader()
+  if (!reader) return ""
+  const chunks: Uint8Array[] = []
+  let size = 0
+  while (true) {
+    const next = await reader.read()
+    if (next.done) break
+    size += next.value.byteLength
+    if (size > MAX_BODY_BYTES) throw new HttpError(413, "request body too large")
+    chunks.push(next.value)
+  }
+  const body = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(body)
 }
 
 function json(body: unknown, status = 200) {

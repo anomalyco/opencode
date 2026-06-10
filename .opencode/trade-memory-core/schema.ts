@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite"
 
-const SOURCE_SIGNATURE_SESSION_MESSAGE = "session_message:v1:id,session_id,type,seq,time_created,data"
+const SOURCE_SIGNATURE_SESSION_MESSAGE_V1 = "session_message:v1:id,session_id,type,seq,time_created,data"
+const SOURCE_SIGNATURE_SESSION_MESSAGE = "session_message:v2:id,session_id,type,seq,time_created,time_updated,data"
 const SOURCE_SIGNATURE_MESSAGE_PART = "message_part:v1:message(id,session_id,time_created,data)+part(message_id,time_created,data)"
 const MEMORY_SCHEMA_VERSION = "2"
 
@@ -157,8 +158,8 @@ export function upsertMeta(db: Database, key: string, value: string) {
   ).run(key, value, Date.now())
 }
 
-export function shouldFullResync(db: Database, sourceDbPath: string) {
-  return readMeta(db, "source_db_path") !== sourceDbPath || !readMeta(db, "last_cursor_created_at")
+export function shouldFullResync(db: Database, sourceDbPath: string, sourceMode: "session_message" | "message_part") {
+  return readMeta(db, "source_db_path") !== sourceDbPath || readMeta(db, "source_signature") !== sourceSignature(sourceMode) || !readMeta(db, "last_cursor_created_at")
 }
 
 export function readSyncCursor(db: Database, sourceDbPath: string): { createdAt: number; messageID: string } | undefined {
@@ -176,8 +177,12 @@ export function readMeta(db: Database, key: string) {
 
 function verifySourceSignature(db: Database) {
   const stored = readMeta(db, "source_signature")
-  if (!stored || stored === SOURCE_SIGNATURE_SESSION_MESSAGE || stored === SOURCE_SIGNATURE_MESSAGE_PART) return
+  if (!stored || stored === SOURCE_SIGNATURE_SESSION_MESSAGE || stored === SOURCE_SIGNATURE_SESSION_MESSAGE_V1 || stored === SOURCE_SIGNATURE_MESSAGE_PART) return
   throw new Error(`source signature mismatch: unsupported stored signature ${stored}`)
+}
+
+export function sourceSignature(sourceMode: "session_message" | "message_part") {
+  return sourceMode === "session_message" ? SOURCE_SIGNATURE_SESSION_MESSAGE : SOURCE_SIGNATURE_MESSAGE_PART
 }
 
 function hasSessionMessageContent(db: Database) {
@@ -186,7 +191,7 @@ function hasSessionMessageContent(db: Database) {
     .get()
   if (!table) return false
   const columns = db.query<{ name: string }, []>("pragma table_info(session_message)").all().map((row) => row.name)
-  const required = ["id", "session_id", "type", "seq", "time_created", "data"]
+  const required = ["id", "session_id", "type", "seq", "time_created", "time_updated", "data"]
   if (required.some((name) => !columns.includes(name))) return false
   const count = db
     .query<{ count: number }, []>("select count(*) as count from session_message where type in ('user', 'assistant')")
