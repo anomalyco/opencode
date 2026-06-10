@@ -1,6 +1,6 @@
 import { Config } from "effect"
 
-function truthy(key: string) {
+export function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
   return value === "true" || value === "1"
 }
@@ -46,7 +46,6 @@ export const Flag = {
 
   OPENCODE_WORKSPACE_ID: process.env["OPENCODE_WORKSPACE_ID"],
   OPENCODE_EXPERIMENTAL_WORKSPACES: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),
-  OPENCODE_EXPERIMENTAL_SESSION_SWITCHER: enabledByExperimental("OPENCODE_EXPERIMENTAL_SESSION_SWITCHER"),
 
   // Evaluated at access time (not module load) because tests, the CLI, and
   // external tooling set these env vars at runtime.

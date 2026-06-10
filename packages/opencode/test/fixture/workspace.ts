@@ -1,7 +1,7 @@
 import { FetchHttpClient } from "effect/unstable/http"
 import { Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Auth } from "../../src/auth"
 import { Workspace } from "../../src/control-plane/workspace"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -23,7 +23,7 @@ export const workspaceLayerWithRuntimeFlags = (overrides: Partial<RuntimeFlags.I
     Layer.provide(Database.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(RuntimeFlags.layer(overrides)),
     Layer.provide(InstanceStore.defaultLayer),
     Layer.provide(InstanceBootstrap.defaultLayer),

@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/enterprise",
-  "version": "1.15.13",
+  "version": "1.17.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -20,6 +20,7 @@
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/meta": "catalog:",
+    "@hono/standard-validator": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
     "js-base64": "3.7.7",

@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Project } from "@/project/project"
-import * as Log from "@opencode-ai/core/util/log"
 import { $ } from "bun"
 import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -17,14 +16,13 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-
-void Log.init({ print: false })
 
 const encoder = new TextEncoder()
 
@@ -75,8 +73,9 @@ function projectLayerWithFailure(failArg: string) {
     Layer.provide(AppProcess.layer.pipe(Layer.provide(mockGitFailure(failArg)))),
     Layer.provide(mockGitFailure(failArg)),
     Layer.provide(ProjectV2.defaultLayer),
+    Layer.provide(ProjectCopy.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
@@ -87,8 +86,9 @@ function projectLayerWithRuntimeFlags(flags: Parameters<typeof RuntimeFlags.laye
   return Project.layer.pipe(
     Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(ProjectV2.defaultLayer),
+    Layer.provide(ProjectCopy.defaultLayer),
     Layer.provide(AppProcess.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(Database.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),

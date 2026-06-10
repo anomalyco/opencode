@@ -277,6 +277,7 @@ export function DialogConnectProvider(props: { provider: string }) {
               <div class="text-14-regular text-text-base">{select()?.message}</div>
               <div>
                 <List
+                  class="px-3"
                   items={select()?.options ?? []}
                   key={(x) => x.value}
                   current={select()?.options.find((x) => x.value === formStore.value[select()!.key])}
@@ -364,6 +365,7 @@ export function DialogConnectProvider(props: { provider: string }) {
         </div>
         <div>
           <List
+            class="px-3"
             ref={(ref) => {
               listRef = ref
             }}

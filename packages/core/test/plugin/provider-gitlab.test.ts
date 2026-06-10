@@ -190,7 +190,7 @@ describe("GitLabPlugin", () => {
             {
               model: model("gitlab", "claude"),
               package: "gitlab-ai-provider",
-              options: provider.options.aisdk.provider,
+              options: provider.request.body,
             },
             {},
           )
@@ -238,7 +238,7 @@ describe("GitLabPlugin", () => {
             {
               model: model("gitlab", "claude"),
               package: "gitlab-ai-provider",
-              options: provider.options.aisdk.provider,
+              options: provider.request.body,
             },
             {},
           )
@@ -256,10 +256,9 @@ describe("GitLabPlugin", () => {
         "aisdk.language",
         {
           model: model("gitlab", "duo-workflow-custom", {
-            options: {
+            request: {
               headers: {},
-              body: {},
-              aisdk: { provider: {}, request: { workflowRef: "ref", workflowDefinition: "definition" } },
+              body: { workflowRef: "ref", workflowDefinition: "definition" },
             },
           }),
           sdk: {
@@ -320,10 +319,9 @@ describe("GitLabPlugin", () => {
         "aisdk.language",
         {
           model: model("gitlab", "duo-workflow-custom", {
-            options: {
+            request: {
               headers: {},
-              body: {},
-              aisdk: { provider: {}, request: { featureFlags: { request_flag: true } } },
+              body: { featureFlags: { request_flag: true } },
             },
           }),
           sdk: {
@@ -350,7 +348,7 @@ describe("GitLabPlugin", () => {
         "aisdk.language",
         {
           model: model("gitlab", "claude", {
-            options: { headers: { h: "v" }, body: {}, aisdk: { provider: {}, request: {} } },
+            request: { headers: { h: "v" }, body: {} },
           }),
           sdk: {
             workflowChat: () => undefined,

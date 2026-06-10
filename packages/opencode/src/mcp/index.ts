@@ -1,4 +1,6 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -13,18 +15,17 @@ import {
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "@/config/config"
-import { ConfigMCP } from "../config/mcp"
-import * as Log from "@opencode-ai/core/util/log"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
-import { TuiEvent } from "@/cli/cmd/tui/event"
+import { TuiEvent } from "@/server/tui-event"
 import open from "open"
 import { Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -32,7 +33,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 
-const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
 
 const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
@@ -106,17 +106,17 @@ const pendingOAuthTransports = new Map<string, TransportWithAuth>()
 // Prompt cache types
 type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
-type McpEntry = NonNullable<Config.Info["mcp"]>[string]
+type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
 
-function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
+function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
   return typeof entry === "object" && entry !== null && "type" in entry
 }
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
+const MAX_LIST_PAGES = 1_000
 
-function remoteURL(key: string, value: string) {
+function remoteURL(value: string) {
   if (URL.canParse(value)) return new URL(value)
-  log.warn("invalid remote mcp url", { key })
 }
 
 function isOutputSchemaValidationError(error: Error) {
@@ -125,33 +125,43 @@ function isOutputSchemaValidationError(error: Error) {
   )
 }
 
-function listTools(key: string, client: MCPClient, timeout: number) {
-  return Effect.tryPromise({
-    try: () => client.listTools(undefined, { timeout }),
-    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-  }).pipe(
-    Effect.map((result) => result.tools),
-    Effect.catch((error) => {
-      if (!isOutputSchemaValidationError(error)) return Effect.fail(error)
+async function paginate<T, R extends { nextCursor?: string }>(
+  list: (cursor?: string) => Promise<R>,
+  items: (result: R) => T[],
+) {
+  const result: T[] = []
+  const cursors = new Set<string>()
+  let cursor: string | undefined
 
-      log.warn("failed to validate MCP tool output schemas, retrying without output schema validation", { key, error })
-      return Effect.tryPromise({
-        try: () =>
-          client.request({ method: "tools/list" }, TolerantListToolsResultSchema, {
-            timeout,
-          }),
-        catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-      }).pipe(
-        Effect.map((result) =>
-          result.tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-          })),
-        ),
-      )
-    }),
-  )
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const page = await list(cursor)
+    result.push(...items(page))
+    if (page.nextCursor === undefined) return result
+    if (cursors.has(page.nextCursor)) throw new Error(`MCP list returned duplicate cursor: ${page.nextCursor}`)
+    cursors.add(page.nextCursor)
+    cursor = page.nextCursor
+  }
+
+  throw new Error(`MCP list exceeded ${MAX_LIST_PAGES} pages`)
+}
+
+function listTools(client: MCPClient, timeout: number) {
+  return Effect.tryPromise({
+    try: () =>
+      paginate(
+        async (cursor) => {
+          const params = cursor === undefined ? undefined : { cursor }
+          try {
+            return await client.listTools(params, { timeout })
+          } catch (error) {
+            if (!(error instanceof Error) || !isOutputSchemaValidationError(error)) throw error
+            return client.request({ method: "tools/list", params }, TolerantListToolsResultSchema, { timeout })
+          }
+        },
+        (result) => result.tools,
+      ),
+    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  })
 }
 
 // Convert MCP tool definition to AI SDK Tool type
@@ -169,7 +179,7 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
   return dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(schema),
-    execute: async (args: unknown) => {
+    execute: async (args: unknown, options) => {
       return client.callTool(
         {
           name: mcpTool.name,
@@ -178,6 +188,7 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
         CallToolResultSchema,
         {
           resetTimeoutOnProgress: true,
+          signal: options.abortSignal,
           timeout,
         },
       )
@@ -185,13 +196,8 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
   })
 }
 
-function defs(key: string, client: MCPClient, timeout?: number) {
-  return listTools(key, client, timeout ?? DEFAULT_TIMEOUT).pipe(
-    Effect.catch((err) => {
-      log.error("failed to get tools from client", { key, error: err })
-      return Effect.succeed(undefined)
-    }),
-  )
+function defs(client: MCPClient, timeout?: number) {
+  return listTools(client, timeout ?? DEFAULT_TIMEOUT).pipe(Effect.catch(() => Effect.void))
 }
 
 function fetchFromClient<T extends { name: string }>(
@@ -202,11 +208,14 @@ function fetchFromClient<T extends { name: string }>(
 ) {
   return Effect.tryPromise({
     try: () => listFn(client),
-    catch: (e: any) => {
-      log.error(`failed to get ${label}`, { clientName, error: e.message })
-      return e
-    },
+    catch: (error) => error,
   }).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning(`failed to get ${label}`, {
+        clientName,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    ),
     Effect.map((items) => {
       const out: Record<string, T & { client: string }> = {}
       const sanitizedClient = sanitize(clientName)
@@ -234,7 +243,7 @@ interface AuthResult {
 // --- Effect Service ---
 
 interface State {
-  config: Record<string, ConfigMCP.Info>
+  config: Record<string, ConfigMCPV1.Info>
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
@@ -246,7 +255,7 @@ export interface Interface {
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
-  readonly add: (name: string, mcp: ConfigMCP.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
+  readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly getPrompt: (
@@ -304,11 +313,11 @@ export const layer = Layer.effect(
 
     const connectRemote = Effect.fn("MCP.connectRemote")(function* (
       key: string,
-      mcp: ConfigMCP.Info & { type: "remote" },
+      mcp: ConfigMCPV1.Info & { type: "remote" },
     ) {
       const oauthDisabled = mcp.oauth === false
       const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
-      const url = remoteURL(key, mcp.url)
+      const url = remoteURL(mcp.url)
       if (!url) {
         return {
           client: undefined as MCPClient | undefined,
@@ -329,9 +338,7 @@ export const layer = Layer.effect(
             redirectUri: oauthConfig?.redirectUri,
           },
           {
-            onRedirect: async (url) => {
-              log.info("oauth redirect requested", { key, url: url.toString() })
-            },
+            onRedirect: async () => {},
           },
           auth,
         )
@@ -366,8 +373,6 @@ export const layer = Layer.effect(
               error instanceof UnauthorizedError || (authProvider && lastError.message.includes("OAuth"))
 
             if (isAuthError) {
-              log.info("mcp server requires authentication", { key, transport: name })
-
               if (lastError.message.includes("registration") || lastError.message.includes("client_id")) {
                 lastStatus = {
                   status: "needs_client_registration" as const,
@@ -395,20 +400,11 @@ export const layer = Layer.effect(
               }
             }
 
-            log.debug("transport connection failed", {
-              key,
-              transport: name,
-              url: mcp.url,
-              error: lastError.message,
-            })
             lastStatus = { status: "failed" as const, error: lastError.message }
-            return Effect.succeed(undefined)
+            return Effect.void
           }),
         )
-        if (result) {
-          log.info("connected", { key, transport: result.transportName })
-          return { client: result.client as MCPClient | undefined, status: { status: "connected" } as Status }
-        }
+        if (result) return { client: result.client, status: { status: "connected" } as Status }
         // If this was an auth error, stop trying other transports
         if (lastStatus?.status === "needs_auth" || lastStatus?.status === "needs_client_registration") break
       }
@@ -421,7 +417,7 @@ export const layer = Layer.effect(
 
     const connectLocal = Effect.fn("MCP.connectLocal")(function* (
       key: string,
-      mcp: ConfigMCP.Info & { type: "local" },
+      mcp: ConfigMCPV1.Info & { type: "local" },
     ) {
       const [cmd, ...args] = mcp.command
       const cwd = yield* InstanceState.directory
@@ -436,9 +432,6 @@ export const layer = Layer.effect(
           ...mcp.environment,
         },
       })
-      transport.stderr?.on("data", (chunk: Buffer) => {
-        log.info(`mcp stderr: ${chunk.toString()}`, { key })
-      })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       return yield* connectTransport(transport, connectTimeout).pipe(
@@ -448,36 +441,34 @@ export const layer = Layer.effect(
         })),
         Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
           const msg = error instanceof Error ? error.message : String(error)
-          log.error("local mcp startup failed", { key, command: mcp.command, cwd, error: msg })
           return Effect.succeed({ client: undefined, status: { status: "failed", error: msg } })
         }),
       )
     })
 
-    const create = Effect.fn("MCP.create")(function* (key: string, mcp: ConfigMCP.Info) {
+    const create = Effect.fn("MCP.create")(function* (key: string, mcp: ConfigMCPV1.Info) {
       if (mcp.enabled === false) {
-        log.info("mcp server disabled", { key })
         return DISABLED_RESULT
       }
 
-      log.info("found", { key, type: mcp.type })
-
       const { client: mcpClient, status } =
         mcp.type === "remote"
-          ? yield* connectRemote(key, mcp as ConfigMCP.Info & { type: "remote" })
-          : yield* connectLocal(key, mcp as ConfigMCP.Info & { type: "local" })
+          ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
+          : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
 
       if (!mcpClient) {
+        if (status.status !== "connected" && status.status !== "disabled") {
+          yield* Effect.logWarning("server unavailable", { key, type: mcp.type, status: status.status })
+        }
         return { status } satisfies CreateResult
       }
 
-      const listed = yield* defs(key, mcpClient, mcp.timeout)
+      const listed = mcpClient.getServerCapabilities()?.tools ? yield* defs(mcpClient, mcp.timeout) : []
       if (!listed) {
         yield* Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore)
         return { status: { status: "failed", error: "Failed to get tools" } } satisfies CreateResult
       }
 
-      log.info("create() successfully created client", { key, toolCount: listed.length })
       return { mcpClient, status, defs: listed } satisfies CreateResult
     })
     const cfgSvc = yield* Config.Service
@@ -487,8 +478,8 @@ export const layer = Layer.effect(
         if (process.platform === "win32") return [] as number[]
         const pids: number[] = []
         const queue = [pid]
-        while (queue.length > 0) {
-          const current = queue.shift()!
+        for (let index = 0; index < queue.length; index++) {
+          const current = queue[index]
           const handle = yield* spawner.spawn(ChildProcess.make("pgrep", ["-P", String(current)], { stdin: "ignore" }))
           const text = yield* Stream.mkString(Stream.decodeText(handle.stdout))
           yield* handle.exitCode
@@ -507,11 +498,11 @@ export const layer = Layer.effect(
     )
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+      if (!client.getServerCapabilities()?.tools) return
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-        log.info("tools list changed notification received", { server: name })
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-        const listed = await bridge.promise(defs(name, client, timeout))
+        const listed = await bridge.promise(defs(client, timeout))
         if (!listed) return
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
@@ -537,7 +528,7 @@ export const layer = Layer.effect(
           ([key, mcp]) =>
             Effect.gen(function* () {
               if (!isMcpConfigured(mcp)) {
-                log.error("Ignoring MCP config entry without type", { key })
+                yield* Effect.logError("Ignoring MCP config entry without type", { key })
                 return
               }
 
@@ -633,7 +624,7 @@ export const layer = Layer.effect(
       return s.clients
     })
 
-    const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCP.Info) {
+    const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCPV1.Info) {
       const s = yield* InstanceState.get(state)
       const result = yield* create(name, mcp)
 
@@ -647,7 +638,7 @@ export const layer = Layer.effect(
       return yield* storeClient(s, name, result.mcpClient, result.defs!, mcp.timeout)
     })
 
-    const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCP.Info) {
+    const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
       const s = yield* InstanceState.get(state)
       s.config[name] = mcp
       yield* createAndStore(name, mcp)
@@ -675,30 +666,20 @@ export const layer = Layer.effect(
       const config = cfg.mcp ?? {}
       const defaultTimeout = cfg.experimental?.mcp_timeout
 
-      const connectedClients = Object.entries(s.clients).filter(
-        ([clientName]) => s.status[clientName]?.status === "connected",
-      )
-
-      yield* Effect.forEach(
-        connectedClients,
-        ([clientName, client]) =>
-          Effect.gen(function* () {
-            const mcpConfig = config[clientName]
-            const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : s.config[clientName]
-
-            const listed = s.defs[clientName]
-            if (!listed) {
-              log.warn("missing cached tools for connected server", { clientName })
-              return
-            }
-
-            const timeout = entry?.timeout ?? defaultTimeout
-            for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
-            }
-          }),
-        { concurrency: "unbounded" },
-      )
+      for (const [clientName, client] of Object.entries(s.clients)) {
+        if (s.status[clientName]?.status !== "connected") continue
+        const mcpConfig = config[clientName]
+        const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : s.config[clientName]
+        const listed = s.defs[clientName]
+        if (!listed) {
+          yield* Effect.logWarning("missing cached tools for connected server", { clientName })
+          continue
+        }
+        const timeout = entry?.timeout ?? defaultTimeout
+        for (const mcpTool of listed) {
+          result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+        }
+      }
       return result
     })
 
@@ -717,12 +698,32 @@ export const layer = Layer.effect(
 
     const prompts = Effect.fn("MCP.prompts")(function* () {
       const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(s, (c) => c.listPrompts().then((r) => r.prompts), "prompts")
+      return yield* collectFromConnected(
+        s,
+        (c) =>
+          c.getServerCapabilities()?.prompts
+            ? paginate(
+                (cursor) => c.listPrompts(cursor === undefined ? undefined : { cursor }),
+                (result) => result.prompts,
+              )
+            : Promise.resolve([]),
+        "prompts",
+      )
     })
 
     const resources = Effect.fn("MCP.resources")(function* () {
       const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(s, (c) => c.listResources().then((r) => r.resources), "resources")
+      return yield* collectFromConnected(
+        s,
+        (c) =>
+          c.getServerCapabilities()?.resources
+            ? paginate(
+                (cursor) => c.listResources(cursor === undefined ? undefined : { cursor }),
+                (result) => result.resources,
+              )
+            : Promise.resolve([]),
+        "resources",
+      )
     })
 
     const withClient = Effect.fnUntraced(function* <A>(
@@ -734,16 +735,22 @@ export const layer = Layer.effect(
       const s = yield* InstanceState.get(state)
       const client = s.clients[clientName]
       if (!client) {
-        log.warn(`client not found for ${label}`, { clientName })
+        yield* Effect.logWarning(`client not found for ${label}`, { clientName })
         return undefined
       }
       return yield* Effect.tryPromise({
         try: () => fn(client),
-        catch: (e: any) => {
-          log.error(`failed to ${label}`, { clientName, ...meta, error: e?.message })
-          return e
-        },
-      }).pipe(Effect.orElseSucceed(() => undefined))
+        catch: (error) => error,
+      }).pipe(
+        Effect.tapError((error) =>
+          Effect.logError(`failed to ${label}`, {
+            clientName,
+            ...meta,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        ),
+        Effect.orElseSucceed(() => undefined),
+      )
     })
 
     const getPrompt = Effect.fn("MCP.getPrompt")(function* (
@@ -782,7 +789,7 @@ export const layer = Layer.effect(
       const mcpConfig = yield* requireMcpConfig(mcpName)
       if (mcpConfig.type !== "remote") throw new Error(`MCP server ${mcpName} is not a remote server`)
       if (mcpConfig.oauth === false) throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
-      const url = remoteURL(mcpName, mcpConfig.url)
+      const url = remoteURL(mcpConfig.url)
       if (!url) throw new Error(`Invalid MCP URL for "${mcpName}"`)
 
       // OAuth config is optional - if not provided, we'll use auto-discovery
@@ -847,18 +854,20 @@ export const layer = Layer.effect(
           Effect.tapError(() => Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)),
         )
 
-        const listed = client ? yield* defs(mcpName, client, mcpConfig.timeout) : undefined
+        const listed = client
+          ? client.getServerCapabilities()?.tools
+            ? yield* defs(client, mcpConfig.timeout)
+            : []
+          : undefined
         if (!client || !listed) {
           yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
-          return { status: "failed", error: "Failed to get tools" } as Status
+          return { status: "failed", error: "Failed to get tools" } satisfies Status
         }
 
         const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
         return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
       }
-
-      log.info("opening browser for oauth", { mcpName, url: result.authorizationUrl, state: result.oauthState })
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
 
@@ -879,7 +888,6 @@ export const layer = Layer.effect(
           }),
         ),
         Effect.catch(() => {
-          log.warn("failed to open browser, user must open URL manually", { mcpName })
           return events.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
         }),
       )
@@ -903,13 +911,12 @@ export const layer = Layer.effect(
       const result = yield* Effect.tryPromise({
         try: () => transport.finishAuth(authorizationCode).then(() => true as const),
         catch: (error) => {
-          log.error("failed to finish oauth", { mcpName, error })
           return error
         },
       }).pipe(Effect.option)
 
       if (Option.isNone(result)) {
-        return { status: "failed", error: "OAuth completion failed" } as Status
+        return { status: "failed", error: "OAuth completion failed" } satisfies Status
       }
 
       yield* auth.clearCodeVerifier(mcpName)
@@ -924,7 +931,6 @@ export const layer = Layer.effect(
       yield* auth.remove(mcpName)
       McpOAuthCallback.cancelPending(mcpName)
       pendingOAuthTransports.delete(mcpName)
-      log.info("removed oauth credentials", { mcpName })
     })
 
     const supportsOAuth = Effect.fn("MCP.supportsOAuth")(function* (mcpName: string) {
@@ -939,9 +945,9 @@ export const layer = Layer.effect(
 
     const getAuthStatus = Effect.fn("MCP.getAuthStatus")(function* (mcpName: string) {
       const entry = yield* auth.get(mcpName)
-      if (!entry?.tokens) return "not_authenticated" as AuthStatus
+      if (!entry?.tokens) return "not_authenticated"
       const expired = yield* auth.isTokenExpired(mcpName)
-      return (expired ? "expired" : "authenticated") as AuthStatus
+      return expired ? "expired" : "authenticated"
     })
 
     return Service.of({
@@ -975,7 +981,9 @@ export const defaultLayer = layer.pipe(
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
 )
+
+export const node = LayerNode.make(layer, [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node])
 
 export * as MCP from "."

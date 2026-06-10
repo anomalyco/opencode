@@ -1,92 +1,74 @@
 import fs from "fs/promises"
 import path from "path"
-import { pathToFileURL } from "url"
+import { fileURLToPath } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
-import { LocationFileSystem } from "@opencode-ai/core/location-filesystem"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
-import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
+import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
-function provide(directory: string) {
-  return Effect.provide(
-    LocationFileSystem.locationLayer.pipe(
+const provide = (directory: string) =>
+  Effect.provide(
+    FileSystem.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
-          AppFileSystem.defaultLayer,
+          FSUtil.defaultLayer,
+          Ripgrep.defaultLayer,
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
         ),
       ),
     ),
   )
-}
 
-function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
-  return Effect.acquireRelease(
+const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
+  Effect.acquireRelease(
     Effect.promise(() => tmpdir()),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path).pipe(provide(tmp.path))))
-}
+  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
-describe("LocationFileSystem", () => {
+describe("FileSystem", () => {
   it.live("reads text and binary files", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => fs.writeFile(path.join(directory, "hello.txt"), "hello"))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "text.txt"), "hello"))
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "data.bin"), Buffer.from([0, 1, 2])))
-        const service = yield* LocationFileSystem.Service
-
-        expect(yield* service.read({ path: RelativePath.make("hello.txt") })).toEqual({
-          type: "text",
-          content: "hello",
-          mime: "text/plain",
-        })
-        expect(yield* service.read({ path: RelativePath.make("data.bin") })).toEqual({
-          type: "binary",
-          content: "AAEC",
-          encoding: "base64",
-          mime: "application/octet-stream",
-        })
-      }),
+        const service = yield* FileSystem.Service
+        const text = yield* service.read({ path: RelativePath.make("text.txt") })
+        const binary = yield* service.read({ path: RelativePath.make("data.bin") })
+        expect(text).toMatchObject({ name: "text.txt", content: "hello", encoding: "utf8", mime: "text/plain" })
+        expect(fileURLToPath(text.uri)).toBe(path.join(directory, "text.txt"))
+        expect(binary).toMatchObject({ name: "data.bin", content: "AAEC", encoding: "base64" })
+      }).pipe(provide(directory)),
     ),
   )
 
-  it.live("lists direct children with relative paths and resolved URIs", () =>
+  it.live("lists direct children", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.mkdir(path.join(directory, "src")))
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "README.md"), "# Test"))
-        const service = yield* LocationFileSystem.Service
-
-        expect(yield* service.list()).toEqual([
-          {
-            path: RelativePath.make("src"),
-            uri: pathToFileURL(path.join(directory, "src")).href,
-            type: "directory",
-            mime: "application/x-directory",
-          },
-          {
-            path: RelativePath.make("README.md"),
-            uri: pathToFileURL(path.join(directory, "README.md")).href,
-            type: "file",
-            mime: "text/markdown",
-          },
+        const entries = yield* (yield* FileSystem.Service).list()
+        expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+          { path: RelativePath.make("src" + path.sep), type: "directory" },
+          { path: RelativePath.make("README.md"), type: "file" },
         ])
-      }),
+      }).pipe(provide(directory)),
     ),
   )
 
-  it.live("rejects paths outside the location", () =>
+  it.live("rejects lexical escapes", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        const service = yield* LocationFileSystem.Service
-        expect(
-          Exit.isFailure(yield* service.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)),
-        ).toBe(true)
-      }),
+        const result = yield* (yield* FileSystem.Service)
+          .read({ path: RelativePath.make("../outside.txt") })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+      }).pipe(provide(directory)),
     ),
   )
 })

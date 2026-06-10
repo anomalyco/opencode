@@ -4,23 +4,21 @@ import { Schema } from "effect"
 import { Location } from "../location"
 import { ModelV2 } from "../model"
 import { ProjectV2 } from "../project"
-import { RelativePath, optionalOmitUndefined, withStatics } from "../schema"
+import { externalID, type ExternalID, RelativePath, optionalOmitUndefined, withStatics } from "../schema"
 import { Identifier } from "../util/identifier"
 import { V2Schema } from "../v2-schema"
 import { AgentV2 } from "../agent"
 
-export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
-  identifier: "Session.Delivery",
-})
-export type Delivery = Schema.Schema.Type<typeof Delivery>
-
-export const DefaultDelivery = "immediate" satisfies Delivery
-
 export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
   Schema.brand("SessionID"),
-  withStatics((schema) => ({
-    descending: (id?: string) => schema.make(id ?? "ses_" + Identifier.descending()),
-  })),
+  withStatics((schema) => {
+    const create = () => schema.make("ses_" + Identifier.descending())
+    return {
+      create,
+      descending: (id?: string) => (id === undefined ? create() : schema.make(id)),
+      fromExternal: (input: ExternalID) => schema.make(externalID("ses", input)),
+    }
+  }),
 )
 export type ID = typeof ID.Type
 

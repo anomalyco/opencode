@@ -80,6 +80,7 @@ WITH normalized AS (
     tokens_reasoning,
     tokens_cache_read,
     tokens_cache_write_5m,
+    tokens_cache_write_1h,
     cost_input_microcents,
     cost_output_microcents,
     cost_total_microcents,
@@ -91,7 +92,6 @@ WITH normalized AS (
   WHERE event_type = 'completions'
     AND model IS NOT NULL
     AND model <> ''
-    AND (strpos(COALESCE(user_agent, ''), 'ai-sdk') > 0 OR strpos(COALESCE(user_agent, ''), 'opencode') > 0)
     AND event_timestamp >= ${periodStartValue}
     AND event_timestamp < ${periodEndValue}
 ), filtered AS (
@@ -119,7 +119,7 @@ WITH normalized AS (
     tokens_output,
     tokens_reasoning,
     tokens_cache_read,
-    COALESCE(tokens_cache_read, 0) + COALESCE(tokens_cache_write_5m, 0) + COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0) AS tokens_total,
+    COALESCE(tokens_cache_read, 0) + COALESCE(tokens_cache_write_5m, 0) + COALESCE(tokens_cache_write_1h, 0) + COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0) AS tokens_total,
     COALESCE(cost_input_microcents, cost_input * 1000000) AS cost_input_microcents,
     COALESCE(cost_output_microcents, cost_output * 1000000) AS cost_output_microcents,
     COALESCE(cost_total_microcents, cost_total * 1000000) AS cost_total_microcents

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/stats-app",
-  "version": "1.15.13",
+  "version": "1.17.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -18,17 +18,25 @@
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
+    "d3-geo": "3.1.1",
     "d3-scale": "4.0.2",
     "effect": "catalog:",
+    "i18n-iso-countries": "7.14.0",
     "nitro": "3.0.1-alpha.1",
-    "sst": "catalog:",
     "solid-js": "catalog:",
-    "vite": "catalog:"
+    "sst": "catalog:",
+    "topojson-client": "3.1.0",
+    "vite": "catalog:",
+    "world-atlas": "2.0.2"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "@types/bun": "catalog:",
+    "@types/d3-geo": "3.1.0",
     "@types/d3-scale": "4.0.9",
+    "@types/geojson": "7946.0.16",
+    "@types/topojson-client": "3.1.5",
+    "@types/topojson-specification": "1.0.5",
     "@typescript/native-preview": "catalog:",
     "typescript": "catalog:"
   },

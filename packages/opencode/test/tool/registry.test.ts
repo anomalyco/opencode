@@ -10,7 +10,7 @@ import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Plugin } from "@/plugin"
 import { Question } from "@/question"
 import { Todo } from "@/session/todo"
@@ -26,16 +26,15 @@ import { Instruction } from "@/session/instruction"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Format } from "@/format"
-import { Ripgrep } from "@/file/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
-import { Reference } from "@/reference/reference"
-import { RepositoryCache } from "@/reference/repository-cache"
 
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const node = CrossSpawnSpawner.defaultLayer
 const configLayer = TestConfig.layer({
@@ -59,11 +58,10 @@ const registryLayer = (opts: RegistryLayerOptions = {}) =>
       Layer.provide(Session.defaultLayer),
       Layer.provide(Layer.mergeAll(SessionStatus.defaultLayer, BackgroundJob.defaultLayer)),
       Layer.provide(Provider.defaultLayer),
-      Layer.provide(Layer.mergeAll(Git.defaultLayer, RepositoryCache.defaultLayer)),
-      Layer.provide(Reference.defaultLayer),
+      Layer.provide(Git.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
-      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(FSUtil.defaultLayer),
       Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
@@ -98,9 +96,6 @@ const brokenPluginLayer = Layer.succeed(
 )
 
 const it = testEffect(Layer.mergeAll(registryLayer(), node, Agent.defaultLayer))
-const scout = testEffect(
-  Layer.mergeAll(registryLayer({ flags: { experimentalScout: true } }), node, Agent.defaultLayer),
-)
 const withBrokenPlugin = testEffect(
   Layer.mergeAll(registryLayer({ plugin: brokenPluginLayer }), node, Agent.defaultLayer),
 )
@@ -110,26 +105,6 @@ afterEach(async () => {
 })
 
 describe("tool.registry", () => {
-  it.instance("hides repo research tools unless experimental", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      const ids = yield* registry.ids()
-
-      expect(ids).not.toContain("repo_clone")
-      expect(ids).not.toContain("repo_overview")
-    }),
-  )
-
-  scout.instance("shows repo research tools when experimental scout is enabled", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      const ids = yield* registry.ids()
-
-      expect(ids).toContain("repo_clone")
-      expect(ids).toContain("repo_overview")
-    }),
-  )
-
   it.instance("does not expose task_status", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
@@ -147,7 +122,7 @@ describe("tool.registry", () => {
       if (!build) throw new Error("build agent not found")
       const task = (yield* registry.tools({
         providerID: ProviderV2.ID.opencode,
-        modelID: ProviderV2.ModelID.make("test"),
+        modelID: ModelV2.ID.make("test"),
         agent: build,
       })).find((tool) => tool.id === "task")
 
@@ -325,7 +300,7 @@ describe("tool.registry", () => {
       const agents = yield* Agent.Service
       const promptTools = yield* registry.tools({
         providerID: ProviderV2.ID.opencode,
-        modelID: ProviderV2.ModelID.make("test"),
+        modelID: ModelV2.ID.make("test"),
         agent: yield* agents.defaultInfo(),
       })
       const promptTool = promptTools.find((tool) => tool.id === "sql")

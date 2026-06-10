@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Effect, Layer } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
@@ -36,5 +37,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer
+
+export const node = LayerNode.make(layer, [])
 
 export * as Env from "."

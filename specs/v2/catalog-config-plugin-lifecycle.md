@@ -1,5 +1,7 @@
 # Catalog / Config / Plugin Lifecycle Options
 
+Status: current core has selected replayable Location-scoped Catalog transforms, aligned with option B. Reload/watch behavior and deferred external plugin activation remain design work; the option comparison below is retained as historical context.
+
 We need to choose where provider/model inputs live and how visible catalog state changes after boot. The designs below compare config, models.dev, auth, plugin activation/disablement, config edits, and policy changes under each option.
 
 ## Scenarios
