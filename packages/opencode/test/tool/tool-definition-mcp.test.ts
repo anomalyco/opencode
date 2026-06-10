@@ -156,4 +156,46 @@ describe("tool.definition MCP hook", () => {
       expect(tool!.description).toBe("PREFIX: Original MCP tool description")
     }),
   )
+
+  it.instance("plugin can modify MCP tool parameters via tool.definition hook", () =>
+    Effect.gen(function* () {
+      const modifyingPlugin = Plugin.Service.of({
+        init: () => Effect.void,
+        list: () => Effect.succeed([]),
+        trigger: ((_name: string, _input: any, output: any) => {
+          output.parameters = jsonSchema({
+            type: "object",
+            properties: {
+              modified: { type: "boolean", description: "Added by plugin" },
+            },
+            required: ["modified"],
+          })
+          return Effect.succeed(output)
+        }) as Plugin.Interface["trigger"],
+      })
+
+      const tools = yield* SessionTools.resolve({
+        agent: {
+          name: "test",
+          mode: "primary" as const,
+          options: {},
+          permission: [
+            { action: "allow", permission: "*", pattern: "*" },
+          ] as PermissionV1.Rule[],
+        },
+        model: ProviderTest.model(),
+        session: testSession,
+        processor: testProcessor,
+        bypassAgentCheck: false,
+        messages: [],
+        promptOps: testPromptOps,
+      }).pipe(Effect.provideService(Plugin.Service, modifyingPlugin))
+
+      const tool = tools["test_mcp_tool_v2"]
+      expect(tool).toBeDefined()
+      expect((tool!.inputSchema as any).jsonSchema?.properties?.modified).toBeDefined()
+      expect((tool!.inputSchema as any).jsonSchema?.properties?.modified.description).toBe("Added by plugin")
+    }),
+  )
+
 })
