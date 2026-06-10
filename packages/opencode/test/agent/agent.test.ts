@@ -14,6 +14,7 @@ import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
 import { Skill } from "../../src/skill"
 import { Truncate } from "../../src/tool/truncate"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 
 const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Agent.layer.pipe(
@@ -22,6 +23,7 @@ const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Skill.defaultLayer),
+    Layer.provide(LocationServiceMap.layer),
     Layer.provide(RuntimeFlags.layer(flags)),
   )
 
@@ -119,7 +121,7 @@ it.instance(
     }),
   {
     config: {
-      reference: {
+      references: {
         effect: "github.com/effect/effect-smol",
         effectFull: {
           repository: "Effect-TS/effect",
@@ -599,6 +601,25 @@ description: Permission skill.
       expect(Permission.evaluate("external_directory", target, build!.permission).action).toBe("allow")
     }),
   { git: true },
+)
+
+it.instance(
+  "project reference directories are allowed for external_directory",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const build = yield* load((svc) => svc.get("build"))
+      const target = path.resolve(test.directory, "../docs/reference/notes.md")
+      expect(Permission.evaluate("external_directory", target, build!.permission).action).toBe("allow")
+    }),
+  {
+    git: true,
+    config: {
+      references: {
+        docs: "../docs",
+      },
+    },
+  },
 )
 
 it.instance("defaultAgent returns build when no default_agent config", () =>

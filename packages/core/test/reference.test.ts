@@ -19,10 +19,16 @@ describe("Reference", () => {
       const scope = yield* Scope.make()
       const update = yield* references.transform().pipe(Effect.provideService(Scope.Scope, scope))
       const path = AbsolutePath.make("/docs")
-      yield* update((editor) => editor.add("docs", new Reference.LocalSource({ type: "local", path })))
+      const source = new Reference.LocalSource({
+        type: "local",
+        path,
+        description: "Use for API documentation",
+        hidden: true,
+      })
+      yield* update((editor) => editor.add("docs", source))
 
       expect(yield* references.list()).toEqual([
-        new Reference.Info({ name: "docs", path, source: new Reference.LocalSource({ type: "local", path }) }),
+        new Reference.Info({ name: "docs", path, description: "Use for API documentation", hidden: true, source }),
       ])
 
       yield* Scope.close(scope, Exit.void)
@@ -47,6 +53,35 @@ describe("Reference", () => {
         new Reference.Info({
           name: "sdk",
           path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository)),
+          source,
+        }),
+      ])
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Reference.layer),
+      Effect.provide(cache),
+      Effect.provide(EventV2.defaultLayer),
+      Effect.provide(Global.defaultLayer),
+    ),
+  )
+
+  it.effect("preserves configured Git descriptions", () =>
+    Effect.gen(function* () {
+      const references = yield* Reference.Service
+      const update = yield* references.transform()
+      const repository = Repository.parseRemote("owner/repo")
+      const source = new Reference.GitSource({
+        type: "git",
+        repository: "owner/repo",
+        description: "Use for SDK implementation details",
+      })
+      yield* update((editor) => editor.add("sdk", source))
+
+      expect(yield* references.list()).toEqual([
+        new Reference.Info({
+          name: "sdk",
+          path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository)),
+          description: "Use for SDK implementation details",
           source,
         }),
       ])

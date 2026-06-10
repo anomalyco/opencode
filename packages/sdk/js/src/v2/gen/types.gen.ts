@@ -1685,26 +1685,6 @@ export type ServerConfig = {
   cors?: Array<string>
 }
 
-export type ReferenceConfigEntry =
-  | string
-  | {
-      /**
-       * Git repository URL, host/path reference, or GitHub owner/repo shorthand
-       */
-      repository: string
-      branch?: string
-    }
-  | {
-      /**
-       * Absolute path, ~/ path, or workspace-relative path to a local reference directory
-       */
-      path: string
-    }
-
-export type ReferenceConfig = {
-  [key: string]: ReferenceConfigEntry
-}
-
 export type PermissionActionConfig = "ask" | "allow" | "deny"
 
 export type PermissionObjectConfig = {
@@ -1948,7 +1928,9 @@ export type Config = {
     paths?: Array<string>
     urls?: Array<string>
   }
-  reference?: ReferenceConfig
+  references?: {
+    [key: string]: string | ConfigV2ReferenceGit | ConfigV2ReferenceLocal
+  }
   watcher?: {
     ignore?: Array<string>
   }
@@ -3723,6 +3705,19 @@ export type SyncEventSessionNextCompactionEnded = {
   }
 }
 
+export type ConfigV2ReferenceGit = {
+  repository: string
+  branch?: string
+  description?: string
+  hidden?: boolean
+}
+
+export type ConfigV2ReferenceLocal = {
+  path: string
+  description?: string
+  hidden?: boolean
+}
+
 export type PolicyEffect = "allow" | "deny"
 
 export type ConfigV2ExperimentalPolicy = {
@@ -4174,17 +4169,23 @@ export type QuestionV2Reply = {
 export type ReferenceLocalSource = {
   type: "local"
   path: string
+  description?: string
+  hidden?: boolean
 }
 
 export type ReferenceGitSource = {
   type: "git"
   repository: string
   branch?: string
+  description?: string
+  hidden?: boolean
 }
 
 export type ReferenceInfo = {
   name: string
   path: string
+  description?: string
+  hidden?: boolean
   source: ReferenceLocalSource | ReferenceGitSource
 }
 

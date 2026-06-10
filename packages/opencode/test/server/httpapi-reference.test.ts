@@ -16,7 +16,7 @@ describe("reference HttpApi", () => {
       config: {
         formatter: false,
         lsp: false,
-        reference: {
+        references: {
           docs: "./docs",
           effect: { repository: "Effect-TS/effect", branch: "main" },
           bad: "not-a-repo",
@@ -35,18 +35,26 @@ describe("reference HttpApi", () => {
       {
         name: "docs",
         path: path.join(tmp.path, "docs"),
+        description: null,
+        hidden: null,
         source: {
           type: "local",
           path: path.join(tmp.path, "docs"),
+          description: null,
+          hidden: null,
         },
       },
       {
         name: "effect",
         path: path.join(Global.Path.repos, "github.com", "Effect-TS", "effect"),
+        description: null,
+        hidden: null,
         source: {
           type: "git",
           repository: "Effect-TS/effect",
           branch: "main",
+          description: null,
+          hidden: null,
         },
       },
     ])
