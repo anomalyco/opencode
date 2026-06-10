@@ -149,16 +149,19 @@ export function createPromptDoc(input: PromptDocInput) {
       sync: next,
       init: opts?.init ?? init,
       submit: input.submit,
-      onDraftChange: syncFilled,
+      onDraftChange: () => {
+        syncFilled()
+        syncHistory()
+      },
     })
     if (!alive()) {
       await fresh.dispose()
       return
     }
     const id = opts?.docID ?? next.docID
-    historySub?.dispose()
-    historySub = undefined
     handle = fresh
+    // Subscribe before attach so history events fired while attaching are not missed.
+    bindHistory()
     sync = next
     setActiveSync(next)
     init = opts?.init ?? init
@@ -170,7 +173,6 @@ export function createPromptDoc(input: PromptDocInput) {
     setReady(true)
     syncHistory()
     syncFilled()
-    bindHistory()
   }
 
   const pivot = (sessionID: string, next: string, opts?: { init?: boolean; force?: boolean }) => {
@@ -227,6 +229,7 @@ export function createPromptDoc(input: PromptDocInput) {
       if (handle?.collection.id === remote.docID) {
         await handle.attach(opts.el)
         setReady(true)
+        syncHistory()
         syncFilled()
         return
       }
@@ -239,8 +242,22 @@ export function createPromptDoc(input: PromptDocInput) {
     mounted = undefined
     theme = undefined
     locale = undefined
-    // serialize() bumps the generation (cancelling any in-flight build) and queues the teardown
-    // behind it, so drop() can never race a concurrent mount/pivot.
+    // Keep the handle (sync connection + own-edit undo history) alive across panel unmounts, so
+    // leaving and re-entering doc mode does not rebuild the editor and wipe undo history. The DOM
+    // is detached only; mount() reuses the handle for the same doc. serialize() bumps the
+    // generation (cancelling any in-flight build) so this can never race a concurrent mount/pivot.
+    void serialize(async () => {
+      handle?.detach()
+      setReady(false)
+    })
+  }
+
+  const dispose = () => {
+    mounted = undefined
+    theme = undefined
+    locale = undefined
+    // Full teardown (unlike detach): releases the editor and sync connection without clearing the
+    // stored actor identity the way reset() does.
     void serialize(async () => {
       await drop()
     })
@@ -336,6 +353,7 @@ export function createPromptDoc(input: PromptDocInput) {
     history,
     mount,
     detach,
+    dispose,
     reset,
     refresh,
     pivot,

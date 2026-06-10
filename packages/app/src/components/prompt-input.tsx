@@ -476,6 +476,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     submit: () => void submit(),
     user: () => parentParams.user[0],
   })
+  // detach() keeps the doc handle (sync + undo history) alive across panel unmounts, so the
+  // component itself owns the final teardown.
+  onCleanup(() => doc.dispose())
 
   const bridge = usePromptDocBridge()
   createEffect(() => {
