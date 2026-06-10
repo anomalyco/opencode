@@ -31,7 +31,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
-import { NewSessionDesignView, NewSessionView, SessionHeader } from "@/components/session"
+import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useServerSync } from "@/context/server-sync"
@@ -63,7 +63,6 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
-import { shouldUseV2NewSessionPage } from "@/pages/session/new-session-layout"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
@@ -271,13 +270,10 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
-  const isV2NewSessionPage = () =>
-    shouldUseV2NewSessionPage({ newLayoutDesigns: newSessionDesign(), sessionID: params.id })
-  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened() && !isV2NewSessionPage())
+  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(
     () =>
       isDesktop() &&
-      !isV2NewSessionPage() &&
       shouldShowFileTree({
         desktopV2: platform.platform === "desktop" && settings.general.newLayoutDesigns(),
         showFileTree: settings.general.showFileTree(),
@@ -1757,10 +1753,9 @@ export default function Page() {
 
         <div
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
+            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
             "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
-            "transition-[width]": !isV2NewSessionPage(),
           }}
           style={{
             width: sessionPanelWidth(),
@@ -1768,9 +1763,7 @@ export default function Page() {
         >
           <div
             classList={{
-              "flex-1 min-h-0 flex flex-col": true,
-              "bg-v2-background-bg-deep": isV2NewSessionPage(),
-              "bg-background-stronger": !isV2NewSessionPage(),
+              "flex-1 min-h-0 flex flex-col bg-background-stronger": true,
               "rounded-[10px] overflow-hidden": settings.general.newLayoutDesigns(),
               "shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
             }}
@@ -1826,9 +1819,7 @@ export default function Page() {
                   </Show>
                 </Match>
                 <Match when={true}>
-                  <Show when={newSessionDesign()} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
-                    <NewSessionDesignView>{composerRegion("inline")}</NewSessionDesignView>
-                  </Show>
+                  <NewSessionView worktree={newSessionWorktree()} />
                 </Match>
               </Switch>
             </div>
