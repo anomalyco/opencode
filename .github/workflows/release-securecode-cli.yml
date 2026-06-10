@@ -104,8 +104,15 @@ jobs:
     #   - oven-sh/bun#29120 — truncated code signature in v1.3.12
     #   - https://bun.com/docs/guides/runtime/codesign-macos-executable
     #   - acompany-develop/securecode#294
+    #
+    # runner image は macos-15 に固定する。当初 macos-14 で署名していたが、
+    # macos-14 上の codesign が出した ad-hoc 署名は macOS 15 Sequoia の AMFI
+    # で `Taskgated Invalid Signature` として実行時に SIGKILL される (`codesign
+    # --verify` は通るのに dyld 初期化前で死ぬ)。署名 OS と実行 OS を揃える
+    # ことで AMFI の整合性検査を通す。standard runner なので per-minute rate
+    # は macos-14 と同一。
     needs: build
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
