@@ -238,14 +238,25 @@ export const layer = Layer.effect(
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
-        // Only explicit user rejections block the loop (subject to
-        // experimental.continue_loop_on_deny). Static ruleset denies
-        // (PermissionV1.DeniedError) and rejections with feedback
-        // (PermissionV1.CorrectedError) intentionally do NOT block: the model
-        // should see the error output and adapt or act on the feedback.
+        // Explicit rejections block the loop (subject to
+        // experimental.continue_loop_on_deny). This includes rejections with
+        // feedback (PermissionV1.CorrectedError): a reject is the user or a
+        // plugin saying no, and the turn must end either way; the feedback is
+        // recorded on the errored tool part, so the model reads it on the
+        // next turn (or immediately when continue_loop_on_deny is true).
+        // Before CorrectedError was included, a reject sent with a message
+        // (e.g. kimaki's permission-timeout auto-reject) never ended the
+        // turn, so the model could retry the denied call and re-ask in a
+        // tight loop. Static ruleset denies (PermissionV1.DeniedError)
+        // intentionally do NOT block: they are routine (e.g. subagent tool
+        // restrictions) and the model should see the error and adapt.
         // Note: error identity survives Effect.orDie here because runPromise
         // rejects with the squashed cause, which is the original error object.
-        if (error instanceof PermissionV1.RejectedError || error instanceof Question.RejectedError) {
+        if (
+          error instanceof PermissionV1.RejectedError ||
+          error instanceof PermissionV1.CorrectedError ||
+          error instanceof Question.RejectedError
+        ) {
           ctx.blocked = ctx.shouldBreak
         }
         yield* settleToolCall(toolCallID)

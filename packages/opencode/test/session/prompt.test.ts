@@ -2290,14 +2290,14 @@ noLLMServer.instance(
 //
 // autoRejectAsks mimics a plugin using the v1 SDK that rejects every
 // permission ask as soon as it is published (e.g. subagent auto-reject).
-const autoRejectAsks = Effect.fn("test.autoRejectAsks")(function* () {
+const autoRejectAsks = Effect.fn("test.autoRejectAsks")(function* (message?: string) {
   const events = yield* EventV2Bridge.Service
   const permission = yield* Permission.Service
   const off = yield* events.listen((event) =>
     Effect.gen(function* () {
       if (event.type !== Permission.Event.Asked.type) return
       const req = event.data as { id: PermissionV1.ID }
-      yield* permission.reply({ requestID: req.id, reply: "reject" })
+      yield* permission.reply({ requestID: req.id, reply: "reject", ...(message ? { message } : {}) })
     }).pipe(Effect.ignore),
   )
   yield* Effect.addFinalizer(() => off)
@@ -2421,4 +2421,90 @@ unix(
       }),
     ),
   20_000,
+)
+
+unix(
+  "rejected permission with feedback blocks loop by default",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        // A reject sent WITH a message produces PermissionV1.CorrectedError.
+        // Before CorrectedError joined the blocked check, such a reject never
+        // ended the turn: the model received the feedback as a tool error and
+        // could immediately retry the same call and re-ask, looping without
+        // user-visible progress (e.g. kimaki's permission-timeout auto-reject
+        // always sends a message). A reject must end the turn by default,
+        // message or not.
+        const { llm, dir } = yield* useServerConfig((url) => ({
+          ...providerCfg(url),
+          experimental: { continue_loop_on_deny: false },
+        }))
+        yield* autoRejectAsks("Permission expired and was rejected.")
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          title: "CorrectedStop",
+          permission: [{ permission: "bash", pattern: "*", action: "ask" }],
+        })
+        yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "run a command" }],
+        })
+        const call = { command: "rm -rf /tmp/corrected-stop", workdir: dir, description: "Remove dir" }
+        for (let i = 0; i < 6; i++) yield* llm.tool("bash", call)
+        yield* llm.text("should never be requested")
+
+        const result = yield* prompt.loop({ sessionID: session.id })
+        expect(result.info.role).toBe("assistant")
+        expect(yield* llm.calls).toBe(1)
+
+        const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+        const tool = msgs.flatMap((m) => m.parts).find((p): p is SessionV1.ToolPart => p.type === "tool")
+        expect(tool?.state.status).toBe("error")
+        if (tool?.state.status === "error") expect(tool.state.error).toContain("Permission expired and was rejected.")
+      }),
+    ),
+  15_000,
+)
+
+unix(
+  "rejected permission with feedback continues loop when continue_loop_on_deny is true",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { llm, dir } = yield* useServerConfig((url) => ({
+          ...providerCfg(url),
+          experimental: { continue_loop_on_deny: true },
+        }))
+        yield* autoRejectAsks("try a different approach")
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          title: "CorrectedContinue",
+          permission: [{ permission: "bash", pattern: "*", action: "ask" }],
+        })
+        yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "run a command" }],
+        })
+        yield* llm.tool("bash", { command: "rm -rf /tmp/corrected-continue", workdir: dir, description: "Remove dir" })
+        yield* llm.text("adjusting based on feedback")
+
+        const result = yield* prompt.loop({ sessionID: session.id })
+        expect(result.info.role).toBe("assistant")
+        expect(yield* llm.calls).toBe(2)
+
+        const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+        const parts = msgs.flatMap((m) => m.parts)
+        const tool = parts.find((p): p is SessionV1.ToolPart => p.type === "tool")
+        expect(tool?.state.status).toBe("error")
+        if (tool?.state.status === "error") expect(tool.state.error).toContain("try a different approach")
+        expect(parts.some((p) => p.type === "text" && p.text === "adjusting based on feedback")).toBe(true)
+      }),
+    ),
+  15_000,
 )
