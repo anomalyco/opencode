@@ -288,10 +288,11 @@ export const layer = Layer.effect(
         subagent_type: task.agent,
         command: task.command,
       }
+      const taskHookOutput = { args: taskArgs }
       yield* plugin.trigger(
         "tool.execute.before",
         { tool: TaskTool.id, sessionID, callID: part.id },
-        { args: taskArgs },
+        taskHookOutput,
       )
 
       const taskAgent = yield* agents.get(task.agent)
@@ -306,7 +307,7 @@ export const layer = Layer.effect(
       let error: Error | undefined
       const taskAbort = new AbortController()
       const result = yield* taskTool
-        .execute(taskArgs, {
+        .execute(taskHookOutput.args, {
           agent: task.agent,
           messageID: assistantMessage.id,
           sessionID,

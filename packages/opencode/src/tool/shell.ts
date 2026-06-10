@@ -410,7 +410,7 @@ export const ShellTool = Tool.define(
           }
         }
 
-        if (tokens.length && (!cmd || !CWD.has(cmd))) {
+        if (tokens.length && (!cmd || !CWD.has(cmd)) && !tokens[0]?.startsWith("$")) {
           scan.patterns.add(source(node))
           scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
         }
