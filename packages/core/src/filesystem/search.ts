@@ -139,11 +139,6 @@ export const fffLayer = Layer.effect(
     }).pipe(Effect.orDie)
     if (!result.ok) return yield* Effect.die(result.error)
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
-    const scanned = yield* Effect.tryPromise({
-      try: () => result.value.waitForScan(5_000),
-      catch: (cause) => cause,
-    }).pipe(Effect.orDie)
-    if (!scanned.ok || !scanned.value) return yield* Effect.die(scanned.ok ? "fff scan timed out" : scanned.error)
     return Service.of({
       glob: (input) =>
         Effect.sync(() => {
