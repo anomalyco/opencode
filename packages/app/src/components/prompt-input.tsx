@@ -88,6 +88,15 @@ import { ImagePreview } from "@opencode-ai/ui/image-preview"
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
+  expanded?: boolean
+  onComposerExpand?: () => void
+  onComposerCollapse?: () => void
+  composerShell?: {
+    size: number
+    min: number
+    max: number
+    onResize: (height: number) => void
+  }
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
@@ -166,6 +175,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const mirror = { input: false }
   const inset = 56
   const space = `${inset}px`
+
+  const composerExpand = () => {
+    if (!props.onComposerExpand || !props.onComposerCollapse) return
+    return {
+      expanded: !!props.expanded,
+      onExpand: props.onComposerExpand,
+      onCollapse: props.onComposerCollapse,
+    }
+  }
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -363,6 +381,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.mode !== "doc") return
     setHeight((value) => clamp(value))
   }
+  const shellResize = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    const bounds = props.composerShell
+    if (!bounds || event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const start = bounds.size
+    const y = event.clientY
+    const html = document.documentElement
+    const body = document.body
+    const cursor = html.style.cursor
+    const select = body.style.userSelect
+    html.style.cursor = "ns-resize"
+    body.style.userSelect = "none"
+
+    const clamp = (value: number) => Math.min(bounds.max, Math.max(bounds.min, value))
+    const move = (event: PointerEvent) => {
+      bounds.onResize(clamp(start + y - event.clientY))
+    }
+    const up = () => {
+      html.style.cursor = cursor
+      body.style.userSelect = select
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+      window.removeEventListener("pointercancel", up)
+    }
+
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+    window.addEventListener("pointercancel", up)
+  }
+
   const resize = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
     if (event.button !== 0) return
     event.preventDefault()
@@ -1958,11 +2008,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     <div
       classList={{
         "relative flex w-full flex-col gap-0": true,
-        "h-[300px] max-h-[512px]": store.mode === "draw",
-        "size-full max-h-[512px] min-h-0": store.mode !== "doc" && store.mode !== "draw",
+        "h-[300px] max-h-[512px]": store.mode === "draw" && !props.expanded,
+        "size-full max-h-[512px] min-h-0": store.mode !== "doc" && store.mode !== "draw" && !props.expanded,
+        "flex-1 min-h-0": props.expanded,
+        relative: props.expanded,
       }}
       style={
-        store.mode === "doc"
+        store.mode === "doc" && !props.expanded
           ? {
               height: `${height()}px`,
               "min-height": `${DOC_MIN}px`,
@@ -1971,11 +2023,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           : undefined
       }
     >
-      <Show when={store.mode === "doc"}>
+      <Show when={store.mode === "doc" && !props.expanded}>
         <div
           data-component="prompt-doc-resize-handle"
           class="group absolute -top-2.5 left-8 right-8 z-30 flex h-3 cursor-ns-resize touch-none items-center justify-center"
           onPointerDown={resize}
+        >
+          <div class="h-0.5 w-18 rounded-none bg-border-weaker-base transition-colors group-hover:bg-border-strong-base" />
+        </div>
+      </Show>
+      <Show when={props.expanded && props.composerShell}>
+        <div
+          data-component="prompt-composer-resize-handle"
+          class="group absolute -top-2.5 left-8 right-8 z-30 flex h-3 cursor-ns-resize touch-none items-center justify-center"
+          onPointerDown={shellResize}
         >
           <div class="h-0.5 w-18 rounded-none bg-border-weaker-base transition-colors group-hover:bg-border-strong-base" />
         </div>
@@ -2000,7 +2061,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         classList={{
           "group/prompt-input": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
-          "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
+          "flex min-h-0 flex-1 flex-col": canvasMode(store.mode) || props.expanded,
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -2061,7 +2122,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 when={store.mode === "doc"}
                 fallback={
                   <div
-                    class="relative max-h-[240px] overflow-y-auto no-scrollbar"
+                    classList={{
+                      "relative overflow-y-auto no-scrollbar": true,
+                      "max-h-[240px]": !props.expanded,
+                      "flex-1 min-h-0": props.expanded,
+                    }}
                     ref={(el) => (scrollRef = el)}
                     style={{ "scroll-padding-bottom": space }}
                   >
@@ -2116,6 +2181,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   tip={tip()}
                   onExit={exitDoc}
                   modes={modeButtons()}
+                  expand={composerExpand()}
                 />
               </Show>
             }
@@ -2130,6 +2196,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               tip={tip()}
               onExit={() => setMode("normal")}
               modes={modeButtons()}
+              expand={composerExpand()}
             />
           </Show>
 

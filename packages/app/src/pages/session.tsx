@@ -9,6 +9,7 @@ import {
   Match,
   Switch,
   createMemo,
+  createSignal,
   createEffect,
   createComputed,
   on,
@@ -1745,6 +1746,8 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
+  const [composerLift, setComposerLift] = createSignal(false)
+
   const SessionPanelBody = () => (
     <>
       <div class="flex-1 min-h-0 overflow-hidden">
@@ -1848,6 +1851,7 @@ export default function Page() {
         setPromptDockRef={(el) => {
           promptDock = el
         }}
+        onExpandedChange={setComposerLift}
       />
     </>
   )
@@ -1855,7 +1859,10 @@ export default function Page() {
   const SessionPanelResize = () => (
     <Show when={isDesktop()}>
       <div
-        class="absolute inset-y-0 right-0 z-30 w-0 overflow-visible"
+        class="absolute inset-y-0 right-0 w-0 overflow-visible"
+        classList={{
+          "pointer-events-none": composerLift(),
+        }}
         style={{ "--resize-gap-offset": "7px" }}
         onPointerDown={() => size.start()}
       >
@@ -1883,18 +1890,20 @@ export default function Page() {
       data-component="codle-session-column"
       classList={{
         "relative flex min-h-0 min-w-0 flex-1 flex-col": true,
+        // expanded composer: sole z-index so column stacks above side panel (flex row DOM order)
+        "z-10": composerLift(),
         ...(props.classList ?? {}),
         [props.class ?? ""]: !!props.class,
       }}
       style={props.style}
     >
+      <SessionPanelResize />
       <div
         data-component="codle-session-frame"
         class="@container relative flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         <SessionPanelBody />
       </div>
-      <SessionPanelResize />
     </div>
   )
 

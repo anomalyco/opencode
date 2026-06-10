@@ -288,6 +288,8 @@ export const dict = {
   "prompt.action.send": "Gönder",
   "prompt.action.stop": "Durdur",
   "prompt.action.queue": "Add to queue",
+  "prompt.action.expandView": "View larger",
+  "prompt.action.collapseView": "Collapse",
 
   "prompt.toast.pasteUnsupported.title": "Desteklenmeyen ek",
   "prompt.toast.drawEmpty.title": "Nothing to send",

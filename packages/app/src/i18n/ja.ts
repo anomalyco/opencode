@@ -263,6 +263,8 @@ export const dict = {
   "prompt.action.send": "送信",
   "prompt.action.stop": "停止",
   "prompt.action.queue": "Add to queue",
+  "prompt.action.expandView": "View larger",
+  "prompt.action.collapseView": "Collapse",
   "prompt.toast.pasteUnsupported.title": "サポートされていない添付ファイル",
   "prompt.toast.drawEmpty.title": "Nothing to send",
   "prompt.toast.drawEmpty.description": "Add a drawing, text, or attachment before sending.",

@@ -21,6 +21,11 @@ type ShellProps = {
   tip: JSX.Element
   onExit: () => void | Promise<void>
   modes?: JSX.Element
+  expand?: {
+    expanded: boolean
+    onExpand: () => void
+    onCollapse: () => void
+  }
 }
 
 export const PromptDrawingShell: Component<ShellProps> = (props) => {
@@ -42,6 +47,11 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
     await navigator.clipboard.writeText(id)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+  const expandLabel = () => {
+    const expand = props.expand
+    if (!expand) return ""
+    return expand.expanded ? language.t("prompt.action.collapseView") : language.t("prompt.action.expandView")
   }
 
   return (
@@ -83,7 +93,7 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
       </div>
       <div
         data-component="prompt-draw-actions"
-        class="relative z-20 flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border-weaker-base bg-surface-raised-stronger-non-alpha px-2 py-0"
+        class="relative flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border-weaker-base bg-surface-raised-stronger-non-alpha px-2 py-0"
       >
         <div class="flex items-center gap-0.5">
           {props.modes}
@@ -136,6 +146,22 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
                 disabled={!props.doc.ready()}
                 onClick={() => fileInputRef?.click()}
                 aria-label={language.t("prompt.action.attachFile")}
+              />
+            </Tooltip>
+          </Show>
+          <Show when={props.expand}>
+            <Tooltip placement="top" value={expandLabel()}>
+              <IconButton
+                data-action={props.expand!.expanded ? "composer-collapse" : "composer-expand"}
+                type="button"
+                variant="ghost"
+                icon={props.expand!.expanded ? "collapse" : "expand"}
+                class="size-7.5"
+                aria-label={expandLabel()}
+                aria-expanded={props.expand!.expanded}
+                onClick={() =>
+                  props.expand!.expanded ? props.expand!.onCollapse() : props.expand!.onExpand()
+                }
               />
             </Tooltip>
           </Show>

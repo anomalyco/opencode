@@ -283,6 +283,8 @@ export const dict = {
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Detener",
   "prompt.action.queue": "Add to queue",
+  "prompt.action.expandView": "View larger",
+  "prompt.action.collapseView": "Collapse",
 
   "prompt.toast.pasteUnsupported.title": "Adjunto no compatible",
   "prompt.toast.drawEmpty.title": "Nothing to send",

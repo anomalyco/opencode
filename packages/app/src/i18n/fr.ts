@@ -264,6 +264,8 @@ export const dict = {
   "prompt.action.send": "Envoyer",
   "prompt.action.stop": "Arrêter",
   "prompt.action.queue": "Add to queue",
+  "prompt.action.expandView": "View larger",
+  "prompt.action.collapseView": "Collapse",
   "prompt.toast.pasteUnsupported.title": "Pièce jointe non prise en charge",
   "prompt.toast.drawEmpty.title": "Nothing to send",
   "prompt.toast.drawEmpty.description": "Add a drawing, text, or attachment before sending.",

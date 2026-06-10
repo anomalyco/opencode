@@ -274,6 +274,8 @@ export const dict = {
   "prompt.action.send": "전송",
   "prompt.action.stop": "중지",
   "prompt.action.queue": "대기열에 추가",
+  "prompt.action.expandView": "크게 보기",
+  "prompt.action.collapseView": "작게 보기",
   "prompt.toast.pasteUnsupported.title": "지원되지 않는 첨부 파일",
   "prompt.toast.pasteUnsupported.description": "이미지, PDF 또는 텍스트 파일만 첨부할 수 있습니다.",
   "prompt.toast.drawEmpty.title": "보낼 내용 없음",

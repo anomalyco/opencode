@@ -517,7 +517,7 @@ export function SessionSidePanel(props: {
                 icon={fileOpen() ? "chevron-right" : "chevron-left"}
                 variant="secondary"
                 size="small"
-                class="absolute top-1/2 z-20 !h-8 !w-5 -translate-y-1/2 cursor-pointer bg-background-stronger"
+                class="absolute top-1/2 !h-8 !w-5 -translate-y-1/2 cursor-pointer bg-background-stronger"
                 classList={{
                   "rounded-r-none border-r-0": !fileOpen(),
                 }}

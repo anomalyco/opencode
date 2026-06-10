@@ -399,6 +399,31 @@
     box-shadow: 0 0 0 2px var(--focus-ring-color);
   }
 
+  [data-component="session-prompt-dock"] dialog[data-component="session-composer-shell"]:not([open]) {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    border: none;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    color: inherit;
+  }
+
+  dialog[data-component="session-composer-expanded"][open] {
+    border: none;
+    margin: 0;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    background: transparent;
+    color: inherit;
+  }
+
+  dialog[data-component="session-composer-expanded"]::backdrop {
+    display: none;
+  }
+
   [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="tray"] {
     background: color-mix(in srgb, var(--app-paper) 82%, var(--app-frame) 18%);
     border-color: color-mix(in srgb, var(--app-line) 72%, transparent);
