@@ -96,8 +96,13 @@ describe("formatServerError", () => {
 
   test("falls back for unknown error objects and names", () => {
     expect(formatServerError({ name: "ServerTimeoutError", data: { seconds: 30 } }, language.t)).toBe(
-      "Erro desconhecido",
+      "ServerTimeoutError",
     )
+  })
+
+  test("extracts message from structured API error objects", () => {
+    expect(formatServerError({ data: { message: "  Sidecar unavailable  " } }, language.t)).toBe("Sidecar unavailable")
+    expect(formatServerError({ message: "Connection refused" }, language.t)).toBe("Connection refused")
   })
 
   test("formats provider model errors using provider/model", () => {

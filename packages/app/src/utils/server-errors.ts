@@ -30,6 +30,16 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
   if (isProviderModelNotFoundErrorLike(error)) return parseReadableProviderModelNotFoundError(error, translate)
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string" && error) return error
+  if (typeof error === "object" && error !== null) {
+    const o = error as Record<string, unknown>
+    const data = o.data
+    if (typeof data === "object" && data !== null) {
+      const message = (data as Record<string, unknown>).message
+      if (typeof message === "string" && message.trim()) return message.trim()
+    }
+    if (typeof o.message === "string" && o.message.trim()) return o.message.trim()
+    if (typeof o.name === "string" && o.name !== "UnknownError") return o.name
+  }
   if (fallback) return fallback
   return tr(translate, "error.chain.unknown", "Unknown error")
 }
